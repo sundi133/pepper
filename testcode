@@ -1,0 +1,63 @@
+ // Prepare auth session data
+    const authSessionData = {
+      originOrgId: originOrgId || user.publicMetadata?.organizationId || userId,
+      originOrgName:
+        originOrgName ||
+        user.publicMetadata?.organizationName ||
+        'Default Organization',
+      originUserEmail:
+        originUserEmail || user.emailAddresses[0]?.emailAddress || '',
+      originUserName:
+        originUserName ||
+        (user.firstName && user.lastName
+          ? `${user.firstName} ${user.lastName}`
+          : user.username || 'User')
+    };
+
+    console.log(
+      'Final auth session data being sent to getKnit:',
+      authSessionData
+    );
+
+    // Create Knit auth session
+    const response = await fetch(
+      'https://api.getknit.dev/v1.0/auth.createSession',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${
+            process.env.KNIT_API_KEY ||
+            '1ce1d47f3765f926515482b2aa8d2dfc870708b420177871b4a9a37b56017723'
+          }`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(authSessionData)
+      }
+    );
+
+    console.log('getKnit API response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('getKnit API error response:', errorText);
+      return NextResponse.json(
+        { error: `getKnit API error: ${response.status} - ${errorText}` },
+        { status: 500 }
+      );
+    }
+
+    const result = await response.json();
+    console.log('getKnit API response data:', result);
+
+    return NextResponse.json({
+      success: true,
+      token: result.msg?.token || result.token,
+      data: authSessionData
+    });
+  } catch (error) {
+    console.error('Auth session creation error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }

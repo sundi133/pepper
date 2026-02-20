@@ -11,7 +11,7 @@ set -euo pipefail
 # ──────────────────────────────────────────────────────────────────────
 
 VERSION="${1:-latest}"
-REGISTRY="${REGISTRY:-docker.io/YOURUSERNAME}"
+REGISTRY="${REGISTRY:-docker.io/sundi133}"
 
 API_IMAGE="${REGISTRY}/pepper"
 WORKER_IMAGE="${REGISTRY}/pepper-worker"

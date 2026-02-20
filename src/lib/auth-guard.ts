@@ -28,7 +28,7 @@ export async function requireRole(orgId: string, minRole: Role) {
   }
 
   const membership = session.user.memberships?.find(
-    (m) => m.organizationId === orgId
+    (m) => m.organizationId === orgId,
   );
   if (
     !membership ||
@@ -43,7 +43,7 @@ export async function requireRole(orgId: string, minRole: Role) {
 }
 
 export function getDefaultOrgId(
-  session: Awaited<ReturnType<typeof getSession>>
+  session: Awaited<ReturnType<typeof getSession>>,
 ): string | null {
   return session?.user?.memberships?.[0]?.organizationId ?? null;
 }

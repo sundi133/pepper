@@ -12,10 +12,7 @@ export function maskSecret(value: string): string {
 /**
  * Mask secret values in a code snippet.
  */
-export function maskSnippet(
-  snippet: string,
-  secretPatterns: RegExp[]
-): string {
+export function maskSnippet(snippet: string, secretPatterns: RegExp[]): string {
   let masked = snippet;
   for (const pattern of secretPatterns) {
     masked = masked.replace(pattern, (match) => maskSecret(match));

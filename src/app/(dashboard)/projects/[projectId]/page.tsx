@@ -2,9 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ScanStatusBadge, GateResultBadge } from "@/components/scans/scan-status-badge";
+import {
+  ScanStatusBadge,
+  GateResultBadge,
+} from "@/components/scans/scan-status-badge";
 import { CreateScanDialog } from "@/components/scans/create-scan-dialog";
 import {
   Table,
@@ -31,8 +40,14 @@ export default function ProjectDetailPage() {
       .finally(() => setLoading(false));
   }, [projectId]);
 
-  if (loading) return <p className="text-muted-foreground py-12 text-center">Loading...</p>;
-  if (!project) return <p className="text-destructive py-12 text-center">Project not found</p>;
+  if (loading)
+    return (
+      <p className="text-muted-foreground py-12 text-center">Loading...</p>
+    );
+  if (!project)
+    return (
+      <p className="text-destructive py-12 text-center">Project not found</p>
+    );
 
   const scans = (project.scans as Array<Record<string, unknown>>) || [];
 
@@ -41,7 +56,9 @@ export default function ProjectDetailPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{project.name as string}</h1>
-          <p className="text-muted-foreground">{project.description as string || "No description"}</p>
+          <p className="text-muted-foreground">
+            {(project.description as string) || "No description"}
+          </p>
         </div>
         <div className="flex gap-2">
           <Link href={`/projects/${projectId}/settings`}>
@@ -50,7 +67,9 @@ export default function ProjectDetailPage() {
               Settings
             </Button>
           </Link>
-          <CreateScanDialog projects={[{ id: projectId, name: project.name as string }]} />
+          <CreateScanDialog
+            projects={[{ id: projectId, name: project.name as string }]}
+          />
         </div>
       </div>
 
@@ -64,15 +83,21 @@ export default function ProjectDetailPage() {
             <div className="flex gap-6 text-sm">
               <div>
                 <span className="text-muted-foreground">Max Critical:</span>{" "}
-                <span className="font-medium">{(project.buildGate as Record<string, number>).maxCritical}</span>
+                <span className="font-medium">
+                  {(project.buildGate as Record<string, number>).maxCritical}
+                </span>
               </div>
               <div>
                 <span className="text-muted-foreground">Max High:</span>{" "}
-                <span className="font-medium">{(project.buildGate as Record<string, number>).maxHigh}</span>
+                <span className="font-medium">
+                  {(project.buildGate as Record<string, number>).maxHigh}
+                </span>
               </div>
               <div>
                 <span className="text-muted-foreground">Max Medium:</span>{" "}
-                <span className="font-medium">{(project.buildGate as Record<string, number>).maxMedium}</span>
+                <span className="font-medium">
+                  {(project.buildGate as Record<string, number>).maxMedium}
+                </span>
               </div>
             </div>
           </CardContent>

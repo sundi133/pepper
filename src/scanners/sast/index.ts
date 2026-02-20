@@ -76,7 +76,7 @@ export const sastPatternScanner: ScannerPlugin = {
     }
 
     ctx.onProgress?.(
-      `SAST Pattern: found ${findings.length} issues in ${ctx.fileList.length} files`
+      `SAST Pattern: found ${findings.length} issues in ${ctx.fileList.length} files`,
     );
     return findings;
   },

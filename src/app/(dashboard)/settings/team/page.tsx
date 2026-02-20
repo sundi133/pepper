@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,7 +53,12 @@ export default function TeamPage() {
       const res = await fetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name, role, password: password || undefined }),
+        body: JSON.stringify({
+          email,
+          name,
+          role,
+          password: password || undefined,
+        }),
       });
       if (!res.ok) throw new Error("Failed to invite");
 
@@ -66,7 +77,10 @@ export default function TeamPage() {
     }
   }
 
-  const roleColors: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
+  const roleColors: Record<
+    string,
+    "default" | "secondary" | "outline" | "destructive"
+  > = {
     ADMIN: "destructive",
     SECURITY: "default",
     DEVELOPER: "secondary",
@@ -77,13 +91,17 @@ export default function TeamPage() {
     <div className="max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Team Management</h1>
-        <p className="text-muted-foreground">Manage team members and their roles</p>
+        <p className="text-muted-foreground">
+          Manage team members and their roles
+        </p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Invite Member</CardTitle>
-          <CardDescription>Add a new member to your organization</CardDescription>
+          <CardDescription>
+            Add a new member to your organization
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleInvite} className="space-y-4">
@@ -162,12 +180,16 @@ export default function TeamPage() {
                     </TableCell>
                     <TableCell>{user.email as string}</TableCell>
                     <TableCell>
-                      <Badge variant={roleColors[member.role as string] || "outline"}>
+                      <Badge
+                        variant={roleColors[member.role as string] || "outline"}
+                      >
                         {member.role as string}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {new Date(member.createdAt as string).toLocaleDateString()}
+                      {new Date(
+                        member.createdAt as string,
+                      ).toLocaleDateString()}
                     </TableCell>
                   </TableRow>
                 );

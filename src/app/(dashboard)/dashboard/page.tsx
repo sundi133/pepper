@@ -1,8 +1,17 @@
 "use client";
 
 import { useScans, useProjects } from "@/hooks/use-scan-polling";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScanStatusBadge, GateResultBadge } from "@/components/scans/scan-status-badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  ScanStatusBadge,
+  GateResultBadge,
+} from "@/components/scans/scan-status-badge";
 import { CreateScanDialog } from "@/components/scans/create-scan-dialog";
 import {
   Table,
@@ -19,24 +28,38 @@ export default function DashboardPage() {
   const { scans, isLoading: scansLoading } = useScans();
   const { projects } = useProjects();
 
-  const completedScans = scans.filter((s: { status: string }) => s.status === "COMPLETED");
+  const completedScans = scans.filter(
+    (s: { status: string }) => s.status === "COMPLETED",
+  );
   const totalFindings = completedScans.reduce(
-    (acc: number, s: { criticalCount: number; highCount: number; mediumCount: number; lowCount: number }) =>
-      acc + s.criticalCount + s.highCount + s.mediumCount + s.lowCount,
-    0
+    (
+      acc: number,
+      s: {
+        criticalCount: number;
+        highCount: number;
+        mediumCount: number;
+        lowCount: number;
+      },
+    ) => acc + s.criticalCount + s.highCount + s.mediumCount + s.lowCount,
+    0,
   );
   const criticalHighCount = completedScans.reduce(
-    (acc: number, s: { criticalCount: number; highCount: number }) => acc + s.criticalCount + s.highCount,
-    0
+    (acc: number, s: { criticalCount: number; highCount: number }) =>
+      acc + s.criticalCount + s.highCount,
+    0,
   );
-  const passedGates = completedScans.filter((s: { gateResult: string }) => s.gateResult === "PASSED").length;
+  const passedGates = completedScans.filter(
+    (s: { gateResult: string }) => s.gateResult === "PASSED",
+  ).length;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">Overview of your security scan results</p>
+          <p className="text-muted-foreground">
+            Overview of your security scan results
+          </p>
         </div>
         <CreateScanDialog projects={projects} />
       </div>
@@ -58,7 +81,9 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Findings</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Findings
+            </CardTitle>
             <Shield className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -71,7 +96,9 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Critical + High</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Critical + High
+            </CardTitle>
             <AlertTriangle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
@@ -86,7 +113,9 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Gate Pass Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Gate Pass Rate
+            </CardTitle>
             <CheckCircle2 className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
@@ -106,7 +135,9 @@ export default function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>Recent Scans</CardTitle>
-          <CardDescription>Latest scan activity across all projects</CardDescription>
+          <CardDescription>
+            Latest scan activity across all projects
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {scansLoading ? (
@@ -148,7 +179,8 @@ export default function DashboardPage() {
                       {scan.status === "COMPLETED" && (
                         <span className="text-sm">
                           <span className="text-destructive font-medium">
-                            {(scan.criticalCount as number) + (scan.highCount as number)}
+                            {(scan.criticalCount as number) +
+                              (scan.highCount as number)}
                           </span>
                           {" / "}
                           <span className="text-muted-foreground">

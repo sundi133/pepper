@@ -72,7 +72,9 @@ export function CreateScanDialog({ projects }: { projects: Project[] }) {
       setOpen(false);
       router.push(`/scans/${result.scanId}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create scan");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create scan",
+      );
     } finally {
       setLoading(false);
     }
@@ -90,7 +92,8 @@ export function CreateScanDialog({ projects }: { projects: Project[] }) {
         <DialogHeader>
           <DialogTitle>Create New Scan</DialogTitle>
           <DialogDescription>
-            Upload source code or provide a repository URL to scan for vulnerabilities.
+            Upload source code or provide a repository URL to scan for
+            vulnerabilities.
           </DialogDescription>
         </DialogHeader>
 
@@ -147,7 +150,9 @@ export function CreateScanDialog({ projects }: { projects: Project[] }) {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Or</span>
+              <span className="bg-background px-2 text-muted-foreground">
+                Or
+              </span>
             </div>
           </div>
 

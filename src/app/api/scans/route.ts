@@ -7,7 +7,9 @@ import { z } from "zod";
 
 const createScanSchema = z.object({
   projectId: z.string(),
-  scanType: z.enum(["FULL", "INCREMENTAL", "SAST_ONLY", "SCA_ONLY", "SECRETS_ONLY"]).default("FULL"),
+  scanType: z
+    .enum(["FULL", "INCREMENTAL", "SAST_ONLY", "SCA_ONLY", "SECRETS_ONLY"])
+    .default("FULL"),
   branch: z.string().optional(),
   commitSha: z.string().optional(),
   baseSha: z.string().optional(),
@@ -62,7 +64,11 @@ export async function POST(req: NextRequest) {
         branch: scanParams.branch,
         commitSha: scanParams.commitSha,
         baseSha: scanParams.baseSha,
-        sourceType: fileBuffer ? "UPLOAD" : scanParams.repoUrl ? "GIT_CLONE" : "UPLOAD",
+        sourceType: fileBuffer
+          ? "UPLOAD"
+          : scanParams.repoUrl
+            ? "GIT_CLONE"
+            : "UPLOAD",
         triggeredBy: auth.session.user.id,
         status: "QUEUED",
       },
@@ -124,13 +130,22 @@ export async function POST(req: NextRequest) {
       data: { jobId: job.id },
     });
 
-    return NextResponse.json({ scanId: scan.id, status: "QUEUED" }, { status: 201 });
+    return NextResponse.json(
+      { scanId: scan.id, status: "QUEUED" },
+      { status: 201 },
+    );
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Invalid input", details: error.issues }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid input", details: error.issues },
+        { status: 400 },
+      );
     }
     console.error("Failed to create scan:", error);
-    return NextResponse.json({ error: "Failed to create scan" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to create scan" },
+      { status: 500 },
+    );
   }
 }
 

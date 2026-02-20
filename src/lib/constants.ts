@@ -130,6 +130,11 @@ export const BINARY_EXTENSIONS = new Set([
   ".lib",
 ]);
 
-export const MAX_FILE_SIZE_BYTES = 1024 * 1024; // 1MB
+export const MAX_FILE_SIZE_BYTES = 1024 * 1024; // 1MB — skip threshold for pattern scanners
+export const LLM_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB — LLM scanner chunks large files instead of skipping
 export const MAX_CHUNK_TOKENS = 3000;
 export const CHUNK_OVERLAP_TOKENS = 200;
+
+// Smaller chunks for local models (Ollama/Qwen) — keeps inference fast on CPU
+export const OLLAMA_MAX_CHUNK_TOKENS = 1200;
+export const OLLAMA_CHUNK_OVERLAP_TOKENS = 100;

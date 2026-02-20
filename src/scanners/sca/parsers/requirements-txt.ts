@@ -1,7 +1,11 @@
 import { Dependency, DependencyParser } from "../../types";
 
 export const requirementsTxtParser: DependencyParser = {
-  filePatterns: ["requirements.txt", "requirements-dev.txt", "requirements-test.txt"],
+  filePatterns: [
+    "requirements.txt",
+    "requirements-dev.txt",
+    "requirements-test.txt",
+  ],
   ecosystem: "PyPI",
   parse(content: string, filePath: string): Dependency[] {
     const deps: Dependency[] = [];
@@ -11,7 +15,9 @@ export const requirementsTxtParser: DependencyParser = {
       const line = rawLine.trim();
       if (!line || line.startsWith("#") || line.startsWith("-")) continue;
 
-      const match = line.match(/^([a-zA-Z0-9_.-]+)\s*(?:==|>=|<=|~=|!=)\s*([^\s;,#]+)/);
+      const match = line.match(
+        /^([a-zA-Z0-9_.-]+)\s*(?:==|>=|<=|~=|!=)\s*([^\s;,#]+)/,
+      );
       if (match) {
         deps.push({
           name: match[1],
@@ -39,7 +45,7 @@ export const pipfileLockParser: DependencyParser = {
         const isDev = section === "develop";
 
         for (const [name, info] of Object.entries(
-          packages as Record<string, { version?: string }>
+          packages as Record<string, { version?: string }>,
         )) {
           if (info.version) {
             deps.push({

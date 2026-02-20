@@ -5,7 +5,7 @@ import { secretsPatternScanner, secretsLlmScanner } from "./secrets";
 
 export function getScanners(
   scanType: string,
-  llmEnabled: boolean
+  llmEnabled: boolean,
 ): ScannerPlugin[] {
   const scanners: ScannerPlugin[] = [];
 
@@ -72,29 +72,43 @@ export class FindingDeduplicator {
   }
 }
 
-export async function runScanners(
-  ctx: ScanContext
-): Promise<ScanResult> {
+export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
   const scanners = getScanners(
     ctx.scanType,
-    ctx.orgSettings.enableLlmSast || ctx.orgSettings.enableLlmSecrets
+    ctx.orgSettings.enableLlmSast || ctx.orgSettings.enableLlmSecrets,
   );
 
   ctx.onProgress?.(
-    `Running ${scanners.length} scanners: ${scanners.map((s) => s.name).join(", ")}`
+    `Running ${scanners.length} scanners: ${scanners.map((s) => s.name).join(", ")}`,
   );
 
   const deduplicator = new FindingDeduplicator();
 
+  // Wrap onBatchFindings through the deduplicator so intermediate
+  // LLM results are deduped before DB insert
+  const wrappedCtx: ScanContext = {
+    ...ctx,
+    onBatchFindings: ctx.onBatchFindings
+      ? async (scannerName: string, findings: RawFinding[]) => {
+          const deduped = deduplicator.dedupe(findings);
+          if (deduped.length > 0) {
+            await ctx.onBatchFindings!(scannerName, deduped);
+          }
+        }
+      : undefined,
+  };
+
   // Run all scanners in parallel, calling onScannerComplete as each resolves
   await Promise.allSettled(
     scanners.map(async (scanner) => {
-      const rawFindings = await scanner.scan(ctx);
+      const rawFindings = await scanner.scan(wrappedCtx);
+      // For scanners that use onBatchFindings (LLM), rawFindings are already
+      // flushed — dedupe returns only unflushed leftovers
       const deduped = deduplicator.dedupe(rawFindings);
       if (ctx.onScannerComplete) {
         await ctx.onScannerComplete(scanner.name, deduped);
       }
-    })
+    }),
   );
 
   // Get dependency info for SBOM

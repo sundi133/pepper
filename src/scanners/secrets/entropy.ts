@@ -26,7 +26,7 @@ export function shannonEntropy(str: string): number {
 export function isHighEntropy(
   str: string,
   minEntropy = 4.5,
-  minLength = 16
+  minLength = 16,
 ): boolean {
   if (str.length < minLength) return false;
   return shannonEntropy(str) >= minEntropy;

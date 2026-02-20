@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { useProjects } from "@/hooks/use-scan-polling";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -98,17 +104,29 @@ export default function BuildGatesPage() {
                   <Input
                     type="number"
                     value={gate.maxCritical}
-                    onChange={(e) => setGate((g) => ({ ...g, maxCritical: parseInt(e.target.value) }))}
+                    onChange={(e) =>
+                      setGate((g) => ({
+                        ...g,
+                        maxCritical: parseInt(e.target.value),
+                      }))
+                    }
                     min={-1}
                   />
-                  <p className="text-xs text-muted-foreground">-1 = unlimited</p>
+                  <p className="text-xs text-muted-foreground">
+                    -1 = unlimited
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Max High</Label>
                   <Input
                     type="number"
                     value={gate.maxHigh}
-                    onChange={(e) => setGate((g) => ({ ...g, maxHigh: parseInt(e.target.value) }))}
+                    onChange={(e) =>
+                      setGate((g) => ({
+                        ...g,
+                        maxHigh: parseInt(e.target.value),
+                      }))
+                    }
                     min={-1}
                   />
                 </div>
@@ -117,7 +135,12 @@ export default function BuildGatesPage() {
                   <Input
                     type="number"
                     value={gate.maxMedium}
-                    onChange={(e) => setGate((g) => ({ ...g, maxMedium: parseInt(e.target.value) }))}
+                    onChange={(e) =>
+                      setGate((g) => ({
+                        ...g,
+                        maxMedium: parseInt(e.target.value),
+                      }))
+                    }
                     min={-1}
                   />
                 </div>
@@ -126,7 +149,12 @@ export default function BuildGatesPage() {
                   <Input
                     type="number"
                     value={gate.maxLow}
-                    onChange={(e) => setGate((g) => ({ ...g, maxLow: parseInt(e.target.value) }))}
+                    onChange={(e) =>
+                      setGate((g) => ({
+                        ...g,
+                        maxLow: parseInt(e.target.value),
+                      }))
+                    }
                     min={-1}
                   />
                 </div>
@@ -141,7 +169,9 @@ export default function BuildGatesPage() {
                 </div>
                 <Switch
                   checked={gate.failOnNew}
-                  onCheckedChange={(v) => setGate((g) => ({ ...g, failOnNew: v }))}
+                  onCheckedChange={(v) =>
+                    setGate((g) => ({ ...g, failOnNew: v }))
+                  }
                 />
               </div>
 

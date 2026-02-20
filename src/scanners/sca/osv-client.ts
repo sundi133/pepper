@@ -25,7 +25,7 @@ interface OsvBatchResponse {
 
 export async function queryOsvBatch(
   dependencies: Dependency[],
-  apiUrl = "https://api.osv.dev"
+  apiUrl = "https://api.osv.dev",
 ): Promise<RawFinding[]> {
   if (dependencies.length === 0) return [];
 
@@ -90,7 +90,7 @@ export async function queryOsvBatch(
 }
 
 function cvssToSeverity(
-  severity?: OsvVulnerability["severity"]
+  severity?: OsvVulnerability["severity"],
 ): RawFinding["severity"] {
   if (!severity || severity.length === 0) return "MEDIUM";
 
@@ -120,7 +120,7 @@ function getFixVersion(vuln: OsvVulnerability): string | undefined {
 function buildDescription(
   vuln: OsvVulnerability,
   dep: Dependency,
-  fixVersion?: string
+  fixVersion?: string,
 ): string {
   let desc = vuln.details || vuln.summary || "No description available.";
   desc += `\n\nPackage: ${dep.name}@${dep.version} (${dep.ecosystem})`;

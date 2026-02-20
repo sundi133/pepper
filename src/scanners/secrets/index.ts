@@ -5,7 +5,11 @@ import { SECRET_PATTERNS } from "./patterns";
 import { isHighEntropy, extractCandidateValues } from "./entropy";
 import { maskSnippet } from "./masker";
 import { classifySecrets } from "./llm-classifier";
-import { SKIP_DIRECTORIES, BINARY_EXTENSIONS, MAX_FILE_SIZE_BYTES } from "@/lib/constants";
+import {
+  SKIP_DIRECTORIES,
+  BINARY_EXTENSIONS,
+  MAX_FILE_SIZE_BYTES,
+} from "@/lib/constants";
 
 export const secretsPatternScanner: ScannerPlugin = {
   name: "SECRETS_PATTERN",
@@ -79,7 +83,7 @@ export const secretsPatternScanner: ScannerPlugin = {
                 (f) =>
                   f.filePath === filePath &&
                   f.startLine === lineNum + 1 &&
-                  f.scanner === "SECRETS_PATTERN"
+                  f.scanner === "SECRETS_PATTERN",
               );
               if (alreadyCaught) continue;
 
@@ -110,7 +114,9 @@ export const secretsPatternScanner: ScannerPlugin = {
       }
     }
 
-    ctx.onProgress?.(`Secrets Pattern: found ${findings.length} potential secrets`);
+    ctx.onProgress?.(
+      `Secrets Pattern: found ${findings.length} potential secrets`,
+    );
     return findings;
   },
 };
@@ -125,7 +131,7 @@ export const secretsLlmScanner: ScannerPlugin = {
     if (patternFindings.length === 0) return [];
 
     ctx.onProgress?.(
-      `Secrets LLM: classifying ${patternFindings.length} candidates...`
+      `Secrets LLM: classifying ${patternFindings.length} candidates...`,
     );
 
     const classified = await classifySecrets(patternFindings, {

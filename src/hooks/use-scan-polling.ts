@@ -14,7 +14,7 @@ export function useScanPolling(scanId: string | null) {
         if (data.status === "QUEUED" || data.status === "RUNNING") return 3000;
         return 0; // stop polling when complete
       },
-    }
+    },
   );
 
   return { scan: data, error, isLoading };
@@ -27,7 +27,7 @@ export function useScans(projectId?: string, page = 1) {
   const { data, error, isLoading, mutate } = useSWR(
     `/api/scans?${params}`,
     fetcher,
-    { refreshInterval: 30000 }
+    { refreshInterval: 30000 },
   );
 
   return {
@@ -40,11 +40,9 @@ export function useScans(projectId?: string, page = 1) {
 }
 
 export function useProjects() {
-  const { data, error, isLoading, mutate } = useSWR(
-    "/api/projects",
-    fetcher,
-    { refreshInterval: 60000 }
-  );
+  const { data, error, isLoading, mutate } = useSWR("/api/projects", fetcher, {
+    refreshInterval: 60000,
+  });
 
   return {
     projects: data?.projects || [],
@@ -54,7 +52,11 @@ export function useProjects() {
   };
 }
 
-export function useFindings(scanId: string, filters?: Record<string, string>, scanStatus?: string) {
+export function useFindings(
+  scanId: string,
+  filters?: Record<string, string>,
+  scanStatus?: string,
+) {
   const params = new URLSearchParams({ page: "1", limit: "100", ...filters });
   const isActive = scanStatus === "QUEUED" || scanStatus === "RUNNING";
 
@@ -63,7 +65,7 @@ export function useFindings(scanId: string, filters?: Record<string, string>, sc
     fetcher,
     {
       refreshInterval: isActive ? 3000 : 0,
-    }
+    },
   );
 
   return {

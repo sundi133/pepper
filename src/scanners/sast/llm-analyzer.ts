@@ -1,9 +1,21 @@
-import { createLlmClient, analyzeWithLlm, parseLlmJsonResponse } from "@/lib/llm-gateway";
+import {
+  createLlmClient,
+  analyzeWithLlm,
+  parseLlmJsonResponse,
+} from "@/lib/llm-gateway";
 import { Chunk, RawFinding, ScanContext } from "../types";
 import { chunkFile } from "./chunker";
 import * as fs from "fs";
 import * as path from "path";
-import { FILE_EXTENSIONS, SKIP_DIRECTORIES, BINARY_EXTENSIONS, MAX_FILE_SIZE_BYTES } from "@/lib/constants";
+import {
+  FILE_EXTENSIONS,
+  SKIP_DIRECTORIES,
+  BINARY_EXTENSIONS,
+  MAX_CHUNK_TOKENS,
+  CHUNK_OVERLAP_TOKENS,
+  OLLAMA_MAX_CHUNK_TOKENS,
+  OLLAMA_CHUNK_OVERLAP_TOKENS,
+} from "@/lib/constants";
 import { logger } from "@/lib/logger";
 
 const SYSTEM_PROMPT = `You are an expert security code reviewer. Analyze the following code for security vulnerabilities.
@@ -49,8 +61,18 @@ interface LlmFinding {
   recommendation?: string;
 }
 
-export async function runLlmSastScanner(ctx: ScanContext): Promise<RawFinding[]> {
-  logger.info({ enableLlmSast: ctx.orgSettings.enableLlmSast, llmProvider: ctx.orgSettings.llmProvider, llmBaseUrl: ctx.orgSettings.llmBaseUrl, llmModel: ctx.orgSettings.llmModel }, "LLM SAST scanner invoked");
+export async function runLlmSastScanner(
+  ctx: ScanContext,
+): Promise<RawFinding[]> {
+  logger.info(
+    {
+      enableLlmSast: ctx.orgSettings.enableLlmSast,
+      llmProvider: ctx.orgSettings.llmProvider,
+      llmBaseUrl: ctx.orgSettings.llmBaseUrl,
+      llmModel: ctx.orgSettings.llmModel,
+    },
+    "LLM SAST scanner invoked",
+  );
 
   if (!ctx.orgSettings.enableLlmSast) {
     logger.warn("LLM SAST scanner skipped — enableLlmSast is false");
@@ -64,11 +86,30 @@ export async function runLlmSastScanner(ctx: ScanContext): Promise<RawFinding[]>
     model: ctx.orgSettings.llmModel,
   });
 
-  logger.info({ provider: ctx.orgSettings.llmProvider, baseUrl: ctx.orgSettings.llmBaseUrl, model: ctx.orgSettings.llmModel }, "LLM client created");
+  logger.info(
+    {
+      provider: ctx.orgSettings.llmProvider,
+      baseUrl: ctx.orgSettings.llmBaseUrl,
+      model: ctx.orgSettings.llmModel,
+    },
+    "LLM client created",
+  );
 
   const findings: RawFinding[] = [];
   const maxConcurrency = parseInt(process.env.MAX_LLM_CONCURRENCY || "2");
   const chunks: Chunk[] = [];
+
+  // Pick chunk size based on provider — smaller chunks for Ollama/Qwen (CPU inference)
+  const isOllama = ctx.orgSettings.llmProvider.toLowerCase() === "ollama";
+  const chunkTokens = isOllama ? OLLAMA_MAX_CHUNK_TOKENS : MAX_CHUNK_TOKENS;
+  const overlapTokens = isOllama
+    ? OLLAMA_CHUNK_OVERLAP_TOKENS
+    : CHUNK_OVERLAP_TOKENS;
+
+  logger.info(
+    { isOllama, chunkTokens, overlapTokens },
+    "Chunk sizing for LLM provider",
+  );
 
   // Collect all chunks from scannable files
   for (const filePath of ctx.fileList) {
@@ -84,13 +125,11 @@ export async function runLlmSastScanner(ctx: ScanContext): Promise<RawFinding[]>
     if (parts.some((p) => SKIP_DIRECTORIES.has(p))) continue;
 
     try {
-      const stat = fs.statSync(fullPath);
-      if (stat.size > MAX_FILE_SIZE_BYTES) continue;
-
       const content = fs.readFileSync(fullPath, "utf-8");
       if (content.trim().length === 0) continue;
 
-      chunks.push(...chunkFile(content, filePath));
+      // Every file gets chunked into LLM-friendly pieces, no size limit
+      chunks.push(...chunkFile(content, filePath, chunkTokens, overlapTokens));
     } catch {
       continue;
     }
@@ -109,37 +148,65 @@ export async function runLlmSastScanner(ctx: ScanContext): Promise<RawFinding[]>
     const batchNum = Math.floor(i / maxConcurrency) + 1;
     const batch = chunks.slice(i, i + maxConcurrency);
     const results = await Promise.allSettled(
-      batch.map((chunk) => analyzeChunk(client, ctx.orgSettings.llmModel, chunk))
+      batch.map((chunk) =>
+        analyzeChunk(client, ctx.orgSettings.llmModel, chunk),
+      ),
     );
 
+    const batchFindings: RawFinding[] = [];
     for (const result of results) {
       if (result.status === "fulfilled") {
+        batchFindings.push(...result.value);
         findings.push(...result.value);
         succeeded++;
       } else {
         failed++;
-        logger.error({ err: result.reason }, "LLM SAST chunk analysis rejected");
+        logger.error(
+          { err: result.reason },
+          "LLM SAST chunk analysis rejected",
+        );
       }
     }
 
-    ctx.onProgress?.(`LLM SAST: batch ${batchNum}/${totalBatches} complete`);
+    // Flush this batch's findings to DB immediately so they appear in UI
+    if (batchFindings.length > 0 && ctx.onBatchFindings) {
+      await ctx.onBatchFindings("SAST_LLM", batchFindings);
+    }
+
+    ctx.onProgress?.(
+      `LLM SAST: batch ${batchNum}/${totalBatches} complete (${findings.length} findings so far)`,
+    );
   }
 
-  logger.info({ total: chunks.length, succeeded, failed, findings: findings.length }, "LLM SAST analysis complete");
+  logger.info(
+    { total: chunks.length, succeeded, failed, findings: findings.length },
+    "LLM SAST analysis complete",
+  );
   return findings;
 }
 
 async function analyzeChunk(
   client: ReturnType<typeof createLlmClient>,
   model: string,
-  chunk: Chunk
+  chunk: Chunk,
 ): Promise<RawFinding[]> {
   const userContent = `File: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n\n\`\`\`\n${chunk.content}\n\`\`\``;
 
   try {
-    logger.info({ filePath: chunk.filePath, startLine: chunk.startLine, endLine: chunk.endLine, model }, "Sending chunk to LLM");
+    logger.info(
+      {
+        filePath: chunk.filePath,
+        startLine: chunk.startLine,
+        endLine: chunk.endLine,
+        model,
+      },
+      "Sending chunk to LLM",
+    );
     const raw = await analyzeWithLlm(client, model, SYSTEM_PROMPT, userContent);
-    logger.info({ filePath: chunk.filePath, responseLength: raw.length }, "LLM response received");
+    logger.info(
+      { filePath: chunk.filePath, responseLength: raw.length },
+      "LLM response received",
+    );
     const parsed = parseLlmJsonResponse<{ findings: LlmFinding[] }>(raw, {
       findings: [],
     });
@@ -161,7 +228,15 @@ async function analyzeChunk(
         ruleId: `LLM-${f.cweId || "GENERIC"}`,
       }));
   } catch (err) {
-    logger.error({ err, filePath: chunk.filePath, startLine: chunk.startLine, endLine: chunk.endLine }, "LLM SAST chunk analysis failed");
+    logger.error(
+      {
+        err,
+        filePath: chunk.filePath,
+        startLine: chunk.startLine,
+        endLine: chunk.endLine,
+      },
+      "LLM SAST chunk analysis failed",
+    );
     return [];
   }
 }

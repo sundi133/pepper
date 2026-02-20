@@ -4,16 +4,19 @@ export const javaRules: PatternRule[] = [
   {
     id: "JAVA-SQL-001",
     title: "SQL injection via string concatenation",
-    description: "Building SQL queries with string concatenation is vulnerable to SQL injection. Use PreparedStatement with parameterized queries.",
+    description:
+      "Building SQL queries with string concatenation is vulnerable to SQL injection. Use PreparedStatement with parameterized queries.",
     severity: "HIGH",
     cweId: "CWE-89",
     languages: ["java", "kotlin", "scala"],
-    pattern: /(?:executeQuery|executeUpdate|execute)\s*\(\s*(?:.*\+|String\.format)/,
+    pattern:
+      /(?:executeQuery|executeUpdate|execute)\s*\(\s*(?:.*\+|String\.format)/,
   },
   {
     id: "JAVA-DESER-001",
     title: "Unsafe deserialization",
-    description: "ObjectInputStream.readObject() can execute arbitrary code during deserialization. Never deserialize untrusted data without validation.",
+    description:
+      "ObjectInputStream.readObject() can execute arbitrary code during deserialization. Never deserialize untrusted data without validation.",
     severity: "HIGH",
     cweId: "CWE-502",
     languages: ["java", "kotlin"],
@@ -22,17 +25,20 @@ export const javaRules: PatternRule[] = [
   {
     id: "JAVA-XXE-001",
     title: "XML External Entity (XXE) processing",
-    description: "XML parsing without disabling external entities can lead to XXE attacks. Set FEATURE_SECURE_PROCESSING and disable external DTDs.",
+    description:
+      "XML parsing without disabling external entities can lead to XXE attacks. Set FEATURE_SECURE_PROCESSING and disable external DTDs.",
     severity: "HIGH",
     cweId: "CWE-611",
     languages: ["java", "kotlin", "scala"],
-    pattern: /(?:DocumentBuilderFactory|SAXParserFactory|XMLInputFactory)\.newInstance\s*\(\)/,
+    pattern:
+      /(?:DocumentBuilderFactory|SAXParserFactory|XMLInputFactory)\.newInstance\s*\(\)/,
     negative: /setFeature|FEATURE_SECURE_PROCESSING|disallow-doctype-decl/,
   },
   {
     id: "JAVA-LDAP-001",
     title: "LDAP injection",
-    description: "Constructing LDAP queries with string concatenation can lead to LDAP injection. Use parameterized LDAP queries.",
+    description:
+      "Constructing LDAP queries with string concatenation can lead to LDAP injection. Use parameterized LDAP queries.",
     severity: "HIGH",
     cweId: "CWE-90",
     languages: ["java", "kotlin"],
@@ -41,7 +47,8 @@ export const javaRules: PatternRule[] = [
   {
     id: "JAVA-CRYPTO-001",
     title: "Weak cipher algorithm",
-    description: "DES, RC4, and Blowfish are considered weak. Use AES-256 or ChaCha20 instead.",
+    description:
+      "DES, RC4, and Blowfish are considered weak. Use AES-256 or ChaCha20 instead.",
     severity: "MEDIUM",
     cweId: "CWE-327",
     languages: ["java", "kotlin", "scala"],
@@ -50,7 +57,8 @@ export const javaRules: PatternRule[] = [
   {
     id: "JAVA-CRYPTO-002",
     title: "ECB mode encryption",
-    description: "ECB mode does not provide semantic security. Use CBC, GCM, or CTR mode instead.",
+    description:
+      "ECB mode does not provide semantic security. Use CBC, GCM, or CTR mode instead.",
     severity: "MEDIUM",
     cweId: "CWE-327",
     languages: ["java", "kotlin", "scala"],
@@ -59,16 +67,19 @@ export const javaRules: PatternRule[] = [
   {
     id: "JAVA-LOG-001",
     title: "Log injection",
-    description: "Logging user-controlled data without sanitization can lead to log injection and log forging attacks.",
+    description:
+      "Logging user-controlled data without sanitization can lead to log injection and log forging attacks.",
     severity: "MEDIUM",
     cweId: "CWE-117",
     languages: ["java", "kotlin", "scala"],
-    pattern: /(?:log|logger)\.(?:info|warn|error|debug)\s*\([^)]*(?:\+|format)/i,
+    pattern:
+      /(?:log|logger)\.(?:info|warn|error|debug)\s*\([^)]*(?:\+|format)/i,
   },
   {
     id: "JAVA-SSRF-001",
     title: "Potential SSRF via URL construction",
-    description: "Creating URL objects or HTTP connections with user input can lead to SSRF. Validate URLs against an allowlist.",
+    description:
+      "Creating URL objects or HTTP connections with user input can lead to SSRF. Validate URLs against an allowlist.",
     severity: "HIGH",
     cweId: "CWE-918",
     languages: ["java", "kotlin"],

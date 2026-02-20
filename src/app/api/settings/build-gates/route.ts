@@ -42,8 +42,14 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(buildGate);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Invalid input", details: error.issues }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid input", details: error.issues },
+        { status: 400 },
+      );
     }
-    return NextResponse.json({ error: "Failed to update build gate" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to update build gate" },
+      { status: 500 },
+    );
   }
 }

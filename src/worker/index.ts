@@ -16,30 +16,29 @@ async function main() {
 
   const concurrency = parseInt(process.env.WORKER_CONCURRENCY || "2");
 
-  const worker = new Worker<ScanJobData>(
-    SCAN_QUEUE_NAME,
-    processScanJob,
-    {
-      connection: redisConnection,
-      concurrency,
-      lockDuration: 300_000,      // 5 minutes — enough for slow LLM batches
-      lockRenewTime: 150_000,     // renew halfway through lock period
-      stalledInterval: 300_000,   // match lock duration to avoid false stalls
-      limiter: {
-        max: 10,
-        duration: 60_000,
-      },
-    }
-  );
+  const worker = new Worker<ScanJobData>(SCAN_QUEUE_NAME, processScanJob, {
+    connection: redisConnection,
+    concurrency,
+    lockDuration: 300_000, // 5 minutes — enough for slow LLM batches
+    lockRenewTime: 150_000, // renew halfway through lock period
+    stalledInterval: 300_000, // match lock duration to avoid false stalls
+    limiter: {
+      max: 10,
+      duration: 60_000,
+    },
+  });
 
   worker.on("completed", (job) => {
-    logger.info({ jobId: job.id, scanId: job.data.scanId }, "Scan job completed");
+    logger.info(
+      { jobId: job.id, scanId: job.data.scanId },
+      "Scan job completed",
+    );
   });
 
   worker.on("failed", async (job, error) => {
     logger.error(
       { jobId: job?.id, scanId: job?.data.scanId, error: error.message },
-      "Scan job failed"
+      "Scan job failed",
     );
 
     if (job?.data.scanId) {

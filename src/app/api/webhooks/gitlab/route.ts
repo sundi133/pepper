@@ -13,7 +13,10 @@ export async function POST(req: NextRequest) {
   const payload = await req.json();
   const eventType = payload.object_kind;
 
-  if (eventType === "merge_request" && ["open", "update"].includes(payload.object_attributes?.action)) {
+  if (
+    eventType === "merge_request" &&
+    ["open", "update"].includes(payload.object_attributes?.action)
+  ) {
     const repoUrl = payload.project?.git_http_url;
     const branch = payload.object_attributes?.source_branch;
     const baseSha = payload.object_attributes?.last_commit?.id;
@@ -21,7 +24,10 @@ export async function POST(req: NextRequest) {
 
     const project = await prisma.project.findFirst({
       where: { repoUrl: { contains: payload.project?.path_with_namespace } },
-      include: { buildGate: true, organization: { include: { settings: true } } },
+      include: {
+        buildGate: true,
+        organization: { include: { settings: true } },
+      },
     });
 
     if (!project) {

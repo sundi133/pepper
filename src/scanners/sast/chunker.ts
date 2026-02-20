@@ -5,7 +5,7 @@ export function chunkFile(
   content: string,
   filePath: string,
   maxTokens = MAX_CHUNK_TOKENS,
-  overlapTokens = CHUNK_OVERLAP_TOKENS
+  overlapTokens = CHUNK_OVERLAP_TOKENS,
 ): Chunk[] {
   const lines = content.split("\n");
   if (lines.length === 0) return [];
@@ -28,14 +28,14 @@ export function chunkFile(
 
       const overlapLines = Math.min(
         Math.floor(overlapTokens / 10),
-        currentLines.length
+        currentLines.length,
       );
       const backtrack = Math.max(overlapLines, 0);
       startLine = startLine + currentLines.length - backtrack;
       currentLines = currentLines.slice(-backtrack);
       currentTokenEst = currentLines.reduce(
         (sum, l) => sum + Math.ceil(l.length / 4) + 1,
-        0
+        0,
       );
     }
 
@@ -56,7 +56,5 @@ export function chunkFile(
 }
 
 function addLineNumbers(lines: string[], startLine: number): string {
-  return lines
-    .map((line, i) => `${startLine + i}: ${line}`)
-    .join("\n");
+  return lines.map((line, i) => `${startLine + i}: ${line}`).join("\n");
 }

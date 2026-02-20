@@ -47,7 +47,7 @@ export const packageLockParser: DependencyParser = {
 
       if (lock.packages) {
         for (const [pkgPath, info] of Object.entries(
-          lock.packages as Record<string, { version?: string; dev?: boolean }>
+          lock.packages as Record<string, { version?: string; dev?: boolean }>,
         )) {
           if (!pkgPath || pkgPath === "") continue;
           const name = pkgPath.replace(/^node_modules\//, "");
@@ -63,7 +63,10 @@ export const packageLockParser: DependencyParser = {
         }
       } else if (lock.dependencies) {
         for (const [name, info] of Object.entries(
-          lock.dependencies as Record<string, { version?: string; dev?: boolean }>
+          lock.dependencies as Record<
+            string,
+            { version?: string; dev?: boolean }
+          >,
         )) {
           if (info.version) {
             deps.push({

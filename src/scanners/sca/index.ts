@@ -1,13 +1,25 @@
 import * as fs from "fs";
 import * as path from "path";
-import { Dependency, RawFinding, ScanContext, ScannerPlugin, DependencyParser } from "../types";
+import {
+  Dependency,
+  RawFinding,
+  ScanContext,
+  ScannerPlugin,
+  DependencyParser,
+} from "../types";
 import { packageJsonParser, packageLockParser } from "./parsers/package-json";
-import { requirementsTxtParser, pipfileLockParser } from "./parsers/requirements-txt";
+import {
+  requirementsTxtParser,
+  pipfileLockParser,
+} from "./parsers/requirements-txt";
 import { goModParser } from "./parsers/go-mod";
 import { cargoTomlParser } from "./parsers/cargo-toml";
 import { pomXmlParser, buildGradleParser } from "./parsers/pom-xml";
 import { gemfileLockParser } from "./parsers/gemfile-lock";
-import { composerJsonParser, composerLockParser } from "./parsers/composer-json";
+import {
+  composerJsonParser,
+  composerLockParser,
+} from "./parsers/composer-json";
 import { queryOsvBatch } from "./osv-client";
 
 const ALL_PARSERS: DependencyParser[] = [
@@ -26,7 +38,7 @@ const ALL_PARSERS: DependencyParser[] = [
 
 export function parseDependencies(
   workDir: string,
-  fileList: string[]
+  fileList: string[],
 ): { dependencies: Dependency[]; parsedFiles: string[] } {
   const dependencies: Dependency[] = [];
   const parsedFiles: string[] = [];
@@ -68,18 +80,18 @@ export const scaScanner: ScannerPlugin = {
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
     const { dependencies, parsedFiles } = parseDependencies(
       ctx.workDir,
-      ctx.fileList
+      ctx.fileList,
     );
 
     ctx.onProgress?.(
-      `SCA: parsed ${dependencies.length} dependencies from ${parsedFiles.length} files`
+      `SCA: parsed ${dependencies.length} dependencies from ${parsedFiles.length} files`,
     );
 
     if (dependencies.length === 0) return [];
 
     const findings = await queryOsvBatch(
       dependencies,
-      ctx.orgSettings.osvApiUrl
+      ctx.orgSettings.osvApiUrl,
     );
 
     ctx.onProgress?.(`SCA: found ${findings.length} vulnerabilities`);

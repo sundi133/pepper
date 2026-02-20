@@ -17,6 +17,6 @@ export const ALL_PATTERN_RULES: PatternRule[] = [
 
 export function getRulesForLanguage(language: string): PatternRule[] {
   return ALL_PATTERN_RULES.filter(
-    (rule) => rule.languages.includes(language) || rule.languages.includes("*")
+    (rule) => rule.languages.includes(language) || rule.languages.includes("*"),
   );
 }

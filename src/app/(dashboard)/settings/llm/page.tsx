@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,7 +71,8 @@ export default function LlmSettingsPage() {
         <CardHeader>
           <CardTitle>LLM Provider</CardTitle>
           <CardDescription>
-            Supports any OpenAI-compatible API endpoint (OpenAI, Azure, Ollama, vLLM)
+            Supports any OpenAI-compatible API endpoint (OpenAI, Azure, Ollama,
+            vLLM)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -74,22 +81,42 @@ export default function LlmSettingsPage() {
             <Select
               value={settings.llmProvider}
               onValueChange={(v) => {
-                const defaults: Record<string, { url: string; model: string }> = {
-                  openai: { url: "https://api.openai.com/v1", model: "gpt-4o-mini" },
-                  azure: { url: "https://YOUR_RESOURCE.openai.azure.com", model: "gpt-4o-mini" },
-                  ollama: { url: "http://host.docker.internal:11434", model: "qwen2.5:3b" },
-                  vllm: { url: "http://localhost:8000/v1", model: "meta-llama/Llama-3-8b" },
-                  custom: { url: "", model: "" },
-                };
+                const defaults: Record<string, { url: string; model: string }> =
+                  {
+                    openai: {
+                      url: "https://api.openai.com/v1",
+                      model: "gpt-4o-mini",
+                    },
+                    azure: {
+                      url: "https://YOUR_RESOURCE.openai.azure.com",
+                      model: "gpt-4o-mini",
+                    },
+                    ollama: {
+                      url: "http://host.docker.internal:11434",
+                      model: "qwen2.5:3b",
+                    },
+                    vllm: {
+                      url: "http://localhost:8000/v1",
+                      model: "meta-llama/Llama-3-8b",
+                    },
+                    custom: { url: "", model: "" },
+                  };
                 const d = defaults[v] || defaults.custom;
-                setSettings((s) => ({ ...s, llmProvider: v, llmBaseUrl: d.url, llmModel: d.model }));
+                setSettings((s) => ({
+                  ...s,
+                  llmProvider: v,
+                  llmBaseUrl: d.url,
+                  llmModel: d.model,
+                }));
               }}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ollama">Ollama (Local, recommended)</SelectItem>
+                <SelectItem value="ollama">
+                  Ollama (Local, recommended)
+                </SelectItem>
                 <SelectItem value="openai">OpenAI</SelectItem>
                 <SelectItem value="azure">Azure OpenAI</SelectItem>
                 <SelectItem value="vllm">vLLM</SelectItem>
@@ -102,7 +129,9 @@ export default function LlmSettingsPage() {
             <Label>Base URL</Label>
             <Input
               value={settings.llmBaseUrl}
-              onChange={(e) => setSettings((s) => ({ ...s, llmBaseUrl: e.target.value }))}
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, llmBaseUrl: e.target.value }))
+              }
               placeholder="https://api.openai.com/v1"
             />
           </div>
@@ -111,7 +140,9 @@ export default function LlmSettingsPage() {
             <Label>Model</Label>
             <Input
               value={settings.llmModel}
-              onChange={(e) => setSettings((s) => ({ ...s, llmModel: e.target.value }))}
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, llmModel: e.target.value }))
+              }
               placeholder="gpt-4o-mini"
             />
           </div>
@@ -122,38 +153,53 @@ export default function LlmSettingsPage() {
               <Input
                 type="password"
                 value={settings.llmApiKey}
-                onChange={(e) => setSettings((s) => ({ ...s, llmApiKey: e.target.value }))}
-                placeholder={settings.hasApiKey ? "Leave empty to keep current key" : "Enter API key"}
+                onChange={(e) =>
+                  setSettings((s) => ({ ...s, llmApiKey: e.target.value }))
+                }
+                placeholder={
+                  settings.hasApiKey
+                    ? "Leave empty to keep current key"
+                    : "Enter API key"
+                }
               />
             </div>
           )}
 
           {settings.llmProvider === "ollama" && (
             <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
-              Ollama runs locally — no API key needed. The model will be pulled automatically on first scan.
-              Make sure the Ollama service is running (included in Docker Compose).
+              Ollama runs locally — no API key needed. The model will be pulled
+              automatically on first scan. Make sure the Ollama service is
+              running (included in Docker Compose).
             </div>
           )}
 
           <div className="flex items-center justify-between pt-4">
             <div>
               <Label>Enable LLM for SAST</Label>
-              <p className="text-sm text-muted-foreground">Use AI to analyze code for vulnerabilities</p>
+              <p className="text-sm text-muted-foreground">
+                Use AI to analyze code for vulnerabilities
+              </p>
             </div>
             <Switch
               checked={settings.enableLlmSast}
-              onCheckedChange={(v) => setSettings((s) => ({ ...s, enableLlmSast: v }))}
+              onCheckedChange={(v) =>
+                setSettings((s) => ({ ...s, enableLlmSast: v }))
+              }
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div>
               <Label>Enable LLM for Secrets</Label>
-              <p className="text-sm text-muted-foreground">Use AI to reduce false positives in secret detection</p>
+              <p className="text-sm text-muted-foreground">
+                Use AI to reduce false positives in secret detection
+              </p>
             </div>
             <Switch
               checked={settings.enableLlmSecrets}
-              onCheckedChange={(v) => setSettings((s) => ({ ...s, enableLlmSecrets: v }))}
+              onCheckedChange={(v) =>
+                setSettings((s) => ({ ...s, enableLlmSecrets: v }))
+              }
             />
           </div>
         </CardContent>
@@ -171,7 +217,9 @@ export default function LlmSettingsPage() {
             <Label>Mode</Label>
             <Select
               value={settings.vulnDbMode}
-              onValueChange={(v) => setSettings((s) => ({ ...s, vulnDbMode: v }))}
+              onValueChange={(v) =>
+                setSettings((s) => ({ ...s, vulnDbMode: v }))
+              }
             >
               <SelectTrigger>
                 <SelectValue />
@@ -179,7 +227,9 @@ export default function LlmSettingsPage() {
               <SelectContent>
                 <SelectItem value="online">Online (OSV.dev API)</SelectItem>
                 <SelectItem value="mirror">Mirrored (Self-hosted)</SelectItem>
-                <SelectItem value="offline">Offline (Bundled snapshot)</SelectItem>
+                <SelectItem value="offline">
+                  Offline (Bundled snapshot)
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -188,7 +238,9 @@ export default function LlmSettingsPage() {
             <Label>OSV API URL</Label>
             <Input
               value={settings.osvApiUrl}
-              onChange={(e) => setSettings((s) => ({ ...s, osvApiUrl: e.target.value }))}
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, osvApiUrl: e.target.value }))
+              }
               placeholder="https://api.osv.dev"
             />
           </div>

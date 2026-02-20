@@ -75,7 +75,7 @@ export async function analyzeWithLlm(
   model: string,
   systemPrompt: string,
   userContent: string,
-  options?: { temperature?: number; maxTokens?: number }
+  options?: { temperature?: number; maxTokens?: number },
 ): Promise<string> {
   const temperature = options?.temperature ?? 0.1;
 

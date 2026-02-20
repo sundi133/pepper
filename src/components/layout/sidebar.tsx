@@ -53,7 +53,7 @@ export function Sidebar() {
                           "group flex gap-x-3 rounded-md p-2 text-sm font-medium leading-6",
                           isActive
                             ? "bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                       >
                         <item.icon className="h-5 w-5 shrink-0" />
@@ -80,7 +80,7 @@ export function Sidebar() {
                           "group flex gap-x-3 rounded-md p-2 text-sm font-medium leading-6",
                           isActive
                             ? "bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                       >
                         <item.icon className="h-5 w-5 shrink-0" />

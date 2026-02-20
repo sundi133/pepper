@@ -1,5 +1,10 @@
 export type SeverityLevel = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
-export type ScannerType = "SAST_PATTERN" | "SAST_LLM" | "SCA" | "SECRETS_PATTERN" | "SECRETS_LLM";
+export type ScannerType =
+  | "SAST_PATTERN"
+  | "SAST_LLM"
+  | "SCA"
+  | "SECRETS_PATTERN"
+  | "SECRETS_LLM";
 
 export interface ScanContext {
   workDir: string;
@@ -16,7 +21,15 @@ export interface ScanContext {
   };
   signal?: AbortSignal;
   onProgress?: (message: string) => void;
-  onScannerComplete?: (scannerName: string, findings: RawFinding[]) => Promise<void>;
+  onScannerComplete?: (
+    scannerName: string,
+    findings: RawFinding[],
+  ) => Promise<void>;
+  /** Called with intermediate findings as LLM batches complete (before scanner finishes) */
+  onBatchFindings?: (
+    scannerName: string,
+    findings: RawFinding[],
+  ) => Promise<void>;
 }
 
 export interface RawFinding {

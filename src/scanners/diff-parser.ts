@@ -25,7 +25,7 @@ export function parseDiffNameStatus(output: string): DiffFile[] {
  */
 export function filterToChangedFiles(
   allFiles: string[],
-  diffFiles: DiffFile[]
+  diffFiles: DiffFile[],
 ): string[] {
   const changedPaths = new Set(diffFiles.map((f) => f.path));
   return allFiles.filter((f) => changedPaths.has(f));

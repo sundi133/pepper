@@ -5,7 +5,11 @@ import { Loader2, CheckCircle2, XCircle, Clock, Ban } from "lucide-react";
 
 const statusConfig: Record<
   string,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType }
+  {
+    label: string;
+    variant: "default" | "secondary" | "destructive" | "outline";
+    icon: React.ElementType;
+  }
 > = {
   QUEUED: { label: "Queued", variant: "secondary", icon: Clock },
   RUNNING: { label: "Running", variant: "default", icon: Loader2 },
@@ -20,7 +24,9 @@ export function ScanStatusBadge({ status }: { status: string }) {
 
   return (
     <Badge variant={config.variant} className="gap-1">
-      <Icon className={`h-3 w-3 ${status === "RUNNING" ? "animate-spin" : ""}`} />
+      <Icon
+        className={`h-3 w-3 ${status === "RUNNING" ? "animate-spin" : ""}`}
+      />
       {config.label}
     </Badge>
   );
@@ -29,7 +35,10 @@ export function ScanStatusBadge({ status }: { status: string }) {
 export function GateResultBadge({ result }: { result: string }) {
   if (result === "PASSED") {
     return (
-      <Badge variant="outline" className="gap-1 border-green-500 text-green-600">
+      <Badge
+        variant="outline"
+        className="gap-1 border-green-500 text-green-600"
+      >
         <CheckCircle2 className="h-3 w-3" />
         Gate Passed
       </Badge>
@@ -52,7 +61,10 @@ export function GateResultBadge({ result }: { result: string }) {
 }
 
 export function SeverityBadge({ severity }: { severity: string }) {
-  const variants: Record<string, "destructive" | "default" | "secondary" | "outline"> = {
+  const variants: Record<
+    string,
+    "destructive" | "default" | "secondary" | "outline"
+  > = {
     CRITICAL: "destructive",
     HIGH: "destructive",
     MEDIUM: "default",

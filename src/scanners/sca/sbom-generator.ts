@@ -24,7 +24,7 @@ interface CycloneDxSbom {
 
 export function generateSbom(
   dependencies: Dependency[],
-  projectName = "unknown"
+  projectName = "unknown",
 ): CycloneDxSbom {
   const components: CycloneDxComponent[] = dependencies.map((dep, i) => ({
     type: "library",

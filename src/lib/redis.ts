@@ -27,7 +27,7 @@ export const redisConnection = {
   },
   get port() {
     return parseInt(
-      new URL(process.env.REDIS_URL || "redis://localhost:6379").port || "6379"
+      new URL(process.env.REDIS_URL || "redis://localhost:6379").port || "6379",
     );
   },
 };

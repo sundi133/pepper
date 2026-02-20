@@ -15,7 +15,15 @@ import { createScanLogger } from "@/lib/logger";
 // prisma is imported from @/lib/prisma
 
 export async function processScanJob(job: Job<ScanJobData>) {
-  const { scanId, projectId, sourceType, sourceRef, scanType, orgSettings, buildGate } = job.data;
+  const {
+    scanId,
+    projectId,
+    sourceType,
+    sourceRef,
+    scanType,
+    orgSettings,
+    buildGate,
+  } = job.data;
   const log = createScanLogger(scanId);
   const abortController = new AbortController();
 
@@ -50,7 +58,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
       const branch = job.data.branch || "main";
       execSync(
         `git clone --depth 1 --branch ${branch} ${repoUrl} ${workDir}/repo`,
-        { timeout: 120000 }
+        { timeout: 120000 },
       );
       // Move contents up
       const repoDir = path.join(workDir, "repo");
@@ -66,7 +74,45 @@ export async function processScanJob(job: Job<ScanJobData>) {
     const fileList = enumerateFiles(workDir);
     log.info({ fileCount: fileList.length }, "Files enumerated");
 
-    // 3. Build scan context with incremental DB insert callback
+    // Helper: insert findings into DB and increment severity counts
+    async function insertFindings(findings: RawFinding[]) {
+      if (findings.length === 0) return;
+      await prisma.finding.createMany({
+        data: findings.map((f) => ({
+          scanId,
+          scanner: f.scanner,
+          severity: f.severity,
+          title: f.title,
+          description: f.description,
+          filePath: f.filePath,
+          startLine: f.startLine,
+          endLine: f.endLine,
+          snippet: f.snippet,
+          ruleId: f.ruleId,
+          cweId: f.cweId,
+          cveId: f.cveId,
+          confidence: f.confidence,
+          metadata: f.metadata as object,
+          masked: f.masked ?? false,
+        })),
+      });
+      const counts = countSeverities(findings);
+      await prisma.scan.update({
+        where: { id: scanId },
+        data: {
+          criticalCount: { increment: counts.CRITICAL },
+          highCount: { increment: counts.HIGH },
+          mediumCount: { increment: counts.MEDIUM },
+          lowCount: { increment: counts.LOW },
+          infoCount: { increment: counts.INFO },
+        },
+      });
+    }
+
+    // Track cumulative batch finding counts per scanner for progress
+    const batchFindingCounts: Record<string, number> = {};
+
+    // 3. Build scan context with incremental DB insert callbacks
     const ctx: ScanContext = {
       workDir,
       fileList,
@@ -77,49 +123,38 @@ export async function processScanJob(job: Job<ScanJobData>) {
         log.info(msg);
         job.updateProgress({ message: msg });
       },
-      onScannerComplete: async (scannerName: string, findings: RawFinding[]) => {
-        log.info({ scanner: scannerName, findings: findings.length }, "Scanner completed — inserting findings");
+      onScannerComplete: async (
+        scannerName: string,
+        findings: RawFinding[],
+      ) => {
+        log.info(
+          { scanner: scannerName, findings: findings.length },
+          "Scanner completed — inserting findings",
+        );
+        await insertFindings(findings);
 
-        // Insert this scanner's findings immediately
-        if (findings.length > 0) {
-          await prisma.finding.createMany({
-            data: findings.map((f) => ({
-              scanId,
-              scanner: f.scanner,
-              severity: f.severity,
-              title: f.title,
-              description: f.description,
-              filePath: f.filePath,
-              startLine: f.startLine,
-              endLine: f.endLine,
-              snippet: f.snippet,
-              ruleId: f.ruleId,
-              cweId: f.cweId,
-              cveId: f.cveId,
-              confidence: f.confidence,
-              metadata: f.metadata as object,
-              masked: f.masked ?? false,
-            })),
-          });
-        }
-
-        // Atomically increment severity counts
-        const counts = countSeverities(findings);
-        await prisma.scan.update({
-          where: { id: scanId },
-          data: {
-            criticalCount: { increment: counts.CRITICAL },
-            highCount: { increment: counts.HIGH },
-            mediumCount: { increment: counts.MEDIUM },
-            lowCount: { increment: counts.LOW },
-            infoCount: { increment: counts.INFO },
-          },
-        });
-
-        // Update scannerProgress JSON — merge new scanner status
+        // Mark scanner as DONE in progress JSON
+        const totalFindings =
+          (batchFindingCounts[scannerName] || 0) + findings.length;
         await prisma.$executeRaw`
           UPDATE "Scan"
-          SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ [scannerName]: { status: "DONE", findingsCount: findings.length } })}::jsonb
+          SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ [scannerName]: { status: "DONE", findingsCount: totalFindings } })}::jsonb
+          WHERE id = ${scanId}
+        `;
+      },
+      onBatchFindings: async (scannerName: string, findings: RawFinding[]) => {
+        log.info(
+          { scanner: scannerName, findings: findings.length },
+          "Batch findings — inserting intermediate results",
+        );
+        await insertFindings(findings);
+
+        // Update scanner progress with running count
+        batchFindingCounts[scannerName] =
+          (batchFindingCounts[scannerName] || 0) + findings.length;
+        await prisma.$executeRaw`
+          UPDATE "Scan"
+          SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ [scannerName]: { status: "RUNNING", findingsCount: batchFindingCounts[scannerName] } })}::jsonb
           WHERE id = ${scanId}
         `;
       },
@@ -129,7 +164,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
     const result = await runScanners(ctx);
     log.info(
       { findings: result.findings.length, deps: result.depsScanned },
-      "Scan complete"
+      "Scan complete",
     );
 
     // 6. Generate and upload SARIF
@@ -148,7 +183,9 @@ export async function processScanJob(job: Job<ScanJobData>) {
     });
 
     // 7. Generate and upload SBOM
-    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+    });
     const dependencies = parseDependencies(workDir, fileList).dependencies;
     const sbom = generateSbom(dependencies, project?.name || "unknown");
     const sbomJson = JSON.stringify(sbom, null, 2);
@@ -169,12 +206,19 @@ export async function processScanJob(job: Job<ScanJobData>) {
     if (buildGate) {
       const currentScan = await prisma.scan.findUniqueOrThrow({
         where: { id: scanId },
-        select: { criticalCount: true, highCount: true, mediumCount: true, lowCount: true },
+        select: {
+          criticalCount: true,
+          highCount: true,
+          mediumCount: true,
+          lowCount: true,
+        },
       });
       if (
-        (buildGate.maxCritical >= 0 && currentScan.criticalCount > buildGate.maxCritical) ||
+        (buildGate.maxCritical >= 0 &&
+          currentScan.criticalCount > buildGate.maxCritical) ||
         (buildGate.maxHigh >= 0 && currentScan.highCount > buildGate.maxHigh) ||
-        (buildGate.maxMedium >= 0 && currentScan.mediumCount > buildGate.maxMedium) ||
+        (buildGate.maxMedium >= 0 &&
+          currentScan.mediumCount > buildGate.maxMedium) ||
         (buildGate.maxLow >= 0 && currentScan.lowCount > buildGate.maxLow)
       ) {
         gateResult = "FAILED";
@@ -217,9 +261,21 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
 function enumerateFiles(dir: string, prefix = ""): string[] {
   const SKIP = new Set([
-    "node_modules", ".git", ".svn", "vendor", "dist", "build",
-    "target", "__pycache__", ".tox", "venv", ".venv", ".next",
-    "coverage", ".nyc_output", ".cache",
+    "node_modules",
+    ".git",
+    ".svn",
+    "vendor",
+    "dist",
+    "build",
+    "target",
+    "__pycache__",
+    ".tox",
+    "venv",
+    ".venv",
+    ".next",
+    "coverage",
+    ".nyc_output",
+    ".cache",
   ]);
 
   const files: string[] = [];
@@ -230,7 +286,10 @@ function enumerateFiles(dir: string, prefix = ""): string[] {
       if (entry.isDirectory()) {
         if (SKIP.has(entry.name)) continue;
         files.push(
-          ...enumerateFiles(path.join(dir, entry.name), path.join(prefix, entry.name))
+          ...enumerateFiles(
+            path.join(dir, entry.name),
+            path.join(prefix, entry.name),
+          ),
         );
       } else if (entry.isFile()) {
         files.push(path.join(prefix, entry.name));
@@ -258,10 +317,7 @@ async function extractArchive(archivePath: string, destDir: string) {
     execSync(`unzip -o -q "${archivePath}" -d "${destDir}"`, {
       timeout: 60000,
     });
-  } else if (
-    archivePath.endsWith(".tar.gz") ||
-    archivePath.endsWith(".tgz")
-  ) {
+  } else if (archivePath.endsWith(".tar.gz") || archivePath.endsWith(".tgz")) {
     execSync(`tar -xzf "${archivePath}" -C "${destDir}"`, { timeout: 60000 });
   } else if (archivePath.endsWith(".tar")) {
     execSync(`tar -xf "${archivePath}" -C "${destDir}"`, { timeout: 60000 });

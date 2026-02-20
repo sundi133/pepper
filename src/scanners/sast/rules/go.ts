@@ -4,7 +4,8 @@ export const goRules: PatternRule[] = [
   {
     id: "GO-SQL-001",
     title: "SQL query with string concatenation",
-    description: "Building SQL queries with string concatenation or fmt.Sprintf is vulnerable to SQL injection. Use parameterized queries with $1, $2 placeholders.",
+    description:
+      "Building SQL queries with string concatenation or fmt.Sprintf is vulnerable to SQL injection. Use parameterized queries with $1, $2 placeholders.",
     severity: "HIGH",
     cweId: "CWE-89",
     languages: ["go"],
@@ -13,7 +14,8 @@ export const goRules: PatternRule[] = [
   {
     id: "GO-EXEC-001",
     title: "Command execution with user input",
-    description: "Using os/exec.Command with unsanitized input can lead to command injection. Validate and sanitize all command arguments.",
+    description:
+      "Using os/exec.Command with unsanitized input can lead to command injection. Validate and sanitize all command arguments.",
     severity: "HIGH",
     cweId: "CWE-78",
     languages: ["go"],
@@ -22,7 +24,8 @@ export const goRules: PatternRule[] = [
   {
     id: "GO-CRYPTO-001",
     title: "Weak cryptographic hash (MD5/SHA1)",
-    description: "MD5 and SHA1 are cryptographically broken. Use SHA-256 or stronger for security-sensitive hashing.",
+    description:
+      "MD5 and SHA1 are cryptographically broken. Use SHA-256 or stronger for security-sensitive hashing.",
     severity: "MEDIUM",
     cweId: "CWE-327",
     languages: ["go"],
@@ -32,7 +35,8 @@ export const goRules: PatternRule[] = [
   {
     id: "GO-TLS-001",
     title: "TLS certificate verification disabled",
-    description: "InsecureSkipVerify: true disables TLS certificate validation, making connections vulnerable to MITM attacks.",
+    description:
+      "InsecureSkipVerify: true disables TLS certificate validation, making connections vulnerable to MITM attacks.",
     severity: "HIGH",
     cweId: "CWE-295",
     languages: ["go"],
@@ -41,16 +45,19 @@ export const goRules: PatternRule[] = [
   {
     id: "GO-SSRF-001",
     title: "Potential SSRF via user-controlled URL",
-    description: "Making HTTP requests with user-controlled URLs can lead to SSRF attacks. Validate URLs against an allowlist.",
+    description:
+      "Making HTTP requests with user-controlled URLs can lead to SSRF attacks. Validate URLs against an allowlist.",
     severity: "HIGH",
     cweId: "CWE-918",
     languages: ["go"],
-    pattern: /http\.(?:Get|Post|Head|NewRequest)\s*\([^)]*(?:r\.|req\.|request\.)/,
+    pattern:
+      /http\.(?:Get|Post|Head|NewRequest)\s*\([^)]*(?:r\.|req\.|request\.)/,
   },
   {
     id: "GO-RACE-001",
     title: "Potential data race on shared variable",
-    description: "Accessing shared variables without proper synchronization can lead to race conditions. Use sync.Mutex or channels.",
+    description:
+      "Accessing shared variables without proper synchronization can lead to race conditions. Use sync.Mutex or channels.",
     severity: "MEDIUM",
     cweId: "CWE-362",
     languages: ["go"],
@@ -59,7 +66,8 @@ export const goRules: PatternRule[] = [
   {
     id: "GO-ERR-001",
     title: "Ignored error return",
-    description: "Ignoring error returns can mask critical failures. Always handle or explicitly discard errors.",
+    description:
+      "Ignoring error returns can mask critical failures. Always handle or explicitly discard errors.",
     severity: "LOW",
     cweId: "CWE-754",
     languages: ["go"],

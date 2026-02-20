@@ -39,7 +39,7 @@ export const cargoTomlParser: DependencyParser = {
 
         // Table form: name = { version = "..." }
         const tableMatch = line.match(
-          /^([a-zA-Z0-9_-]+)\s*=\s*\{.*version\s*=\s*"([^"]+)"/
+          /^([a-zA-Z0-9_-]+)\s*=\s*\{.*version\s*=\s*"([^"]+)"/,
         );
         if (tableMatch) {
           deps.push({

@@ -24,7 +24,7 @@ export const authOptions: NextAuthOptions = {
         if (!user?.passwordHash) return null;
         const valid = await bcrypt.compare(
           credentials.password,
-          user.passwordHash
+          user.passwordHash,
         );
         if (!valid) return null;
         return { id: user.id, email: user.email, name: user.name };
@@ -59,7 +59,8 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (token.userId) {
         session.user.id = token.userId as string;
-        session.user.memberships = token.memberships as typeof session.user.memberships;
+        session.user.memberships =
+          token.memberships as typeof session.user.memberships;
       }
       return session;
     },

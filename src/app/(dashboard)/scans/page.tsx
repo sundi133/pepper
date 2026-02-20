@@ -2,7 +2,10 @@
 
 import { useScans, useProjects } from "@/hooks/use-scan-polling";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScanStatusBadge, GateResultBadge } from "@/components/scans/scan-status-badge";
+import {
+  ScanStatusBadge,
+  GateResultBadge,
+} from "@/components/scans/scan-status-badge";
 import { CreateScanDialog } from "@/components/scans/create-scan-dialog";
 import {
   Table,
@@ -36,7 +39,9 @@ export default function ScansPage() {
           {isLoading ? (
             <p className="text-muted-foreground text-center py-8">Loading...</p>
           ) : scans.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">No scans yet.</p>
+            <p className="text-muted-foreground text-center py-8">
+              No scans yet.
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -62,7 +67,9 @@ export default function ScansPage() {
                         {(scan.project as { name: string })?.name || "Unknown"}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-sm">{scan.scanType as string}</TableCell>
+                    <TableCell className="text-sm">
+                      {scan.scanType as string}
+                    </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {(scan.branch as string) || "-"}
                     </TableCell>
@@ -72,7 +79,8 @@ export default function ScansPage() {
                     <TableCell>
                       {scan.status === "COMPLETED" && (
                         <span className="text-sm font-medium text-destructive">
-                          {(scan.criticalCount as number) + (scan.highCount as number)}
+                          {(scan.criticalCount as number) +
+                            (scan.highCount as number)}
                         </span>
                       )}
                     </TableCell>

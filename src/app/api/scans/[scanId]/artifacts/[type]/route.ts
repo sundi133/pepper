@@ -5,7 +5,7 @@ import { downloadObject } from "@/lib/minio";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ scanId: string; type: string }> }
+  { params }: { params: Promise<{ scanId: string; type: string }> },
 ) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
@@ -22,19 +22,21 @@ export async function GET(
   if (!artifactType) {
     return NextResponse.json(
       { error: "Invalid artifact type. Use: sarif, sbom, or log" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   const artifact = await prisma.scanArtifact.findUnique({
-    where: { scanId_type: { scanId, type: artifactType as "SARIF" | "SBOM_CYCLONEDX" | "SCAN_LOG" } },
+    where: {
+      scanId_type: {
+        scanId,
+        type: artifactType as "SARIF" | "SBOM_CYCLONEDX" | "SCAN_LOG",
+      },
+    },
   });
 
   if (!artifact) {
-    return NextResponse.json(
-      { error: "Artifact not found" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
   }
 
   try {
@@ -55,7 +57,7 @@ export async function GET(
   } catch {
     return NextResponse.json(
       { error: "Failed to download artifact" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

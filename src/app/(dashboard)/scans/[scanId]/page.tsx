@@ -14,11 +14,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScanStatusBadge, GateResultBadge, SeverityBadge } from "@/components/scans/scan-status-badge";
+import {
+  ScanStatusBadge,
+  GateResultBadge,
+  SeverityBadge,
+} from "@/components/scans/scan-status-badge";
 import { FindingsTable } from "@/components/scans/findings-table";
 import { FindingDetailPanel } from "@/components/scans/finding-detail-panel";
 import { Progress } from "@/components/ui/progress";
-import { Download, Ban, FileJson, FileText, AlertTriangle, Shield, Key } from "lucide-react";
+import {
+  Download,
+  Ban,
+  FileJson,
+  FileText,
+  AlertTriangle,
+  Shield,
+  Key,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export default function ScanDetailPage() {
@@ -37,18 +49,27 @@ export default function ScanDetailPage() {
   const { findings } = useFindings(scanId, filters, scan?.status);
 
   if (isLoading) {
-    return <p className="text-muted-foreground text-center py-12">Loading scan...</p>;
+    return (
+      <p className="text-muted-foreground text-center py-12">Loading scan...</p>
+    );
   }
   if (!scan) {
     return <p className="text-destructive text-center py-12">Scan not found</p>;
   }
 
   const isRunning = scan.status === "QUEUED" || scan.status === "RUNNING";
-  const totalFindings = scan.criticalCount + scan.highCount + scan.mediumCount + scan.lowCount + scan.infoCount;
+  const totalFindings =
+    scan.criticalCount +
+    scan.highCount +
+    scan.mediumCount +
+    scan.lowCount +
+    scan.infoCount;
 
   async function handleCancel() {
     try {
-      const res = await fetch(`/api/scans/${scanId}/cancel`, { method: "POST" });
+      const res = await fetch(`/api/scans/${scanId}/cancel`, {
+        method: "POST",
+      });
       if (!res.ok) throw new Error("Failed to cancel");
       toast.success("Scan cancelled");
     } catch {
@@ -78,7 +99,8 @@ export default function ScanDetailPage() {
             {scan.branch && `Branch: ${scan.branch}`}
             {scan.commitSha && ` | Commit: ${scan.commitSha.substring(0, 8)}`}
             {` | Created: ${new Date(scan.createdAt).toLocaleString()}`}
-            {scan.completedAt && ` | Duration: ${getDuration(scan.startedAt, scan.completedAt)}`}
+            {scan.completedAt &&
+              ` | Duration: ${getDuration(scan.startedAt, scan.completedAt)}`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -90,11 +112,17 @@ export default function ScanDetailPage() {
           )}
           {scan.status === "COMPLETED" && (
             <>
-              <Button variant="outline" onClick={() => downloadArtifact("sarif")}>
+              <Button
+                variant="outline"
+                onClick={() => downloadArtifact("sarif")}
+              >
                 <FileJson className="mr-2 h-4 w-4" />
                 SARIF
               </Button>
-              <Button variant="outline" onClick={() => downloadArtifact("sbom")}>
+              <Button
+                variant="outline"
+                onClick={() => downloadArtifact("sbom")}
+              >
                 <FileText className="mr-2 h-4 w-4" />
                 SBOM
               </Button>
@@ -112,18 +140,32 @@ export default function ScanDetailPage() {
                 <span>Scanning...</span>
                 <span className="text-muted-foreground">{scan.status}</span>
               </div>
-              <Progress value={computeScanProgress(scan.scannerProgress, scan.status)} />
-              {scan.scannerProgress && Object.keys(scan.scannerProgress).length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {Object.entries(scan.scannerProgress as Record<string, { status: string; findingsCount: number }>).map(
-                    ([name, info]) => (
-                      <Badge key={name} variant={info.status === "DONE" ? "default" : "outline"}>
-                        {name}: {info.status === "DONE" ? `Done (${info.findingsCount})` : info.status}
+              <Progress
+                value={computeScanProgress(scan.scannerProgress, scan.status)}
+              />
+              {scan.scannerProgress &&
+                Object.keys(scan.scannerProgress).length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {Object.entries(
+                      scan.scannerProgress as Record<
+                        string,
+                        { status: string; findingsCount: number }
+                      >,
+                    ).map(([name, info]) => (
+                      <Badge
+                        key={name}
+                        variant={
+                          info.status === "DONE" ? "default" : "secondary"
+                        }
+                      >
+                        {name}:{" "}
+                        {info.status === "DONE"
+                          ? `Done (${info.findingsCount})`
+                          : `Running (${info.findingsCount} so far)`}
                       </Badge>
-                    )
-                  )}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
             </div>
           </CardContent>
         </Card>
@@ -194,7 +236,10 @@ export default function ScanDetailPage() {
                 )}
               </CardTitle>
               <div className="flex gap-2">
-                <Select value={severityFilter} onValueChange={setSeverityFilter}>
+                <Select
+                  value={severityFilter}
+                  onValueChange={setSeverityFilter}
+                >
                   <SelectTrigger className="w-36">
                     <SelectValue placeholder="Severity" />
                   </SelectTrigger>
@@ -216,7 +261,9 @@ export default function ScanDetailPage() {
                     <SelectItem value="SAST_PATTERN">SAST (Pattern)</SelectItem>
                     <SelectItem value="SAST_LLM">SAST (AI)</SelectItem>
                     <SelectItem value="SCA">SCA</SelectItem>
-                    <SelectItem value="SECRETS_PATTERN">Secrets (Pattern)</SelectItem>
+                    <SelectItem value="SECRETS_PATTERN">
+                      Secrets (Pattern)
+                    </SelectItem>
                     <SelectItem value="SECRETS_LLM">Secrets (AI)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -241,14 +288,26 @@ export default function ScanDetailPage() {
               <AlertTriangle className="h-5 w-5" />
               <span className="font-medium">Scan Failed</span>
             </div>
-            <p className="text-sm text-muted-foreground mt-2">{scan.errorMessage}</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              {scan.errorMessage}
+            </p>
           </CardContent>
         </Card>
       )}
 
       {/* Finding Detail Panel */}
       <FindingDetailPanel
-        finding={selectedFinding as Record<string, unknown> & { id: string; scanner: string; severity: string; title: string; description: string } | null}
+        finding={
+          selectedFinding as
+            | (Record<string, unknown> & {
+                id: string;
+                scanner: string;
+                severity: string;
+                title: string;
+                description: string;
+              })
+            | null
+        }
         open={!!selectedFinding}
         onClose={() => setSelectedFinding(null)}
       />
@@ -258,7 +317,7 @@ export default function ScanDetailPage() {
 
 function computeScanProgress(
   scannerProgress: Record<string, { status: string }> | null | undefined,
-  status: string
+  status: string,
 ): number {
   if (status === "QUEUED") return 5;
   if (!scannerProgress || Object.keys(scannerProgress).length === 0) return 10;

@@ -1,4 +1,8 @@
-import { createLlmClient, analyzeWithLlm, parseLlmJsonResponse } from "@/lib/llm-gateway";
+import {
+  createLlmClient,
+  analyzeWithLlm,
+  parseLlmJsonResponse,
+} from "@/lib/llm-gateway";
 import { RawFinding } from "../types";
 import { logger } from "@/lib/logger";
 
@@ -32,11 +36,19 @@ export async function classifySecrets(
     baseUrl: string;
     apiKey?: string;
     model: string;
-  }
+  },
 ): Promise<RawFinding[]> {
   if (findings.length === 0) return [];
 
-  logger.info({ provider: llmConfig.provider, baseUrl: llmConfig.baseUrl, model: llmConfig.model, findingCount: findings.length }, "Secrets LLM classifier invoked");
+  logger.info(
+    {
+      provider: llmConfig.provider,
+      baseUrl: llmConfig.baseUrl,
+      model: llmConfig.model,
+      findingCount: findings.length,
+    },
+    "Secrets LLM classifier invoked",
+  );
 
   const client = createLlmClient(llmConfig);
 
@@ -50,17 +62,20 @@ export async function classifySecrets(
   }));
 
   try {
-    logger.info({ findingCount: findings.length }, "Sending secrets to LLM for classification");
+    logger.info(
+      { findingCount: findings.length },
+      "Sending secrets to LLM for classification",
+    );
     const raw = await analyzeWithLlm(
       client,
       llmConfig.model,
       SYSTEM_PROMPT,
-      JSON.stringify({ findings: context })
+      JSON.stringify({ findings: context }),
     );
 
     const parsed = parseLlmJsonResponse<{ classifications: Classification[] }>(
       raw,
-      { classifications: [] }
+      { classifications: [] },
     );
 
     const classMap = new Map<number, Classification>();
@@ -74,7 +89,10 @@ export async function classifySecrets(
       return classification.isSecret;
     });
   } catch (err) {
-    logger.error({ err, findingCount: findings.length }, "Secrets LLM classification failed — keeping all findings unfiltered");
+    logger.error(
+      { err, findingCount: findings.length },
+      "Secrets LLM classification failed — keeping all findings unfiltered",
+    );
     return findings;
   }
 }

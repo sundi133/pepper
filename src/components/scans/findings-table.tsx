@@ -80,7 +80,9 @@ export function FindingsTable({
             </TableCell>
             <TableCell>
               <Badge variant="outline" className="text-xs">
-                {SCANNER_LABELS[finding.scanner as keyof typeof SCANNER_LABELS] || finding.scanner}
+                {SCANNER_LABELS[
+                  finding.scanner as keyof typeof SCANNER_LABELS
+                ] || finding.scanner}
               </Badge>
             </TableCell>
             <TableCell>

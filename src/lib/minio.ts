@@ -14,7 +14,8 @@ export const minioClient =
     secretKey: process.env.MINIO_SECRET_KEY || "minioadmin",
   });
 
-if (process.env.NODE_ENV !== "production") globalForMinio.minioClient = minioClient;
+if (process.env.NODE_ENV !== "production")
+  globalForMinio.minioClient = minioClient;
 
 const BUCKET = process.env.MINIO_BUCKET || "pepper-artifacts";
 
@@ -28,7 +29,7 @@ export async function ensureBucket() {
 export async function uploadObject(
   key: string,
   data: Buffer | string,
-  contentType = "application/octet-stream"
+  contentType = "application/octet-stream",
 ): Promise<void> {
   const buffer = typeof data === "string" ? Buffer.from(data) : data;
   await minioClient.putObject(BUCKET, key, buffer, buffer.length, {
@@ -47,7 +48,7 @@ export async function downloadObject(key: string): Promise<Buffer> {
 
 export async function getPresignedUrl(
   key: string,
-  expiry = 3600
+  expiry = 3600,
 ): Promise<string> {
   return minioClient.presignedGetObject(BUCKET, key, expiry);
 }

@@ -4,7 +4,8 @@ export const SECRET_PATTERNS: SecretPattern[] = [
   {
     id: "AWS_ACCESS_KEY",
     title: "AWS Access Key ID",
-    description: "AWS Access Key ID found in code. This can be used to access AWS services.",
+    description:
+      "AWS Access Key ID found in code. This can be used to access AWS services.",
     severity: "CRITICAL",
     pattern: /AKIA[0-9A-Z]{16}/,
     allowlist: [/example/i, /test/i, /dummy/i, /fake/i, /placeholder/i],
@@ -14,12 +15,14 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     title: "AWS Secret Access Key",
     description: "AWS Secret Access Key found in code.",
     severity: "CRITICAL",
-    pattern: /(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY|aws_secret)\s*[:=]\s*['"]?[A-Za-z0-9/+=]{40}['"]?/,
+    pattern:
+      /(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY|aws_secret)\s*[:=]\s*['"]?[A-Za-z0-9/+=]{40}['"]?/,
   },
   {
     id: "GITHUB_TOKEN",
     title: "GitHub Personal Access Token",
-    description: "GitHub token found in code. Can be used to access GitHub APIs.",
+    description:
+      "GitHub token found in code. Can be used to access GitHub APIs.",
     severity: "HIGH",
     pattern: /gh[ps]_[A-Za-z0-9_]{36,}/,
   },
@@ -49,7 +52,8 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     title: "Slack Webhook URL",
     description: "Slack incoming webhook URL found in code.",
     severity: "MEDIUM",
-    pattern: /https:\/\/hooks\.slack\.com\/services\/T[A-Z0-9]+\/B[A-Z0-9]+\/[a-zA-Z0-9]+/,
+    pattern:
+      /https:\/\/hooks\.slack\.com\/services\/T[A-Z0-9]+\/B[A-Z0-9]+\/[a-zA-Z0-9]+/,
   },
   {
     id: "PRIVATE_KEY",
@@ -63,16 +67,34 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     title: "Generic API Key",
     description: "Possible API key detected based on variable naming pattern.",
     severity: "MEDIUM",
-    pattern: /(?:api[_-]?key|apikey|api[_-]?secret|api[_-]?token)\s*[:=]\s*['"][A-Za-z0-9_\-/.+=]{20,}['"]/i,
-    allowlist: [/example/i, /your[_-]?api/i, /\$\{/i, /process\.env/i, /os\.environ/i, /ENV\[/i],
+    pattern:
+      /(?:api[_-]?key|apikey|api[_-]?secret|api[_-]?token)\s*[:=]\s*['"][A-Za-z0-9_\-/.+=]{20,}['"]/i,
+    allowlist: [
+      /example/i,
+      /your[_-]?api/i,
+      /\$\{/i,
+      /process\.env/i,
+      /os\.environ/i,
+      /ENV\[/i,
+    ],
   },
   {
     id: "GENERIC_SECRET",
     title: "Generic Secret",
-    description: "Possible secret or password detected based on variable naming pattern.",
+    description:
+      "Possible secret or password detected based on variable naming pattern.",
     severity: "MEDIUM",
-    pattern: /(?:secret|password|passwd|pwd|token|auth[_-]?key)\s*[:=]\s*['"][A-Za-z0-9_\-/.+=!@#$%^&*]{8,}['"]/i,
-    allowlist: [/example/i, /changeme/i, /\$\{/i, /process\.env/i, /os\.environ/i, /placeholder/i, /your[_-]/i],
+    pattern:
+      /(?:secret|password|passwd|pwd|token|auth[_-]?key)\s*[:=]\s*['"][A-Za-z0-9_\-/.+=!@#$%^&*]{8,}['"]/i,
+    allowlist: [
+      /example/i,
+      /changeme/i,
+      /\$\{/i,
+      /process\.env/i,
+      /os\.environ/i,
+      /placeholder/i,
+      /your[_-]/i,
+    ],
   },
   {
     id: "JWT_TOKEN",
@@ -99,7 +121,8 @@ export const SECRET_PATTERNS: SecretPattern[] = [
   {
     id: "STRIPE_PUBLISHABLE_KEY",
     title: "Stripe Publishable Key",
-    description: "Stripe publishable key found in code. While not as sensitive as secret keys, it should not be hardcoded.",
+    description:
+      "Stripe publishable key found in code. While not as sensitive as secret keys, it should not be hardcoded.",
     severity: "LOW",
     pattern: /pk_live_[0-9a-zA-Z]{24,}/,
   },
@@ -129,7 +152,8 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     title: "Database Connection String",
     description: "Database connection string with credentials found in code.",
     severity: "HIGH",
-    pattern: /(?:postgres|mysql|mongodb|redis|amqp):\/\/[^:\s]+:[^@\s]+@[^\s'"]+/,
+    pattern:
+      /(?:postgres|mysql|mongodb|redis|amqp):\/\/[^:\s]+:[^@\s]+@[^\s'"]+/,
     allowlist: [/localhost/i, /127\.0\.0\.1/, /example\.com/i],
   },
   {
@@ -137,7 +161,8 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     title: "Heroku API Key",
     description: "Heroku API key found in code.",
     severity: "HIGH",
-    pattern: /(?:heroku_api_key|HEROKU_API_KEY)\s*[:=]\s*['"]?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}['"]?/,
+    pattern:
+      /(?:heroku_api_key|HEROKU_API_KEY)\s*[:=]\s*['"]?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}['"]?/,
   },
   {
     id: "NPM_TOKEN",
@@ -151,6 +176,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     title: "Azure Storage Connection String",
     description: "Azure storage connection string found in code.",
     severity: "HIGH",
-    pattern: /DefaultEndpointsProtocol=https?;AccountName=[^;]+;AccountKey=[A-Za-z0-9/+=]+/,
+    pattern:
+      /DefaultEndpointsProtocol=https?;AccountName=[^;]+;AccountKey=[A-Za-z0-9/+=]+/,
   },
 ];

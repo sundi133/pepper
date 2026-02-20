@@ -8,7 +8,8 @@ export async function GET(req: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const orgId = getDefaultOrgId(auth.session);
-  if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
+  if (!orgId)
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
 
   const settings = await prisma.orgSettings.findUnique({
     where: { organizationId: orgId },
@@ -55,7 +56,8 @@ export async function PUT(req: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const orgId = getDefaultOrgId(auth.session);
-  if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
+  if (!orgId)
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
 
   try {
     const body = await req.json();
@@ -77,8 +79,14 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Invalid input", details: error.issues }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid input", details: error.issues },
+        { status: 400 },
+      );
     }
-    return NextResponse.json({ error: "Failed to update settings" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to update settings" },
+      { status: 500 },
+    );
   }
 }

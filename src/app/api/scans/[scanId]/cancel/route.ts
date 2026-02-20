@@ -5,7 +5,7 @@ import { scanQueue } from "@/lib/queue";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ scanId: string }> }
+  { params }: { params: Promise<{ scanId: string }> },
 ) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
@@ -20,7 +20,7 @@ export async function POST(
   if (scan.status !== "QUEUED" && scan.status !== "RUNNING") {
     return NextResponse.json(
       { error: "Scan is not in a cancellable state" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 

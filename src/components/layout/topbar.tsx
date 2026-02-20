@@ -29,7 +29,8 @@ export function Topbar() {
         <div className="flex flex-1" />
         <div className="flex items-center gap-x-4 lg:gap-x-6">
           <span className="text-sm text-muted-foreground">
-            {session?.user?.memberships?.[0]?.organizationName || "Organization"}
+            {session?.user?.memberships?.[0]?.organizationName ||
+              "Organization"}
           </span>
 
           <DropdownMenu>
@@ -42,7 +43,9 @@ export function Topbar() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <div className="px-2 py-1.5">
-                <p className="text-sm font-medium">{session?.user?.name || "User"}</p>
+                <p className="text-sm font-medium">
+                  {session?.user?.name || "User"}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {session?.user?.email}
                 </p>
@@ -53,7 +56,9 @@ export function Topbar() {
                 Profile
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })}>
+              <DropdownMenuItem
+                onClick={() => signOut({ callbackUrl: "/login" })}
+              >
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign Out
               </DropdownMenuItem>

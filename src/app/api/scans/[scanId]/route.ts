@@ -4,7 +4,7 @@ import { requireAuth } from "@/lib/auth-guard";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ scanId: string }> }
+  { params }: { params: Promise<{ scanId: string }> },
 ) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;

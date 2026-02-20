@@ -58,12 +58,15 @@ export function FindingDetailPanel({
           <div className="flex items-center gap-2">
             <SeverityBadge severity={finding.severity} />
             <Badge variant="outline">
-              {SCANNER_LABELS[finding.scanner as keyof typeof SCANNER_LABELS] || finding.scanner}
+              {SCANNER_LABELS[finding.scanner as keyof typeof SCANNER_LABELS] ||
+                finding.scanner}
             </Badge>
           </div>
           <SheetTitle className="text-left">{finding.title}</SheetTitle>
           <SheetDescription className="text-left">
-            {finding.ruleId && <span className="font-mono">{finding.ruleId}</span>}
+            {finding.ruleId && (
+              <span className="font-mono">{finding.ruleId}</span>
+            )}
             {finding.cweId && <span className="ml-2">{finding.cweId}</span>}
             {finding.cveId && <span className="ml-2">{finding.cveId}</span>}
           </SheetDescription>
@@ -84,7 +87,8 @@ export function FindingDetailPanel({
                     {finding.startLine && (
                       <span className="text-muted-foreground">
                         :{finding.startLine}
-                        {finding.endLine && finding.endLine !== finding.startLine
+                        {finding.endLine &&
+                        finding.endLine !== finding.startLine
                           ? `-${finding.endLine}`
                           : ""}
                       </span>
@@ -134,7 +138,9 @@ export function FindingDetailPanel({
                   <div className="h-2 flex-1 rounded-full bg-muted overflow-hidden">
                     <div
                       className="h-full bg-primary rounded-full"
-                      style={{ width: `${(finding.confidence * 100).toFixed(0)}%` }}
+                      style={{
+                        width: `${(finding.confidence * 100).toFixed(0)}%`,
+                      }}
                     />
                   </div>
                   <span className="text-sm font-mono">

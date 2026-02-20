@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +44,9 @@ export default function NewProjectPage() {
       toast.success("Project created");
       router.push(`/projects/${project.id}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create project");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create project",
+      );
     } finally {
       setLoading(false);
     }
@@ -52,7 +60,8 @@ export default function NewProjectPage() {
         <CardHeader>
           <CardTitle>Project Details</CardTitle>
           <CardDescription>
-            Configure a project to organize your scans and set build gate policies.
+            Configure a project to organize your scans and set build gate
+            policies.
           </CardDescription>
         </CardHeader>
         <CardContent>

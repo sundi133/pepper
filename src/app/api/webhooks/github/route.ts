@@ -22,7 +22,10 @@ export async function POST(req: NextRequest) {
 
   const payload = JSON.parse(body);
 
-  if (event === "pull_request" && ["opened", "synchronize"].includes(payload.action)) {
+  if (
+    event === "pull_request" &&
+    ["opened", "synchronize"].includes(payload.action)
+  ) {
     const repoUrl = payload.repository?.clone_url;
     const branch = payload.pull_request?.head?.ref;
     const baseSha = payload.pull_request?.base?.sha;
@@ -32,7 +35,10 @@ export async function POST(req: NextRequest) {
     // Find project by repo URL
     const project = await prisma.project.findFirst({
       where: { repoUrl: { contains: payload.repository?.full_name } },
-      include: { buildGate: true, organization: { include: { settings: true } } },
+      include: {
+        buildGate: true,
+        organization: { include: { settings: true } },
+      },
     });
 
     if (!project) {

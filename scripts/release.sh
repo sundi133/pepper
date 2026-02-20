@@ -11,7 +11,7 @@ set -euo pipefail
 # ──────────────────────────────────────────────────────────────────────
 
 VERSION="${1:-latest}"
-REGISTRY="${REGISTRY:-ghcr.io/votal}"
+REGISTRY="${REGISTRY:-docker.io/YOURUSERNAME}"
 
 API_IMAGE="${REGISTRY}/pepper"
 WORKER_IMAGE="${REGISTRY}/pepper-worker"

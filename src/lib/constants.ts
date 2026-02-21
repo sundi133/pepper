@@ -132,9 +132,15 @@ export const BINARY_EXTENSIONS = new Set([
 
 export const MAX_FILE_SIZE_BYTES = 1024 * 1024; // 1MB — skip threshold for pattern scanners
 export const LLM_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB — LLM scanner chunks large files instead of skipping
-export const MAX_CHUNK_TOKENS = 3000;
-export const CHUNK_OVERLAP_TOKENS = 200;
 
-// Smaller chunks for local models (Ollama/Qwen) — keeps inference fast on CPU
-export const OLLAMA_MAX_CHUNK_TOKENS = 1200;
-export const OLLAMA_CHUNK_OVERLAP_TOKENS = 100;
+// LLM context configuration — all configurable via env vars
+// Chunk size = how much code is sent per LLM request (in estimated tokens)
+// Response tokens = max tokens the LLM can generate in its response
+export const MAX_CHUNK_TOKENS = parseInt(process.env.LLM_CHUNK_TOKENS || "3000");
+export const CHUNK_OVERLAP_TOKENS = parseInt(process.env.LLM_CHUNK_OVERLAP_TOKENS || "200");
+export const LLM_MAX_RESPONSE_TOKENS = parseInt(process.env.LLM_MAX_RESPONSE_TOKENS || "4096");
+
+// Ollama/local model defaults — smaller chunks for faster CPU inference
+export const OLLAMA_MAX_CHUNK_TOKENS = parseInt(process.env.OLLAMA_CHUNK_TOKENS || "1200");
+export const OLLAMA_CHUNK_OVERLAP_TOKENS = parseInt(process.env.OLLAMA_CHUNK_OVERLAP_TOKENS || "100");
+export const OLLAMA_MAX_RESPONSE_TOKENS = parseInt(process.env.OLLAMA_MAX_RESPONSE_TOKENS || "2048");

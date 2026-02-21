@@ -15,6 +15,8 @@ import {
   CHUNK_OVERLAP_TOKENS,
   OLLAMA_MAX_CHUNK_TOKENS,
   OLLAMA_CHUNK_OVERLAP_TOKENS,
+  LLM_MAX_RESPONSE_TOKENS,
+  OLLAMA_MAX_RESPONSE_TOKENS,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 
@@ -115,16 +117,15 @@ export async function runLlmSastScanner(
   const maxConcurrency = parseInt(process.env.MAX_LLM_CONCURRENCY || "2");
   const chunks: Chunk[] = [];
 
-  // Pick chunk size based on provider — smaller chunks for Ollama/Qwen (CPU inference)
+  // Pick chunk size and response limit based on provider
   const isOllama = ctx.orgSettings.llmProvider.toLowerCase() === "ollama";
   const chunkTokens = isOllama ? OLLAMA_MAX_CHUNK_TOKENS : MAX_CHUNK_TOKENS;
-  const overlapTokens = isOllama
-    ? OLLAMA_CHUNK_OVERLAP_TOKENS
-    : CHUNK_OVERLAP_TOKENS;
+  const overlapTokens = isOllama ? OLLAMA_CHUNK_OVERLAP_TOKENS : CHUNK_OVERLAP_TOKENS;
+  const maxResponseTokens = isOllama ? OLLAMA_MAX_RESPONSE_TOKENS : LLM_MAX_RESPONSE_TOKENS;
 
   logger.info(
-    { isOllama, chunkTokens, overlapTokens },
-    "Chunk sizing for LLM provider",
+    { isOllama, chunkTokens, overlapTokens, maxResponseTokens },
+    "LLM context configuration",
   );
 
   // Collect all chunks from scannable files
@@ -176,7 +177,7 @@ export async function runLlmSastScanner(
     const batch = chunks.slice(i, i + maxConcurrency);
     const results = await Promise.allSettled(
       batch.map((chunk) =>
-        analyzeChunk(client, ctx.orgSettings.llmModel, chunk),
+        analyzeChunk(client, ctx.orgSettings.llmModel, chunk, maxResponseTokens),
       ),
     );
 
@@ -225,6 +226,7 @@ async function analyzeChunk(
   client: ReturnType<typeof createLlmClient>,
   model: string,
   chunk: Chunk,
+  maxResponseTokens: number,
 ): Promise<RawFinding[]> {
   const userContent = `File: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n\n\`\`\`\n${chunk.content}\n\`\`\``;
 
@@ -238,7 +240,7 @@ async function analyzeChunk(
       },
       "Sending chunk to LLM",
     );
-    const raw = await analyzeWithLlm(client, model, SYSTEM_PROMPT, userContent);
+    const raw = await analyzeWithLlm(client, model, SYSTEM_PROMPT, userContent, { maxTokens: maxResponseTokens });
     logger.info(
       { filePath: chunk.filePath, responseLength: raw.length },
       "LLM response received",

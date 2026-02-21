@@ -6,13 +6,43 @@
 - **4 GB RAM** minimum (8 GB recommended if using Ollama for AI scanning)
 - **Ollama** (optional) — for AI-powered SAST and secrets scanning
 
-## Quick Start
+## Automated Setup (Recommended)
+
+The setup script installs Docker, Ollama, configures `.env` with secure random passwords, and starts Pepper — all in one command:
+
+```bash
+# 1. Download the pepper distribution files into a directory
+mkdir pepper && cd pepper
+# Place setup.sh, docker-compose.yml, and .env.example here
+
+# 2. Run the setup script
+chmod +x setup.sh
+./setup.sh
+```
+
+The script will:
+1. Install Docker (if not already installed)
+2. Install Ollama and pull the `qwen2.5-coder:7b` model
+3. Generate secure random passwords and create `.env`
+4. Pull Docker images and start all services
+
+Options:
+```bash
+./setup.sh --no-ollama    # Skip Ollama (no AI scanning)
+./setup.sh --help         # Show all options
+
+OLLAMA_MODEL=qwen2.5-coder:3b ./setup.sh   # Use a smaller model
+```
+
+## Manual Setup
+
+If you prefer to install manually:
 
 ```bash
 # 1. Create a directory
 mkdir pepper && cd pepper
 
-# 2. Download these three files into the directory:
+# 2. Download these files into the directory:
 #    - docker-compose.yml
 #    - .env.example
 #    (provided by your account manager)
@@ -28,7 +58,7 @@ docker compose up -d
 #    Log in with ADMIN_EMAIL / ADMIN_PASSWORD from your .env
 ```
 
-That's it. Docker pulls the images automatically from Docker Hub:
+Docker pulls the images automatically from Docker Hub:
 - `sundi133/pepper` — Web UI + API
 - `sundi133/pepper-worker` — Scan worker
 
@@ -47,9 +77,24 @@ ollama pull qwen2.5-coder:7b
 curl http://localhost:11434/api/tags
 ```
 
+### Supported Models
+
+| Model | Size | Speed | Accuracy | Best For |
+|-------|------|-------|----------|----------|
+| `qwen2.5-coder:7b` | 4.7 GB | Medium | High | Recommended default |
+| `qwen2.5-coder:3b` | 2.0 GB | Fast | Good | Low-memory machines |
+| `qwen2.5-coder:14b` | 9.0 GB | Slow | Very High | GPU machines |
+
+### Connecting Ollama to Docker
+
 Set `OLLAMA_HOST` in your `.env`:
 - **macOS / Windows (Docker Desktop):** `http://host.docker.internal:11434` (default)
 - **Linux:** `http://172.17.0.1:11434` or your host's IP address
+
+To find your host IP on Linux:
+```bash
+hostname -I | awk '{print $1}'
+```
 
 ## Configuration Reference
 
@@ -64,6 +109,9 @@ Set `OLLAMA_HOST` in your `.env`:
 | `WORKER_CONCURRENCY` | No | `2` | Parallel scan jobs |
 | `MAX_LLM_CONCURRENCY` | No | `1` | Parallel LLM requests per scan |
 | `WORKER_REPLICAS` | No | `1` | Number of worker containers |
+| `LLM_CHUNK_TOKENS` | No | `3000` | Tokens per LLM chunk (API models) |
+| `OLLAMA_CHUNK_TOKENS` | No | `1200` | Tokens per LLM chunk (Ollama) |
+| `LLM_MIN_CONFIDENCE` | No | `0.7` | Drop findings below this confidence |
 
 ## Upgrading
 
@@ -72,6 +120,15 @@ Set `OLLAMA_HOST` in your `.env`:
 docker compose pull
 
 # Restart (migrations run automatically on startup)
+docker compose up -d
+```
+
+Or upgrade to a specific version:
+```bash
+# Set version in .env
+echo 'PEPPER_VERSION=1.3.0' >> .env
+
+docker compose pull
 docker compose up -d
 ```
 
@@ -121,3 +178,7 @@ Use your host IP instead of `host.docker.internal`:
 ```bash
 OLLAMA_HOST="http://$(hostname -I | awk '{print $1}'):11434"
 ```
+
+**Ollama out of memory:**
+Use a smaller model: `OLLAMA_MODEL=qwen2.5-coder:3b ollama pull qwen2.5-coder:3b`
+Then set the model in Pepper's organization settings.

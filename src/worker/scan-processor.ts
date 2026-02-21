@@ -119,9 +119,28 @@ export async function processScanJob(job: Job<ScanJobData>) {
       scanType,
       orgSettings,
       signal: abortController.signal,
-      onProgress: (msg) => {
+      onProgress: async (msg) => {
         log.info(msg);
         job.updateProgress({ message: msg });
+
+        // Parse LLM file progress and update scannerProgress JSON
+        // Format: "LLM SAST: 5/120 files scanned (3 findings)"
+        const fileProgressMatch = msg.match(/LLM SAST: (\d+)\/(\d+) files scanned \((\d+) findings\)/);
+        if (fileProgressMatch) {
+          const [, filesCompleted, filesTotal, findingsCount] = fileProgressMatch;
+          await prisma.$executeRaw`
+            UPDATE "Scan"
+            SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({
+              SAST_LLM: {
+                status: "RUNNING",
+                findingsCount: parseInt(findingsCount),
+                filesCompleted: parseInt(filesCompleted),
+                filesTotal: parseInt(filesTotal),
+              }
+            })}::jsonb
+            WHERE id = ${scanId}
+          `;
+        }
       },
       onScannerComplete: async (
         scannerName: string,

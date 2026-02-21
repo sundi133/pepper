@@ -149,7 +149,7 @@ export default function ScanDetailPage() {
                     {Object.entries(
                       scan.scannerProgress as Record<
                         string,
-                        { status: string; findingsCount: number }
+                        { status: string; findingsCount: number; filesCompleted?: number; filesTotal?: number }
                       >,
                     ).map(([name, info]) => (
                       <Badge
@@ -161,7 +161,9 @@ export default function ScanDetailPage() {
                         {name}:{" "}
                         {info.status === "DONE"
                           ? `Done (${info.findingsCount})`
-                          : `Running (${info.findingsCount} so far)`}
+                          : info.filesTotal
+                            ? `${info.filesCompleted}/${info.filesTotal} files (${info.findingsCount} findings)`
+                            : `Running (${info.findingsCount} so far)`}
                       </Badge>
                     ))}
                   </div>
@@ -316,16 +318,34 @@ export default function ScanDetailPage() {
 }
 
 function computeScanProgress(
-  scannerProgress: Record<string, { status: string }> | null | undefined,
+  scannerProgress: Record<string, { status: string; filesCompleted?: number; filesTotal?: number }> | null | undefined,
   status: string,
 ): number {
   if (status === "QUEUED") return 5;
   if (!scannerProgress || Object.keys(scannerProgress).length === 0) return 10;
 
-  const scanners = Object.values(scannerProgress);
-  const done = scanners.filter((s) => s.status === "DONE").length;
-  // Assume ~5 scanners max; scale from 10-95%
-  const total = Math.max(scanners.length + 1, 3); // at least expect one more
+  const entries = Object.values(scannerProgress);
+  const done = entries.filter((s) => s.status === "DONE").length;
+  const total = Math.max(entries.length + 1, 3);
+
+  // If any scanner has file-level progress, use it for finer granularity
+  let fileProgress = 0;
+  let hasFileProgress = false;
+  for (const s of entries) {
+    if (s.status === "DONE") {
+      fileProgress += 1;
+    } else if (s.filesTotal && s.filesTotal > 0) {
+      hasFileProgress = true;
+      fileProgress += (s.filesCompleted || 0) / s.filesTotal;
+    }
+  }
+
+  if (hasFileProgress) {
+    // Weighted: file-level progress across all known scanners
+    return Math.min(95, Math.round(10 + (fileProgress / total) * 85));
+  }
+
+  // Fallback: count done scanners
   return Math.min(95, Math.round(10 + (done / total) * 85));
 }
 

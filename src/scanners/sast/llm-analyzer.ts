@@ -135,12 +135,23 @@ export async function runLlmSastScanner(
     }
   }
 
-  ctx.onProgress?.(`LLM SAST: analyzing ${chunks.length} code chunks...`);
+  // Count unique files across all chunks for progress tracking
+  const totalFiles = new Set(chunks.map((c) => c.filePath)).size;
+  const completedFiles = new Set<string>();
+
+  ctx.onProgress?.(`LLM SAST: analyzing ${totalFiles} files (${chunks.length} chunks)...`);
 
   // Process chunks with concurrency limit
   let succeeded = 0;
   let failed = 0;
   const totalBatches = Math.ceil(chunks.length / maxConcurrency);
+
+  // Track which chunks belong to each file so we know when a file is fully done
+  const chunksPerFile = new Map<string, number>();
+  const completedChunksPerFile = new Map<string, number>();
+  for (const chunk of chunks) {
+    chunksPerFile.set(chunk.filePath, (chunksPerFile.get(chunk.filePath) || 0) + 1);
+  }
 
   for (let i = 0; i < chunks.length; i += maxConcurrency) {
     if (ctx.signal?.aborted) break;
@@ -154,7 +165,16 @@ export async function runLlmSastScanner(
     );
 
     const batchFindings: RawFinding[] = [];
-    for (const result of results) {
+    for (let j = 0; j < results.length; j++) {
+      const result = results[j];
+      const chunkFilePath = batch[j].filePath;
+
+      // Track completed chunks per file
+      completedChunksPerFile.set(chunkFilePath, (completedChunksPerFile.get(chunkFilePath) || 0) + 1);
+      if (completedChunksPerFile.get(chunkFilePath) === chunksPerFile.get(chunkFilePath)) {
+        completedFiles.add(chunkFilePath);
+      }
+
       if (result.status === "fulfilled") {
         batchFindings.push(...result.value);
         findings.push(...result.value);
@@ -174,7 +194,7 @@ export async function runLlmSastScanner(
     }
 
     ctx.onProgress?.(
-      `LLM SAST: batch ${batchNum}/${totalBatches} complete (${findings.length} findings so far)`,
+      `LLM SAST: ${completedFiles.size}/${totalFiles} files scanned (${findings.length} findings)`,
     );
   }
 

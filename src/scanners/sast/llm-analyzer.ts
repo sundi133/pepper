@@ -18,37 +18,53 @@ import {
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 
-const SYSTEM_PROMPT = `You are an expert security code reviewer. Analyze the following code for security vulnerabilities.
+const SYSTEM_PROMPT = `You are an expert security code auditor performing a strict vulnerability review. Your goal is PRECISION over recall — report ONLY vulnerabilities you are highly confident are real and exploitable.
 
-For each vulnerability found, provide a JSON response with this structure:
+STRICT RULES:
+1. Only report a finding if you can explain a concrete attack scenario — how an attacker would exploit it.
+2. Do NOT report theoretical or speculative issues. If the code has proper input validation, sanitization, or framework-level protections, it is NOT vulnerable.
+3. Do NOT flag:
+   - Safe uses of crypto (e.g. bcrypt, argon2, scrypt for password hashing)
+   - Framework-provided CSRF/XSS protections (e.g. React JSX auto-escaping, Django templates, Rails ERB)
+   - Parameterized queries or ORM-generated queries (these are NOT SQL injection)
+   - Environment variable reads or config files (these are NOT hardcoded secrets unless a real key/password literal is present)
+   - Test files, fixtures, or mock data
+   - Informational or best-practice suggestions — only report actual vulnerabilities
+4. Confidence MUST reflect how certain you are that this is a real, exploitable vulnerability:
+   - 0.9-1.0: Certain — clear, unambiguous vulnerability with direct exploit path
+   - 0.8-0.9: Very likely — strong evidence, minor ambiguity about context
+   - 0.7-0.8: Probable — likely vulnerable but depends on runtime context
+   - Below 0.7: Do NOT report it
+
+For each genuine vulnerability found, respond with:
 {
   "findings": [
     {
       "title": "Brief vulnerability title",
-      "severity": "CRITICAL|HIGH|MEDIUM|LOW|INFO",
-      "description": "Detailed description of the vulnerability and its impact",
-      "startLine": <line number where the issue starts>,
-      "endLine": <line number where the issue ends>,
+      "severity": "CRITICAL|HIGH|MEDIUM|LOW",
+      "description": "What the vulnerability is, how it can be exploited, and what the impact is",
+      "startLine": <exact line number>,
+      "endLine": <exact line number>,
       "cweId": "CWE-XXX",
-      "confidence": <0.0 to 1.0>,
-      "recommendation": "How to fix this issue"
+      "confidence": <0.7 to 1.0>,
+      "recommendation": "Specific fix for this code"
     }
   ]
 }
 
-Focus on:
-- Injection vulnerabilities (SQL, command, LDAP, XSS, XXE)
-- Authentication and authorization flaws
-- Cryptographic weaknesses
-- Sensitive data exposure
-- Security misconfigurations
-- Insecure deserialization
-- Broken access control
-- Server-side request forgery (SSRF)
-- Mass assignment vulnerabilities
+Focus on exploitable instances of:
+- SQL/NoSQL injection (raw string concatenation into queries, NOT parameterized/ORM)
+- Command injection (unsanitized user input passed to exec/spawn/system)
+- XSS (unsanitized output in raw HTML, NOT framework-escaped templates)
+- Path traversal (user input in file paths without validation)
+- SSRF (user-controlled URLs passed to HTTP clients)
+- Authentication bypass (missing auth checks on sensitive endpoints)
+- Hardcoded credentials (actual passwords/keys in source, NOT env var references)
+- Insecure deserialization (untrusted data passed to deserialize/pickle/eval)
+- Broken access control (missing authorization checks)
 
 If no vulnerabilities are found, return: {"findings": []}
-Be precise with line numbers. Only report genuine security issues with HIGH confidence.`;
+When in doubt, do NOT report. False positives waste security engineers' time.`;
 
 interface LlmFinding {
   title: string;
@@ -231,22 +247,32 @@ async function analyzeChunk(
       findings: [],
     });
 
-    return (parsed.findings || [])
-      .filter((f) => f.title && f.severity)
-      .map((f) => ({
-        scanner: "SAST_LLM" as const,
-        severity: normalizeSeverity(f.severity),
-        title: f.title,
-        description: f.recommendation
-          ? `${f.description}\n\nRecommendation: ${f.recommendation}`
-          : f.description,
-        filePath: chunk.filePath,
-        startLine: f.startLine,
-        endLine: f.endLine,
-        cweId: f.cweId,
-        confidence: f.confidence ?? 0.7,
-        ruleId: `LLM-${f.cweId || "GENERIC"}`,
-      }));
+    const minConfidence = parseFloat(process.env.LLM_MIN_CONFIDENCE || "0.7");
+
+    const allFindings = (parsed.findings || []).filter((f) => f.title && f.severity);
+    const filtered = allFindings.filter((f) => (f.confidence ?? 0) >= minConfidence);
+
+    if (allFindings.length > filtered.length) {
+      logger.info(
+        { filePath: chunk.filePath, total: allFindings.length, kept: filtered.length, minConfidence },
+        "Filtered low-confidence LLM findings",
+      );
+    }
+
+    return filtered.map((f) => ({
+      scanner: "SAST_LLM" as const,
+      severity: normalizeSeverity(f.severity),
+      title: f.title,
+      description: f.recommendation
+        ? `${f.description}\n\nRecommendation: ${f.recommendation}`
+        : f.description,
+      filePath: chunk.filePath,
+      startLine: f.startLine,
+      endLine: f.endLine,
+      cweId: f.cweId,
+      confidence: f.confidence ?? 0.7,
+      ruleId: `LLM-${f.cweId || "GENERIC"}`,
+    }));
   } catch (err) {
     logger.error(
       {

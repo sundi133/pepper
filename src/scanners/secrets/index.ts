@@ -65,6 +65,7 @@ export const secretsPatternScanner: ScannerPlugin = {
                 endLine: lineNum + 1,
                 snippet: maskedSnippet,
                 ruleId: pattern.id,
+                cweId: "CWE-798",
                 confidence: 0.85,
                 masked: true,
               });
@@ -103,6 +104,7 @@ export const secretsPatternScanner: ScannerPlugin = {
                 endLine: lineNum + 1,
                 snippet: `${lineNum + 1}: [MASKED HIGH-ENTROPY VALUE]`,
                 ruleId: "ENTROPY_SECRET",
+                cweId: "CWE-798",
                 confidence: 0.6,
                 masked: true,
               });

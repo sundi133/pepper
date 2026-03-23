@@ -9,6 +9,7 @@ AI-powered Static Application Security Testing platform.
 - **Docker** 24+ and **Docker Compose** v2
 - **4 GB RAM** minimum (8 GB recommended with AI scanning)
 - **Ollama** (optional) for AI-powered vulnerability analysis
+- **Subversion CLI** (optional) for scanning SVN repositories
 
 ### Quick Start (Automated)
 
@@ -141,21 +142,83 @@ docker compose down       # Stop (keeps data)
 docker compose down -v    # Stop and delete all data
 ```
 
+### SVN Repository Scanning
+
+Pepper can scan code from Subversion repositories. The `svn` CLI must be installed on the worker machine (or inside the worker container for Docker deployments).
+
+**macOS:**
+
+```bash
+brew install subversion
+svn --version   # confirm: 1.x.x
+```
+
+**Ubuntu / Debian:**
+
+```bash
+sudo apt-get install -y subversion
+```
+
+**Fedora / RHEL:**
+
+```bash
+sudo dnf install -y subversion
+```
+
+**Docker deployments:** The provided `Dockerfile` already installs `subversion` in the worker image. No extra steps needed.
+
+Once installed, create a scan and select **SVN** as the source. Provide the full SVN URL including the path you want to scan (e.g. `https://svn.example.com/repos/myproject/trunk`), an optional revision number (leave blank for `HEAD`), and credentials if the repo is private.
+
 ### Troubleshooting
 
-| Problem                             | Solution                                                       |
-| ----------------------------------- | -------------------------------------------------------------- | ------------------------- |
-| Worker shows "could not renew lock" | Ollama is slow on CPU. Set `MAX_LLM_CONCURRENCY=1` and restart |
-| LLM "Headers Timeout Error"         | Reduce `MAX_LLM_CONCURRENCY` or use a smaller model            |
-| Scans stuck in QUEUED               | Check worker: `docker compose logs pepper-worker`              |
-| Port conflict                       | Change `PEPPER_PORT` in `.env`                                 |
-| Can't reach Ollama on Linux         | Use host IP: `OLLAMA_HOST="http://$(hostname -I                | awk '{print $1}'):11434"` |
+| Problem                             | Solution                                                                                |
+| ----------------------------------- | --------------------------------------------------------------------------------------- |
+| Worker shows "could not renew lock" | Ollama is slow on CPU. Set `MAX_LLM_CONCURRENCY=1` and restart                         |
+| LLM "Headers Timeout Error"         | Reduce `MAX_LLM_CONCURRENCY` or use a smaller model                                    |
+| Scans stuck in QUEUED               | Check worker: `docker compose logs pepper-worker`                                       |
+| Port conflict                       | Change `PEPPER_PORT` in `.env`                                                          |
+| Can't reach Ollama on Linux         | Use host IP: `OLLAMA_HOST="http://$(hostname -I \| awk '{print $1}'):11434"`            |
+| SVN scan fails — "SVN CLI not found" | Install subversion on the worker: `brew install subversion` (macOS) or `apt install subversion` |
+| SVN scan fails — "Authorization failed" | Check the SVN username/password you entered when creating the scan                 |
+| SVN scan fails — "path not found"   | Make sure the URL includes the correct path (e.g. `/trunk`, `/branches/main`)          |
 
 ## Development
 
+### Prerequisites
+
+- **Node.js** 20+
+- **Docker** (for Postgres, Redis, MinIO)
+- **Subversion CLI** — required to scan SVN repositories:
+
+  ```bash
+  # macOS
+  brew install subversion
+
+  # Ubuntu / Debian
+  sudo apt-get install -y subversion
+  ```
+
+### Setup
+
 ```bash
+# 1. Install dependencies
 npm install
-npm run dev
+
+# 2. Copy env and configure
+cp .env.example .env
+
+# 3. Start infrastructure (Postgres, Redis, MinIO)
+docker compose up -d postgres redis minio
+
+# 4. Push DB schema and seed admin user
+npm run db:push
+npm run db:seed
+
+# 5. Start the web server
+npm run dev         # http://localhost:3000
+
+# 6. In a separate terminal, start the worker
+npm run worker
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Login with `admin@pepper.local` / `pepper-admin-changeme` (or whatever you set in `.env`).

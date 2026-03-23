@@ -124,6 +124,30 @@ export default function ScanDetailPage() {
             <>
               <Button
                 variant="outline"
+                onClick={() =>
+                  window.open(
+                    `/api/scans/${scanId}/findings/export?format=csv`,
+                    "_blank",
+                  )
+                }
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Findings CSV
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  window.open(
+                    `/api/scans/${scanId}/findings/export?format=json`,
+                    "_blank",
+                  )
+                }
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Findings JSON
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => downloadArtifact("sarif")}
               >
                 <FileJson className="mr-2 h-4 w-4" />

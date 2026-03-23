@@ -41,7 +41,7 @@ CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed.ts && npm sta
 FROM base AS worker
 ENV NODE_ENV=production
 
-# Worker needs git for cloning repositories
-RUN apk add --no-cache git unzip
+# Worker needs git for cloning repositories, subversion for SVN repos
+RUN apk add --no-cache git unzip subversion
 
 CMD ["npx", "tsx", "src/worker/index.ts"]

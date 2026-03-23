@@ -2,6 +2,9 @@ import { RawFinding, ScanContext, ScannerPlugin, ScanResult } from "./types";
 import { sastPatternScanner, sastLlmScanner } from "./sast";
 import { scaScanner, parseDependencies } from "./sca";
 import { secretsPatternScanner, secretsLlmScanner } from "./secrets";
+import { iacScanner } from "./iac";
+import { maliciousPkgScanner } from "./sca/malicious-pkg";
+import { zeroDayScanner } from "./zero-day";
 
 export function getScanners(
   scanType: string,
@@ -12,6 +15,7 @@ export function getScanners(
   const includeSast = ["FULL", "SAST_ONLY"].includes(scanType);
   const includeSca = ["FULL", "SCA_ONLY"].includes(scanType);
   const includeSecrets = ["FULL", "SECRETS_ONLY"].includes(scanType);
+  const includeFull = scanType === "FULL";
 
   if (includeSast) {
     scanners.push(sastPatternScanner);
@@ -20,20 +24,27 @@ export function getScanners(
 
   if (includeSca) {
     scanners.push(scaScanner);
+    scanners.push(maliciousPkgScanner); // Supply chain / typosquat detection
   }
 
   if (includeSecrets) {
     scanners.push(secretsPatternScanner);
-    // LLM secrets scanner runs its own pattern detection + classification
-    // so we don't add it alongside pattern scanner; use one or the other
-    // If LLM is enabled, replace pattern with LLM
     if (llmEnabled) {
-      // Remove pattern scanner and replace with LLM version
       const idx = scanners.indexOf(secretsPatternScanner);
       if (idx >= 0) {
         scanners.splice(idx, 1, secretsLlmScanner);
       }
     }
+  }
+
+  // IaC scanner runs on FULL scans (covers Dockerfile, Terraform, K8s, CI/CD)
+  if (includeFull || includeSast) {
+    scanners.push(iacScanner);
+  }
+
+  // Zero-day / business logic scanner (LLM-only, FULL scans only)
+  if (includeFull && llmEnabled) {
+    scanners.push(zeroDayScanner);
   }
 
   return scanners;

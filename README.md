@@ -1,36 +1,161 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Pepper SAST
 
-## Getting Started
+AI-powered Static Application Security Testing platform.
 
-First, run the development server:
+## Customer On-Prem Deployment
+
+### Prerequisites
+
+- **Docker** 24+ and **Docker Compose** v2
+- **4 GB RAM** minimum (8 GB recommended with AI scanning)
+- **Ollama** (optional) for AI-powered vulnerability analysis
+
+### Quick Start (Automated)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# 1. Create a directory and place the distribution files
+mkdir pepper && cd pepper
+# Copy setup.sh, docker-compose.yml, and .env.example into this directory
+
+# 2. Run the setup script
+chmod +x setup.sh
+./setup.sh
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The script will:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Install Docker (if not present)
+2. Install Ollama and pull the `qwen2.5-coder:7b` model
+3. Generate secure random passwords and create `.env`
+4. Pull Docker images and start all services
+5. Print admin credentials to the terminal
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Options:
 
-## Learn More
+```bash
+./setup.sh --no-ollama                          # Skip Ollama (disables AI scanning)
+OLLAMA_MODEL=qwen2.5-coder:3b ./setup.sh       # Use a smaller model for low-memory machines
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Manual Setup
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+# 1. Copy and configure environment
+cp .env.example .env
+nano .env   # Set POSTGRES_PASSWORD, NEXTAUTH_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# 2. Start all services
+docker compose up -d
 
-## Deploy on Vercel
+# 3. Open http://localhost:3000 and log in with your admin credentials
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Ollama Setup (AI Scanning)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Pepper uses Ollama running on the host machine for AI-powered SAST:
+
+```bash
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull the recommended model
+ollama pull qwen2.5-coder:7b
+
+# Verify
+curl http://localhost:11434/api/tags
+```
+
+Set `OLLAMA_HOST` in `.env`:
+
+- **macOS / Windows (Docker Desktop):** `http://host.docker.internal:11434` (default)
+- **Linux:** `http://<host-ip>:11434`
+
+#### Supported Models
+
+| Model               | Size   | Speed  | Accuracy  | Best For              |
+| ------------------- | ------ | ------ | --------- | --------------------- |
+| `qwen2.5-coder:7b`  | 4.7 GB | Medium | High      | Recommended default   |
+| `qwen2.5-coder:3b`  | 2.0 GB | Fast   | Good      | Low-memory machines   |
+| `qwen2.5-coder:14b` | 9.0 GB | Slow   | Very High | GPU-equipped machines |
+
+### Configuration Reference
+
+| Variable              | Required | Default                      | Description                     |
+| --------------------- | -------- | ---------------------------- | ------------------------------- |
+| `POSTGRES_PASSWORD`   | Yes      | —                            | Database password               |
+| `NEXTAUTH_SECRET`     | Yes      | —                            | Session encryption key          |
+| `ADMIN_EMAIL`         | Yes      | —                            | Initial admin login email       |
+| `ADMIN_PASSWORD`      | Yes      | —                            | Initial admin login password    |
+| `PEPPER_PORT`         | No       | `3000`                       | Host port for web UI            |
+| `OLLAMA_HOST`         | No       | `host.docker.internal:11434` | Ollama API endpoint             |
+| `WORKER_CONCURRENCY`  | No       | `2`                          | Parallel scan jobs              |
+| `MAX_LLM_CONCURRENCY` | No       | `1`                          | Parallel LLM requests per scan  |
+| `WORKER_REPLICAS`     | No       | `1`                          | Number of worker containers     |
+| `PEPPER_IMAGE`        | No       | `sundi133/pepper`            | Override for private registries |
+| `PEPPER_VERSION`      | No       | `latest`                     | Pin to a specific release       |
+
+### Air-Gapped Deployment
+
+For environments without internet access:
+
+```bash
+# On a machine with internet — export images
+docker pull sundi133/pepper:latest
+docker pull sundi133/pepper-worker:latest
+docker save sundi133/pepper sundi133/pepper-worker postgres:16-alpine redis:7-alpine minio/minio:latest -o pepper-images.tar
+
+# Transfer pepper-images.tar + dist/ files to the target machine
+
+# On the target machine — load images and start
+docker load -i pepper-images.tar
+cp .env.example .env
+nano .env
+docker compose up -d
+```
+
+For Ollama in air-gapped environments, copy the model directory from `~/.ollama/models` on a connected machine.
+
+### Upgrading
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Migrations run automatically on startup.
+
+### Backup & Restore
+
+```bash
+# Backup
+docker compose exec postgres pg_dump -U pepper pepper > backup.sql
+
+# Restore
+docker compose exec -i postgres psql -U pepper pepper < backup.sql
+```
+
+### Stopping
+
+```bash
+docker compose down       # Stop (keeps data)
+docker compose down -v    # Stop and delete all data
+```
+
+### Troubleshooting
+
+| Problem                             | Solution                                                       |
+| ----------------------------------- | -------------------------------------------------------------- | ------------------------- |
+| Worker shows "could not renew lock" | Ollama is slow on CPU. Set `MAX_LLM_CONCURRENCY=1` and restart |
+| LLM "Headers Timeout Error"         | Reduce `MAX_LLM_CONCURRENCY` or use a smaller model            |
+| Scans stuck in QUEUED               | Check worker: `docker compose logs pepper-worker`              |
+| Port conflict                       | Change `PEPPER_PORT` in `.env`                                 |
+| Can't reach Ollama on Linux         | Use host IP: `OLLAMA_HOST="http://$(hostname -I                | awk '{print $1}'):11434"` |
+
+## Development
+
+```bash
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).

@@ -20,6 +20,9 @@ export const SCANNER_LABELS = {
   SCA: "SCA",
   SECRETS_PATTERN: "Secrets (Pattern)",
   SECRETS_LLM: "Secrets (AI)",
+  IAC: "IaC Security",
+  MALICIOUS_PKG: "Supply Chain",
+  ZERO_DAY: "Zero-Day (AI)",
 } as const;
 
 export const SCAN_STATUS_LABELS = {
@@ -130,17 +133,81 @@ export const BINARY_EXTENSIONS = new Set([
   ".lib",
 ]);
 
+// IaC file type detection
+export type IacFileType =
+  | "dockerfile"
+  | "docker-compose"
+  | "terraform"
+  | "kubernetes"
+  | "helm"
+  | "github-actions"
+  | "gitlab-ci"
+  | "cloudformation"
+  | "ansible";
+
+export function detectIacFileType(filePath: string): IacFileType | null {
+  const lower = filePath.toLowerCase();
+  const basename = lower.split("/").pop() || "";
+
+  if (
+    basename === "dockerfile" ||
+    basename.startsWith("dockerfile.") ||
+    basename.endsWith(".dockerfile")
+  )
+    return "dockerfile";
+  if (basename.startsWith("docker-compose")) return "docker-compose";
+  if (lower.endsWith(".tf") || lower.endsWith(".tfvars")) return "terraform";
+  if (lower.includes(".github/workflows/")) return "github-actions";
+  if (basename === ".gitlab-ci.yml") return "gitlab-ci";
+  if (
+    lower.includes("/helm/") ||
+    basename === "chart.yaml" ||
+    basename === "values.yaml"
+  )
+    return "helm";
+  if (
+    lower.includes("/k8s/") ||
+    lower.includes("/kubernetes/") ||
+    lower.includes("/manifests/") ||
+    lower.includes("/deploy/")
+  )
+    return "kubernetes";
+  if (
+    lower.includes("/cloudformation/") ||
+    lower.includes("/sam/") ||
+    (basename.startsWith("template.") &&
+      (lower.endsWith(".yaml") || lower.endsWith(".json")))
+  )
+    return "cloudformation";
+  if (lower.includes("/ansible/") || lower.includes("/playbooks/"))
+    return "ansible";
+
+  return null;
+}
+
 export const MAX_FILE_SIZE_BYTES = 1024 * 1024; // 1MB — skip threshold for pattern scanners
 export const LLM_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB — LLM scanner chunks large files instead of skipping
 
 // LLM context configuration — all configurable via env vars
 // Chunk size = how much code is sent per LLM request (in estimated tokens)
 // Response tokens = max tokens the LLM can generate in its response
-export const MAX_CHUNK_TOKENS = parseInt(process.env.LLM_CHUNK_TOKENS || "3000");
-export const CHUNK_OVERLAP_TOKENS = parseInt(process.env.LLM_CHUNK_OVERLAP_TOKENS || "200");
-export const LLM_MAX_RESPONSE_TOKENS = parseInt(process.env.LLM_MAX_RESPONSE_TOKENS || "4096");
+export const MAX_CHUNK_TOKENS = parseInt(
+  process.env.LLM_CHUNK_TOKENS || "3000",
+);
+export const CHUNK_OVERLAP_TOKENS = parseInt(
+  process.env.LLM_CHUNK_OVERLAP_TOKENS || "200",
+);
+export const LLM_MAX_RESPONSE_TOKENS = parseInt(
+  process.env.LLM_MAX_RESPONSE_TOKENS || "4096",
+);
 
 // Ollama/local model defaults — smaller chunks for faster CPU inference
-export const OLLAMA_MAX_CHUNK_TOKENS = parseInt(process.env.OLLAMA_CHUNK_TOKENS || "1200");
-export const OLLAMA_CHUNK_OVERLAP_TOKENS = parseInt(process.env.OLLAMA_CHUNK_OVERLAP_TOKENS || "100");
-export const OLLAMA_MAX_RESPONSE_TOKENS = parseInt(process.env.OLLAMA_MAX_RESPONSE_TOKENS || "2048");
+export const OLLAMA_MAX_CHUNK_TOKENS = parseInt(
+  process.env.OLLAMA_CHUNK_TOKENS || "1200",
+);
+export const OLLAMA_CHUNK_OVERLAP_TOKENS = parseInt(
+  process.env.OLLAMA_CHUNK_OVERLAP_TOKENS || "100",
+);
+export const OLLAMA_MAX_RESPONSE_TOKENS = parseInt(
+  process.env.OLLAMA_MAX_RESPONSE_TOKENS || "2048",
+);

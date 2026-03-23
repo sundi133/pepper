@@ -71,8 +71,8 @@ export default function LlmSettingsPage() {
         <CardHeader>
           <CardTitle>LLM Provider</CardTitle>
           <CardDescription>
-            Supports any OpenAI-compatible API endpoint (OpenAI, Azure, Ollama,
-            vLLM)
+            Supports Ollama, OpenAI, OpenRouter, Azure, vLLM, or any
+            OpenAI-compatible endpoint
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -86,6 +86,10 @@ export default function LlmSettingsPage() {
                     openai: {
                       url: "https://api.openai.com/v1",
                       model: "gpt-4o-mini",
+                    },
+                    openrouter: {
+                      url: "https://openrouter.ai/api/v1",
+                      model: "google/gemini-2.5-flash",
                     },
                     azure: {
                       url: "https://YOUR_RESOURCE.openai.azure.com",
@@ -118,6 +122,9 @@ export default function LlmSettingsPage() {
                   Ollama (Local, recommended)
                 </SelectItem>
                 <SelectItem value="openai">OpenAI</SelectItem>
+                <SelectItem value="openrouter">
+                  OpenRouter (Multi-model)
+                </SelectItem>
                 <SelectItem value="azure">Azure OpenAI</SelectItem>
                 <SelectItem value="vllm">vLLM</SelectItem>
                 <SelectItem value="custom">Custom Endpoint</SelectItem>
@@ -170,6 +177,24 @@ export default function LlmSettingsPage() {
               Ollama runs locally — no API key needed. The model will be pulled
               automatically on first scan. Make sure the Ollama service is
               running (included in Docker Compose).
+            </div>
+          )}
+
+          {settings.llmProvider === "openrouter" && (
+            <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+              OpenRouter gives access to 100+ models (Google Gemini, Meta Llama,
+              Mistral, DeepSeek, etc.) through a single API key. Get your key at{" "}
+              <a
+                href="https://openrouter.ai/keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                openrouter.ai/keys
+              </a>
+              . You can use any model ID from the OpenRouter catalog (e.g.{" "}
+              <code className="text-xs">google/gemini-2.5-flash</code>,{" "}
+              <code className="text-xs">deepseek/deepseek-coder</code>).
             </div>
           )}
 

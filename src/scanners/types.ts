@@ -4,7 +4,10 @@ export type ScannerType =
   | "SAST_LLM"
   | "SCA"
   | "SECRETS_PATTERN"
-  | "SECRETS_LLM";
+  | "SECRETS_LLM"
+  | "IAC"
+  | "MALICIOUS_PKG"
+  | "ZERO_DAY";
 
 export interface ScanContext {
   workDir: string;

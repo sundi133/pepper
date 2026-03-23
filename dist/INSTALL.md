@@ -21,12 +21,14 @@ chmod +x setup.sh
 ```
 
 The script will:
+
 1. Install Docker (if not already installed)
 2. Install Ollama and pull the `qwen2.5-coder:7b` model
 3. Generate secure random passwords and create `.env`
 4. Pull Docker images and start all services
 
 Options:
+
 ```bash
 ./setup.sh --no-ollama    # Skip Ollama (no AI scanning)
 ./setup.sh --help         # Show all options
@@ -59,6 +61,7 @@ docker compose up -d
 ```
 
 Docker pulls the images automatically from Docker Hub:
+
 - `sundi133/pepper` — Web UI + API
 - `sundi133/pepper-worker` — Scan worker
 
@@ -79,39 +82,41 @@ curl http://localhost:11434/api/tags
 
 ### Supported Models
 
-| Model | Size | Speed | Accuracy | Best For |
-|-------|------|-------|----------|----------|
-| `qwen2.5-coder:7b` | 4.7 GB | Medium | High | Recommended default |
-| `qwen2.5-coder:3b` | 2.0 GB | Fast | Good | Low-memory machines |
-| `qwen2.5-coder:14b` | 9.0 GB | Slow | Very High | GPU machines |
+| Model               | Size   | Speed  | Accuracy  | Best For            |
+| ------------------- | ------ | ------ | --------- | ------------------- |
+| `qwen2.5-coder:7b`  | 4.7 GB | Medium | High      | Recommended default |
+| `qwen2.5-coder:3b`  | 2.0 GB | Fast   | Good      | Low-memory machines |
+| `qwen2.5-coder:14b` | 9.0 GB | Slow   | Very High | GPU machines        |
 
 ### Connecting Ollama to Docker
 
 Set `OLLAMA_HOST` in your `.env`:
+
 - **macOS / Windows (Docker Desktop):** `http://host.docker.internal:11434` (default)
 - **Linux:** `http://172.17.0.1:11434` or your host's IP address
 
 To find your host IP on Linux:
+
 ```bash
 hostname -I | awk '{print $1}'
 ```
 
 ## Configuration Reference
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `POSTGRES_PASSWORD` | Yes | — | Database password |
-| `NEXTAUTH_SECRET` | Yes | — | Session encryption key (`openssl rand -base64 32`) |
-| `ADMIN_EMAIL` | Yes | — | Initial admin email |
-| `ADMIN_PASSWORD` | Yes | — | Initial admin password |
-| `PEPPER_PORT` | No | `3000` | Host port for web UI |
-| `OLLAMA_HOST` | No | `host.docker.internal:11434` | Ollama API endpoint |
-| `WORKER_CONCURRENCY` | No | `2` | Parallel scan jobs |
-| `MAX_LLM_CONCURRENCY` | No | `1` | Parallel LLM requests per scan |
-| `WORKER_REPLICAS` | No | `1` | Number of worker containers |
-| `LLM_CHUNK_TOKENS` | No | `3000` | Tokens per LLM chunk (API models) |
-| `OLLAMA_CHUNK_TOKENS` | No | `1200` | Tokens per LLM chunk (Ollama) |
-| `LLM_MIN_CONFIDENCE` | No | `0.7` | Drop findings below this confidence |
+| Variable              | Required | Default                      | Description                                        |
+| --------------------- | -------- | ---------------------------- | -------------------------------------------------- |
+| `POSTGRES_PASSWORD`   | Yes      | —                            | Database password                                  |
+| `NEXTAUTH_SECRET`     | Yes      | —                            | Session encryption key (`openssl rand -base64 32`) |
+| `ADMIN_EMAIL`         | Yes      | —                            | Initial admin email                                |
+| `ADMIN_PASSWORD`      | Yes      | —                            | Initial admin password                             |
+| `PEPPER_PORT`         | No       | `3000`                       | Host port for web UI                               |
+| `OLLAMA_HOST`         | No       | `host.docker.internal:11434` | Ollama API endpoint                                |
+| `WORKER_CONCURRENCY`  | No       | `2`                          | Parallel scan jobs                                 |
+| `MAX_LLM_CONCURRENCY` | No       | `1`                          | Parallel LLM requests per scan                     |
+| `WORKER_REPLICAS`     | No       | `1`                          | Number of worker containers                        |
+| `LLM_CHUNK_TOKENS`    | No       | `3000`                       | Tokens per LLM chunk (API models)                  |
+| `OLLAMA_CHUNK_TOKENS` | No       | `1200`                       | Tokens per LLM chunk (Ollama)                      |
+| `LLM_MIN_CONFIDENCE`  | No       | `0.7`                        | Drop findings below this confidence                |
 
 ## Upgrading
 
@@ -124,6 +129,7 @@ docker compose up -d
 ```
 
 Or upgrade to a specific version:
+
 ```bash
 # Set version in .env
 echo 'PEPPER_VERSION=1.3.0' >> .env
@@ -135,16 +141,19 @@ docker compose up -d
 ## Data & Backups
 
 All data is stored in Docker volumes:
+
 - `pgdata` — PostgreSQL (findings, scan history, users)
 - `redisdata` — Redis (job queue)
 - `miniodata` — MinIO (SARIF reports, SBOMs)
 
 Backup the database:
+
 ```bash
 docker compose exec postgres pg_dump -U pepper pepper > backup.sql
 ```
 
 Restore:
+
 ```bash
 docker compose exec -i postgres psql -U pepper pepper < backup.sql
 ```
@@ -175,6 +184,7 @@ Change `PEPPER_PORT` in `.env` (e.g., `PEPPER_PORT=8080`).
 
 **Cannot connect to Ollama from Docker on Linux:**
 Use your host IP instead of `host.docker.internal`:
+
 ```bash
 OLLAMA_HOST="http://$(hostname -I | awk '{print $1}'):11434"
 ```

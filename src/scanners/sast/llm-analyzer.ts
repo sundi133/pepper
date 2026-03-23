@@ -55,15 +55,54 @@ For each genuine vulnerability found, respond with:
 }
 
 Focus on exploitable instances of:
+
+**INJECTION & INPUT VALIDATION:**
 - SQL/NoSQL injection (raw string concatenation into queries, NOT parameterized/ORM)
 - Command injection (unsanitized user input passed to exec/spawn/system)
 - XSS (unsanitized output in raw HTML, NOT framework-escaped templates)
+- LDAP injection, XML injection (XXE), template injection (SSTI)
 - Path traversal (user input in file paths without validation)
-- SSRF (user-controlled URLs passed to HTTP clients)
+- ReDoS (catastrophic regex backtracking, user input in new RegExp/re.compile)
+- Mass assignment (accepting unfiltered request body into ORM create/update)
+
+**AUTH & ACCESS CONTROL:**
 - Authentication bypass (missing auth checks on sensitive endpoints)
-- Hardcoded credentials (actual passwords/keys in source, NOT env var references)
+- Broken access control (missing authorization checks, IDOR)
+- OAuth/OIDC flaws (missing state param, no PKCE, open redirect in callback URL, token leakage via Referer)
+- Session management flaws (weak entropy, missing invalidation on privilege change, excessive timeouts)
+- Missing cookie security attributes (Secure, HttpOnly, SameSite)
+
+**DATA EXPOSURE & CRYPTO:**
+- Hardcoded credentials (actual passwords/keys/tokens in source, NOT env var references)
+- Weak cryptography (MD5/SHA1 for security, Math.random for tokens, ECB mode, RSA < 2048 bits)
+- TLS verification bypass (rejectUnauthorized:false, verify=False, InsecureSkipVerify)
+- Sensitive data in logs (PII, credentials, tokens written to log output)
+
+**NETWORK & API SECURITY:**
+- SSRF (user-controlled URLs passed to HTTP clients)
+- CORS misconfiguration (wildcard origin with credentials, dynamic origin reflection without allowlist)
+- GraphQL abuse (introspection in production, unbounded query depth, batching attacks)
+- WebSocket security (missing origin validation on upgrade, no auth on WS connections)
+- gRPC security (reflection enabled in production, missing TLS, no auth interceptors)
+- Missing HTTP security headers (HSTS, CSP, X-Content-Type-Options)
+
+**DESERIALIZATION & FILE HANDLING:**
 - Insecure deserialization (untrusted data passed to deserialize/pickle/eval)
-- Broken access control (missing authorization checks)
+- File upload exploits (unrestricted types, path traversal in filenames, polyglot files)
+- Prototype pollution (user input merged into object prototypes)
+
+**BUSINESS LOGIC & CONCURRENCY:**
+- Race conditions (TOCTOU in file ops, double-spend patterns, missing locks on shared state)
+- Business logic flaws (price manipulation, privilege escalation through normal flows)
+- Integer overflow/underflow in security-critical calculations
+
+**M2M & AGENT SECURITY:**
+- Overprivileged OAuth tokens/API keys for SaaS integrations
+- Long-lived tokens without rotation or expiration
+- Webhook endpoints without HMAC/signature verification
+- AI agent/MCP connections without auth boundaries or scope limits
+- Service accounts with excessive permissions
+- Missing audit logging for M2M operations
 
 If no vulnerabilities are found, return: {"findings": []}
 When in doubt, do NOT report. False positives waste security engineers' time.`;
@@ -120,8 +159,12 @@ export async function runLlmSastScanner(
   // Pick chunk size and response limit based on provider
   const isOllama = ctx.orgSettings.llmProvider.toLowerCase() === "ollama";
   const chunkTokens = isOllama ? OLLAMA_MAX_CHUNK_TOKENS : MAX_CHUNK_TOKENS;
-  const overlapTokens = isOllama ? OLLAMA_CHUNK_OVERLAP_TOKENS : CHUNK_OVERLAP_TOKENS;
-  const maxResponseTokens = isOllama ? OLLAMA_MAX_RESPONSE_TOKENS : LLM_MAX_RESPONSE_TOKENS;
+  const overlapTokens = isOllama
+    ? OLLAMA_CHUNK_OVERLAP_TOKENS
+    : CHUNK_OVERLAP_TOKENS;
+  const maxResponseTokens = isOllama
+    ? OLLAMA_MAX_RESPONSE_TOKENS
+    : LLM_MAX_RESPONSE_TOKENS;
 
   logger.info(
     { isOllama, chunkTokens, overlapTokens, maxResponseTokens },
@@ -156,7 +199,9 @@ export async function runLlmSastScanner(
   const totalFiles = new Set(chunks.map((c) => c.filePath)).size;
   const completedFiles = new Set<string>();
 
-  ctx.onProgress?.(`LLM SAST: analyzing ${totalFiles} files (${chunks.length} chunks)...`);
+  ctx.onProgress?.(
+    `LLM SAST: analyzing ${totalFiles} files (${chunks.length} chunks)...`,
+  );
 
   // Process chunks with concurrency limit
   let succeeded = 0;
@@ -167,7 +212,10 @@ export async function runLlmSastScanner(
   const chunksPerFile = new Map<string, number>();
   const completedChunksPerFile = new Map<string, number>();
   for (const chunk of chunks) {
-    chunksPerFile.set(chunk.filePath, (chunksPerFile.get(chunk.filePath) || 0) + 1);
+    chunksPerFile.set(
+      chunk.filePath,
+      (chunksPerFile.get(chunk.filePath) || 0) + 1,
+    );
   }
 
   for (let i = 0; i < chunks.length; i += maxConcurrency) {
@@ -177,7 +225,12 @@ export async function runLlmSastScanner(
     const batch = chunks.slice(i, i + maxConcurrency);
     const results = await Promise.allSettled(
       batch.map((chunk) =>
-        analyzeChunk(client, ctx.orgSettings.llmModel, chunk, maxResponseTokens),
+        analyzeChunk(
+          client,
+          ctx.orgSettings.llmModel,
+          chunk,
+          maxResponseTokens,
+        ),
       ),
     );
 
@@ -187,8 +240,14 @@ export async function runLlmSastScanner(
       const chunkFilePath = batch[j].filePath;
 
       // Track completed chunks per file
-      completedChunksPerFile.set(chunkFilePath, (completedChunksPerFile.get(chunkFilePath) || 0) + 1);
-      if (completedChunksPerFile.get(chunkFilePath) === chunksPerFile.get(chunkFilePath)) {
+      completedChunksPerFile.set(
+        chunkFilePath,
+        (completedChunksPerFile.get(chunkFilePath) || 0) + 1,
+      );
+      if (
+        completedChunksPerFile.get(chunkFilePath) ===
+        chunksPerFile.get(chunkFilePath)
+      ) {
         completedFiles.add(chunkFilePath);
       }
 
@@ -240,7 +299,13 @@ async function analyzeChunk(
       },
       "Sending chunk to LLM",
     );
-    const raw = await analyzeWithLlm(client, model, SYSTEM_PROMPT, userContent, { maxTokens: maxResponseTokens });
+    const raw = await analyzeWithLlm(
+      client,
+      model,
+      SYSTEM_PROMPT,
+      userContent,
+      { maxTokens: maxResponseTokens },
+    );
     logger.info(
       { filePath: chunk.filePath, responseLength: raw.length },
       "LLM response received",
@@ -251,12 +316,21 @@ async function analyzeChunk(
 
     const minConfidence = parseFloat(process.env.LLM_MIN_CONFIDENCE || "0.7");
 
-    const allFindings = (parsed.findings || []).filter((f) => f.title && f.severity);
-    const filtered = allFindings.filter((f) => (f.confidence ?? 0) >= minConfidence);
+    const allFindings = (parsed.findings || []).filter(
+      (f) => f.title && f.severity,
+    );
+    const filtered = allFindings.filter(
+      (f) => (f.confidence ?? 0) >= minConfidence,
+    );
 
     if (allFindings.length > filtered.length) {
       logger.info(
-        { filePath: chunk.filePath, total: allFindings.length, kept: filtered.length, minConfidence },
+        {
+          filePath: chunk.filePath,
+          total: allFindings.length,
+          kept: filtered.length,
+          minConfidence,
+        },
         "Filtered low-confidence LLM findings",
       );
     }

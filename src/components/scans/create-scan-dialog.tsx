@@ -35,16 +35,23 @@ export function CreateScanDialog({ projects }: { projects: Project[] }) {
   const [loading, setLoading] = useState(false);
   const [projectId, setProjectId] = useState("");
   const [scanType, setScanType] = useState("FULL");
+  const [sourceMode, setSourceMode] = useState<"upload" | "git" | "svn">(
+    "upload",
+  );
   const [file, setFile] = useState<File | null>(null);
   const [repoUrl, setRepoUrl] = useState("");
   const [branch, setBranch] = useState("");
+  const [svnUrl, setSvnUrl] = useState("");
+  const [svnRevision, setSvnRevision] = useState("");
+  const [svnUsername, setSvnUsername] = useState("");
+  const [svnPassword, setSvnPassword] = useState("");
 
   async function handleSubmit() {
     if (!projectId) {
       toast.error("Please select a project");
       return;
     }
-    if (!file && !repoUrl) {
+    if (!file && !repoUrl && !svnUrl) {
       toast.error("Please upload a file or provide a repository URL");
       return;
     }
@@ -53,9 +60,21 @@ export function CreateScanDialog({ projects }: { projects: Project[] }) {
 
     try {
       const formData = new FormData();
-      const data = { projectId, scanType, repoUrl, branch };
+      const data = {
+        projectId,
+        scanType,
+        repoUrl: sourceMode === "git" ? repoUrl : undefined,
+        branch: sourceMode === "git" ? branch : undefined,
+        svnUrl: sourceMode === "svn" ? svnUrl : undefined,
+        svnRevision:
+          sourceMode === "svn" ? svnRevision || undefined : undefined,
+        svnUsername:
+          sourceMode === "svn" ? svnUsername || undefined : undefined,
+        svnPassword:
+          sourceMode === "svn" ? svnPassword || undefined : undefined,
+      };
       formData.append("data", JSON.stringify(data));
-      if (file) formData.append("file", file);
+      if (sourceMode === "upload" && file) formData.append("file", file);
 
       const res = await fetch("/api/scans", {
         method: "POST",
@@ -130,49 +149,112 @@ export function CreateScanDialog({ projects }: { projects: Project[] }) {
           </div>
 
           <div className="space-y-2">
-            <Label>Source Code (ZIP/TAR)</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="file"
-                accept=".zip,.tar,.tar.gz,.tgz"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-              />
-              {file && (
-                <span className="text-sm text-muted-foreground">
-                  {(file.size / 1024 / 1024).toFixed(1)} MB
-                </span>
-              )}
+            <Label>Source</Label>
+            <div className="flex gap-1 rounded-md border p-1">
+              {(["upload", "git", "svn"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setSourceMode(mode)}
+                  className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                    sourceMode === mode
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {mode === "upload"
+                    ? "ZIP / TAR"
+                    : mode === "git"
+                      ? "Git"
+                      : "SVN"}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
+          {sourceMode === "upload" && (
+            <div className="space-y-2">
+              <Label>Source Code (ZIP/TAR)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="file"
+                  accept=".zip,.tar,.tar.gz,.tgz"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                />
+                {file && (
+                  <span className="text-sm text-muted-foreground">
+                    {(file.size / 1024 / 1024).toFixed(1)} MB
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                Or
-              </span>
-            </div>
-          </div>
+          )}
 
-          <div className="space-y-2">
-            <Label>Repository URL</Label>
-            <Input
-              placeholder="https://github.com/org/repo.git"
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-            />
-          </div>
+          {sourceMode === "git" && (
+            <>
+              <div className="space-y-2">
+                <Label>Repository URL</Label>
+                <Input
+                  placeholder="https://github.com/org/repo.git"
+                  value={repoUrl}
+                  onChange={(e) => setRepoUrl(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Branch (optional)</Label>
+                <Input
+                  placeholder="main"
+                  value={branch}
+                  onChange={(e) => setBranch(e.target.value)}
+                />
+              </div>
+            </>
+          )}
 
-          <div className="space-y-2">
-            <Label>Branch (optional)</Label>
-            <Input
-              placeholder="main"
-              value={branch}
-              onChange={(e) => setBranch(e.target.value)}
-            />
-          </div>
+          {sourceMode === "svn" && (
+            <>
+              <div className="space-y-2">
+                <Label>SVN Repository URL</Label>
+                <Input
+                  placeholder="https://svn.example.com/repos/project/trunk"
+                  value={svnUrl}
+                  onChange={(e) => setSvnUrl(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Revision (optional)</Label>
+                <Input
+                  placeholder="HEAD"
+                  value={svnRevision}
+                  onChange={(e) => setSvnRevision(e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
+                  <Label>Username (optional)</Label>
+                  <Input
+                    placeholder="svn-user"
+                    value={svnUsername}
+                    onChange={(e) => setSvnUsername(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Password (optional)</Label>
+                  <Input
+                    type="password"
+                    placeholder="password"
+                    value={svnPassword}
+                    onChange={(e) => setSvnPassword(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+                SVN requires the <code>svn</code> CLI installed on the worker.
+                Supports standard SVN URLs including trunk, branches, and tags
+                paths.
+              </div>
+            </>
+          )}
         </div>
 
         <DialogFooter>

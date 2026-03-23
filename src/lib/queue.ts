@@ -30,12 +30,16 @@ export const scanQueue = new Proxy({} as Queue, {
 export interface ScanJobData {
   scanId: string;
   projectId: string;
-  sourceType: "UPLOAD" | "GIT_CLONE" | "WEBHOOK";
+  sourceType: "UPLOAD" | "GIT_CLONE" | "SVN_CHECKOUT" | "WEBHOOK";
   sourceRef: string;
   scanType: "FULL" | "INCREMENTAL" | "SAST_ONLY" | "SCA_ONLY" | "SECRETS_ONLY";
   baseSha?: string;
   commitSha?: string;
   repoUrl?: string;
+  svnUrl?: string;
+  svnRevision?: string;
+  svnUsername?: string;
+  svnPassword?: string;
   branch?: string;
   orgSettings: {
     llmProvider: string;

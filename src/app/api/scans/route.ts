@@ -14,6 +14,10 @@ const createScanSchema = z.object({
   commitSha: z.string().optional(),
   baseSha: z.string().optional(),
   repoUrl: z.string().optional(),
+  svnUrl: z.string().optional(),
+  svnRevision: z.string().optional(),
+  svnUsername: z.string().optional(),
+  svnPassword: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -68,7 +72,9 @@ export async function POST(req: NextRequest) {
           ? "UPLOAD"
           : scanParams.repoUrl
             ? "GIT_CLONE"
-            : "UPLOAD",
+            : scanParams.svnUrl
+              ? "SVN_CHECKOUT"
+              : "UPLOAD",
         triggeredBy: auth.session.user.id,
         status: "QUEUED",
       },
@@ -82,6 +88,8 @@ export async function POST(req: NextRequest) {
       await uploadObject(sourceRef, fileBuffer, "application/zip");
     } else if (scanParams.repoUrl) {
       sourceRef = scanParams.repoUrl;
+    } else if (scanParams.svnUrl) {
+      sourceRef = scanParams.svnUrl;
     }
 
     // Update scan with sourceRef
@@ -94,12 +102,22 @@ export async function POST(req: NextRequest) {
     const jobData: ScanJobData = {
       scanId: scan.id,
       projectId: scanParams.projectId,
-      sourceType: fileBuffer ? "UPLOAD" : "GIT_CLONE",
+      sourceType: fileBuffer
+        ? "UPLOAD"
+        : scanParams.repoUrl
+          ? "GIT_CLONE"
+          : scanParams.svnUrl
+            ? "SVN_CHECKOUT"
+            : "UPLOAD",
       sourceRef,
       scanType: scanParams.scanType,
       baseSha: scanParams.baseSha,
       commitSha: scanParams.commitSha,
       repoUrl: scanParams.repoUrl,
+      svnUrl: scanParams.svnUrl,
+      svnRevision: scanParams.svnRevision,
+      svnUsername: scanParams.svnUsername,
+      svnPassword: scanParams.svnPassword,
       branch: scanParams.branch,
       orgSettings: {
         llmProvider: orgSettings?.llmProvider || "openai",

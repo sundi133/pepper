@@ -46,6 +46,7 @@ export default function ScansPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Scan ID</TableHead>
                   <TableHead>Project</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Branch</TableHead>
@@ -59,6 +60,14 @@ export default function ScansPage() {
               <TableBody>
                 {scans.map((scan: Record<string, unknown>) => (
                   <TableRow key={scan.id as string}>
+                    <TableCell className="text-xs font-mono text-muted-foreground">
+                      <Link
+                        href={`/scans/${scan.id}`}
+                        className="hover:underline"
+                      >
+                        {(scan.id as string).slice(0, 8)}...
+                      </Link>
+                    </TableCell>
                     <TableCell>
                       <Link
                         href={`/scans/${scan.id}`}

@@ -68,6 +68,34 @@ export async function processScanJob(job: Job<ScanJobData>) {
           fs.renameSync(path.join(repoDir, item), path.join(workDir, item));
         }
       }
+    } else if (sourceType === "SVN_CHECKOUT") {
+      const { execSync } = await import("child_process");
+      const svnUrl = job.data.svnUrl || sourceRef;
+      const svnRevision = job.data.svnRevision;
+
+      // Build svn export command (export = no .svn metadata)
+      const authArgs: string[] = [];
+      if (job.data.svnUsername) {
+        authArgs.push(`--username "${job.data.svnUsername}"`);
+      }
+      if (job.data.svnPassword) {
+        authArgs.push(`--password "${job.data.svnPassword}"`);
+      }
+      const revArg = svnRevision ? `-r ${svnRevision}` : "";
+
+      log.info({ svnUrl, svnRevision }, "SVN export starting");
+      execSync(
+        `svn export --non-interactive --trust-server-cert ${revArg} ${authArgs.join(" ")} "${svnUrl}" "${workDir}/repo"`,
+        { timeout: 300000 },
+      );
+
+      // Move contents up
+      const repoDir = path.join(workDir, "repo");
+      if (fs.existsSync(repoDir)) {
+        for (const item of fs.readdirSync(repoDir)) {
+          fs.renameSync(path.join(repoDir, item), path.join(workDir, item));
+        }
+      }
     }
 
     // 2. Enumerate files
@@ -125,19 +153,24 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
         // Parse LLM file progress and update scannerProgress JSON
         // Format: "LLM SAST: 5/120 files scanned (3 findings)"
-        const fileProgressMatch = msg.match(/LLM SAST: (\d+)\/(\d+) files scanned \((\d+) findings\)/);
+        const fileProgressMatch = msg.match(
+          /LLM SAST: (\d+)\/(\d+) files scanned \((\d+) findings\)/,
+        );
         if (fileProgressMatch) {
-          const [, filesCompleted, filesTotal, findingsCount] = fileProgressMatch;
+          const [, filesCompleted, filesTotal, findingsCount] =
+            fileProgressMatch;
           await prisma.$executeRaw`
             UPDATE "Scan"
-            SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({
-              SAST_LLM: {
-                status: "RUNNING",
-                findingsCount: parseInt(findingsCount),
-                filesCompleted: parseInt(filesCompleted),
-                filesTotal: parseInt(filesTotal),
-              }
-            })}::jsonb
+            SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify(
+              {
+                SAST_LLM: {
+                  status: "RUNNING",
+                  findingsCount: parseInt(findingsCount),
+                  filesCompleted: parseInt(filesCompleted),
+                  filesTotal: parseInt(filesTotal),
+                },
+              },
+            )}::jsonb
             WHERE id = ${scanId}
           `;
         }

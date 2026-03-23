@@ -37,6 +37,20 @@ function getOllamaClient(host?: string): Ollama {
 // ─── OpenAI-compatible Client ─────────────────────────────────────────
 
 function createOpenAIClient(config: LlmConfig): OpenAI {
+  const provider = config.provider.toLowerCase();
+
+  // OpenRouter requires specific headers and base URL
+  if (provider === "openrouter") {
+    return new OpenAI({
+      apiKey: config.apiKey || "",
+      baseURL: config.baseUrl || "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": process.env.OPENROUTER_REFERER || "https://pepper.dev",
+        "X-Title": process.env.OPENROUTER_TITLE || "Pepper SAST",
+      },
+    });
+  }
+
   return new OpenAI({
     apiKey: config.apiKey || "not-needed",
     baseURL: config.baseUrl,
@@ -47,6 +61,7 @@ function createOpenAIClient(config: LlmConfig): OpenAI {
 
 export type LlmClient =
   | { type: "ollama"; client: Ollama; model: string }
+  | { type: "openrouter"; client: OpenAI; model: string }
   | { type: "openai"; client: OpenAI; model: string };
 
 export function createLlmClient(config: LlmConfig): LlmClient {
@@ -56,6 +71,14 @@ export function createLlmClient(config: LlmConfig): LlmClient {
     return {
       type: "ollama",
       client: getOllamaClient(config.baseUrl || OLLAMA_HOST),
+      model: config.model,
+    };
+  }
+
+  if (provider === "openrouter") {
+    return {
+      type: "openrouter",
+      client: createOpenAIClient(config),
       model: config.model,
     };
   }
@@ -93,6 +116,22 @@ export async function analyzeWithLlm(
       },
     });
     return response.message?.content || "{}";
+  }
+
+  // OpenRouter path — many models don't support response_format, so we
+  // enforce JSON via the prompt and parse the response manually.
+  if (llmClient.type === "openrouter") {
+    const jsonSystemPrompt = `${systemPrompt}\n\nIMPORTANT: You MUST respond with valid JSON only. No markdown, no explanation, no code fences — just raw JSON.`;
+    const response = await llmClient.client.chat.completions.create({
+      model: model || llmClient.model,
+      messages: [
+        { role: "system", content: jsonSystemPrompt },
+        { role: "user", content: userContent },
+      ],
+      temperature,
+      max_tokens: options?.maxTokens ?? 4096,
+    });
+    return response.choices[0]?.message?.content || "{}";
   }
 
   // OpenAI-compatible path

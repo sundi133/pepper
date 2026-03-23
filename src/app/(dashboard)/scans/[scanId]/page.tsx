@@ -149,7 +149,12 @@ export default function ScanDetailPage() {
                     {Object.entries(
                       scan.scannerProgress as Record<
                         string,
-                        { status: string; findingsCount: number; filesCompleted?: number; filesTotal?: number }
+                        {
+                          status: string;
+                          findingsCount: number;
+                          filesCompleted?: number;
+                          filesTotal?: number;
+                        }
                       >,
                     ).map(([name, info]) => (
                       <Badge
@@ -318,7 +323,13 @@ export default function ScanDetailPage() {
 }
 
 function computeScanProgress(
-  scannerProgress: Record<string, { status: string; filesCompleted?: number; filesTotal?: number }> | null | undefined,
+  scannerProgress:
+    | Record<
+        string,
+        { status: string; filesCompleted?: number; filesTotal?: number }
+      >
+    | null
+    | undefined,
   status: string,
 ): number {
   if (status === "QUEUED") return 5;

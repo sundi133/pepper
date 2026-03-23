@@ -166,6 +166,7 @@ enum ScanType {
 enum SourceType {
   UPLOAD
   GIT_CLONE
+  SVN_CHECKOUT
   WEBHOOK
 }
 
@@ -207,6 +208,9 @@ enum Scanner {
   SCA
   SECRETS_PATTERN
   SECRETS_LLM
+  IAC
+  MALICIOUS_PKG
+  ZERO_DAY
 }
 
 enum Severity {

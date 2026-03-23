@@ -5,6 +5,7 @@ import { javascriptRules } from "./rules/javascript";
 import { pythonRules } from "./rules/python";
 import { goRules } from "./rules/go";
 import { javaRules } from "./rules/java";
+import { phpRules } from "./rules/php";
 import { genericRules } from "./rules/generic";
 
 export const ALL_PATTERN_RULES: PatternRule[] = [
@@ -12,6 +13,7 @@ export const ALL_PATTERN_RULES: PatternRule[] = [
   ...pythonRules,
   ...goRules,
   ...javaRules,
+  ...phpRules,
   ...genericRules,
 ];
 

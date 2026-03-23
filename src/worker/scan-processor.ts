@@ -48,7 +48,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
     if (sourceType === "UPLOAD") {
       const data = await downloadObject(sourceRef);
-      const archivePath = path.join(workDir, "source.zip");
+      const archiveExt = sourceRef.match(/\.(zip|tar\.gz|tgz|tar)$/i)?.[0] || ".zip";
+      const archivePath = path.join(workDir, `source${archiveExt}`);
       fs.writeFileSync(archivePath, data);
       await extractArchive(archivePath, workDir);
       fs.unlinkSync(archivePath);
@@ -69,32 +70,103 @@ export async function processScanJob(job: Job<ScanJobData>) {
         }
       }
     } else if (sourceType === "SVN_CHECKOUT") {
-      const { execSync } = await import("child_process");
+      const { execFileSync } = await import("child_process");
       const svnUrl = job.data.svnUrl || sourceRef;
       const svnRevision = job.data.svnRevision;
+      const repoDir = path.join(workDir, "repo");
 
-      // Build svn export command (export = no .svn metadata)
-      const authArgs: string[] = [];
+      // Verify svn CLI is available
+      try {
+        execFileSync("svn", ["--version", "--quiet"], { timeout: 5000 });
+      } catch {
+        throw new Error(
+          "SVN CLI not found. Install Subversion (e.g. `brew install subversion`) on the worker.",
+        );
+      }
+
+      // Build args array (no shell interpolation)
+      const exportArgs = [
+        "export",
+        "--non-interactive",
+        "--trust-server-cert",
+        "--trust-server-cert-failures=unknown-ca,cn-mismatch,expired,not-yet-valid,other",
+      ];
+      if (svnRevision) {
+        exportArgs.push("-r", svnRevision);
+      }
       if (job.data.svnUsername) {
-        authArgs.push(`--username "${job.data.svnUsername}"`);
+        exportArgs.push("--username", job.data.svnUsername);
       }
       if (job.data.svnPassword) {
-        authArgs.push(`--password "${job.data.svnPassword}"`);
+        exportArgs.push("--password", job.data.svnPassword);
       }
-      const revArg = svnRevision ? `-r ${svnRevision}` : "";
+      exportArgs.push(svnUrl, repoDir);
 
       log.info({ svnUrl, svnRevision }, "SVN export starting");
-      execSync(
-        `svn export --non-interactive --trust-server-cert ${revArg} ${authArgs.join(" ")} "${svnUrl}" "${workDir}/repo"`,
-        { timeout: 300000 },
-      );
+      try {
+        execFileSync("svn", exportArgs, { timeout: 300000 });
+      } catch (svnErr) {
+        const msg =
+          svnErr instanceof Error ? svnErr.message : String(svnErr);
+        if (msg.includes("E170013") || msg.includes("Unable to connect")) {
+          throw new Error(`SVN connection failed — check URL: ${svnUrl}`);
+        }
+        if (msg.includes("E170001") || msg.includes("Authorization failed")) {
+          throw new Error(
+            "SVN authentication failed — check username/password.",
+          );
+        }
+        if (msg.includes("E200009") || msg.includes("not found")) {
+          throw new Error(
+            `SVN path not found at ${svnUrl}. Verify the repository URL includes the correct path (e.g. /trunk).`,
+          );
+        }
+        throw new Error(`SVN export failed: ${msg}`);
+      }
 
-      // Move contents up
-      const repoDir = path.join(workDir, "repo");
+      // Capture the actual revision number via svn info
+      try {
+        const infoArgs = [
+          "info",
+          "--non-interactive",
+          "--trust-server-cert",
+          "--trust-server-cert-failures=unknown-ca,cn-mismatch,expired,not-yet-valid,other",
+          "--show-item",
+          "revision",
+        ];
+        if (svnRevision) {
+          infoArgs.push("-r", svnRevision);
+        }
+        if (job.data.svnUsername) {
+          infoArgs.push("--username", job.data.svnUsername);
+        }
+        if (job.data.svnPassword) {
+          infoArgs.push("--password", job.data.svnPassword);
+        }
+        infoArgs.push(svnUrl);
+
+        const revOutput = execFileSync("svn", infoArgs, {
+          timeout: 30000,
+          encoding: "utf-8",
+        }).trim();
+
+        if (revOutput && /^\d+$/.test(revOutput)) {
+          await prisma.scan.update({
+            where: { id: scanId },
+            data: { commitSha: `r${revOutput}` },
+          });
+          log.info({ revision: revOutput }, "SVN revision captured");
+        }
+      } catch (infoErr) {
+        log.warn({ error: infoErr }, "Could not retrieve SVN revision info");
+      }
+
+      // Move exported contents up into workDir
       if (fs.existsSync(repoDir)) {
         for (const item of fs.readdirSync(repoDir)) {
           fs.renameSync(path.join(repoDir, item), path.join(workDir, item));
         }
+        fs.rmSync(repoDir, { recursive: true, force: true });
       }
     }
 

@@ -216,18 +216,25 @@ export function CreateScanDialog({ projects }: { projects: Project[] }) {
               <div className="space-y-2">
                 <Label>SVN Repository URL</Label>
                 <Input
-                  placeholder="https://svn.example.com/repos/project/trunk"
+                  placeholder="https://svn.riouxsvn.com/my-repo/trunk"
                   value={svnUrl}
                   onChange={(e) => setSvnUrl(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Full URL to the SVN path you want to scan (e.g. repo root,
+                  /trunk, or a specific branch).
+                </p>
               </div>
               <div className="space-y-2">
                 <Label>Revision (optional)</Label>
                 <Input
-                  placeholder="HEAD"
+                  placeholder="HEAD (latest)"
                   value={svnRevision}
                   onChange={(e) => setSvnRevision(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  A revision number (e.g. 42) or leave blank for HEAD.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-2">
@@ -249,9 +256,11 @@ export function CreateScanDialog({ projects }: { projects: Project[] }) {
                 </div>
               </div>
               <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
-                SVN requires the <code>svn</code> CLI installed on the worker.
-                Supports standard SVN URLs including trunk, branches, and tags
-                paths.
+                <p>
+                  Requires <code>svn</code> CLI on the worker. The worker runs{" "}
+                  <code>svn export</code> to fetch the code without .svn
+                  metadata, then scans it like any other source.
+                </p>
               </div>
             </>
           )}

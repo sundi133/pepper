@@ -5,20 +5,28 @@ import { scanQueue, ScanJobData } from "@/lib/queue";
 import { uploadObject, ensureBucket } from "@/lib/minio";
 import { z } from "zod";
 
-const createScanSchema = z.object({
-  projectId: z.string(),
-  scanType: z
-    .enum(["FULL", "INCREMENTAL", "SAST_ONLY", "SCA_ONLY", "SECRETS_ONLY"])
-    .default("FULL"),
-  branch: z.string().optional(),
-  commitSha: z.string().optional(),
-  baseSha: z.string().optional(),
-  repoUrl: z.string().optional(),
-  svnUrl: z.string().optional(),
-  svnRevision: z.string().optional(),
-  svnUsername: z.string().optional(),
-  svnPassword: z.string().optional(),
-});
+const createScanSchema = z
+  .object({
+    projectId: z.string(),
+    scanType: z
+      .enum(["FULL", "INCREMENTAL", "SAST_ONLY", "SCA_ONLY", "SECRETS_ONLY"])
+      .default("FULL"),
+    branch: z.string().optional(),
+    commitSha: z.string().optional(),
+    baseSha: z.string().optional(),
+    repoUrl: z.string().optional(),
+    svnUrl: z.string().url("Invalid SVN URL").optional(),
+    svnRevision: z
+      .string()
+      .regex(/^(\d+|HEAD|\{[\d\-T:]+\})$/i, "Revision must be a number, HEAD, or {date}")
+      .optional(),
+    svnUsername: z.string().optional(),
+    svnPassword: z.string().optional(),
+  })
+  .refine((data) => !(data.repoUrl && data.svnUrl), {
+    message: "Cannot specify both repoUrl and svnUrl",
+    path: ["svnUrl"],
+  });
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
@@ -28,6 +36,7 @@ export async function POST(req: NextRequest) {
     const contentType = req.headers.get("content-type") || "";
     let scanParams: z.infer<typeof createScanSchema>;
     let fileBuffer: Buffer | null = null;
+    let originalFileName: string | null = null;
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -39,6 +48,7 @@ export async function POST(req: NextRequest) {
       if (file) {
         const arrayBuffer = await file.arrayBuffer();
         fileBuffer = Buffer.from(arrayBuffer);
+        originalFileName = file.name;
       }
     } else {
       const body = await req.json();
@@ -84,8 +94,10 @@ export async function POST(req: NextRequest) {
     let sourceRef = "";
     if (fileBuffer) {
       await ensureBucket();
-      sourceRef = `scans/${scan.id}/source.zip`;
-      await uploadObject(sourceRef, fileBuffer, "application/zip");
+      const ext = originalFileName?.match(/\.(zip|tar\.gz|tgz|tar)$/i)?.[0] || ".zip";
+      sourceRef = `scans/${scan.id}/source${ext}`;
+      const mimeType = ext === ".zip" ? "application/zip" : "application/x-tar";
+      await uploadObject(sourceRef, fileBuffer, mimeType);
     } else if (scanParams.repoUrl) {
       sourceRef = scanParams.repoUrl;
     } else if (scanParams.svnUrl) {

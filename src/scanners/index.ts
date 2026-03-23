@@ -8,9 +8,10 @@ import { zeroDayScanner } from "./zero-day";
 
 export function getScanners(
   scanType: string,
-  llmEnabled: boolean,
+  orgSettings: { enableLlmSast: boolean; enableLlmSecrets: boolean },
 ): ScannerPlugin[] {
   const scanners: ScannerPlugin[] = [];
+  const llmEnabled = orgSettings.enableLlmSast || orgSettings.enableLlmSecrets;
 
   const includeSast = ["FULL", "SAST_ONLY"].includes(scanType);
   const includeSca = ["FULL", "SCA_ONLY"].includes(scanType);
@@ -19,30 +20,26 @@ export function getScanners(
 
   if (includeSast) {
     scanners.push(sastPatternScanner);
-    if (llmEnabled) scanners.push(sastLlmScanner);
+    if (orgSettings.enableLlmSast) scanners.push(sastLlmScanner);
   }
 
   if (includeSca) {
     scanners.push(scaScanner);
-    scanners.push(maliciousPkgScanner); // Supply chain / typosquat detection
+    scanners.push(maliciousPkgScanner);
   }
 
   if (includeSecrets) {
-    scanners.push(secretsPatternScanner);
-    if (llmEnabled) {
-      const idx = scanners.indexOf(secretsPatternScanner);
-      if (idx >= 0) {
-        scanners.splice(idx, 1, secretsLlmScanner);
-      }
+    if (orgSettings.enableLlmSecrets) {
+      scanners.push(secretsLlmScanner);
+    } else {
+      scanners.push(secretsPatternScanner);
     }
   }
 
-  // IaC scanner runs on FULL scans (covers Dockerfile, Terraform, K8s, CI/CD)
   if (includeFull || includeSast) {
     scanners.push(iacScanner);
   }
 
-  // Zero-day / business logic scanner (LLM-only, FULL scans only)
   if (includeFull && llmEnabled) {
     scanners.push(zeroDayScanner);
   }
@@ -84,10 +81,7 @@ export class FindingDeduplicator {
 }
 
 export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
-  const scanners = getScanners(
-    ctx.scanType,
-    ctx.orgSettings.enableLlmSast || ctx.orgSettings.enableLlmSecrets,
-  );
+  const scanners = getScanners(ctx.scanType, ctx.orgSettings);
 
   ctx.onProgress?.(
     `Running ${scanners.length} scanners: ${scanners.map((s) => s.name).join(", ")}`,

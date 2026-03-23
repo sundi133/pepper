@@ -5,6 +5,7 @@
 - **Docker** 24+ and **Docker Compose** v2
 - **4 GB RAM** minimum (8 GB recommended if using Ollama for AI scanning)
 - **Ollama** (optional) — for AI-powered SAST and secrets scanning
+- **Subversion CLI** (optional) — required only if you plan to scan SVN repositories
 
 ## Automated Setup (Recommended)
 
@@ -168,6 +169,29 @@ docker compose down
 docker compose down -v
 ```
 
+## SVN Repository Scanning
+
+Pepper supports scanning code directly from Subversion repositories. The `svn` CLI must be available on the worker. The provided Docker worker image includes it by default — no extra steps are needed for Docker deployments.
+
+For non-Docker / local development setups, install it manually:
+
+```bash
+# macOS
+brew install subversion
+
+# Ubuntu / Debian
+sudo apt-get install -y subversion
+
+# Fedora / RHEL
+sudo dnf install -y subversion
+```
+
+When creating a scan, select **SVN** as the source and provide:
+
+- **SVN URL** — full URL to the path you want to scan, e.g. `https://svn.example.com/repos/myproject/trunk`
+- **Revision** — a revision number (e.g. `42`) or leave blank for `HEAD`
+- **Username / Password** — only required for private repositories
+
 ## Troubleshooting
 
 **Worker shows "could not renew lock":**
@@ -192,3 +216,12 @@ OLLAMA_HOST="http://$(hostname -I | awk '{print $1}'):11434"
 **Ollama out of memory:**
 Use a smaller model: `OLLAMA_MODEL=qwen2.5-coder:3b ollama pull qwen2.5-coder:3b`
 Then set the model in Pepper's organization settings.
+
+**SVN scan fails — "SVN CLI not found":**
+Install Subversion on the worker machine. For Docker: rebuild the worker image, which installs `subversion` automatically.
+
+**SVN scan fails — "Authorization failed":**
+The username or password you provided is incorrect. Check your SVN credentials.
+
+**SVN scan fails — "path not found":**
+The URL doesn't point to a valid SVN path. Make sure to include the correct sub-path, e.g. `/trunk` or `/branches/main`.

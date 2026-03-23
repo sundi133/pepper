@@ -96,8 +96,18 @@ export default function ScanDetailPage() {
             )}
           </div>
           <p className="text-sm text-muted-foreground">
-            {scan.branch && `Branch: ${scan.branch}`}
-            {scan.commitSha && ` | Commit: ${scan.commitSha.substring(0, 8)}`}
+            {scan.sourceType === "SVN_CHECKOUT" && scan.sourceRef && (
+              <>SVN: {scan.sourceRef}</>
+            )}
+            {scan.sourceType === "SVN_CHECKOUT" &&
+              scan.commitSha &&
+              ` | Rev: ${scan.commitSha}`}
+            {scan.sourceType !== "SVN_CHECKOUT" &&
+              scan.branch &&
+              `Branch: ${scan.branch}`}
+            {scan.sourceType !== "SVN_CHECKOUT" &&
+              scan.commitSha &&
+              ` | Commit: ${scan.commitSha.substring(0, 8)}`}
             {` | Created: ${new Date(scan.createdAt).toLocaleString()}`}
             {scan.completedAt &&
               ` | Duration: ${getDuration(scan.startedAt, scan.completedAt)}`}
@@ -112,6 +122,30 @@ export default function ScanDetailPage() {
           )}
           {scan.status === "COMPLETED" && (
             <>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  window.open(
+                    `/api/scans/${scanId}/findings/export?format=csv`,
+                    "_blank",
+                  )
+                }
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Findings CSV
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  window.open(
+                    `/api/scans/${scanId}/findings/export?format=json`,
+                    "_blank",
+                  )
+                }
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Findings JSON
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => downloadArtifact("sarif")}

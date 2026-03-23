@@ -169,18 +169,84 @@ sudo dnf install -y subversion
 
 Once installed, create a scan and select **SVN** as the source. Provide the full SVN URL including the path you want to scan (e.g. `https://svn.example.com/repos/myproject/trunk`), an optional revision number (leave blank for `HEAD`), and credentials if the repo is private.
 
+### Scan Scheduling
+
+Pepper can automatically scan your projects on a recurring schedule. Configure per-project in **Settings > Projects > [Project] > Schedule**.
+
+Supported frequencies: **Daily**, **Weekly**, **Biweekly**, **Monthly**.
+
+Scheduled scans require the project to have a **repository URL** (Git or SVN) — file upload scans cannot be scheduled.
+
+Scans run at **2:00 AM UTC** by default. The scheduler runs inside the worker process and checks for due scans every 60 seconds.
+
+**API:**
+
+```bash
+# Set a weekly full scan schedule
+curl -X PUT http://localhost:3000/api/projects/<projectId>/schedule \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true, "frequency": "WEEKLY", "scanType": "FULL"}'
+
+# Check current schedule
+curl http://localhost:3000/api/projects/<projectId>/schedule
+
+# Disable schedule
+curl -X DELETE http://localhost:3000/api/projects/<projectId>/schedule
+```
+
+### Email Notifications
+
+Pepper can send email notifications when scans complete. Each user can configure their notification preferences:
+
+- **On scan complete** — receive a summary email after every scan
+- **On gate failure** — only notify when the build gate fails
+- **On critical findings** — only notify when critical vulnerabilities are found
+
+**SMTP Configuration:**
+
+Set via environment variables (simplest) or per-org in the database:
+
+| Variable        | Default                     | Description          |
+| --------------- | --------------------------- | -------------------- |
+| `SMTP_HOST`     | —                           | SMTP server hostname |
+| `SMTP_PORT`     | `587`                       | SMTP port            |
+| `SMTP_USER`     | —                           | SMTP username        |
+| `SMTP_PASSWORD` | —                           | SMTP password        |
+| `SMTP_FROM`     | `noreply@pepper-sast.local` | From address         |
+| `SMTP_TLS`      | `true`                      | Use TLS              |
+
+For Gmail:
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=you@gmail.com
+SMTP_PASSWORD=your-app-password
+SMTP_FROM=you@gmail.com
+```
+
+For AWS SES:
+
+```
+SMTP_HOST=email-smtp.us-east-1.amazonaws.com
+SMTP_PORT=587
+SMTP_USER=AKIA...
+SMTP_PASSWORD=...
+SMTP_FROM=security@yourdomain.com
+```
+
 ### Troubleshooting
 
-| Problem                             | Solution                                                                                |
-| ----------------------------------- | --------------------------------------------------------------------------------------- |
-| Worker shows "could not renew lock" | Ollama is slow on CPU. Set `MAX_LLM_CONCURRENCY=1` and restart                         |
-| LLM "Headers Timeout Error"         | Reduce `MAX_LLM_CONCURRENCY` or use a smaller model                                    |
-| Scans stuck in QUEUED               | Check worker: `docker compose logs pepper-worker`                                       |
-| Port conflict                       | Change `PEPPER_PORT` in `.env`                                                          |
-| Can't reach Ollama on Linux         | Use host IP: `OLLAMA_HOST="http://$(hostname -I \| awk '{print $1}'):11434"`            |
-| SVN scan fails — "SVN CLI not found" | Install subversion on the worker: `brew install subversion` (macOS) or `apt install subversion` |
-| SVN scan fails — "Authorization failed" | Check the SVN username/password you entered when creating the scan                 |
-| SVN scan fails — "path not found"   | Make sure the URL includes the correct path (e.g. `/trunk`, `/branches/main`)          |
+| Problem                                 | Solution                                                                                        |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Worker shows "could not renew lock"     | Ollama is slow on CPU. Set `MAX_LLM_CONCURRENCY=1` and restart                                  |
+| LLM "Headers Timeout Error"             | Reduce `MAX_LLM_CONCURRENCY` or use a smaller model                                             |
+| Scans stuck in QUEUED                   | Check worker: `docker compose logs pepper-worker`                                               |
+| Port conflict                           | Change `PEPPER_PORT` in `.env`                                                                  |
+| Can't reach Ollama on Linux             | Use host IP: `OLLAMA_HOST="http://$(hostname -I \| awk '{print $1}'):11434"`                    |
+| SVN scan fails — "SVN CLI not found"    | Install subversion on the worker: `brew install subversion` (macOS) or `apt install subversion` |
+| SVN scan fails — "Authorization failed" | Check the SVN username/password you entered when creating the scan                              |
+| SVN scan fails — "path not found"       | Make sure the URL includes the correct path (e.g. `/trunk`, `/branches/main`)                   |
 
 ## Development
 

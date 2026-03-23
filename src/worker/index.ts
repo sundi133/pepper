@@ -4,6 +4,7 @@ import { SCAN_QUEUE_NAME, ScanJobData } from "@/lib/queue";
 import { redisConnection } from "@/lib/redis";
 import { ensureBucket } from "@/lib/minio";
 import { processScanJob } from "./scan-processor";
+import { startScheduler } from "./scheduler";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
@@ -70,6 +71,9 @@ async function main() {
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+
+  // Start scan scheduler (checks for due scheduled scans every 60s)
+  const schedulerInterval = startScheduler();
 
   logger.info({ concurrency }, "Worker started and waiting for jobs");
 }

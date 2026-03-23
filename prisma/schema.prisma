@@ -29,6 +29,11 @@ model OrgMember {
   organizationId String
   createdAt      DateTime @default(now())
 
+  // Notification preferences
+  emailOnScanComplete Boolean @default(true)
+  emailOnGateFail     Boolean @default(true)
+  emailOnCritical     Boolean @default(true)
+
   user         User         @relation(fields: [userId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -107,6 +112,7 @@ model Project {
   organization Organization @relation(fields: [organizationId], references: [id])
   scans        Scan[]
   buildGate    BuildGate?
+  schedule     ScanSchedule?
 }
 
 model Scan {
@@ -177,29 +183,42 @@ enum GateResult {
 }
 
 model Finding {
-  id          String   @id @default(cuid())
-  scanId      String
-  scanner     Scanner
-  severity    Severity
-  title       String
-  description String   @db.Text
-  filePath    String?
-  startLine   Int?
-  endLine     Int?
-  snippet     String?  @db.Text
-  ruleId      String?
-  cweId       String?
-  cveId       String?
-  confidence  Float?
-  metadata    Json?
-  masked      Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id              String        @id @default(cuid())
+  scanId          String
+  scanner         Scanner
+  severity        Severity
+  title           String
+  description     String        @db.Text
+  filePath        String?
+  startLine       Int?
+  endLine         Int?
+  snippet         String?       @db.Text
+  ruleId          String?
+  cweId           String?
+  cveId           String?
+  confidence      Float?
+  metadata        Json?
+  masked          Boolean       @default(false)
+  status          FindingStatus @default(OPEN)
+  statusNote      String?
+  statusUpdatedBy String?
+  statusUpdatedAt DateTime?
+  createdAt       DateTime      @default(now())
 
   scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
 
   @@index([scanId, severity])
   @@index([scanId, scanner])
   @@index([scanId, filePath])
+  @@index([scanId, status])
+}
+
+enum FindingStatus {
+  OPEN
+  IN_PROGRESS
+  FALSE_POSITIVE
+  ACCEPTED_RISK
+  RESOLVED
 }
 
 enum Scanner {
@@ -252,6 +271,30 @@ model BuildGate {
   project Project @relation(fields: [projectId], references: [id])
 }
 
+model ScanSchedule {
+  id        String       @id @default(cuid())
+  projectId String       @unique
+  enabled   Boolean      @default(true)
+  frequency ScheduleFreq
+  cronExpr  String?
+  scanType  ScanType     @default(FULL)
+  branch    String?
+  lastRunAt DateTime?
+  nextRunAt DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+enum ScheduleFreq {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  CUSTOM
+}
+
 model OrgSettings {
   id               String  @id @default(cuid())
   organizationId   String  @unique
@@ -263,6 +306,14 @@ model OrgSettings {
   enableLlmSecrets Boolean @default(true)
   osvApiUrl        String  @default("https://api.osv.dev")
   vulnDbMode       String  @default("online")
+
+  // SMTP Email Configuration
+  smtpHost        String?
+  smtpPort        Int?     @default(587)
+  smtpUser        String?
+  smtpPassword    String?  @db.Text
+  smtpFromAddress String?  @default("noreply@pepper-sast.local")
+  smtpUseTls      Boolean  @default(true)
 
   organization Organization @relation(fields: [organizationId], references: [id])
 }

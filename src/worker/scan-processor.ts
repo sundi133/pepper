@@ -11,6 +11,7 @@ import { generateSbom } from "@/scanners/sca/sbom-generator";
 import { ScanContext, RawFinding } from "@/scanners/types";
 import { parseDependencies } from "@/scanners/sca";
 import { createScanLogger } from "@/lib/logger";
+import { sendScanCompleteEmail } from "@/lib/email";
 
 // prisma is imported from @/lib/prisma
 
@@ -48,7 +49,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
     if (sourceType === "UPLOAD") {
       const data = await downloadObject(sourceRef);
-      const archiveExt = sourceRef.match(/\.(zip|tar\.gz|tgz|tar)$/i)?.[0] || ".zip";
+      const archiveExt =
+        sourceRef.match(/\.(zip|tar\.gz|tgz|tar)$/i)?.[0] || ".zip";
       const archivePath = path.join(workDir, `source${archiveExt}`);
       fs.writeFileSync(archivePath, data);
       await extractArchive(archivePath, workDir);
@@ -106,8 +108,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
       try {
         execFileSync("svn", exportArgs, { timeout: 300000 });
       } catch (svnErr) {
-        const msg =
-          svnErr instanceof Error ? svnErr.message : String(svnErr);
+        const msg = svnErr instanceof Error ? svnErr.message : String(svnErr);
         if (msg.includes("E170013") || msg.includes("Unable to connect")) {
           throw new Error(`SVN connection failed — check URL: ${svnUrl}`);
         }
@@ -362,6 +363,98 @@ export async function processScanJob(job: Job<ScanJobData>) {
     });
 
     log.info({ gateResult }, "Scan completed successfully");
+
+    // 10. Send email notification (non-blocking)
+    try {
+      if (job.data.sourceType !== "WEBHOOK") {
+        const triggeredBy = job.data.scanId
+          ? await prisma.scan.findUnique({
+              where: { id: scanId },
+              select: {
+                triggeredBy: true,
+                project: { select: { name: true, organizationId: true } },
+              },
+            })
+          : null;
+
+        if (
+          triggeredBy?.triggeredBy &&
+          triggeredBy.triggeredBy !== "scheduler"
+        ) {
+          const user = await prisma.user.findUnique({
+            where: { id: triggeredBy.triggeredBy },
+            select: { email: true, name: true },
+          });
+
+          if (user?.email && triggeredBy.project) {
+            // Check notification preferences
+            const member = await prisma.orgMember.findFirst({
+              where: {
+                userId: triggeredBy.triggeredBy,
+                organizationId: triggeredBy.project.organizationId,
+              },
+              select: {
+                emailOnScanComplete: true,
+                emailOnGateFail: true,
+                emailOnCritical: true,
+              },
+            });
+
+            const shouldEmail =
+              member?.emailOnScanComplete ||
+              (member?.emailOnGateFail && gateResult === "FAILED") ||
+              (member?.emailOnCritical &&
+                (
+                  await prisma.scan.findUnique({
+                    where: { id: scanId },
+                    select: { criticalCount: true },
+                  })
+                )?.criticalCount! > 0);
+
+            if (shouldEmail) {
+              const scanCounts = await prisma.scan.findUnique({
+                where: { id: scanId },
+                select: {
+                  criticalCount: true,
+                  highCount: true,
+                  mediumCount: true,
+                  lowCount: true,
+                  startedAt: true,
+                  completedAt: true,
+                },
+              });
+
+              const durationSecs =
+                scanCounts?.startedAt && scanCounts?.completedAt
+                  ? Math.floor(
+                      (scanCounts.completedAt.getTime() -
+                        scanCounts.startedAt.getTime()) /
+                        1000,
+                    )
+                  : undefined;
+
+              await sendScanCompleteEmail(triggeredBy.project.organizationId, {
+                to: user.email,
+                userName: user.name || undefined,
+                projectName: triggeredBy.project.name,
+                scanId,
+                branch: job.data.branch,
+                severityCounts: {
+                  critical: scanCounts?.criticalCount || 0,
+                  high: scanCounts?.highCount || 0,
+                  medium: scanCounts?.mediumCount || 0,
+                  low: scanCounts?.lowCount || 0,
+                },
+                gateResult,
+                duration: durationSecs,
+              });
+            }
+          }
+        }
+      }
+    } catch (emailErr) {
+      log.warn({ emailErr }, "Email notification failed (non-blocking)");
+    }
   } catch (error) {
     log.error({ error }, "Scan failed");
     await prisma.scan.update({

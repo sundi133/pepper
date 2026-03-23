@@ -84,7 +84,8 @@ export const genericRules: PatternRule[] = [
     severity: "MEDIUM",
     cweId: "CWE-1004",
     languages: ["*"],
-    pattern: /(?:Set-Cookie|setCookie|set_cookie|cookie)\s*[:=(].*(?!HttpOnly)/i,
+    pattern:
+      /(?:Set-Cookie|setCookie|set_cookie|cookie)\s*[:=(].*(?!HttpOnly)/i,
     negative: /(?:httponly|HttpOnly|http_only)/i,
   },
   {
@@ -117,8 +118,7 @@ export const genericRules: PatternRule[] = [
     severity: "HIGH",
     cweId: "CWE-312",
     languages: ["*"],
-    pattern:
-      /(?:password|passwd|secret|token)\s*=\s*['"][^'"]{4,}['"]\s*;/i,
+    pattern: /(?:password|passwd|secret|token)\s*=\s*['"][^'"]{4,}['"]\s*;/i,
     negative:
       /(?:hash|encrypt|bcrypt|scrypt|argon|placeholder|example|changeme|test|process\.env|getenv|os\.environ|\$\{)/i,
   },

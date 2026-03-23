@@ -27,7 +27,10 @@ export async function GET(
   });
 
   const timestamp = new Date().toISOString().slice(0, 10);
-  const projectSlug = (scan.project?.name || "scan").replace(/[^a-zA-Z0-9_-]/g, "_");
+  const projectSlug = (scan.project?.name || "scan").replace(
+    /[^a-zA-Z0-9_-]/g,
+    "_",
+  );
 
   if (format === "json") {
     return new NextResponse(JSON.stringify(findings, null, 2), {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useScans, useProjects } from "@/hooks/use-scan-polling";
+import useSWR from "swr";
 import {
   Card,
   CardContent,
@@ -23,10 +24,39 @@ import {
 } from "@/components/ui/table";
 import { Shield, Scan, AlertTriangle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  Legend,
+} from "recharts";
+import { SCANNER_LABELS } from "@/lib/constants";
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
+const SEVERITY_COLORS: Record<string, string> = {
+  CRITICAL: "#dc2626",
+  HIGH: "#ea580c",
+  MEDIUM: "#ca8a04",
+  LOW: "#2563eb",
+  INFO: "#6b7280",
+};
 
 export default function DashboardPage() {
   const { scans, isLoading: scansLoading } = useScans();
   const { projects } = useProjects();
+  const { data: stats } = useSWR("/api/dashboard/stats", fetcher, {
+    refreshInterval: 30000,
+  });
 
   const completedScans = scans.filter(
     (s: { status: string }) => s.status === "COMPLETED",
@@ -130,6 +160,191 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Charts */}
+      {stats && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Findings Trend */}
+          {stats.trend?.length > 0 && (
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Findings Trend</CardTitle>
+                <CardDescription>
+                  Severity breakdown across recent scans
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={stats.trend}>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      className="stroke-muted"
+                    />
+                    <XAxis
+                      dataKey="date"
+                      className="text-xs"
+                      tick={{ fontSize: 11 }}
+                    />
+                    <YAxis className="text-xs" tick={{ fontSize: 11 }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "8px",
+                        fontSize: "12px",
+                      }}
+                    />
+                    <Legend />
+                    <Area
+                      type="monotone"
+                      dataKey="critical"
+                      stackId="1"
+                      stroke="#dc2626"
+                      fill="#dc2626"
+                      fillOpacity={0.6}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="high"
+                      stackId="1"
+                      stroke="#ea580c"
+                      fill="#ea580c"
+                      fillOpacity={0.5}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="medium"
+                      stackId="1"
+                      stroke="#ca8a04"
+                      fill="#ca8a04"
+                      fillOpacity={0.4}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="low"
+                      stackId="1"
+                      stroke="#2563eb"
+                      fill="#2563eb"
+                      fillOpacity={0.3}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Severity Breakdown Pie */}
+          {stats.severity?.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Severity Breakdown</CardTitle>
+                <CardDescription>
+                  Finding distribution by severity
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie
+                      data={stats.severity}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={2}
+                      dataKey="count"
+                      nameKey="name"
+                      label={(props: { name?: string; value?: number }) =>
+                        `${props.name} (${props.value})`
+                      }
+                      labelLine={false}
+                    >
+                      {stats.severity.map(
+                        (entry: { name: string }, i: number) => (
+                          <Cell
+                            key={i}
+                            fill={SEVERITY_COLORS[entry.name] || "#6b7280"}
+                          />
+                        ),
+                      )}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Scanner Distribution */}
+          {stats.scanners?.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Scanner Distribution</CardTitle>
+                <CardDescription>Findings by scanner type</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart
+                    data={stats.scanners.map(
+                      (s: { name: string; count: number }) => ({
+                        ...s,
+                        label:
+                          SCANNER_LABELS[
+                            s.name as keyof typeof SCANNER_LABELS
+                          ] || s.name,
+                      }),
+                    )}
+                    layout="vertical"
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      className="stroke-muted"
+                    />
+                    <XAxis type="number" tick={{ fontSize: 11 }} />
+                    <YAxis
+                      dataKey="label"
+                      type="category"
+                      width={120}
+                      tick={{ fontSize: 11 }}
+                    />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Top Vulnerable Files */}
+          {stats.topFiles?.length > 0 && (
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Top Vulnerable Files</CardTitle>
+                <CardDescription>Files with the most findings</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {stats.topFiles.map(
+                    (f: { filePath: string; count: number }, i: number) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2"
+                      >
+                        <span className="font-mono text-sm truncate max-w-[70%]">
+                          {f.filePath}
+                        </span>
+                        <span className="text-sm font-bold text-destructive">
+                          {f.count}
+                        </span>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Recent Scans */}
       <Card>

@@ -24,7 +24,38 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
+
+const FINDING_STATUSES = [
+  { value: "OPEN", label: "Open", color: "bg-yellow-100 text-yellow-800" },
+  {
+    value: "IN_PROGRESS",
+    label: "In Progress",
+    color: "bg-blue-100 text-blue-800",
+  },
+  {
+    value: "FALSE_POSITIVE",
+    label: "False Positive",
+    color: "bg-gray-100 text-gray-600",
+  },
+  {
+    value: "ACCEPTED_RISK",
+    label: "Accepted Risk",
+    color: "bg-purple-100 text-purple-800",
+  },
+  {
+    value: "RESOLVED",
+    label: "Resolved",
+    color: "bg-green-100 text-green-800",
+  },
+] as const;
 
 interface Finding {
   id: string;
@@ -32,6 +63,7 @@ interface Finding {
   severity: string;
   title: string;
   description: string;
+  status?: string;
   filePath?: string;
   startLine?: number;
   endLine?: number;
@@ -47,6 +79,7 @@ interface FindingDetailPanelProps {
   finding: Finding | null;
   open: boolean;
   onClose: () => void;
+  onStatusChange?: (findingId: string, status: string) => void;
 }
 
 // ─── Kill Chain Mapping ──────────────────────────────────────────────
@@ -424,12 +457,30 @@ export function FindingDetailPanel({
   finding,
   open,
   onClose,
+  onStatusChange,
 }: FindingDetailPanelProps) {
   if (!finding) return null;
 
   const copyDescription = () => {
     navigator.clipboard.writeText(finding.description);
     toast.success("Copied to clipboard");
+  };
+
+  const handleStatusChange = async (newStatus: string) => {
+    try {
+      const res = await fetch(`/api/findings/${finding.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error("Failed to update status");
+      toast.success(
+        `Status updated to ${newStatus.replace("_", " ").toLowerCase()}`,
+      );
+      onStatusChange?.(finding.id, newStatus);
+    } catch {
+      toast.error("Failed to update finding status");
+    }
   };
 
   const killChain = getKillChain(finding);
@@ -477,6 +528,29 @@ export function FindingDetailPanel({
             <SheetTitle className="text-left text-lg leading-tight">
               {finding.title}
             </SheetTitle>
+            {/* Status Control */}
+            <div className="flex items-center gap-2 pt-1">
+              <span className="text-xs text-muted-foreground">Status:</span>
+              <Select
+                value={finding.status || "OPEN"}
+                onValueChange={handleStatusChange}
+              >
+                <SelectTrigger className="h-7 w-[160px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FINDING_STATUSES.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      <span
+                        className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${s.color}`}
+                      >
+                        {s.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <SheetDescription className="text-left flex items-center gap-3 flex-wrap">
               {finding.ruleId && (
                 <code className="text-xs bg-muted px-1.5 py-0.5 rounded">

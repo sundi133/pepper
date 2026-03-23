@@ -14,6 +14,7 @@ export async function GET(
   const severity = searchParams.get("severity")?.split(",");
   const scanner = searchParams.get("scanner")?.split(",");
   const filePath = searchParams.get("filePath");
+  const status = searchParams.get("status")?.split(",");
   const page = parseInt(searchParams.get("page") || "1");
   const limit = parseInt(searchParams.get("limit") || "50");
   const sort = searchParams.get("sort") || "severity";
@@ -22,6 +23,7 @@ export async function GET(
   if (severity) where.severity = { in: severity };
   if (scanner) where.scanner = { in: scanner };
   if (filePath) where.filePath = { contains: filePath };
+  if (status) where.status = { in: status };
 
   const orderBy: Record<string, string> = {};
   if (sort === "severity") {

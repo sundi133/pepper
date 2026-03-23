@@ -18,7 +18,10 @@ const createScanSchema = z
     svnUrl: z.string().url("Invalid SVN URL").optional(),
     svnRevision: z
       .string()
-      .regex(/^(\d+|HEAD|\{[\d\-T:]+\})$/i, "Revision must be a number, HEAD, or {date}")
+      .regex(
+        /^(\d+|HEAD|\{[\d\-T:]+\})$/i,
+        "Revision must be a number, HEAD, or {date}",
+      )
       .optional(),
     svnUsername: z.string().optional(),
     svnPassword: z.string().optional(),
@@ -94,7 +97,8 @@ export async function POST(req: NextRequest) {
     let sourceRef = "";
     if (fileBuffer) {
       await ensureBucket();
-      const ext = originalFileName?.match(/\.(zip|tar\.gz|tgz|tar)$/i)?.[0] || ".zip";
+      const ext =
+        originalFileName?.match(/\.(zip|tar\.gz|tgz|tar)$/i)?.[0] || ".zip";
       sourceRef = `scans/${scan.id}/source${ext}`;
       const mimeType = ext === ".zip" ? "application/zip" : "application/x-tar";
       await uploadObject(sourceRef, fileBuffer, mimeType);

@@ -42,8 +42,7 @@ export const phpRules: PatternRule[] = [
     severity: "HIGH",
     cweId: "CWE-79",
     languages: ["php"],
-    pattern:
-      /(?:echo|print)\s+.*\$_(?:GET|POST|REQUEST|COOKIE|SERVER)\b/,
+    pattern: /(?:echo|print)\s+.*\$_(?:GET|POST|REQUEST|COOKIE|SERVER)\b/,
   },
   {
     id: "PHP-XSS-002",
@@ -53,8 +52,7 @@ export const phpRules: PatternRule[] = [
     severity: "MEDIUM",
     cweId: "CWE-79",
     languages: ["php"],
-    pattern:
-      /(?:echo|print)\s+\$(?!this\b)[a-zA-Z_]\w*\s*;/,
+    pattern: /(?:echo|print)\s+\$(?!this\b)[a-zA-Z_]\w*\s*;/,
     negative: /htmlspecialchars|htmlentities|strip_tags|esc_html/,
   },
   {
@@ -132,7 +130,8 @@ export const phpRules: PatternRule[] = [
     cweId: "CWE-434",
     languages: ["php"],
     pattern: /move_uploaded_file\s*\(/,
-    negative: /(?:getimagesize|finfo_|mime_content_type|pathinfo.*PATHINFO_EXTENSION)/,
+    negative:
+      /(?:getimagesize|finfo_|mime_content_type|pathinfo.*PATHINFO_EXTENSION)/,
   },
   {
     id: "PHP-DESER-001",
@@ -175,8 +174,7 @@ export const phpRules: PatternRule[] = [
     severity: "CRITICAL",
     cweId: "CWE-798",
     languages: ["php"],
-    pattern:
-      /\$(?:password|passwd|pwd|pass)\s*=\s*['"][^'"]{3,}['"]/i,
+    pattern: /\$(?:password|passwd|pwd|pass)\s*=\s*['"][^'"]{3,}['"]/i,
     negative: /\$_(?:GET|POST|REQUEST)|password_hash|func_get_arg|getenv|empty/,
   },
   {
@@ -187,8 +185,7 @@ export const phpRules: PatternRule[] = [
     severity: "HIGH",
     cweId: "CWE-113",
     languages: ["php"],
-    pattern:
-      /\bheader\s*\(.*\$_(?:GET|POST|REQUEST|COOKIE|SERVER)/i,
+    pattern: /\bheader\s*\(.*\$_(?:GET|POST|REQUEST|COOKIE|SERVER)/i,
   },
   {
     id: "PHP-SSRF-001",
@@ -220,8 +217,7 @@ export const phpRules: PatternRule[] = [
     severity: "MEDIUM",
     cweId: "CWE-209",
     languages: ["php"],
-    pattern:
-      /(?:display_errors|error_reporting)\s*[=(].*(?:E_ALL|1|true|on)/i,
+    pattern: /(?:display_errors|error_reporting)\s*[=(].*(?:E_ALL|1|true|on)/i,
     negative: /(?:ini_set.*0|off|false|test|dev)/i,
   },
   {
@@ -232,8 +228,7 @@ export const phpRules: PatternRule[] = [
     severity: "MEDIUM",
     cweId: "CWE-352",
     languages: ["php"],
-    pattern:
-      /\$_(?:POST|REQUEST)\s*\[/,
+    pattern: /\$_(?:POST|REQUEST)\s*\[/,
     negative: /(?:csrf|token|nonce|verify_nonce|check_admin_referer)/i,
   },
   {
@@ -244,8 +239,7 @@ export const phpRules: PatternRule[] = [
     severity: "MEDIUM",
     cweId: "CWE-601",
     languages: ["php"],
-    pattern:
-      /\bheader\s*\(\s*['"]Location:\s*.*\$_(?:GET|POST|REQUEST)/i,
+    pattern: /\bheader\s*\(\s*['"]Location:\s*.*\$_(?:GET|POST|REQUEST)/i,
   },
   {
     id: "PHP-RAND-001",

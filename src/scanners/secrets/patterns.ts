@@ -182,7 +182,8 @@ export const SECRET_PATTERNS: SecretPattern[] = [
   {
     id: "OPENAI_API_KEY",
     title: "OpenAI API Key",
-    description: "OpenAI API key found in code. Can be used to access GPT and other OpenAI services.",
+    description:
+      "OpenAI API key found in code. Can be used to access GPT and other OpenAI services.",
     severity: "HIGH",
     pattern: /sk-[A-Za-z0-9]{20,}T3BlbkFJ[A-Za-z0-9]{20,}/,
   },
@@ -206,16 +207,25 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     title: "Discord Webhook URL",
     description: "Discord webhook URL found in code.",
     severity: "MEDIUM",
-    pattern: /https:\/\/discord(?:app)?\.com\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+/,
+    pattern:
+      /https:\/\/discord(?:app)?\.com\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+/,
   },
   {
     id: "OAUTH_CLIENT_SECRET",
     title: "OAuth Client Secret",
-    description: "OAuth client_secret found in code. This enables impersonation of the application.",
+    description:
+      "OAuth client_secret found in code. This enables impersonation of the application.",
     severity: "HIGH",
     pattern:
       /(?:client_secret|CLIENT_SECRET|clientSecret)\s*[:=]\s*['"][A-Za-z0-9_\-]{20,}['"]/,
-    allowlist: [/example/i, /\$\{/i, /process\.env/i, /os\.environ/i, /getenv/i, /placeholder/i],
+    allowlist: [
+      /example/i,
+      /\$\{/i,
+      /process\.env/i,
+      /os\.environ/i,
+      /getenv/i,
+      /placeholder/i,
+    ],
   },
   {
     id: "AZURE_CLIENT_SECRET",
@@ -267,8 +277,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     description:
       "A password value is hardcoded in source code. Use environment variables or a secrets vault instead.",
     severity: "HIGH",
-    pattern:
-      /(?:password|passwd|pwd)\s*[:=]\s*['"][^'"${\s]{4,}['"]/i,
+    pattern: /(?:password|passwd|pwd)\s*[:=]\s*['"][^'"${\s]{4,}['"]/i,
     allowlist: [
       /example/i,
       /changeme/i,

@@ -13,10 +13,9 @@ import {
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 
-// ─── OSV Malware Advisory Query ───────────────────────────────────────
+// ─── OSV Malware Advisory Query (Batch) ───────────────────────────────
 // OSV tracks malicious packages (MAL-*) reported by OpenSSF and others.
-// Query individual packages against OSV to catch known-malicious advisories
-// that the batch SCA scanner might miss (different query granularity).
+// Uses batch API for efficiency, then filters for malware-specific advisories.
 
 interface OsvMalwareHit {
   id: string;
@@ -25,54 +24,101 @@ interface OsvMalwareHit {
   aliases?: string[];
 }
 
-async function queryOsvForMalware(
-  dep: Dependency,
-  apiUrl: string,
-): Promise<OsvMalwareHit[]> {
-  try {
-    const response = await fetch(`${apiUrl}/v1/query`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        package: { name: dep.name, ecosystem: dep.ecosystem },
-        version: dep.version,
-      }),
-      signal: AbortSignal.timeout(5000),
-    });
-
-    if (!response.ok) return [];
-
-    const data = await response.json();
-    const vulns: OsvMalwareHit[] = data.vulns || [];
-
-    // Filter for malware-specific advisories (MAL-*, PYSEC-malware, etc.)
-    return vulns.filter(
-      (v) =>
-        v.id.startsWith("MAL-") ||
-        v.summary?.toLowerCase().includes("malicious") ||
-        v.summary?.toLowerCase().includes("malware") ||
-        v.details?.toLowerCase().includes("malicious"),
-    );
-  } catch {
-    return [];
-  }
+interface OsvBatchResult {
+  results: Array<{
+    vulns?: OsvMalwareHit[];
+  }>;
 }
 
-// ─── NPM Registry Metadata Checks ────────────────────────────────────
-// Fast, deterministic checks using public registry metadata
+/**
+ * Batch query OSV for malware advisories.
+ * Returns a map of dep index -> malware hits.
+ */
+async function batchQueryOsvForMalware(
+  deps: Dependency[],
+  apiUrl: string,
+): Promise<Map<number, OsvMalwareHit[]>> {
+  const results = new Map<number, OsvMalwareHit[]>();
+  const BATCH_SIZE = 1000;
 
-interface NpmMetadata {
+  for (let i = 0; i < deps.length; i += BATCH_SIZE) {
+    const batch = deps.slice(i, i + BATCH_SIZE);
+    const queries = batch.map((dep) => ({
+      package: { name: dep.name, ecosystem: dep.ecosystem },
+      version: dep.version,
+    }));
+
+    try {
+      const response = await fetch(`${apiUrl}/v1/querybatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queries }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!response.ok) continue;
+
+      const data: OsvBatchResult = await response.json();
+
+      for (let j = 0; j < (data.results?.length || 0); j++) {
+        const vulns = data.results[j]?.vulns;
+        if (!vulns || vulns.length === 0) continue;
+
+        // Filter for malware-specific advisories
+        const malwareHits = vulns.filter(
+          (v) =>
+            v.id.startsWith("MAL-") ||
+            v.summary?.toLowerCase().includes("malicious") ||
+            v.summary?.toLowerCase().includes("malware") ||
+            v.details?.toLowerCase().includes("malicious"),
+        );
+
+        if (malwareHits.length > 0) {
+          results.set(i + j, malwareHits);
+        }
+      }
+    } catch {
+      // OSV batch failed, continue
+    }
+  }
+
+  return results;
+}
+
+// ─── Registry Metadata Checks (Multi-Ecosystem) ──────────────────────
+// Fast, deterministic checks using public registry APIs
+
+interface PkgMetadata {
+  ecosystem: string;
   hasInstallScripts: boolean;
   installScripts: Record<string, string>;
   ageInDays?: number;
-  weeklyDownloads?: number;
   hasRepository: boolean;
 }
 
-async function fetchNpmMetadata(
+async function fetchPkgMetadata(dep: Dependency): Promise<PkgMetadata | null> {
+  switch (dep.ecosystem) {
+    case "npm":
+      return fetchNpmMeta(dep.name, dep.version);
+    case "PyPI":
+      return fetchPypiMeta(dep.name, dep.version);
+    case "Maven":
+      return fetchMavenMeta(dep.name, dep.version);
+    case "Go":
+      return fetchGoMeta(dep.name, dep.version);
+    case "crates.io":
+      return fetchCratesMeta(dep.name, dep.version);
+    case "RubyGems":
+      return fetchRubyGemsMeta(dep.name, dep.version);
+    default:
+      return null;
+  }
+}
+
+async function fetchNpmMeta(
   pkgName: string,
   version: string,
-): Promise<NpmMetadata | null> {
+): Promise<PkgMetadata | null> {
   try {
     const response = await fetch(
       `https://registry.npmjs.org/${encodeURIComponent(pkgName)}/${version}`,
@@ -89,13 +135,11 @@ async function fetchNpmMetadata(
       "preuninstall",
       "postuninstall",
     ];
-
     const installScripts: Record<string, string> = {};
     for (const key of dangerousKeys) {
       if (scripts[key]) installScripts[key] = scripts[key];
     }
 
-    // Fetch package-level metadata for age
     let ageInDays: number | undefined;
     let hasRepository = !!data.repository;
     try {
@@ -106,22 +150,198 @@ async function fetchNpmMetadata(
       if (pkgRes.ok) {
         const pkgData = await pkgRes.json();
         if (pkgData.time?.created) {
-          const created = new Date(pkgData.time.created);
           ageInDays = Math.floor(
-            (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24),
+            (Date.now() - new Date(pkgData.time.created).getTime()) / 86400000,
           );
         }
         hasRepository = hasRepository || !!pkgData.repository;
       }
     } catch {
-      // ignore
+      /* ignore */
     }
 
     return {
+      ecosystem: "npm",
       hasInstallScripts: Object.keys(installScripts).length > 0,
       installScripts,
       ageInDays,
       hasRepository,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchPypiMeta(
+  pkgName: string,
+  version: string,
+): Promise<PkgMetadata | null> {
+  try {
+    const response = await fetch(
+      `https://pypi.org/pypi/${encodeURIComponent(pkgName)}/${version}/json`,
+      { signal: AbortSignal.timeout(5000) },
+    );
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const info = data.info;
+    let ageInDays: number | undefined;
+
+    // Check first release date
+    const releases = data.releases || {};
+    const allVersions = Object.keys(releases);
+    if (allVersions.length > 0) {
+      const firstRelease = releases[allVersions[0]];
+      if (firstRelease?.[0]?.upload_time) {
+        ageInDays = Math.floor(
+          (Date.now() - new Date(firstRelease[0].upload_time).getTime()) /
+            86400000,
+        );
+      }
+    }
+
+    // Python packages can have setup.py install hooks — flag if setup.py exists
+    return {
+      ecosystem: "PyPI",
+      hasInstallScripts: false, // Can't detect from API; checked via file analysis
+      installScripts: {},
+      ageInDays,
+      hasRepository: !!(info.project_urls?.Repository || info.home_page),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchMavenMeta(
+  pkgName: string,
+  _version: string,
+): Promise<PkgMetadata | null> {
+  try {
+    const [groupId, artifactId] = pkgName.split(":");
+    if (!groupId || !artifactId) return null;
+
+    const response = await fetch(
+      `https://search.maven.org/solrsearch/select?q=g:"${encodeURIComponent(groupId)}"+AND+a:"${encodeURIComponent(artifactId)}"&rows=1&wt=json`,
+      { signal: AbortSignal.timeout(5000) },
+    );
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const doc = data?.response?.docs?.[0];
+    if (!doc) return null;
+
+    let ageInDays: number | undefined;
+    if (doc.timestamp) {
+      ageInDays = Math.floor((Date.now() - doc.timestamp) / 86400000);
+    }
+
+    return {
+      ecosystem: "Maven",
+      hasInstallScripts: false,
+      installScripts: {},
+      ageInDays,
+      hasRepository: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchGoMeta(
+  pkgName: string,
+  version: string,
+): Promise<PkgMetadata | null> {
+  try {
+    const vStr = version.startsWith("v") ? version : `v${version}`;
+    const response = await fetch(
+      `https://proxy.golang.org/${encodeURIComponent(pkgName)}/@v/${encodeURIComponent(vStr)}.info`,
+      { signal: AbortSignal.timeout(5000) },
+    );
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    let ageInDays: number | undefined;
+    if (data.Time) {
+      ageInDays = Math.floor(
+        (Date.now() - new Date(data.Time).getTime()) / 86400000,
+      );
+    }
+
+    return {
+      ecosystem: "Go",
+      hasInstallScripts: false,
+      installScripts: {},
+      ageInDays,
+      hasRepository: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchCratesMeta(
+  pkgName: string,
+  _version: string,
+): Promise<PkgMetadata | null> {
+  try {
+    const response = await fetch(
+      `https://crates.io/api/v1/crates/${encodeURIComponent(pkgName)}`,
+      {
+        signal: AbortSignal.timeout(5000),
+        headers: { "User-Agent": "Pepper-SCA/1.0" },
+      },
+    );
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const crate = data?.crate;
+    if (!crate) return null;
+
+    let ageInDays: number | undefined;
+    if (crate.created_at) {
+      ageInDays = Math.floor(
+        (Date.now() - new Date(crate.created_at).getTime()) / 86400000,
+      );
+    }
+
+    return {
+      ecosystem: "crates.io",
+      hasInstallScripts: false,
+      installScripts: {},
+      ageInDays,
+      hasRepository: !!crate.repository,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchRubyGemsMeta(
+  pkgName: string,
+  _version: string,
+): Promise<PkgMetadata | null> {
+  try {
+    const response = await fetch(
+      `https://rubygems.org/api/v1/gems/${encodeURIComponent(pkgName)}.json`,
+      { signal: AbortSignal.timeout(5000) },
+    );
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    let ageInDays: number | undefined;
+    if (data.created_at) {
+      ageInDays = Math.floor(
+        (Date.now() - new Date(data.created_at).getTime()) / 86400000,
+      );
+    }
+
+    return {
+      ecosystem: "RubyGems",
+      hasInstallScripts: false,
+      installScripts: {},
+      ageInDays,
+      hasRepository: !!(data.source_code_uri || data.homepage_uri),
     };
   } catch {
     return null;
@@ -227,44 +447,32 @@ export const maliciousPkgScanner: ScannerPlugin = {
     const osvApiUrl = ctx.orgSettings.osvApiUrl || "https://api.osv.dev";
 
     // ────────────────────────────────────────────────────────────────────
-    // PHASE 1: OSV Malware Advisory Check (fast, free, authoritative)
+    // PHASE 1: OSV Malware Advisory Check (batch API — fast, free, authoritative)
     // ────────────────────────────────────────────────────────────────────
     ctx.onProgress?.(
-      `Supply Chain: checking ${dependencies.length} packages against OSV malware database...`,
+      `Supply Chain: batch-checking ${dependencies.length} packages against OSV malware database...`,
     );
 
-    const OSV_CONCURRENCY = 10;
-    for (let i = 0; i < dependencies.length; i += OSV_CONCURRENCY) {
-      if (ctx.signal?.aborted) break;
+    const malwareMap = await batchQueryOsvForMalware(dependencies, osvApiUrl);
 
-      const batch = dependencies.slice(i, i + OSV_CONCURRENCY);
-      const results = await Promise.allSettled(
-        batch.map((dep) => queryOsvForMalware(dep, osvApiUrl)),
-      );
-
-      for (let j = 0; j < results.length; j++) {
-        const result = results[j];
-        if (result.status !== "fulfilled" || result.value.length === 0)
-          continue;
-
-        const dep = batch[j];
-        for (const hit of result.value) {
-          findings.push({
-            scanner: "MALICIOUS_PKG",
-            severity: "CRITICAL",
-            title: `Known malicious package: ${dep.name}@${dep.version} (${hit.id})`,
-            description: `${hit.summary || hit.details || "This package has been flagged as malicious by the OpenSSF Malicious Packages database."}\n\nAdvisory: ${hit.id}\nPackage: ${dep.name}@${dep.version} (${dep.ecosystem})\n\nRecommendation: Remove this package immediately and audit any systems where it was installed.`,
-            ruleId: hit.id,
-            cweId: "CWE-506",
-            confidence: 1.0,
-            metadata: {
-              ecosystem: dep.ecosystem,
-              version: dep.version,
-              osvId: hit.id,
-              source: "osv-malware-db",
-            },
-          });
-        }
+    for (const [depIdx, hits] of malwareMap) {
+      const dep = dependencies[depIdx];
+      for (const hit of hits) {
+        findings.push({
+          scanner: "MALICIOUS_PKG",
+          severity: "CRITICAL",
+          title: `Known malicious package: ${dep.name}@${dep.version} (${hit.id})`,
+          description: `${hit.summary || hit.details || "This package has been flagged as malicious by the OpenSSF Malicious Packages database."}\n\nAdvisory: ${hit.id}\nPackage: ${dep.name}@${dep.version} (${dep.ecosystem})\n\nRecommendation: Remove this package immediately and audit any systems where it was installed.`,
+          ruleId: hit.id,
+          cweId: "CWE-506",
+          confidence: 1.0,
+          metadata: {
+            ecosystem: dep.ecosystem,
+            version: dep.version,
+            osvId: hit.id,
+            source: "osv-malware-db",
+          },
+        });
       }
     }
 
@@ -274,55 +482,74 @@ export const maliciousPkgScanner: ScannerPlugin = {
     }
 
     // ────────────────────────────────────────────────────────────────────
-    // PHASE 2: NPM Registry Metadata Checks (fast, deterministic)
+    // PHASE 2: Registry Metadata Checks (all ecosystems — fast, deterministic)
     // ────────────────────────────────────────────────────────────────────
-    ctx.onProgress?.(`Supply Chain: checking npm registry metadata...`);
+    ctx.onProgress?.(
+      `Supply Chain: checking registry metadata for ${dependencies.length} packages...`,
+    );
 
-    const npmDeps = dependencies.filter((d) => d.ecosystem === "npm");
-    const NPM_CONCURRENCY = 5;
+    const REG_CONCURRENCY = 10;
+    const depsWithScripts: { dep: Dependency; meta: PkgMetadata }[] = [];
 
-    const depsWithScripts: { dep: Dependency; meta: NpmMetadata }[] = [];
-
-    for (let i = 0; i < npmDeps.length; i += NPM_CONCURRENCY) {
+    for (let i = 0; i < dependencies.length; i += REG_CONCURRENCY) {
       if (ctx.signal?.aborted) break;
 
-      const batch = npmDeps.slice(i, i + NPM_CONCURRENCY);
+      const batch = dependencies.slice(i, i + REG_CONCURRENCY);
       const results = await Promise.allSettled(
-        batch.map((dep) => fetchNpmMetadata(dep.name, dep.version)),
+        batch.map((dep) => fetchPkgMetadata(dep)),
       );
 
       for (let j = 0; j < results.length; j++) {
         if (results[j].status !== "fulfilled") continue;
-        const meta = (results[j] as PromiseFulfilledResult<NpmMetadata | null>)
+        const meta = (results[j] as PromiseFulfilledResult<PkgMetadata | null>)
           .value;
         if (!meta) continue;
         const dep = batch[j];
 
-        // Flag very new packages (< 7 days) with install scripts
-        if (
-          meta.ageInDays !== undefined &&
-          meta.ageInDays < 7 &&
-          meta.hasInstallScripts
-        ) {
+        // Flag very new packages (< 7 days old) — high risk across ALL ecosystems
+        if (meta.ageInDays !== undefined && meta.ageInDays < 7) {
+          const hasScripts = meta.hasInstallScripts;
           findings.push({
             scanner: "MALICIOUS_PKG",
-            severity: "HIGH",
-            title: `New package with install scripts: ${dep.name}@${dep.version} (${meta.ageInDays} days old)`,
-            description: `Package "${dep.name}" was published only ${meta.ageInDays} days ago and contains install scripts. New packages with install scripts are a common vector for supply chain attacks.\n\nRecommendation: Verify this package is legitimate before using it. Consider running with --ignore-scripts.`,
-            ruleId: "MAL-NEW-SCRIPT",
+            severity: hasScripts ? "HIGH" : "MEDIUM",
+            title: `Very new package: ${dep.name}@${dep.version} (${meta.ageInDays} days old, ${dep.ecosystem})`,
+            description: `Package "${dep.name}" (${dep.ecosystem}) was published only ${meta.ageInDays} days ago.${hasScripts ? " It also contains install scripts, which is a common supply chain attack vector." : ""} New packages have significantly higher risk of being malicious.\n\nRecommendation: Verify this package is legitimate. Check its source repository, maintainer history, and download count before using it.`,
+            ruleId: "MAL-NEW-PKG",
             cweId: "CWE-829",
-            confidence: 0.75,
+            confidence: hasScripts ? 0.8 : 0.65,
             metadata: {
-              ecosystem: "npm",
+              ecosystem: dep.ecosystem,
               version: dep.version,
               ageInDays: meta.ageInDays,
-              installScripts: Object.keys(meta.installScripts),
-              source: "npm-registry",
+              hasInstallScripts: meta.hasInstallScripts,
+              source: "registry-metadata",
             },
           });
         }
 
-        // Collect deps with install scripts for LLM analysis in Phase 3
+        // Flag packages with no source repository (> 30 days old to avoid flagging new legitimate packages)
+        if (
+          !meta.hasRepository &&
+          meta.ageInDays !== undefined &&
+          meta.ageInDays > 30
+        ) {
+          findings.push({
+            scanner: "MALICIOUS_PKG",
+            severity: "LOW",
+            title: `No source repository: ${dep.name}@${dep.version} (${dep.ecosystem})`,
+            description: `Package "${dep.name}" has no linked source code repository. This makes it impossible to verify the code matches what's published. Packages without source repos have higher risk of containing hidden malicious code.`,
+            ruleId: "MAL-NO-REPO",
+            cweId: "CWE-829",
+            confidence: 0.5,
+            metadata: {
+              ecosystem: dep.ecosystem,
+              version: dep.version,
+              source: "registry-metadata",
+            },
+          });
+        }
+
+        // Collect npm deps with install scripts for LLM analysis in Phase 3
         if (meta.hasInstallScripts) {
           depsWithScripts.push({ dep, meta });
         }

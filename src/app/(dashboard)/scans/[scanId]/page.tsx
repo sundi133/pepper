@@ -46,7 +46,11 @@ export default function ScanDetailPage() {
   if (severityFilter !== "all") filters.severity = severityFilter;
   if (scannerFilter !== "all") filters.scanner = scannerFilter;
 
-  const { findings } = useFindings(scanId, filters, scan?.status);
+  const { findings, refresh: refreshFindings } = useFindings(
+    scanId,
+    filters,
+    scan?.status,
+  );
 
   if (isLoading) {
     return (
@@ -306,6 +310,9 @@ export default function ScanDetailPage() {
                       Secrets (Pattern)
                     </SelectItem>
                     <SelectItem value="SECRETS_LLM">Secrets (AI)</SelectItem>
+                    <SelectItem value="IAC">IaC Security</SelectItem>
+                    <SelectItem value="MALICIOUS_PKG">Supply Chain</SelectItem>
+                    <SelectItem value="ZERO_DAY">Zero-Day (AI)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -316,6 +323,7 @@ export default function ScanDetailPage() {
               findings={findings}
               onSelect={(f) => setSelectedFinding(f)}
               selectedId={selectedFinding?.id as string}
+              onBulkStatusChange={() => refreshFindings()}
             />
           </CardContent>
         </Card>
@@ -351,6 +359,7 @@ export default function ScanDetailPage() {
         }
         open={!!selectedFinding}
         onClose={() => setSelectedFinding(null)}
+        onStatusChange={() => refreshFindings()}
       />
     </div>
   );

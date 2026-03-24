@@ -60,7 +60,7 @@ export function useFindings(
   const params = new URLSearchParams({ page: "1", limit: "100", ...filters });
   const isActive = scanStatus === "QUEUED" || scanStatus === "RUNNING";
 
-  const { data, error, isLoading } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR(
     `/api/scans/${scanId}/findings?${params}`,
     fetcher,
     {
@@ -73,5 +73,6 @@ export function useFindings(
     pagination: data?.pagination,
     error,
     isLoading,
+    refresh: mutate,
   };
 }

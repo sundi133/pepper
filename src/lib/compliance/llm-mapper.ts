@@ -72,7 +72,7 @@ export async function mapFindingsToControls(
 ): Promise<FindingComplianceResult[]> {
   const client = createLlmClient(llmConfig);
   const results: FindingComplianceResult[] = [];
-  const BATCH_SIZE = 10;
+  const BATCH_SIZE = 15; // 15 findings per batch — balances accuracy vs. API calls
 
   onProgress?.(
     `Mapping ${findings.length} findings to ${framework.name} controls...`,
@@ -163,28 +163,87 @@ Return STRICT JSON:
 Map EVERY finding. Be thorough and accurate.`;
 
   const raw = await analyzeWithLlm(client, model, SYSTEM_PROMPT, userPrompt, {
-    maxTokens: 4096,
-    temperature: 0.1, // Low temperature for consistency
+    maxTokens: 8192,
+    temperature: 0.1,
   });
+
+  logger.info(
+    { responseLength: raw.length, preview: raw.substring(0, 200) },
+    "Compliance LLM raw response",
+  );
 
   interface LlmMapping {
     findingId: string;
     controls: ControlMapping[];
   }
 
-  const parsed = parseLlmJsonResponse<{ mappings: LlmMapping[] }>(raw, {
-    mappings: [],
-  });
+  // Try multiple parsing strategies — LLMs return varied formats
+  let mappings: LlmMapping[] = [];
 
-  if (!parsed.mappings || parsed.mappings.length === 0) {
-    logger.warn("LLM returned no compliance mappings");
+  // Strategy 1: Standard JSON parse with markdown stripping
+  const parsed = parseLlmJsonResponse<{
+    mappings?: LlmMapping[];
+  }>(raw, {});
+
+  if (parsed.mappings && parsed.mappings.length > 0) {
+    mappings = parsed.mappings;
+  }
+
+  // Strategy 2: Response might be the array directly (no wrapper)
+  if (mappings.length === 0) {
+    const asArray = parseLlmJsonResponse<LlmMapping[]>(raw, []);
+    if (Array.isArray(asArray) && asArray.length > 0 && asArray[0]?.findingId) {
+      mappings = asArray;
+    }
+  }
+
+  // Strategy 3: Extract JSON from text that has extra content around it
+  if (mappings.length === 0) {
+    const jsonMatch = raw.match(/\{[\s\S]*"mappings"\s*:\s*\[[\s\S]*\]\s*\}/);
+    if (jsonMatch) {
+      try {
+        const extracted = JSON.parse(jsonMatch[0]);
+        if (extracted.mappings && extracted.mappings.length > 0) {
+          mappings = extracted.mappings;
+        }
+      } catch {
+        // ignore parse error
+      }
+    }
+  }
+
+  // Strategy 4: Find array of objects with findingId
+  if (mappings.length === 0) {
+    const arrayMatch = raw.match(/\[\s*\{[\s\S]*?"findingId"[\s\S]*?\}\s*\]/);
+    if (arrayMatch) {
+      try {
+        const extracted = JSON.parse(arrayMatch[0]);
+        if (Array.isArray(extracted) && extracted.length > 0) {
+          mappings = extracted;
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  if (mappings.length === 0) {
+    logger.warn(
+      { rawPreview: raw.substring(0, 500) },
+      "LLM returned no parseable compliance mappings",
+    );
     return findings.map((f) => ({ findingId: f.id, controls: [] }));
   }
+
+  logger.info(
+    { mappingsCount: mappings.length },
+    "Compliance mappings parsed successfully",
+  );
 
   // Validate and clean up results
   const validControlIds = new Set(framework.controls.map((c) => c.controlId));
 
-  return parsed.mappings.map((m) => ({
+  return mappings.map((m) => ({
     findingId: m.findingId,
     controls: (m.controls || [])
       .filter((c) => c.controlId && validControlIds.has(c.controlId))

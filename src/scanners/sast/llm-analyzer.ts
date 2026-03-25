@@ -19,6 +19,56 @@ import {
   OLLAMA_MAX_RESPONSE_TOKENS,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import { prisma } from "@/lib/prisma";
+
+// ─── Custom Policy Integration ────────────────────────────────────────
+
+interface SecurityPolicy {
+  id: string;
+  name: string;
+  rule: string;
+  severity: string;
+  category?: string | null;
+}
+
+async function fetchEnabledPolicies(orgId?: string): Promise<SecurityPolicy[]> {
+  if (!orgId) return [];
+  try {
+    return await prisma.securityPolicy.findMany({
+      where: { organizationId: orgId, enabled: true },
+      orderBy: [{ severity: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        rule: true,
+        severity: true,
+        category: true,
+      },
+    });
+  } catch {
+    return [];
+  }
+}
+
+function buildPolicyPromptSection(policies: SecurityPolicy[]): string {
+  if (policies.length === 0) return "";
+
+  const lines = policies.map(
+    (p) =>
+      `- [${p.severity}] ${p.name}: ${p.rule.slice(0, 200)}${p.rule.length > 200 ? "..." : ""}`,
+  );
+
+  return `
+
+**CUSTOM ORGANIZATION POLICIES (MUST CHECK):**
+${lines.join("\n")}
+
+For each policy violation found, you MUST format the finding as:
+- title: "Policy: <exact policy name> — <what is wrong>"
+- category: "Policy Violation"
+- severity: use the severity shown in brackets above (e.g. [HIGH] → HIGH)
+Do NOT skip policy checks. Check every policy against the code.`;
+}
 
 const SYSTEM_PROMPT = `You are an expert security code auditor performing a strict vulnerability review. Your goal is PRECISION over recall — report ONLY vulnerabilities you are highly confident are real and exploitable.
 
@@ -143,6 +193,30 @@ export async function runLlmSastScanner(
     model: ctx.orgSettings.llmModel,
   });
 
+  // Fetch custom policies (inject into prompt — zero extra LLM calls for first 10)
+  const MAX_INLINE_POLICIES = 10;
+  const allPolicies = await fetchEnabledPolicies(ctx.orgSettings.orgId);
+  const inlinePolicies = allPolicies.slice(0, MAX_INLINE_POLICIES);
+  const policyPromptSection = buildPolicyPromptSection(inlinePolicies);
+
+  if (allPolicies.length > 0) {
+    logger.info(
+      { total: allPolicies.length, inline: inlinePolicies.length },
+      "Custom policies loaded for SAST scan",
+    );
+  }
+  if (allPolicies.length > MAX_INLINE_POLICIES) {
+    logger.warn(
+      { total: allPolicies.length, max: MAX_INLINE_POLICIES },
+      `Only first ${MAX_INLINE_POLICIES} policies injected into prompt. Remaining ${allPolicies.length - MAX_INLINE_POLICIES} will not be checked. Consider consolidating policies.`,
+    );
+  }
+
+  // Build final prompt with policies appended
+  const finalPrompt = policyPromptSection
+    ? SYSTEM_PROMPT + policyPromptSection
+    : SYSTEM_PROMPT;
+
   logger.info(
     {
       provider: ctx.orgSettings.llmProvider,
@@ -230,6 +304,8 @@ export async function runLlmSastScanner(
           ctx.orgSettings.llmModel,
           chunk,
           maxResponseTokens,
+          finalPrompt,
+          inlinePolicies.map((p) => p.name),
         ),
       ),
     );
@@ -286,6 +362,8 @@ async function analyzeChunk(
   model: string,
   chunk: Chunk,
   maxResponseTokens: number,
+  systemPrompt: string = SYSTEM_PROMPT,
+  policyNames: string[] = [],
 ): Promise<RawFinding[]> {
   const userContent = `File: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n\n\`\`\`\n${chunk.content}\n\`\`\``;
 
@@ -299,13 +377,9 @@ async function analyzeChunk(
       },
       "Sending chunk to LLM",
     );
-    const raw = await analyzeWithLlm(
-      client,
-      model,
-      SYSTEM_PROMPT,
-      userContent,
-      { maxTokens: maxResponseTokens },
-    );
+    const raw = await analyzeWithLlm(client, model, systemPrompt, userContent, {
+      maxTokens: maxResponseTokens,
+    });
     logger.info(
       { filePath: chunk.filePath, responseLength: raw.length },
       "LLM response received",
@@ -335,20 +409,35 @@ async function analyzeChunk(
       );
     }
 
-    return filtered.map((f) => ({
-      scanner: "SAST_LLM" as const,
-      severity: normalizeSeverity(f.severity),
-      title: f.title,
-      description: f.recommendation
-        ? `${f.description}\n\nRecommendation: ${f.recommendation}`
-        : f.description,
-      filePath: chunk.filePath,
-      startLine: f.startLine,
-      endLine: f.endLine,
-      cweId: f.cweId,
-      confidence: f.confidence ?? 0.7,
-      ruleId: `LLM-${f.cweId || "GENERIC"}`,
-    }));
+    return filtered.map((f) => {
+      // Detect if this is a policy violation and tag it
+      const titleLower = f.title.toLowerCase();
+      const isPolicy =
+        titleLower.includes("policy") || titleLower.includes("policy:");
+      const matchedPolicy = policyNames.find((name) =>
+        titleLower.includes(name.toLowerCase()),
+      );
+
+      return {
+        scanner: "SAST_LLM" as const,
+        severity: normalizeSeverity(f.severity),
+        title: f.title,
+        description: f.recommendation
+          ? `${f.description}\n\nRecommendation: ${f.recommendation}`
+          : f.description,
+        filePath: chunk.filePath,
+        startLine: f.startLine,
+        endLine: f.endLine,
+        cweId: f.cweId,
+        confidence: f.confidence ?? 0.7,
+        ruleId: isPolicy
+          ? `POLICY-${matchedPolicy || "CUSTOM"}`
+          : `LLM-${f.cweId || "GENERIC"}`,
+        metadata: matchedPolicy
+          ? { policyName: matchedPolicy, type: "policy-violation" }
+          : undefined,
+      };
+    });
   } catch (err) {
     logger.error(
       {

@@ -21,6 +21,7 @@ export interface ScanContext {
     enableLlmSast: boolean;
     enableLlmSecrets: boolean;
     osvApiUrl: string;
+    orgId?: string;
   };
   signal?: AbortSignal;
   onProgress?: (message: string) => void;

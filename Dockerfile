@@ -19,7 +19,7 @@ RUN npm run build
 
 FROM node:20-alpine AS api
 WORKDIR /app
-RUN apk add --no-cache libc6-compat git unzip
+RUN apk add --no-cache libc6-compat git unzip poppler-utils
 
 COPY --from=api-build /app/package.json /app/package-lock.json ./
 COPY --from=api-build /app/node_modules ./node_modules
@@ -29,6 +29,7 @@ COPY --from=api-build /app/next.config.ts ./
 COPY --from=api-build /app/prisma ./prisma
 COPY --from=api-build /app/prisma.config.ts ./
 COPY --from=api-build /app/src/generated ./src/generated
+COPY --from=api-build /app/compliance ./compliance
 
 ENV NODE_ENV=production
 ENV PORT=3000

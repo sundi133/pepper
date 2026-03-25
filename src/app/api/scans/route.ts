@@ -143,6 +143,7 @@ export async function POST(req: NextRequest) {
         enableLlmSast: orgSettings?.enableLlmSast ?? true,
         enableLlmSecrets: orgSettings?.enableLlmSecrets ?? true,
         osvApiUrl: orgSettings?.osvApiUrl || "https://api.osv.dev",
+        orgId: project.organizationId,
       },
       buildGate: project.buildGate
         ? {

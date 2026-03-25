@@ -30,12 +30,15 @@ import {
   AlertTriangle,
   Shield,
   Key,
+  BookOpen,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 export default function ScanDetailPage() {
   const params = useParams();
   const scanId = params.scanId as string;
+  const router = useRouter();
   const { scan, isLoading } = useScanPolling(scanId);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [scannerFilter, setScannerFilter] = useState<string>("all");
@@ -163,6 +166,12 @@ export default function ScanDetailPage() {
               >
                 <FileText className="mr-2 h-4 w-4" />
                 SBOM
+              </Button>
+              <Button
+                onClick={() => router.push(`/scans/${scanId}/compliance`)}
+              >
+                <BookOpen className="mr-2 h-4 w-4" />
+                Compliance Report
               </Button>
             </>
           )}

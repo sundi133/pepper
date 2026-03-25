@@ -13,6 +13,7 @@ import {
   Zap,
   ShieldCheck,
   Webhook,
+  ScrollText,
 } from "lucide-react";
 
 const navigation = [
@@ -23,6 +24,7 @@ const navigation = [
 
 const settingsNav = [
   { name: "LLM Config", href: "/settings/llm", icon: Zap },
+  { name: "Policies", href: "/settings/policies", icon: ScrollText },
   { name: "Build Gates", href: "/settings/build-gates", icon: ShieldCheck },
   { name: "Team", href: "/settings/team", icon: Users },
   { name: "Integrations", href: "/settings/integrations", icon: Webhook },

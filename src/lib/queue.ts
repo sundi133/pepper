@@ -49,6 +49,7 @@ export interface ScanJobData {
     enableLlmSast: boolean;
     enableLlmSecrets: boolean;
     osvApiUrl: string;
+    orgId?: string;
   };
   buildGate?: {
     maxCritical: number;

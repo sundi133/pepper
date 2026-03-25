@@ -16,10 +16,11 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members  OrgMember[]
-  projects Project[]
-  settings OrgSettings?
-  apiKeys  ApiKey[]
+  members          OrgMember[]
+  projects         Project[]
+  settings         OrgSettings?
+  apiKeys          ApiKey[]
+  securityPolicies SecurityPolicy[]
 }
 
 model OrgMember {
@@ -316,6 +317,23 @@ model OrgSettings {
   smtpUseTls      Boolean  @default(true)
 
   organization Organization @relation(fields: [organizationId], references: [id])
+}
+
+model SecurityPolicy {
+  id             String          @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?         @db.Text
+  rule           String          @db.Text   // Natural language rule the LLM should enforce
+  severity       Severity        @default(HIGH)
+  enabled        Boolean         @default(true)
+  category       String?                    // e.g. "Data Privacy", "Compliance", "Internal Standard"
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, enabled])
 }
 
 model ApiKey {

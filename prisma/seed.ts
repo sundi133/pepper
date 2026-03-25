@@ -11,6 +11,12 @@ const prisma = new PrismaClient({ adapter }) as any;
 async function main() {
   console.log("Seeding database...");
 
+  const llmProvider = process.env.LLM_PROVIDER || "openrouter";
+  const llmBaseUrl =
+    process.env.LLM_BASE_URL || "https://openrouter.ai/api/v1";
+  const llmModel = process.env.LLM_MODEL || "google/gemini-2.5-flash";
+  const llmApiKey = process.env.LLM_API_KEY;
+
   // Create default organization
   const org = await (prisma as any).organization.upsert({
     where: { slug: "default" },
@@ -25,12 +31,18 @@ async function main() {
   // Create org settings
   await (prisma as any).orgSettings.upsert({
     where: { organizationId: org.id },
-    update: {},
+    update: {
+      llmProvider,
+      llmBaseUrl,
+      llmModel,
+      ...(llmApiKey ? { llmApiKey } : {}),
+    },
     create: {
       organizationId: org.id,
-      llmProvider: "openai",
-      llmBaseUrl: "https://api.openai.com/v1",
-      llmModel: "gpt-4o-mini",
+      llmProvider,
+      llmBaseUrl,
+      llmModel,
+      ...(llmApiKey ? { llmApiKey } : {}),
     },
   });
 

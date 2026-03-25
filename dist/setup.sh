@@ -1,16 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ──────────────────────────────────────────────────────────────────────
-# Pepper SAST — Automated Setup Script
-# Installs Docker, Ollama, and starts Pepper
-# Supports: Ubuntu/Debian, macOS, Amazon Linux, RHEL/CentOS
-# ──────────────────────────────────────────────────────────────────────
-
 PEPPER_DIR="$(cd "$(dirname "$0")" && pwd)"
-OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5-coder:7b}"
-
-# ─── Helpers ─────────────────────────────────────────────────────────
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -33,10 +24,10 @@ detect_os() {
         . /etc/os-release
         case "$ID" in
           ubuntu|debian|pop|linuxmint) echo "debian" ;;
-          amzn|amazon)                 echo "amazon" ;;
-          rhel|centos|rocky|alma)      echo "rhel" ;;
-          fedora)                      echo "fedora" ;;
-          *)                           echo "linux" ;;
+          amzn|amazon) echo "amazon" ;;
+          rhel|centos|rocky|alma) echo "rhel" ;;
+          fedora) echo "fedora" ;;
+          *) echo "linux" ;;
         esac
       else
         echo "linux"
@@ -46,7 +37,32 @@ detect_os() {
   esac
 }
 
-# ─── Step 1: Install Docker ─────────────────────────────────────────
+replace_in_file() {
+  local file="$1"
+  local search="$2"
+  local replace="$3"
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    sed -i '' "s|${search}|${replace}|" "$file"
+  else
+    sed -i "s|${search}|${replace}|" "$file"
+  fi
+}
+
+generate_secret() {
+  if command_exists openssl; then
+    openssl rand -base64 32 | tr -d '\r\n'
+  else
+    head -c 32 /dev/urandom | base64 | tr -d '\r\n'
+  fi
+}
+
+generate_password() {
+  if command_exists openssl; then
+    openssl rand -base64 24 | tr -d '/+=\r\n' | head -c 24
+  else
+    head -c 24 /dev/urandom | base64 | tr -d '/+=\r\n' | head -c 24
+  fi
+}
 
 install_docker() {
   if command_exists docker; then
@@ -55,19 +71,14 @@ install_docker() {
   fi
 
   info "Installing Docker..."
-  local os
-  os=$(detect_os)
-
-  case "$os" in
+  case "$(detect_os)" in
     macos)
       if command_exists brew; then
         brew install --cask docker
-        info "Docker Desktop installed. Please open Docker Desktop from Applications to start the daemon."
-        info "Press Enter once Docker Desktop is running..."
+        info "Open Docker Desktop, wait for the daemon, then press Enter."
         read -r
       else
-        err "Please install Docker Desktop from https://www.docker.com/products/docker-desktop/"
-        err "Then re-run this script."
+        err "Install Docker Desktop manually, then rerun this script."
         exit 1
       fi
       ;;
@@ -77,7 +88,7 @@ install_docker() {
       sudo install -m 0755 -d /etc/apt/keyrings
       curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
       sudo chmod a+r /etc/apt/keyrings/docker.gpg
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
       sudo apt-get update -qq
       sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
       sudo systemctl enable --now docker
@@ -87,11 +98,6 @@ install_docker() {
       sudo yum install -y docker
       sudo systemctl enable --now docker
       sudo usermod -aG docker "$USER"
-      # Install compose plugin
-      sudo mkdir -p /usr/local/lib/docker/cli-plugins
-      curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /tmp/docker-compose
-      sudo mv /tmp/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
-      sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
       ;;
     rhel|fedora)
       sudo dnf install -y dnf-plugins-core
@@ -101,7 +107,7 @@ install_docker() {
       sudo usermod -aG docker "$USER"
       ;;
     *)
-      err "Unsupported OS. Please install Docker manually: https://docs.docker.com/engine/install/"
+      err "Unsupported OS. Install Docker manually, then rerun this script."
       exit 1
       ;;
   esac
@@ -109,217 +115,108 @@ install_docker() {
   ok "Docker installed successfully"
 }
 
-# ─── Step 2: Install Ollama ──────────────────────────────────────────
-
-install_ollama() {
-  if command_exists ollama; then
-    ok "Ollama already installed: $(ollama --version 2>/dev/null || echo 'installed')"
-  else
-    info "Installing Ollama..."
-    local os
-    os=$(detect_os)
-
-    case "$os" in
-      macos)
-        if command_exists brew; then
-          brew install ollama
-        else
-          curl -fsSL https://ollama.com/install.sh | sh
-        fi
-        ;;
-      *)
-        curl -fsSL https://ollama.com/install.sh | sh
-        ;;
-    esac
-    ok "Ollama installed"
-  fi
-
-  # Ensure Ollama is running
-  info "Starting Ollama service..."
-  local os
-  os=$(detect_os)
-  if [ "$os" = "macos" ]; then
-    # On macOS, ollama serve runs as an app or launchd
-    if ! curl -sf http://localhost:11434/api/tags &>/dev/null; then
-      ollama serve &>/dev/null &
-      sleep 3
-    fi
-  else
-    # On Linux, use systemd
-    if command_exists systemctl; then
-      sudo systemctl enable --now ollama 2>/dev/null || ollama serve &>/dev/null &
-      sleep 3
-    else
-      ollama serve &>/dev/null &
-      sleep 3
-    fi
-  fi
-
-  # Verify Ollama is responding
-  if curl -sf http://localhost:11434/api/tags &>/dev/null; then
-    ok "Ollama is running"
-  else
-    warn "Ollama may not be running. You can start it manually with: ollama serve"
-  fi
-
-  # Pull the recommended model
-  info "Pulling model: ${OLLAMA_MODEL} (this may take a few minutes)..."
-  ollama pull "$OLLAMA_MODEL"
-  ok "Model ${OLLAMA_MODEL} ready"
-}
-
-# ─── Step 3: Configure .env ──────────────────────────────────────────
-
-configure_env() {
+create_env() {
   if [ -f "$PEPPER_DIR/.env" ]; then
-    ok ".env file already exists"
+    ok ".env already exists"
     return
   fi
 
   info "Creating .env configuration..."
   cp "$PEPPER_DIR/.env.example" "$PEPPER_DIR/.env"
 
-  # Generate random secrets
-  local pg_password nextauth_secret admin_password
-  pg_password=$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)
-  nextauth_secret=$(openssl rand -base64 32)
-  admin_password=$(openssl rand -base64 16 | tr -d '/+=' | head -c 16)
+  local pg_password nextauth_secret admin_password minio_password
+  pg_password="$(generate_password)"
+  nextauth_secret="$(generate_secret)"
+  admin_password="$(generate_password)"
+  minio_password="$(generate_password)"
 
-  # Set passwords in .env
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    sed -i '' "s|POSTGRES_PASSWORD=\"CHANGE_ME_strong_random_password\"|POSTGRES_PASSWORD=\"${pg_password}\"|" "$PEPPER_DIR/.env"
-    sed -i '' "s|NEXTAUTH_SECRET=\"CHANGE_ME_random_secret\"|NEXTAUTH_SECRET=\"${nextauth_secret}\"|" "$PEPPER_DIR/.env"
-    sed -i '' "s|ADMIN_PASSWORD=\"CHANGE_ME_admin_password\"|ADMIN_PASSWORD=\"${admin_password}\"|" "$PEPPER_DIR/.env"
-  else
-    sed -i "s|POSTGRES_PASSWORD=\"CHANGE_ME_strong_random_password\"|POSTGRES_PASSWORD=\"${pg_password}\"|" "$PEPPER_DIR/.env"
-    sed -i "s|NEXTAUTH_SECRET=\"CHANGE_ME_random_secret\"|NEXTAUTH_SECRET=\"${nextauth_secret}\"|" "$PEPPER_DIR/.env"
-    sed -i "s|ADMIN_PASSWORD=\"CHANGE_ME_admin_password\"|ADMIN_PASSWORD=\"${admin_password}\"|" "$PEPPER_DIR/.env"
+  replace_in_file "$PEPPER_DIR/.env" 'POSTGRES_PASSWORD="CHANGE_ME_strong_random_password"' "POSTGRES_PASSWORD=\"${pg_password}\""
+  replace_in_file "$PEPPER_DIR/.env" 'NEXTAUTH_SECRET="CHANGE_ME_random_secret"' "NEXTAUTH_SECRET=\"${nextauth_secret}\""
+  replace_in_file "$PEPPER_DIR/.env" 'ADMIN_PASSWORD="CHANGE_ME_admin_password"' "ADMIN_PASSWORD=\"${admin_password}\""
+  replace_in_file "$PEPPER_DIR/.env" '# MINIO_SECRET_KEY="CHANGE_ME_minio_password"' "MINIO_SECRET_KEY=\"${minio_password}\""
+
+  if grep -q 'LLM_API_KEY="CHANGE_ME_openrouter_api_key"' "$PEPPER_DIR/.env"; then
+    warn "Set LLM_API_KEY in .env before first AI scan."
   fi
 
-  # Set Ollama host based on OS
-  local os
-  os=$(detect_os)
-  if [ "$os" != "macos" ]; then
-    local host_ip
-    host_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "172.17.0.1")
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-      sed -i '' "s|OLLAMA_HOST=\"http://host.docker.internal:11434\"|OLLAMA_HOST=\"http://${host_ip}:11434\"|" "$PEPPER_DIR/.env"
-    else
-      sed -i "s|OLLAMA_HOST=\"http://host.docker.internal:11434\"|OLLAMA_HOST=\"http://${host_ip}:11434\"|" "$PEPPER_DIR/.env"
-    fi
-  fi
-
-  ok ".env configured with auto-generated secrets"
+  ok ".env configured"
   echo ""
   echo "  Admin email:    admin@yourcompany.com"
   echo "  Admin password: ${admin_password}"
   echo ""
-  warn "Save the admin password above! You can also find it in .env"
+  warn "Save the admin password above. It is also written to .env."
 }
 
-# ─── Step 4: Start Pepper ────────────────────────────────────────────
+docker_login_if_configured() {
+  if ! grep -q '^PEPPER_REGISTRY=' "$PEPPER_DIR/.env"; then
+    return
+  fi
+
+  # shellcheck disable=SC1090
+  . "$PEPPER_DIR/.env"
+
+  if [ -n "${PEPPER_REGISTRY:-}" ] && [ -n "${PEPPER_REGISTRY_USERNAME:-}" ] && [ -n "${PEPPER_REGISTRY_PASSWORD:-}" ]; then
+    info "Logging in to private registry ${PEPPER_REGISTRY}..."
+    echo "${PEPPER_REGISTRY_PASSWORD}" | docker login "${PEPPER_REGISTRY}" --username "${PEPPER_REGISTRY_USERNAME}" --password-stdin
+    ok "Registry login successful"
+  else
+    info "Skipping registry login: PEPPER_REGISTRY credentials not set"
+  fi
+}
 
 start_pepper() {
   info "Pulling Pepper images..."
   docker compose -f "$PEPPER_DIR/docker-compose.yml" --env-file "$PEPPER_DIR/.env" pull
 
-  info "Starting Pepper SAST..."
+  info "Starting Pepper..."
   docker compose -f "$PEPPER_DIR/docker-compose.yml" --env-file "$PEPPER_DIR/.env" up -d
 
-  # Wait for API to be healthy
-  info "Waiting for Pepper to start..."
-  local retries=30
+  info "Waiting for Pepper API..."
+  local retries=45
+  local port
+  port=$(grep '^PEPPER_PORT=' "$PEPPER_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || true)
+  port="${port:-3000}"
+
   while [ $retries -gt 0 ]; do
-    if curl -sf http://localhost:${PEPPER_PORT:-3000}/api/health &>/dev/null 2>&1; then
-      break
+    if curl -sf "http://localhost:${port}/api/health" >/dev/null 2>&1; then
+      ok "Pepper is running"
+      return
     fi
     sleep 2
     retries=$((retries - 1))
   done
 
-  if [ $retries -gt 0 ]; then
-    ok "Pepper is running!"
-  else
-    warn "Pepper may still be starting. Check logs with: docker compose logs -f"
-  fi
+  warn "Pepper may still be starting. Check logs with: docker compose logs -f"
 }
-
-# ─── Step 5: Print summary ───────────────────────────────────────────
 
 print_summary() {
-  local port="${PEPPER_PORT:-3000}"
-  echo ""
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo -e "  ${GREEN}Pepper SAST is ready!${NC}"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo ""
-  echo "  Web UI:   http://localhost:${port}"
-  echo "  Login:    Check .env for ADMIN_EMAIL and ADMIN_PASSWORD"
-  echo ""
-  echo "  Useful commands:"
-  echo "    docker compose logs -f          # view logs"
-  echo "    docker compose ps               # check status"
-  echo "    docker compose down             # stop (keeps data)"
-  echo "    docker compose down -v          # stop and delete data"
-  echo "    docker compose pull && docker compose up -d  # upgrade"
-  echo ""
-  echo "  Ollama model: ${OLLAMA_MODEL}"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-}
+  local port
+  port=$(grep '^PEPPER_PORT=' "$PEPPER_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || true)
+  port="${port:-3000}"
 
-# ─── Main ────────────────────────────────────────────────────────────
+  echo ""
+  echo "------------------------------------------------------------"
+  echo "Pepper SAST is ready"
+  echo "------------------------------------------------------------"
+  echo "Web UI: http://localhost:${port}"
+  echo "Login: check .env for ADMIN_EMAIL and ADMIN_PASSWORD"
+  echo ""
+  echo "Useful commands:"
+  echo "  docker compose ps"
+  echo "  docker compose logs -f"
+  echo "  docker compose down"
+  echo "  docker compose pull && docker compose up -d"
+}
 
 main() {
   echo ""
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "  Pepper SAST — Setup"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "Pepper SAST setup"
   echo ""
 
-  # Parse flags
-  local skip_ollama=false
-  for arg in "$@"; do
-    case "$arg" in
-      --no-ollama) skip_ollama=true ;;
-      --help|-h)
-        echo "Usage: ./setup.sh [OPTIONS]"
-        echo ""
-        echo "Options:"
-        echo "  --no-ollama    Skip Ollama installation (no AI scanning)"
-        echo "  --help         Show this help"
-        echo ""
-        echo "Environment variables:"
-        echo "  OLLAMA_MODEL   Model to pull (default: qwen2.5-coder:7b)"
-        echo "  PEPPER_PORT    Port for web UI (default: 3000)"
-        exit 0
-        ;;
-    esac
-  done
-
-  # Step 1: Docker
-  info "Step 1/4: Docker"
   install_docker
-  echo ""
-
-  # Step 2: Ollama
-  if [ "$skip_ollama" = true ]; then
-    info "Step 2/4: Ollama (skipped with --no-ollama)"
-  else
-    info "Step 2/4: Ollama + AI Model"
-    install_ollama
-  fi
-  echo ""
-
-  # Step 3: Configure
-  info "Step 3/4: Configuration"
-  configure_env
-  echo ""
-
-  # Step 4: Start
-  info "Step 4/4: Starting Pepper"
+  create_env
+  docker_login_if_configured
   start_pepper
-
-  # Summary
   print_summary
 }
 

@@ -1,11 +1,10 @@
 version: "3.9"
 
-# ──────────────────────────────────────────────────────────────────────
-# Pepper SAST — Customer Deployment
+# Pepper SAST - Customer Deployment
 # 1. Copy .env.example to .env and fill in your values
-# 2. Run: docker compose up -d
-# 3. Open http://localhost:3000 and log in with your admin credentials
-# ──────────────────────────────────────────────────────────────────────
+# 2. Optionally run setup.sh for automated setup
+# 3. Run: docker compose up -d
+# 4. Open Pepper in the browser and sign in with your admin credentials
 
 services:
   postgres:
@@ -47,7 +46,7 @@ services:
       retries: 5
 
   pepper-api:
-    image: ${PEPPER_IMAGE:-docker.io/sundi133/pepper}:${PEPPER_VERSION:-latest}
+    image: ${PEPPER_API_IMAGE:-docker.io/sundi133/pepper}:${PEPPER_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -69,12 +68,18 @@ services:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@pepper.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_MODEL: ${LLM_MODEL:-google/gemini-2.5-flash}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      OPENROUTER_REFERER: ${OPENROUTER_REFERER:-https://pepper.dev}
+      OPENROUTER_TITLE: ${OPENROUTER_TITLE:-Pepper SAST}
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
     ports:
       - "${PEPPER_PORT:-3000}:3000"
 
   pepper-worker:
-    image: ${PEPPER_IMAGE:-docker.io/sundi133/pepper-worker}:${PEPPER_VERSION:-latest}
+    image: ${PEPPER_WORKER_IMAGE:-docker.io/sundi133/pepper-worker}:${PEPPER_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -93,7 +98,13 @@ services:
       MINIO_USE_SSL: "false"
       MINIO_BUCKET: pepper-artifacts
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
-      MAX_LLM_CONCURRENCY: ${MAX_LLM_CONCURRENCY:-1}
+      MAX_LLM_CONCURRENCY: ${MAX_LLM_CONCURRENCY:-2}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_MODEL: ${LLM_MODEL:-google/gemini-2.5-flash}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      OPENROUTER_REFERER: ${OPENROUTER_REFERER:-https://pepper.dev}
+      OPENROUTER_TITLE: ${OPENROUTER_TITLE:-Pepper SAST}
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
     deploy:
       replicas: ${WORKER_REPLICAS:-1}

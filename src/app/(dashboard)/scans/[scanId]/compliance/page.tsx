@@ -1,6 +1,7 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import useSWR from "swr";
 import {
   Card,
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { SeverityBadge } from "@/components/scans/scan-status-badge";
 import { SCANNER_LABELS } from "@/lib/constants";
 import {
@@ -49,6 +51,8 @@ const THEME_COLORS: Record<string, string> = {
     "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-400",
   Technological:
     "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-400",
+  "OWASP Top 10":
+    "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-300",
 };
 
 const RELEVANCE_COLORS: Record<string, string> = {
@@ -101,12 +105,12 @@ interface FrameworkReport {
 
 export default function ComplianceReportPage() {
   const params = useParams();
-  const router = useRouter();
   const scanId = params.scanId as string;
   const { data, isLoading, error, mutate } = useSWR(
     `/api/scans/${scanId}/compliance`,
     fetcher,
   );
+  const [selectedFrameworks, setSelectedFrameworks] = useState<string[]>([]);
 
   async function handleRegenerate() {
     try {
@@ -149,6 +153,32 @@ export default function ComplianceReportPage() {
   }
 
   const reports: FrameworkReport[] = data.reports || [];
+  const frameworkNames = reports.map((report) => report.framework);
+
+  useEffect(() => {
+    setSelectedFrameworks((current) => {
+      if (frameworkNames.length === 0) return [];
+      if (current.length === 0) return frameworkNames;
+
+      const next = current.filter((name) => frameworkNames.includes(name));
+      return next.length > 0 ? next : frameworkNames;
+    });
+  }, [data.generatedAt, frameworkNames.join("|")]);
+
+  const visibleReports = reports.filter((report) =>
+    selectedFrameworks.includes(report.framework),
+  );
+
+  function toggleFramework(framework: string, checked: boolean) {
+    setSelectedFrameworks((current) => {
+      if (checked) {
+        return current.includes(framework) ? current : [...current, framework];
+      }
+
+      if (current.length === 1) return current;
+      return current.filter((name) => name !== framework);
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -197,7 +227,48 @@ export default function ComplianceReportPage() {
         </div>
       </div>
 
-      {reports.map((report) => (
+      <Card>
+        <CardHeader>
+          <CardTitle>Frameworks</CardTitle>
+          <CardDescription>
+            Select one or more frameworks to display in this report.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedFrameworks(frameworkNames)}
+              disabled={frameworkNames.length === selectedFrameworks.length}
+            >
+              Select All
+            </Button>
+            <span className="text-sm text-muted-foreground self-center">
+              Showing {visibleReports.length} of {reports.length} frameworks
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-4">
+            {reports.map((report) => (
+              <label
+                key={report.framework}
+                className="flex items-center gap-3 rounded-md border px-3 py-2 text-sm"
+              >
+                <Checkbox
+                  checked={selectedFrameworks.includes(report.framework)}
+                  onCheckedChange={(checked) =>
+                    toggleFramework(report.framework, checked === true)
+                  }
+                />
+                <span className="font-medium">{report.framework}</span>
+                <Badge variant="outline">{report.impactedControls} impacted</Badge>
+              </label>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {visibleReports.map((report) => (
         <div key={report.framework} className="space-y-6">
           {/* Framework Summary */}
           <div className="grid gap-4 md:grid-cols-4">

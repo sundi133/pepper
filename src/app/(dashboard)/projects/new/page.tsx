@@ -20,8 +20,6 @@ export default function NewProjectPage() {
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [repoUrl, setRepoUrl] = useState("");
-  const [defaultBranch, setDefaultBranch] = useState("main");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -35,7 +33,7 @@ export default function NewProjectPage() {
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description, repoUrl, defaultBranch }),
+        body: JSON.stringify({ name, description }),
       });
 
       if (!res.ok) throw new Error("Failed to create project");
@@ -60,8 +58,8 @@ export default function NewProjectPage() {
         <CardHeader>
           <CardTitle>Project Details</CardTitle>
           <CardDescription>
-            Configure a project to organize your scans and set build gate
-            policies.
+            Create a project to organize scans and manage project-level
+            settings.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -84,26 +82,6 @@ export default function NewProjectPage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Brief description of the project"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="repoUrl">Repository URL (optional)</Label>
-              <Input
-                id="repoUrl"
-                value={repoUrl}
-                onChange={(e) => setRepoUrl(e.target.value)}
-                placeholder="https://github.com/org/repo.git"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="branch">Default Branch</Label>
-              <Input
-                id="branch"
-                value={defaultBranch}
-                onChange={(e) => setDefaultBranch(e.target.value)}
-                placeholder="main"
               />
             </div>
 

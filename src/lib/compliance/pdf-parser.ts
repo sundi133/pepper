@@ -56,23 +56,14 @@ export function parseCompliancePdf(
       return null;
     }
 
-    const controls: ComplianceControl[] = [];
-    const chunks = text.split("[CHUNK_START]").slice(1); // Skip preamble
-
-    for (const chunk of chunks) {
-      const endIdx = chunk.indexOf("[CHUNK_END]");
-      const content = endIdx >= 0 ? chunk.substring(0, endIdx) : chunk;
-
-      const control = parseChunk(content.trim());
-      if (control) {
-        controls.push(control);
-      }
-    }
+    const controls = parseComplianceControls(text);
 
     // Determine framework name from filename
     const basename = path.basename(filePath, ".pdf");
     const name = basename.includes("27001")
       ? "ISO/IEC 27001:2022"
+      : basename.toUpperCase().includes("OWASP")
+        ? "OWASP Top 10:2025"
       : basename.includes("SOC2")
         ? "SOC 2"
         : basename.includes("PCI")
@@ -103,6 +94,35 @@ export function parseCompliancePdf(
     logger.error({ err, filePath }, "Failed to parse compliance PDF");
     return null;
   }
+}
+
+function parseComplianceControls(text: string): ComplianceControl[] {
+  if (text.includes("[CHUNK_START]")) {
+    return parseChunkedControls(text);
+  }
+
+  if (text.includes("BEGIN_CATEGORY:") && text.includes("CATEGORY_ID:")) {
+    return parseOwaspTop10Controls(text);
+  }
+
+  return [];
+}
+
+function parseChunkedControls(text: string): ComplianceControl[] {
+  const controls: ComplianceControl[] = [];
+  const chunks = text.split("[CHUNK_START]").slice(1);
+
+  for (const chunk of chunks) {
+    const endIdx = chunk.indexOf("[CHUNK_END]");
+    const content = endIdx >= 0 ? chunk.substring(0, endIdx) : chunk;
+
+    const control = parseChunk(content.trim());
+    if (control) {
+      controls.push(control);
+    }
+  }
+
+  return controls;
 }
 
 function parseChunk(content: string): ComplianceControl | null {
@@ -171,6 +191,97 @@ function parseChunk(content: string): ComplianceControl | null {
     clauseId: getValue("ClauseID:") || undefined,
     subclause: getValue("Subclause:") || undefined,
   };
+}
+
+function parseOwaspTop10Controls(text: string): ComplianceControl[] {
+  const controls: ComplianceControl[] = [];
+  const categoryBlocks = text.split("BEGIN_CATEGORY:").slice(1);
+
+  for (const block of categoryBlocks) {
+    const endIdx = block.indexOf("END_CATEGORY:");
+    const content = endIdx >= 0 ? block.substring(0, endIdx) : block;
+    const control = parseOwaspCategory(content.trim());
+    if (control) {
+      controls.push(control);
+    }
+  }
+
+  return controls;
+}
+
+function parseOwaspCategory(content: string): ComplianceControl | null {
+  const lines = content.split("\n").map((line) => line.trim()).filter(Boolean);
+
+  const getValue = (prefix: string): string => {
+    const line = lines.find((entry) => entry.startsWith(prefix));
+    return line ? line.substring(prefix.length).trim() : "";
+  };
+
+  const categoryId = getValue("CATEGORY_ID:");
+  const categoryName = getValue("CATEGORY_NAME:");
+  if (!categoryId || !categoryName) return null;
+
+  const descriptions = collectOwaspSectionText(lines, "Description");
+  const indicators = collectOwaspSectionText(lines, "Common indicators");
+  const recommendedControls = collectOwaspSectionText(
+    lines,
+    "Recommended controls",
+  );
+
+  const summary = descriptions.join(" ").trim();
+  const evidenceExamples = indicators.length > 0 ? indicators : descriptions;
+
+  return {
+    controlId: categoryId,
+    chunkId: `${categoryId}.CATEGORY`,
+    type: "OWASP_Top10_Category",
+    theme: "OWASP Top 10",
+    title: categoryName,
+    summary,
+    implementationChecklist: recommendedControls,
+    evidenceExamples,
+  };
+}
+
+function collectOwaspSectionText(lines: string[], sectionName: string): string[] {
+  const results: string[] = [];
+  let inSection = false;
+
+  for (const line of lines) {
+    if (line === `SECTION: ${sectionName}`) {
+      inSection = true;
+      continue;
+    }
+
+    if (!inSection) continue;
+
+    if (
+      line.startsWith("SECTION:") ||
+      line.startsWith("BEGIN_CATEGORY:") ||
+      line.startsWith("END_CATEGORY:")
+    ) {
+      break;
+    }
+
+    if (line.startsWith("CHUNK_ID:")) {
+      continue;
+    }
+
+    if (line.startsWith("TEXT:")) {
+      const value = line.substring("TEXT:".length).trim();
+      if (value) {
+        results.push(value);
+      }
+      continue;
+    }
+
+    const previous = results[results.length - 1];
+    if (previous && !line.includes(":")) {
+      results[results.length - 1] = `${previous} ${line}`.trim();
+    }
+  }
+
+  return results;
 }
 
 /**

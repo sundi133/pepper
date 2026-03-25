@@ -99,6 +99,11 @@ interface FrameworkReport {
   findings: FindingMapping[];
 }
 
+function csvEscape(value: string | number | null | undefined): string {
+  const stringValue = value == null ? "" : String(value);
+  return `"${stringValue.replace(/"/g, '""')}"`;
+}
+
 export default function ComplianceReportPage() {
   const params = useParams();
   const router = useRouter();
@@ -150,6 +155,87 @@ export default function ComplianceReportPage() {
 
   const reports: FrameworkReport[] = data.reports || [];
 
+  function handleExportCsv() {
+    const lines = [
+      [
+        "Framework",
+        "Finding ID",
+        "Finding Title",
+        "Severity",
+        "Scanner",
+        "CWE",
+        "File Path",
+        "Start Line",
+        "Status",
+        "Control ID",
+        "Control Title",
+        "Control Theme",
+        "Relevance",
+        "Reasoning",
+      ].join(","),
+    ];
+
+    for (const report of visibleReports) {
+      for (const finding of report.findings) {
+        if (finding.controls.length === 0) {
+          lines.push(
+            [
+              report.framework,
+              finding.id,
+              finding.title,
+              finding.severity,
+              finding.scanner,
+              finding.cweId,
+              finding.filePath,
+              finding.startLine,
+              finding.status,
+              "",
+              "",
+              "",
+              "",
+              "",
+            ]
+              .map(csvEscape)
+              .join(","),
+          );
+          continue;
+        }
+
+        for (const control of finding.controls) {
+          lines.push(
+            [
+              report.framework,
+              finding.id,
+              finding.title,
+              finding.severity,
+              finding.scanner,
+              finding.cweId,
+              finding.filePath,
+              finding.startLine,
+              finding.status,
+              control.controlId,
+              control.title,
+              control.theme,
+              control.relevance,
+              control.reasoning,
+            ]
+              .map(csvEscape)
+              .join(","),
+          );
+        }
+      }
+    }
+
+    const csv = lines.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `compliance-${scanId.slice(0, 8)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -177,6 +263,10 @@ export default function ComplianceReportPage() {
           <Button variant="outline" size="sm" onClick={handleRegenerate}>
             <RefreshCw className="mr-2 h-3.5 w-3.5" />
             Regenerate
+          </Button>
+          <Button variant="outline" onClick={handleExportCsv}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
           </Button>
           <Button
             variant="outline"

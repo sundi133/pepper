@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import useSWR from "swr";
 import {
   Card,
@@ -106,7 +106,6 @@ function csvEscape(value: string | number | null | undefined): string {
 
 export default function ComplianceReportPage() {
   const params = useParams();
-  const router = useRouter();
   const scanId = params.scanId as string;
   const { data, isLoading, error, mutate } = useSWR(
     `/api/scans/${scanId}/compliance`,
@@ -175,7 +174,7 @@ export default function ComplianceReportPage() {
       ].join(","),
     ];
 
-    for (const report of visibleReports) {
+    for (const report of reports) {
       for (const finding of report.findings) {
         if (finding.controls.length === 0) {
           lines.push(

@@ -6,7 +6,6 @@ import { useScanPolling, useFindings } from "@/hooks/use-scan-polling";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -17,21 +16,27 @@ import {
 import {
   ScanStatusBadge,
   GateResultBadge,
-  SeverityBadge,
 } from "@/components/scans/scan-status-badge";
 import { FindingsTable } from "@/components/scans/findings-table";
-import { FindingDetailPanel } from "@/components/scans/finding-detail-panel";
 import { Progress } from "@/components/ui/progress";
 import {
   Download,
   Ban,
   FileJson,
   FileText,
+  PanelsTopLeft,
   AlertTriangle,
-  Shield,
-  Key,
   BookOpen,
+  Trash2,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
@@ -42,8 +47,11 @@ export default function ScanDetailPage() {
   const { scan, isLoading } = useScanPolling(scanId);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [scannerFilter, setScannerFilter] = useState<string>("all");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [selectedFinding, setSelectedFinding] = useState<any>(null);
+  const [expandedFindingId, setExpandedFindingId] = useState<string | null>(
+    null,
+  );
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const filters: Record<string, string> = {};
   if (severityFilter !== "all") filters.severity = severityFilter;
@@ -84,6 +92,29 @@ export default function ScanDetailPage() {
     }
   }
 
+  async function handleDeleteScan() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/scans/${scanId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error || "Failed to delete scan");
+      }
+      toast.success("Scan deleted");
+      setDeleteOpen(false);
+      router.push(
+        scan.projectId ? `/projects/${scan.projectId}` : "/scans",
+      );
+      router.refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete scan",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   function downloadArtifact(type: string) {
     window.open(`/api/scans/${scanId}/artifacts/${type}`, "_blank");
   }
@@ -91,8 +122,8 @@ export default function ScanDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">
               {scan.project?.name || "Scan"} - {scan.scanType}
@@ -120,7 +151,7 @@ export default function ScanDetailPage() {
               ` | Duration: ${getDuration(scan.startedAt, scan.completedAt)}`}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-shrink-0 flex-wrap items-center gap-2 lg:justify-end">
           {isRunning && (
             <Button variant="outline" onClick={handleCancel}>
               <Ban className="mr-2 h-4 w-4" />
@@ -151,7 +182,14 @@ export default function ScanDetailPage() {
                 }
               >
                 <Download className="mr-2 h-4 w-4" />
-                Findings JSON
+                Report JSON
+              </Button>
+              <Button
+                variant="default"
+                onClick={() => router.push(`/scans/${scanId}/report`)}
+              >
+                <PanelsTopLeft className="mr-2 h-4 w-4" />
+                HTML Report
               </Button>
               <Button
                 variant="outline"
@@ -175,8 +213,47 @@ export default function ScanDetailPage() {
               </Button>
             </>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            className="border-destructive/50 text-destructive hover:bg-destructive/10"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete scan
+          </Button>
         </div>
       </div>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete this scan?</DialogTitle>
+            <DialogDescription>
+              All findings and artifacts for this scan will be permanently
+              removed. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteScan}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting…" : "Delete scan"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Progress bar for running scans */}
       {isRunning && (
@@ -330,8 +407,8 @@ export default function ScanDetailPage() {
           <CardContent>
             <FindingsTable
               findings={findings}
-              onSelect={(f) => setSelectedFinding(f)}
-              selectedId={selectedFinding?.id as string}
+              expandedId={expandedFindingId}
+              onExpandedChange={setExpandedFindingId}
               onBulkStatusChange={() => refreshFindings()}
             />
           </CardContent>
@@ -353,23 +430,6 @@ export default function ScanDetailPage() {
         </Card>
       )}
 
-      {/* Finding Detail Panel */}
-      <FindingDetailPanel
-        finding={
-          selectedFinding as
-            | (Record<string, unknown> & {
-                id: string;
-                scanner: string;
-                severity: string;
-                title: string;
-                description: string;
-              })
-            | null
-        }
-        open={!!selectedFinding}
-        onClose={() => setSelectedFinding(null)}
-        onStatusChange={() => refreshFindings()}
-      />
     </div>
   );
 }

@@ -1,11 +1,18 @@
 import IORedis from "ioredis";
+import { normalizeLocalhostToIPv4 } from "@/lib/db-url";
 
 const globalForRedis = globalThis as unknown as {
   redis: IORedis | undefined;
 };
 
+function redisUrl(): string {
+  return normalizeLocalhostToIPv4(
+    process.env.REDIS_URL || "redis://127.0.0.1:6379",
+  );
+}
+
 function createRedis(): IORedis {
-  return new IORedis(process.env.REDIS_URL || "redis://localhost:6379", {
+  return new IORedis(redisUrl(), {
     maxRetriesPerRequest: null,
     lazyConnect: true,
   });
@@ -23,11 +30,9 @@ export const redis = new Proxy({} as IORedis, {
 
 export const redisConnection = {
   get host() {
-    return new URL(process.env.REDIS_URL || "redis://localhost:6379").hostname;
+    return new URL(redisUrl()).hostname;
   },
   get port() {
-    return parseInt(
-      new URL(process.env.REDIS_URL || "redis://localhost:6379").port || "6379",
-    );
+    return parseInt(new URL(redisUrl()).port || "6379", 10);
   },
 };

@@ -217,6 +217,7 @@ async function fetchMavenMeta(
   pkgName: string,
   _version: string,
 ): Promise<PkgMetadata | null> {
+  void _version;
   try {
     const [groupId, artifactId] = pkgName.split(":");
     if (!groupId || !artifactId) return null;
@@ -284,6 +285,7 @@ async function fetchCratesMeta(
   pkgName: string,
   _version: string,
 ): Promise<PkgMetadata | null> {
+  void _version;
   try {
     const response = await fetch(
       `https://crates.io/api/v1/crates/${encodeURIComponent(pkgName)}`,
@@ -321,6 +323,7 @@ async function fetchRubyGemsMeta(
   pkgName: string,
   _version: string,
 ): Promise<PkgMetadata | null> {
+  void _version;
   try {
     const response = await fetch(
       `https://rubygems.org/api/v1/gems/${encodeURIComponent(pkgName)}.json`,
@@ -458,20 +461,27 @@ export const maliciousPkgScanner: ScannerPlugin = {
     for (const [depIdx, hits] of malwareMap) {
       const dep = dependencies[depIdx];
       for (const hit of hits) {
-        findings.push({
-          scanner: "MALICIOUS_PKG",
-          severity: "CRITICAL",
-          title: `Known malicious package: ${dep.name}@${dep.version} (${hit.id})`,
-          description: `${hit.summary || hit.details || "This package has been flagged as malicious by the OpenSSF Malicious Packages database."}\n\nAdvisory: ${hit.id}\nPackage: ${dep.name}@${dep.version} (${dep.ecosystem})\n\nRecommendation: Remove this package immediately and audit any systems where it was installed.`,
-          ruleId: hit.id,
-          cweId: "CWE-506",
-          confidence: 1.0,
-          metadata: {
-            ecosystem: dep.ecosystem,
-            version: dep.version,
-            osvId: hit.id,
-            source: "osv-malware-db",
-          },
+          findings.push({
+            scanner: "MALICIOUS_PKG",
+            severity: "CRITICAL",
+            title: `Known malicious package: ${dep.name}@${dep.version} (${hit.id})`,
+            description: `${hit.summary || hit.details || "This package has been flagged as malicious by the OpenSSF Malicious Packages database."}\n\nAdvisory: ${hit.id}\nPackage: ${dep.name}@${dep.version} (${dep.ecosystem})\n\nRecommendation: Remove this package immediately and audit any systems where it was installed.`,
+            filePath: dep.sourceFile,
+            startLine: dep.sourceLine,
+            endLine: dep.sourceLine,
+            snippet: dep.sourceSnippet,
+            ruleId: hit.id,
+            cweId: "CWE-506",
+            confidence: 1.0,
+            metadata: {
+              packageName: dep.name,
+              ecosystem: dep.ecosystem,
+              version: dep.version,
+              sourceFile: dep.sourceFile,
+              sourceLine: dep.sourceLine,
+              osvId: hit.id,
+              source: "osv-malware-db",
+            },
         });
       }
     }
@@ -514,12 +524,19 @@ export const maliciousPkgScanner: ScannerPlugin = {
             severity: hasScripts ? "HIGH" : "MEDIUM",
             title: `Very new package: ${dep.name}@${dep.version} (${meta.ageInDays} days old, ${dep.ecosystem})`,
             description: `Package "${dep.name}" (${dep.ecosystem}) was published only ${meta.ageInDays} days ago.${hasScripts ? " It also contains install scripts, which is a common supply chain attack vector." : ""} New packages have significantly higher risk of being malicious.\n\nRecommendation: Verify this package is legitimate. Check its source repository, maintainer history, and download count before using it.`,
+            filePath: dep.sourceFile,
+            startLine: dep.sourceLine,
+            endLine: dep.sourceLine,
+            snippet: dep.sourceSnippet,
             ruleId: "MAL-NEW-PKG",
             cweId: "CWE-829",
             confidence: hasScripts ? 0.8 : 0.65,
             metadata: {
+              packageName: dep.name,
               ecosystem: dep.ecosystem,
               version: dep.version,
+              sourceFile: dep.sourceFile,
+              sourceLine: dep.sourceLine,
               ageInDays: meta.ageInDays,
               hasInstallScripts: meta.hasInstallScripts,
               source: "registry-metadata",
@@ -538,12 +555,19 @@ export const maliciousPkgScanner: ScannerPlugin = {
             severity: "LOW",
             title: `No source repository: ${dep.name}@${dep.version} (${dep.ecosystem})`,
             description: `Package "${dep.name}" has no linked source code repository. This makes it impossible to verify the code matches what's published. Packages without source repos have higher risk of containing hidden malicious code.`,
+            filePath: dep.sourceFile,
+            startLine: dep.sourceLine,
+            endLine: dep.sourceLine,
+            snippet: dep.sourceSnippet,
             ruleId: "MAL-NO-REPO",
             cweId: "CWE-829",
             confidence: 0.5,
             metadata: {
+              packageName: dep.name,
               ecosystem: dep.ecosystem,
               version: dep.version,
+              sourceFile: dep.sourceFile,
+              sourceLine: dep.sourceLine,
               source: "registry-metadata",
             },
           });
@@ -610,6 +634,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
         for (const f of parsed.findings || []) {
           if (!f.packageName || !f.severity || (f.confidence ?? 0) < 0.7)
             continue;
+          const dep = batch.find((d) => d.name === f.packageName);
 
           findings.push({
             scanner: "MALICIOUS_PKG",
@@ -618,12 +643,19 @@ export const maliciousPkgScanner: ScannerPlugin = {
             description: f.recommendation
               ? `${f.description}\n\nRecommendation: ${f.recommendation}`
               : f.description,
+            filePath: dep?.sourceFile,
+            startLine: dep?.sourceLine,
+            endLine: dep?.sourceLine,
+            snippet: dep?.sourceSnippet,
             ruleId: `MAL-${f.type || "PKG"}`,
             cweId: f.type === "TYPOSQUAT" ? "CWE-506" : "CWE-829",
             confidence: f.confidence ?? 0.7,
             metadata: {
-              ecosystem: batch.find((d) => d.name === f.packageName)?.ecosystem,
+              packageName: f.packageName,
+              ecosystem: dep?.ecosystem,
               version: f.version,
+              sourceFile: dep?.sourceFile,
+              sourceLine: dep?.sourceLine,
               type: f.type,
               similarTo: f.similarTo,
               source: "llm-analysis",
@@ -667,19 +699,26 @@ export const maliciousPkgScanner: ScannerPlugin = {
             findings.push({
               scanner: "MALICIOUS_PKG",
               severity: normalizeSeverity(f.severity),
-              title: `${f.title} in ${dep.name}@${dep.version}`,
-              description: f.recommendation
-                ? `${f.description}\n\nRecommendation: ${f.recommendation}`
-                : f.description,
-              ruleId: `MAL-SCRIPT-${f.scriptKey || "INSTALL"}`,
-              cweId: "CWE-506",
-              confidence: f.confidence ?? 0.7,
-              metadata: {
-                ecosystem: "npm",
-                version: dep.version,
-                scriptKey: f.scriptKey,
-                source: "llm-script-analysis",
-              },
+            title: `${f.title} in ${dep.name}@${dep.version}`,
+            description: f.recommendation
+              ? `${f.description}\n\nRecommendation: ${f.recommendation}`
+              : f.description,
+            filePath: dep.sourceFile,
+            startLine: dep.sourceLine,
+            endLine: dep.sourceLine,
+            snippet: dep.sourceSnippet,
+            ruleId: `MAL-SCRIPT-${f.scriptKey || "INSTALL"}`,
+            cweId: "CWE-506",
+            confidence: f.confidence ?? 0.7,
+            metadata: {
+              packageName: dep.name,
+              ecosystem: "npm",
+              version: dep.version,
+              sourceFile: dep.sourceFile,
+              sourceLine: dep.sourceLine,
+              scriptKey: f.scriptKey,
+              source: "llm-script-analysis",
+            },
             });
           }
         } catch (err) {
@@ -733,6 +772,10 @@ export const maliciousPkgScanner: ScannerPlugin = {
 
         for (const f of parsed.findings || []) {
           if (!f.title || !f.severity || (f.confidence ?? 0) < 0.7) continue;
+          const sourceLine = findPackageScriptLine(content, f.scriptKey);
+          const sourceSnippet = sourceLine
+            ? buildPackageScriptSnippet(content, sourceLine)
+            : undefined;
 
           findings.push({
             scanner: "MALICIOUS_PKG",
@@ -742,10 +785,18 @@ export const maliciousPkgScanner: ScannerPlugin = {
               ? `${f.description}\n\nRecommendation: ${f.recommendation}`
               : f.description,
             filePath,
+            startLine: sourceLine,
+            endLine: sourceLine,
+            snippet: sourceSnippet,
             ruleId: `MAL-SCRIPT-${f.scriptKey || "INSTALL"}`,
             cweId: "CWE-506",
             confidence: f.confidence ?? 0.7,
-            metadata: { source: "llm-local-script-analysis" },
+            metadata: {
+              sourceFile: filePath,
+              sourceLine,
+              scriptKey: f.scriptKey,
+              source: "llm-local-script-analysis",
+            },
           });
         }
       } catch {
@@ -766,4 +817,26 @@ function normalizeSeverity(s: string): RawFinding["severity"] {
     return upper as RawFinding["severity"];
   }
   return "MEDIUM";
+}
+
+function findPackageScriptLine(
+  content: string,
+  scriptKey?: string,
+): number | undefined {
+  if (!scriptKey) return undefined;
+  const lines = content.split("\n");
+  for (let index = 0; index < lines.length; index++) {
+    if (lines[index].includes(`"${scriptKey}"`)) return index + 1;
+  }
+  return undefined;
+}
+
+function buildPackageScriptSnippet(content: string, sourceLine: number): string {
+  const lines = content.split("\n");
+  const start = Math.max(1, sourceLine - 1);
+  const end = Math.min(lines.length, sourceLine + 1);
+  return lines
+    .slice(start - 1, end)
+    .map((line, index) => `${start + index}: ${line}`)
+    .join("\n");
 }

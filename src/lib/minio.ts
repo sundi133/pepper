@@ -4,10 +4,15 @@ const globalForMinio = globalThis as unknown as {
   minioClient: Minio.Client | undefined;
 };
 
+function minioEndPoint(): string {
+  const ep = process.env.MINIO_ENDPOINT || "127.0.0.1";
+  return ep === "localhost" ? "127.0.0.1" : ep;
+}
+
 export const minioClient =
   globalForMinio.minioClient ??
   new Minio.Client({
-    endPoint: process.env.MINIO_ENDPOINT || "localhost",
+    endPoint: minioEndPoint(),
     port: parseInt(process.env.MINIO_PORT || "9000"),
     useSSL: process.env.MINIO_USE_SSL === "true",
     accessKey: process.env.MINIO_ACCESS_KEY || "minioadmin",

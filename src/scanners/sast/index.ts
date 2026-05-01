@@ -9,6 +9,7 @@ import {
   BINARY_EXTENSIONS,
   MAX_FILE_SIZE_BYTES,
 } from "@/lib/constants";
+import { scanSensitivePaths } from "./sensitive-files";
 
 export const sastPatternScanner: ScannerPlugin = {
   name: "SAST_PATTERN",
@@ -74,6 +75,9 @@ export const sastPatternScanner: ScannerPlugin = {
         continue;
       }
     }
+
+    const sensitive = scanSensitivePaths(ctx);
+    findings.push(...sensitive);
 
     ctx.onProgress?.(
       `SAST Pattern: found ${findings.length} issues in ${ctx.fileList.length} files`,

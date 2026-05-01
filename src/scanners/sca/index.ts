@@ -102,7 +102,15 @@ export function parseDependencies(
           const key = `${dep.ecosystem}:${dep.name}@${dep.version}`;
           if (!seen.has(key)) {
             seen.add(key);
-            dependencies.push(dep);
+            const sourceLine = dep.sourceLine ?? findDependencyLine(content, dep);
+            dependencies.push({
+              ...dep,
+              sourceFile: dep.sourceFile ?? filePath,
+              sourceLine,
+              sourceSnippet:
+                dep.sourceSnippet ??
+                (sourceLine ? buildDependencySnippet(content, sourceLine) : undefined),
+            });
           }
         }
 
@@ -143,3 +151,32 @@ export const scaScanner: ScannerPlugin = {
 };
 
 export { parseDependencies as getDependencies };
+
+function findDependencyLine(content: string, dep: Dependency): number | undefined {
+  const lines = content.split("\n");
+  const normalizedVersion = dep.version.replace(/^[\^~>=<]+/, "");
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    if (!line.includes(dep.name)) continue;
+    if (!normalizedVersion || line.includes(normalizedVersion) || line.includes(dep.version)) {
+      return index + 1;
+    }
+  }
+
+  for (let index = 0; index < lines.length; index++) {
+    if (lines[index].includes(dep.name)) return index + 1;
+  }
+
+  return undefined;
+}
+
+function buildDependencySnippet(content: string, sourceLine: number): string {
+  const lines = content.split("\n");
+  const start = Math.max(1, sourceLine - 1);
+  const end = Math.min(lines.length, sourceLine + 1);
+  return lines
+    .slice(start - 1, end)
+    .map((line, index) => `${start + index}: ${line}`)
+    .join("\n");
+}

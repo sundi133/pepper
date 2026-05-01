@@ -124,3 +124,183 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Professional SAST finding report (scoped under .sast-report) */
+@layer components {
+  /* Radix ScrollArea inner wrapper defaults to min-width: max-content — force shrink */
+  [data-slot="scroll-area-viewport"] > div {
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+
+  .sast-report.report-container,
+  .sast-report .finding-card,
+  .sast-report .report-section,
+  .sast-report .section-content {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .sast-report .section-content,
+  .sast-report .report-paragraph,
+  .sast-report .description,
+  .sast-report .remediation,
+  .sast-report .impact,
+  .sast-report .attack-reasoning,
+  .sast-report .regression-prevention {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.6;
+  }
+
+  .sast-report pre,
+  .sast-report .code-block {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    border-radius: 10px;
+    padding: 16px;
+    background: #0b0b0f;
+    color: #f4f4f5;
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  .dark .sast-report pre,
+  .dark .sast-report .code-block {
+    background: oklch(0.18 0.01 260);
+    color: oklch(0.96 0 0);
+  }
+
+  .sast-report .finding-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+
+  .dark .sast-report .finding-card {
+    border-color: hsl(var(--border));
+    background: hsl(var(--card));
+    box-shadow: none;
+  }
+
+  .sast-report .report-section {
+    margin-top: 20px;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  .dark .sast-report .report-section {
+    border-color: hsl(var(--border));
+    background: hsl(var(--card));
+  }
+
+  .sast-report .report-section:first-of-type {
+    margin-top: 0;
+  }
+
+  .sast-report .report-section-header {
+    padding: 14px 18px;
+    font-weight: 600;
+    border-bottom: 1px solid #e5e7eb;
+    background: #fafafa;
+    color: hsl(var(--foreground));
+  }
+
+  .dark .sast-report .report-section-header {
+    border-color: hsl(var(--border));
+    background: hsl(var(--muted) / 0.35);
+  }
+
+  .sast-report .section-content {
+    padding: 18px;
+  }
+
+  .sast-report .kill-chain {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sast-report .kill-chain-step {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    background: #fafafa;
+  }
+
+  .dark .sast-report .kill-chain-step {
+    border-color: hsl(var(--border));
+    background: hsl(var(--muted) / 0.25);
+  }
+
+  .sast-report .kill-chain-step-active {
+    border: 1px solid #fecaca;
+    background: #fff1f2;
+  }
+
+  .dark .sast-report .kill-chain-step-active {
+    border-color: oklch(0.45 0.15 25);
+    background: oklch(0.22 0.05 25);
+  }
+
+  .sast-report .kill-chain-number {
+    min-width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: #ef4444;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .sast-report .kill-chain-number-muted {
+    background: #9ca3af;
+    color: white;
+  }
+
+  .dark .sast-report .kill-chain-number-muted {
+    background: oklch(0.45 0 0);
+  }
+
+  /* Legacy accordion wrapper */
+  .finding-report.report-container {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .finding-report .finding-report-meta-cell {
+    min-width: 0;
+  }
+
+  .sast-report ol.report-steps {
+    list-style-position: outside;
+    padding-left: 1.35rem;
+  }
+
+  .sast-report ol.report-steps li {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    margin-bottom: 0.5rem;
+  }
+}

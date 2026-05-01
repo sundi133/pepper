@@ -12,6 +12,9 @@ import { ScanContext, RawFinding } from "@/scanners/types";
 import { parseDependencies } from "@/scanners/sca";
 import { createScanLogger } from "@/lib/logger";
 import { sendScanCompleteEmail } from "@/lib/email";
+import { enrichRawFindingsWithSource } from "@/lib/security-report";
+import { analyzeArchitecture, architectureOverviewMarkdown } from "@/scanners/sast/architecture";
+import { enrichFindingsWithSastEngine } from "@/scanners/sast/finding-enrichment";
 
 // prisma is imported from @/lib/prisma
 
@@ -175,11 +178,22 @@ export async function processScanJob(job: Job<ScanJobData>) {
     const fileList = enumerateFiles(workDir);
     log.info({ fileCount: fileList.length }, "Files enumerated");
 
+    const architecture = analyzeArchitecture(workDir, fileList);
+
     // Helper: insert findings into DB and increment severity counts
     async function insertFindings(findings: RawFinding[]) {
       if (findings.length === 0) return;
+      const engineEnriched = enrichFindingsWithSastEngine(
+        findings,
+        workDir,
+        architecture,
+      );
+      const enrichedFindings = await enrichRawFindingsWithSource(
+        engineEnriched,
+        workDir,
+      );
       await prisma.finding.createMany({
-        data: findings.map((f) => ({
+        data: enrichedFindings.map((f) => ({
           scanId,
           scanner: f.scanner,
           severity: f.severity,
@@ -197,7 +211,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
           masked: f.masked ?? false,
         })),
       });
-      const counts = countSeverities(findings);
+      const counts = countSeverities(enrichedFindings);
       await prisma.scan.update({
         where: { id: scanId },
         data: {
@@ -292,8 +306,13 @@ export async function processScanJob(job: Job<ScanJobData>) {
       "Scan complete",
     );
 
-    // 6. Generate and upload SARIF
-    const sarif = buildSarif(result.findings);
+    // 6. Generate and upload SARIF (same enrichment as DB inserts)
+    const findingsForArtifacts = enrichFindingsWithSastEngine(
+      result.findings,
+      workDir,
+      architecture,
+    );
+    const sarif = buildSarif(findingsForArtifacts);
     const sarifJson = JSON.stringify(sarif, null, 2);
     const sarifKey = `scans/${scanId}/results.sarif.json`;
     await uploadObject(sarifKey, sarifJson, "application/json");
@@ -351,6 +370,17 @@ export async function processScanJob(job: Job<ScanJobData>) {
     }
 
     // 9. Update scan record (severity counts already incremented per-scanner)
+    const existingProgress = await prisma.scan.findUnique({
+      where: { id: scanId },
+      select: { scannerProgress: true },
+    });
+    const progressObj =
+      existingProgress?.scannerProgress &&
+      typeof existingProgress.scannerProgress === "object" &&
+      !Array.isArray(existingProgress.scannerProgress)
+        ? (existingProgress.scannerProgress as Record<string, unknown>)
+        : {};
+
     await prisma.scan.update({
       where: { id: scanId },
       data: {
@@ -359,6 +389,11 @@ export async function processScanJob(job: Job<ScanJobData>) {
         filesScanned: result.filesScanned,
         depsScanned: result.depsScanned,
         gateResult,
+        scannerProgress: {
+          ...progressObj,
+          architectureOverview: architectureOverviewMarkdown(architecture),
+          rulesVersion: "pepper-sast-engine@1.1",
+        },
       },
     });
 
@@ -400,16 +435,18 @@ export async function processScanJob(job: Job<ScanJobData>) {
               },
             });
 
+            const criticalForEmail = member?.emailOnCritical
+              ? await prisma.scan.findUnique({
+                  where: { id: scanId },
+                  select: { criticalCount: true },
+                })
+              : null;
+
             const shouldEmail =
               member?.emailOnScanComplete ||
               (member?.emailOnGateFail && gateResult === "FAILED") ||
               (member?.emailOnCritical &&
-                (
-                  await prisma.scan.findUnique({
-                    where: { id: scanId },
-                    select: { criticalCount: true },
-                  })
-                )?.criticalCount! > 0);
+                (criticalForEmail?.criticalCount ?? 0) > 0);
 
             if (shouldEmail) {
               const scanCounts = await prisma.scan.findUnique({

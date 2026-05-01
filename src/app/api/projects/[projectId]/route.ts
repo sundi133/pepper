@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth-guard";
+import { requireAuth, requireRole } from "@/lib/auth-guard";
 import { z } from "zod";
 
 export async function GET(
@@ -95,7 +95,24 @@ export async function DELETE(
 
   const { projectId } = await params;
 
-  await prisma.project.delete({ where: { id: projectId } });
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, organizationId: true },
+  });
+
+  if (!project) {
+    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  }
+
+  const gate = await requireRole(project.organizationId, "DEVELOPER");
+  if ("error" in gate) return gate.error;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.scan.deleteMany({ where: { projectId } });
+    await tx.buildGate.deleteMany({ where: { projectId } });
+    await tx.scanSchedule.deleteMany({ where: { projectId } });
+    await tx.project.delete({ where: { id: projectId } });
+  });
 
   return NextResponse.json({ success: true });
 }

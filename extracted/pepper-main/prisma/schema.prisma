@@ -1,0 +1,366 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Multi-tenancy ─────────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members          OrgMember[]
+  projects         Project[]
+  settings         OrgSettings?
+  apiKeys          ApiKey[]
+  securityPolicies SecurityPolicy[]
+}
+
+model OrgMember {
+  id             String   @id @default(cuid())
+  role           Role     @default(DEVELOPER)
+  userId         String
+  organizationId String
+  createdAt      DateTime @default(now())
+
+  // Notification preferences
+  emailOnScanComplete Boolean @default(true)
+  emailOnGateFail     Boolean @default(true)
+  emailOnCritical     Boolean @default(true)
+
+  user         User         @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([userId, organizationId])
+}
+
+enum Role {
+  ADMIN
+  SECURITY
+  DEVELOPER
+  VIEWER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  memberships OrgMember[]
+}
+
+// NextAuth required models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Core domain ───────────────────────────────────────────────────
+
+model Project {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  repoUrl        String?
+  defaultBranch  String   @default("main")
+  organizationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  scans        Scan[]
+  buildGate    BuildGate?
+  schedule     ScanSchedule?
+}
+
+model Scan {
+  id         String     @id @default(cuid())
+  status     ScanStatus @default(QUEUED)
+  scanType   ScanType   @default(FULL)
+  branch     String?
+  commitSha  String?
+  prNumber   Int?
+  baseSha    String?
+  sourceType SourceType @default(UPLOAD)
+  sourceRef  String?
+  projectId  String
+  triggeredBy String?
+  jobId      String?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  criticalCount Int @default(0)
+  highCount     Int @default(0)
+  mediumCount   Int @default(0)
+  lowCount      Int @default(0)
+  infoCount     Int @default(0)
+
+  filesScanned Int @default(0)
+  depsScanned  Int @default(0)
+
+  scannerProgress Json?
+
+  gateResult GateResult @default(PENDING)
+  errorMessage String?
+
+  project   Project        @relation(fields: [projectId], references: [id])
+  findings  Finding[]
+  artifacts ScanArtifact[]
+}
+
+enum ScanStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ScanType {
+  FULL
+  INCREMENTAL
+  SAST_ONLY
+  SCA_ONLY
+  SECRETS_ONLY
+}
+
+enum SourceType {
+  UPLOAD
+  GIT_CLONE
+  SVN_CHECKOUT
+  WEBHOOK
+}
+
+enum GateResult {
+  PENDING
+  PASSED
+  FAILED
+}
+
+model Finding {
+  id              String        @id @default(cuid())
+  scanId          String
+  scanner         Scanner
+  severity        Severity
+  title           String
+  description     String        @db.Text
+  filePath        String?
+  startLine       Int?
+  endLine         Int?
+  snippet         String?       @db.Text
+  ruleId          String?
+  cweId           String?
+  cveId           String?
+  confidence      Float?
+  metadata        Json?
+  masked          Boolean       @default(false)
+  status          FindingStatus @default(OPEN)
+  statusNote      String?
+  statusUpdatedBy String?
+  statusUpdatedAt DateTime?
+  createdAt       DateTime      @default(now())
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId, severity])
+  @@index([scanId, scanner])
+  @@index([scanId, filePath])
+  @@index([scanId, status])
+}
+
+enum FindingStatus {
+  OPEN
+  IN_PROGRESS
+  FALSE_POSITIVE
+  ACCEPTED_RISK
+  RESOLVED
+}
+
+enum Scanner {
+  SAST_PATTERN
+  SAST_LLM
+  SCA
+  SECRETS_PATTERN
+  SECRETS_LLM
+  IAC
+  MALICIOUS_PKG
+  ZERO_DAY
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+model ScanArtifact {
+  id        String       @id @default(cuid())
+  scanId    String
+  type      ArtifactType
+  objectKey String
+  size      Int?
+  createdAt DateTime     @default(now())
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@unique([scanId, type])
+}
+
+enum ArtifactType {
+  SARIF
+  SBOM_CYCLONEDX
+  SCAN_LOG
+}
+
+model BuildGate {
+  id          String  @id @default(cuid())
+  projectId   String  @unique
+  maxCritical Int     @default(0)
+  maxHigh     Int     @default(5)
+  maxMedium   Int     @default(20)
+  maxLow      Int     @default(-1) // -1 = unlimited
+  failOnNew   Boolean @default(true)
+
+  project Project @relation(fields: [projectId], references: [id])
+}
+
+model ScanSchedule {
+  id        String       @id @default(cuid())
+  projectId String       @unique
+  enabled   Boolean      @default(true)
+  frequency ScheduleFreq
+  cronExpr  String?
+  scanType  ScanType     @default(FULL)
+  branch    String?
+  lastRunAt DateTime?
+  nextRunAt DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+enum ScheduleFreq {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+model OrgSettings {
+  id               String  @id @default(cuid())
+  organizationId   String  @unique
+  llmProvider      String  @default("openai")
+  llmBaseUrl       String  @default("https://api.openai.com/v1")
+  llmModel         String  @default("gpt-4o-mini")
+  llmApiKey        String? @db.Text
+  enableLlmSast    Boolean @default(true)
+  enableLlmSecrets Boolean @default(true)
+  osvApiUrl        String  @default("https://api.osv.dev")
+  vulnDbMode       String  @default("online")
+
+  // SMTP Email Configuration
+  smtpHost        String?
+  smtpPort        Int?     @default(587)
+  smtpUser        String?
+  smtpPassword    String?  @db.Text
+  smtpFromAddress String?  @default("noreply@pepper-sast.local")
+  smtpUseTls      Boolean  @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+}
+
+model SecurityPolicy {
+  id             String          @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?         @db.Text
+  rule           String          @db.Text   // Natural language rule the LLM should enforce
+  severity       Severity        @default(HIGH)
+  enabled        Boolean         @default(true)
+  category       String?                    // e.g. "Data Privacy", "Compliance", "Internal Standard"
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, enabled])
+}
+
+model ApiKey {
+  id             String    @id @default(cuid())
+  name           String
+  keyHash        String    @unique
+  prefix         String
+  organizationId String
+  createdBy      String
+  expiresAt      DateTime?
+  lastUsedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String?
+  userId         String?
+  action         String
+  resource       String
+  resourceId     String?
+  details        Json?
+  ipAddress      String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([action])
+}

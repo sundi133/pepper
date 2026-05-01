@@ -170,6 +170,16 @@ async function analyzeChunk(
         cweId: f.cweId,
         confidence: f.confidence ?? 0.8,
         ruleId: `ZD-${f.cweId || "NOVEL"}`,
+        metadata: {
+          reportHints: compactObject({
+            rootCause: f.description,
+            realWorldAttackScenario: f.attackVector,
+            advancedAttackerReasoning: f.attackVector
+              ? `${f.attackVector} The attacker would first satisfy the required business state, then abuse the trust boundary repeatedly or combine it with weak authorization and missing audit controls.`
+              : undefined,
+            secureFixExplanation: f.recommendation,
+          }),
+        },
       }));
   } catch (err) {
     logger.error(
@@ -178,6 +188,12 @@ async function analyzeChunk(
     );
     return [];
   }
+}
+
+function compactObject<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as Partial<T>;
 }
 
 function normalizeSeverity(s: string): RawFinding["severity"] {

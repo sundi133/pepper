@@ -64,6 +64,9 @@ export interface Dependency {
   ecosystem: string;
   isDev?: boolean;
   lockfileVersion?: string;
+  sourceFile?: string;
+  sourceLine?: number;
+  sourceSnippet?: string;
 }
 
 export interface DependencyParser {

@@ -1,5 +1,6 @@
 import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { normalizeLocalhostToIPv4 } from "@/lib/db-url";
 import pg from "pg";
 
 const globalForPrisma = globalThis as unknown as {
@@ -11,7 +12,9 @@ function createPrismaClient(): PrismaClient {
   if (!databaseUrl) {
     throw new Error("DATABASE_URL environment variable is not set");
   }
-  const pool = new pg.Pool({ connectionString: databaseUrl });
+  const pool = new pg.Pool({
+    connectionString: normalizeLocalhostToIPv4(databaseUrl),
+  });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({ adapter }) as unknown as PrismaClient;
 }

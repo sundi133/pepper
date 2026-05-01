@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Card,
@@ -12,6 +12,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +40,8 @@ export default function ProjectSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -90,6 +100,29 @@ export default function ProjectSettingsPage() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDeleteProject() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error || "Failed to delete project");
+      }
+      toast.success("Project deleted");
+      setDeleteOpen(false);
+      router.push("/projects");
+      router.refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete project",
+      );
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -155,6 +188,57 @@ export default function ProjectSettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle className="text-destructive">Danger zone</CardTitle>
+          <CardDescription>
+            Permanently delete this project and all of its scans, findings, and
+            schedules. This cannot be undone.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete project
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete project?</DialogTitle>
+            <DialogDescription>
+              This will permanently remove{" "}
+              <span className="font-semibold text-foreground">{name}</span> and
+              all associated scans and data. This action cannot be reversed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteProject}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting…" : "Delete project"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -177,6 +177,13 @@ export const iacScanner: ScannerPlugin = {
                 cweId: f.cweId,
                 confidence: f.confidence ?? 0.7,
                 ruleId: `IAC-${f.cweId || "MISC"}`,
+                metadata: {
+                  reportHints: compactObject({
+                    rootCause: f.description,
+                    secureFixExplanation: f.recommendation,
+                    secureCodeExample: f.recommendation,
+                  }),
+                },
               }));
           } catch (err) {
             logger.error({ err, filePath }, "IaC analysis failed for file");
@@ -204,6 +211,12 @@ export const iacScanner: ScannerPlugin = {
     return findings;
   },
 };
+
+function compactObject<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as Partial<T>;
+}
 
 function normalizeSeverity(s: string): RawFinding["severity"] {
   const upper = s.toUpperCase();

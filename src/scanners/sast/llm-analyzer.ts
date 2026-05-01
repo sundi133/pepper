@@ -99,7 +99,19 @@ For each genuine vulnerability found, respond with:
       "endLine": <exact line number>,
       "cweId": "CWE-XXX",
       "confidence": <0.7 to 1.0>,
-      "recommendation": "Specific fix for this code"
+      "recommendation": "Specific fix for this code",
+      "affectedFunction": "function/component name if identifiable",
+      "lineByLineExplanation": ["Line-specific explanation grounded in this code"],
+      "rootCause": "Precise root cause in this code path",
+      "attackScenario": "Concrete real-world attack scenario",
+      "attackChain": "How an advanced attacker could chain this weakness",
+      "reproductionSteps": ["Safe non-destructive step 1", "Safe non-destructive step 2"],
+      "proofOfConcept": "Safe curl, payload, CLI command, or test input",
+      "expectedBehavior": "Expected vulnerable behavior when reproduced safely",
+      "businessImpact": "Business/security impact",
+      "secureCode": "Secure replacement code for this exact pattern",
+      "securityTests": "Tests that should pass after the fix",
+      "regressionPrevention": "How to prevent this class of issue"
     }
   ]
 }
@@ -166,6 +178,18 @@ interface LlmFinding {
   cweId?: string;
   confidence?: number;
   recommendation?: string;
+  affectedFunction?: string;
+  lineByLineExplanation?: string[];
+  rootCause?: string;
+  attackScenario?: string;
+  attackChain?: string;
+  reproductionSteps?: string[];
+  proofOfConcept?: string;
+  expectedBehavior?: string;
+  businessImpact?: string;
+  secureCode?: string;
+  securityTests?: string;
+  regressionPrevention?: string;
 }
 
 export async function runLlmSastScanner(
@@ -280,7 +304,6 @@ export async function runLlmSastScanner(
   // Process chunks with concurrency limit
   let succeeded = 0;
   let failed = 0;
-  const totalBatches = Math.ceil(chunks.length / maxConcurrency);
 
   // Track which chunks belong to each file so we know when a file is fully done
   const chunksPerFile = new Map<string, number>();
@@ -295,7 +318,6 @@ export async function runLlmSastScanner(
   for (let i = 0; i < chunks.length; i += maxConcurrency) {
     if (ctx.signal?.aborted) break;
 
-    const batchNum = Math.floor(i / maxConcurrency) + 1;
     const batch = chunks.slice(i, i + maxConcurrency);
     const results = await Promise.allSettled(
       batch.map((chunk) =>
@@ -433,9 +455,24 @@ async function analyzeChunk(
         ruleId: isPolicy
           ? `POLICY-${matchedPolicy || "CUSTOM"}`
           : `LLM-${f.cweId || "GENERIC"}`,
-        metadata: matchedPolicy
-          ? { policyName: matchedPolicy, type: "policy-violation" }
-          : undefined,
+        metadata: {
+          ...(matchedPolicy ? { policyName: matchedPolicy } : {}),
+          reportHints: compactObject({
+            affectedFunction: f.affectedFunction,
+            lineByLineExplanation: f.lineByLineExplanation,
+            rootCause: f.rootCause,
+            realWorldAttackScenario: f.attackScenario,
+            advancedAttackerReasoning: f.attackChain,
+            stepsToReproduce: f.reproductionSteps,
+            proofOfConcept: f.proofOfConcept,
+            expectedVulnerableBehavior: f.expectedBehavior,
+            businessImpact: f.businessImpact,
+            secureFixExplanation: f.recommendation,
+            secureCodeExample: f.secureCode,
+            securityTests: f.securityTests,
+            regressionPrevention: f.regressionPrevention,
+          }),
+        },
       };
     });
   } catch (err) {
@@ -450,6 +487,12 @@ async function analyzeChunk(
     );
     return [];
   }
+}
+
+function compactObject<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as Partial<T>;
 }
 
 function normalizeSeverity(s: string): RawFinding["severity"] {

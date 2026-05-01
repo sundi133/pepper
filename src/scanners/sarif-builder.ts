@@ -37,6 +37,7 @@ interface SarifResult {
     };
   }>;
   fingerprints?: Record<string, string>;
+  properties?: Record<string, unknown>;
 }
 
 export function buildSarif(findings: RawFinding[]): SarifLog {
@@ -60,11 +61,32 @@ export function buildSarif(findings: RawFinding[]): SarifLog {
       });
     }
 
+    const meta =
+      finding.metadata && typeof finding.metadata === "object"
+        ? (finding.metadata as Record<string, unknown>)
+        : {};
+    const sast = meta.sastEngine as Record<string, unknown> | undefined;
+
     const result: SarifResult = {
       ruleId,
       level: severityToSarifLevel(finding.severity),
       message: { text: finding.description },
     };
+
+    if (sast?.owaspTop10Id || sast?.owaspCategory || finding.cweId) {
+      result.properties = {
+        ...(finding.cweId ? { cwe: finding.cweId } : {}),
+        ...(typeof sast?.owaspTop10Id === "string"
+          ? { owaspTop10_2021: sast.owaspTop10Id }
+          : {}),
+        ...(typeof sast?.owaspCategory === "string"
+          ? { owaspCategory: sast.owaspCategory }
+          : {}),
+        ...(typeof sast?.needsManualValidation === "boolean"
+          ? { needsManualValidation: sast.needsManualValidation }
+          : {}),
+      };
+    }
 
     if (finding.filePath) {
       result.locations = [

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   Table,
   TableBody,
@@ -21,7 +21,11 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SCANNER_LABELS } from "@/lib/constants";
-import { FileCode, ChevronRight } from "lucide-react";
+import { FileCode, ChevronRight, ChevronDown } from "lucide-react";
+import {
+  FindingDetailContent,
+  type FindingDetailFinding,
+} from "@/components/scans/finding-detail-panel";
 import { toast } from "sonner";
 
 interface Finding {
@@ -36,6 +40,10 @@ interface Finding {
   ruleId?: string;
   cweId?: string;
   confidence?: number;
+  metadata?: Record<string, unknown>;
+  snippet?: string;
+  endLine?: number;
+  cveId?: string;
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -65,15 +73,16 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 interface FindingsTableProps {
   findings: Finding[];
-  onSelect?: (finding: Finding) => void;
-  selectedId?: string;
+  /** Which finding row is expanded to show full detail below */
+  expandedId?: string | null;
+  onExpandedChange?: (id: string | null) => void;
   onBulkStatusChange?: () => void;
 }
 
 export function FindingsTable({
   findings,
-  onSelect,
-  selectedId,
+  expandedId,
+  onExpandedChange,
   onBulkStatusChange,
 }: FindingsTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -201,59 +210,92 @@ export function FindingsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {findings.map((finding) => (
-            <TableRow
-              key={finding.id}
-              className={`cursor-pointer ${selectedId === finding.id ? "bg-muted" : ""}`}
-            >
-              <TableCell onClick={(e) => e.stopPropagation()}>
-                <Checkbox
-                  checked={selected.has(finding.id)}
-                  onCheckedChange={() => toggleOne(finding.id)}
-                />
-              </TableCell>
-              <TableCell onClick={() => onSelect?.(finding)}>
-                <SeverityBadge severity={finding.severity} />
-              </TableCell>
-              <TableCell onClick={() => onSelect?.(finding)}>
-                <div>
-                  <p className="font-medium text-sm">{finding.title}</p>
-                  {finding.cweId && (
-                    <span className="text-xs text-muted-foreground">
-                      {finding.cweId}
-                    </span>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell onClick={() => onSelect?.(finding)}>
-                {finding.status && STATUS_LABELS[finding.status] && (
-                  <span
-                    className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${STATUS_LABELS[finding.status].color}`}
+          {findings.map((finding) => {
+            const isOpen = expandedId === finding.id;
+            return (
+              <Fragment key={finding.id}>
+                <TableRow
+                  data-state={isOpen ? "open" : "closed"}
+                  className={`cursor-pointer transition-colors ${isOpen ? "bg-muted/80" : "hover:bg-muted/50"}`}
+                  onClick={(e) => {
+                    const el = e.target as HTMLElement;
+                    if (el.closest("[data-checkbox-cell]")) return;
+                    onExpandedChange?.(isOpen ? null : finding.id);
+                  }}
+                >
+                  <TableCell
+                    data-checkbox-cell
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    {STATUS_LABELS[finding.status].label}
-                  </span>
+                    <Checkbox
+                      checked={selected.has(finding.id)}
+                      onCheckedChange={() => toggleOne(finding.id)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <SeverityBadge severity={finding.severity} />
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <p className="font-medium text-sm">{finding.title}</p>
+                      {finding.cweId && (
+                        <span className="text-xs text-muted-foreground">
+                          {finding.cweId}
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {finding.status && STATUS_LABELS[finding.status] && (
+                      <span
+                        className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${STATUS_LABELS[finding.status].color}`}
+                      >
+                        {STATUS_LABELS[finding.status].label}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs">
+                      {SCANNER_LABELS[
+                        finding.scanner as keyof typeof SCANNER_LABELS
+                      ] || finding.scanner}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {finding.filePath && (
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {finding.filePath}
+                        {finding.startLine ? `:${finding.startLine}` : ""}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="w-10 text-right">
+                    {isOpen ? (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground inline" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground inline" />
+                    )}
+                  </TableCell>
+                </TableRow>
+                {isOpen && (
+                  <TableRow className="hover:bg-transparent border-b">
+                    <TableCell
+                      colSpan={7}
+                      className="p-0 align-top bg-muted/15 border-t border-primary/15"
+                    >
+                      <div className="min-w-0 max-w-full overflow-x-hidden p-3 sm:p-4">
+                        <FindingDetailContent
+                          finding={finding as FindingDetailFinding}
+                          onCollapse={() => onExpandedChange?.(null)}
+                          onStatusChange={() => onBulkStatusChange?.()}
+                        />
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 )}
-              </TableCell>
-              <TableCell onClick={() => onSelect?.(finding)}>
-                <Badge variant="outline" className="text-xs">
-                  {SCANNER_LABELS[
-                    finding.scanner as keyof typeof SCANNER_LABELS
-                  ] || finding.scanner}
-                </Badge>
-              </TableCell>
-              <TableCell onClick={() => onSelect?.(finding)}>
-                {finding.filePath && (
-                  <span className="text-xs text-muted-foreground font-mono">
-                    {finding.filePath}
-                    {finding.startLine ? `:${finding.startLine}` : ""}
-                  </span>
-                )}
-              </TableCell>
-              <TableCell onClick={() => onSelect?.(finding)}>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </TableCell>
-            </TableRow>
-          ))}
+              </Fragment>
+            );
+          })}
         </TableBody>
       </Table>
     </div>

@@ -1,4 +1,5 @@
 import { RawFinding, ScanContext, ScannerPlugin, ScanResult } from "./types";
+import { sanitizeFindingForEvent } from "./scan-events";
 import { sastPatternScanner, sastLlmScanner } from "./sast";
 import { scaScanner, parseDependencies } from "./sca";
 import { secretsPatternScanner, secretsLlmScanner } from "./secrets";
@@ -98,6 +99,18 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
           const deduped = deduplicator.dedupe(findings);
           if (deduped.length > 0) {
             await ctx.onBatchFindings!(scannerName, deduped);
+          }
+        }
+      : undefined,
+    onEvent: ctx.onEvent
+      ? async (event) => {
+          if (event.type === "finding_found") {
+            await ctx.onEvent!({
+              ...event,
+              finding: sanitizeFindingForEvent(event.finding),
+            });
+          } else {
+            await ctx.onEvent!(event);
           }
         }
       : undefined,

@@ -99,8 +99,79 @@ test("buildSecurityScanReport groups severities and emits risk rating", () => {
   assert.equal(report.executiveSummary.totalVulnerabilities, 2);
   assert.equal(report.executiveSummary.criticalCount, 1);
   assert.equal(report.executiveSummary.mediumCount, 1);
+  assert.equal(report.executiveSummary.infoCount, 0);
   assert.equal(report.executiveSummary.overallRiskRating, "Critical");
   assert.equal(report.vulnerabilities[0].report.severity, "CRITICAL");
+});
+
+test("buildSecurityScanReport merges sparse LLM report with template fallbacks", () => {
+  const report = buildSecurityScanReport({
+    findings: [
+      {
+        id: "llm-1",
+        scanner: "SAST_LLM",
+        severity: "HIGH",
+        title: "SQL injection risk",
+        description: "Narrative from the scanner that should appear on the vulnerability record.",
+        filePath: "src/api.ts",
+        startLine: 10,
+        cweId: "CWE-89",
+        confidence: 0.88,
+        metadata: {
+          report: {
+            vulnerabilityName: "SQL injection risk",
+            severity: "HIGH",
+            rootCause: "",
+            realWorldAttackScenario: "Custom concrete scenario from the model.",
+            lineByLineExplanation: [],
+            stepsToReproduce: [],
+            attackPreconditions: {},
+            proofOfConcept: "",
+            businessImpact: "",
+            secureFixExplanation: "",
+            secureCodeExample: "",
+            securityTests: "",
+            regressionPrevention: "",
+            advancedAttackerReasoning: "",
+            expectedVulnerableBehavior: "",
+            affectedFilePath: "",
+            affectedFunction: "",
+            lineRange: "",
+            language: "",
+            vulnerableSourceCode: "",
+            confidenceLevel: "",
+          },
+        },
+      },
+    ],
+  });
+
+  const v = report.vulnerabilities[0].report;
+  assert.ok(
+    v.rootCause.length > 20,
+    "empty LLM rootCause should be filled from template",
+  );
+  assert.match(v.realWorldAttackScenario, /Custom concrete scenario/);
+  assert.ok(
+    report.vulnerabilities[0].scannerDescription?.includes("Narrative"),
+  );
+});
+
+test("executive summary counts INFO severities", () => {
+  const report = buildSecurityScanReport({
+    findings: [
+      {
+        scanner: "SAST_PATTERN",
+        severity: "INFO",
+        title: "Informational note",
+        description: "FYI",
+        filePath: "readme.md",
+        startLine: 1,
+      },
+    ],
+  });
+  assert.equal(report.executiveSummary.infoCount, 1);
+  assert.equal(report.executiveSummary.overallRiskRating, "Informational");
 });
 
 test("markdown report includes developer-ready sections", () => {
@@ -126,10 +197,9 @@ test("markdown report includes developer-ready sections", () => {
   assert.match(markdown, /# Security Scan Report/);
   assert.match(markdown, /## Executive Summary/);
   assert.match(markdown, /#### Steps to Reproduce/);
-  assert.match(markdown, /#### Proof of Concept/);
-  assert.match(markdown, /#### Secure Code/);
   assert.match(markdown, /#### Security Tests/);
-  assert.match(markdown, /#### Regression Prevention/);
+  assert.doesNotMatch(markdown, /localhost\/example/);
+  assert.doesNotMatch(markdown, /file\.txt;\s*whoami/);
 });
 
 test("report JSON includes reproduction and fix guidance", () => {
@@ -153,7 +223,7 @@ test("report JSON includes reproduction and fix guidance", () => {
   });
 
   const detail = report.vulnerabilities[0].report;
-  assert.match(detail.proofOfConcept, /npm ls express/);
+  assert.equal(detail.proofOfConcept, "");
   assert.match(detail.secureFixExplanation, /4.18.3/);
   assert.doesNotThrow(() => JSON.stringify(report));
 });

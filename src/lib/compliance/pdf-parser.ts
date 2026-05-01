@@ -4,6 +4,7 @@
  */
 import * as fs from "fs";
 import * as path from "path";
+import { execFileSync } from "child_process";
 import { logger } from "@/lib/logger";
 
 export interface ComplianceControl {
@@ -37,12 +38,11 @@ export function parseCompliancePdf(
   try {
     // Read PDF as text — works because these PDFs are text-based
     // In production, use a proper PDF parser; for now, we exec pdftotext
-    const { execSync } = require("child_process");
     let text: string;
 
     try {
       // Try pdftotext first (most accurate)
-      text = execSync(`pdftotext -layout "${filePath}" -`, {
+      text = execFileSync("pdftotext", ["-layout", filePath, "-"], {
         encoding: "utf-8",
         timeout: 30000,
       });

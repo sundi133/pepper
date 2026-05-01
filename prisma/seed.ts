@@ -9,7 +9,7 @@ const pool = new pg.Pool({
   connectionString: normalizeLocalhostToIPv4(process.env.DATABASE_URL!),
 });
 const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter }) as any;
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   console.log("Seeding database...");
@@ -21,7 +21,7 @@ async function main() {
   const llmApiKey = process.env.LLM_API_KEY;
 
   // Create default organization
-  const org = await (prisma as any).organization.upsert({
+  const org = await prisma.organization.upsert({
     where: { slug: "default" },
     update: {},
     create: {
@@ -32,7 +32,7 @@ async function main() {
   console.log(`Organization: ${org.name} (${org.id})`);
 
   // Create org settings
-  await (prisma as any).orgSettings.upsert({
+  await prisma.orgSettings.upsert({
     where: { organizationId: org.id },
     update: {
       llmProvider,
@@ -54,7 +54,7 @@ async function main() {
   const password = process.env.ADMIN_PASSWORD || "pepper-admin-changeme";
   const passwordHash = await bcrypt.hash(password, 12);
 
-  const admin = await (prisma as any).user.upsert({
+  const admin = await prisma.user.upsert({
     where: { email },
     update: { passwordHash },
     create: {
@@ -66,7 +66,7 @@ async function main() {
   console.log(`Admin user: ${admin.email} (${admin.id})`);
 
   // Create org membership
-  await (prisma as any).orgMember.upsert({
+  await prisma.orgMember.upsert({
     where: {
       userId_organizationId: {
         userId: admin.id,
@@ -82,7 +82,7 @@ async function main() {
   });
 
   // Create a sample project
-  const project = await (prisma as any).project.upsert({
+  const project = await prisma.project.upsert({
     where: { id: "sample-project" },
     update: {},
     create: {
@@ -94,7 +94,7 @@ async function main() {
   });
 
   // Create default build gate for sample project
-  await (prisma as any).buildGate.upsert({
+  await prisma.buildGate.upsert({
     where: { projectId: project.id },
     update: {},
     create: {
@@ -161,7 +161,7 @@ async function main() {
   ];
 
   for (const policy of samplePolicies) {
-    await (prisma as any).securityPolicy.upsert({
+    await prisma.securityPolicy.upsert({
       where: {
         id: `seed-policy-${policy.name.toLowerCase().replace(/\s+/g, "-")}`,
       },
@@ -194,5 +194,5 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await (prisma as any).$disconnect();
+    await prisma.$disconnect();
   });

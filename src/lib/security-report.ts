@@ -112,6 +112,15 @@ interface SourceContext {
 
 interface ReportHints {
   affectedFunction?: string;
+  /** Untrusted input entry point (LLM SAST). */
+  inputSource?: string;
+  /** Dangerous operation (LLM SAST). */
+  dangerousSink?: string;
+  missingSecurityControl?: string;
+  /** Source→sink path narrative (LLM SAST). */
+  reachabilityExplanation?: string;
+  owaspCategory?: string;
+  validationStatus?: string;
   lineByLineExplanation?: LineExplanation[] | string[];
   rootCause?: string;
   realWorldAttackScenario?: string;
@@ -238,6 +247,7 @@ export function buildSecurityScanReport(args: {
       "Software composition analysis (dependency advisories)",
       "Secret and sensitive-path detection with redaction",
       "Heuristic architecture and route mapping from repository structure",
+      "Machine-generated findings: validate in your environment; static analysis does not prove exploitability.",
     ],
     architectureOverview: args.architectureOverview,
     appendix: args.appendix,
@@ -308,7 +318,13 @@ export function buildVulnerabilityReportDetails(
     stepsToReproduce: (hints.stepsToReproduce || template.stepsToReproduce).map(
       (s) => norm(s),
     ),
-    proofOfConcept: norm(hints.proofOfConcept || template.proofOfConcept),
+    proofOfConcept: norm(
+      selectProofOfConcept(
+        hints.proofOfConcept,
+        template.proofOfConcept,
+        category,
+      ),
+    ),
     expectedVulnerableBehavior: norm(
       hints.expectedVulnerableBehavior ||
         template.expectedVulnerableBehavior,
@@ -385,6 +401,11 @@ export function renderSecurityScanReportMarkdown(
     const item = vulnerability.report;
     lines.push(`### [${item.severity}] ${item.vulnerabilityName}`);
     lines.push("");
+    if (vulnerability.scannerDescription?.trim()) {
+      lines.push("#### Original scanner text");
+      lines.push(vulnerability.scannerDescription.trim());
+      lines.push("");
+    }
     if (vulnerability.cweId) {
       lines.push("#### Classification");
       lines.push(`- CWE: ${vulnerability.cweId}`);
@@ -497,6 +518,19 @@ export function renderSecurityScanReportMarkdown(
   }
 
   return lines.join("\n");
+}
+
+function selectProofOfConcept(
+  hint: string | undefined,
+  fallback: string | undefined,
+  category: string,
+): string {
+  if (["dependency", "supply-chain", "iac"].includes(category)) return "";
+  const value = hint || fallback || "";
+  if (/localhost:3000\/example|Replace with a safe local request/i.test(value)) {
+    return "";
+  }
+  return value;
 }
 
 function getSourceContext(

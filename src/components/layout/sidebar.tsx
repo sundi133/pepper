@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   FolderOpen,
   Scan,
-  Settings,
   Users,
   Zap,
   ShieldCheck,

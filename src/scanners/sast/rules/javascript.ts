@@ -83,7 +83,8 @@ export const javascriptRules: PatternRule[] = [
     severity: "CRITICAL",
     cweId: "CWE-78",
     languages: ["javascript", "typescript"],
-    pattern: /(?:exec|execSync|spawn|spawnSync)\s*\([^)]*(?:\+|`|\$\{)/,
+    pattern:
+      /(?:\bchild_process\.(?:exec|execSync|spawn|spawnSync)|(?<!\.)\b(?:exec|execSync|spawn|spawnSync))\s*\([^)]*(?:\+|`|\$\{)/,
   },
   {
     id: "JS-PROTO-001",

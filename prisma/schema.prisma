@@ -258,6 +258,8 @@ enum ArtifactType {
   SARIF
   SBOM_CYCLONEDX
   SCAN_LOG
+  HTML_FINDINGS_REPORT
+  MARKDOWN_FINDINGS_REPORT
 }
 
 model BuildGate {

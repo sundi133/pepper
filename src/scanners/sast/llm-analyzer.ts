@@ -112,6 +112,8 @@ STRICT RULES:
    - 0.8-0.9: Very likely — strong evidence, minor ambiguity about context
    - 0.7-0.8: Probable — likely vulnerable but depends on runtime context
    - Below 0.7: Do NOT report it
+5. Reproduction steps MUST be usable by a tester. When the source exposes an HTTP route, include the exact route, method, field name, and a safe curl command using localhost. Do not use fake endpoints.
+6. If curl is not appropriate, state "Direct verification" and give exact source-grounded steps, including the file/function and what output/log/result proves the issue.
 
 For each genuine vulnerability found, respond with:
 {
@@ -131,7 +133,7 @@ For each genuine vulnerability found, respond with:
       "attackScenario": "Concrete real-world attack scenario",
       "attackChain": "How an advanced attacker could chain this weakness",
       "reproductionSteps": ["Safe non-destructive step 1", "Safe non-destructive step 2"],
-      "proofOfConcept": "Safe curl, payload, CLI command, or test input",
+      "proofOfConcept": "Exact safe curl command, payload, CLI command, or direct test input grounded in the source",
       "expectedBehavior": "Expected vulnerable behavior when reproduced safely",
       "businessImpact": "Business/security impact",
       "secureCode": "Secure replacement code for this exact pattern",

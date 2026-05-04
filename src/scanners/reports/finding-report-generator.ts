@@ -1,4 +1,4 @@
-import type { RawFinding, SeverityLevel } from "@/scanners/types";
+import type { RawFinding } from "@/scanners/types";
 
 export type FindingReport = {
   markdown: string;
@@ -12,6 +12,14 @@ export type FindingReport = {
   betterFix?: string;
   unsafeFixWarning?: string;
   validationTest: string;
+  vulnerabilityDescription: string[];
+  weaknessClassification: Array<[string, string]>;
+  expectedBehavior: string;
+  actualBehavior: string;
+  proofOfConceptPayload: string;
+  scopeLimitations: string[];
+  remediationGuidance: string[];
+  references: string[];
 };
 
 type FindingCategory =
@@ -70,6 +78,7 @@ const CWE_NAMES: Record<string, string> = {
   "CWE-327": "Use of a Broken or Risky Cryptographic Algorithm",
   "CWE-338": "Use of Cryptographically Weak Pseudo-Random Number Generator",
   "CWE-352": "Cross-Site Request Forgery",
+  "CWE-532": "Insertion of Sensitive Information into Log File",
   "CWE-400": "Uncontrolled Resource Consumption",
   "CWE-434": "Unrestricted Upload of File with Dangerous Type",
   "CWE-502": "Deserialization of Untrusted Data",
@@ -132,69 +141,127 @@ export function generateFindingReport(input: {
   const betterFix = getBetterFix(category, language, context.framework, finding);
   const unsafeFixWarning = getUnsafeFixWarning(category, language, context.framework, finding);
   const validationTest = getValidationTest(category, language, context.framework, finding);
+  const reportId = reportIdFor(input.scan?.id);
+  const target = targetFor(finding, context, input.scan, input.project);
+  const affectedField = affectedFieldOf(finding);
+  const affectedComponent = affectedComponentOf(finding, context);
+  const vulnerabilityDescription = vulnerabilityDescriptionFor(finding, summary);
+  const weaknessClassification = weaknessClassificationFor(category, finding, context);
+  const expectedBehavior = expectedBehaviorFor(category, finding);
+  const actualBehavior = actualBehaviorFor(category, finding, summary);
+  const proofOfConceptPayload = proofPayload(reproductionSteps, exploitExample);
+  const scopeLimitations = scopeLimitationsFor(finding);
+  const remediationGuidance = remediationGuidanceFor(betterFix, unsafeFixWarning, validationTest);
+  const references = referencesFor(finding, context);
 
   const lines: string[] = [];
-  lines.push(`### ${severityLabel}: ${title}`);
+  lines.push("# Vulnerability Report");
+  lines.push("");
+  lines.push(title);
+  lines.push("");
+  lines.push(`${target} | ${reportId}`);
+  lines.push("");
+  lines.push("## Report Summary");
+  lines.push("");
+  lines.push(markdownTable([
+    ["Report ID", reportId],
+    ["Title", title],
+    ["Target", target],
+    ["Affected Field", affectedField],
+    ["Affected Component", affectedComponent],
+    ["Severity", severityLabel],
+    ["Status", "Open"],
+    ["Bounty Awarded", "Not applicable - internal SAST finding"],
+    ["Reported", "Generated during scan"],
+    ["Resolved", "Not resolved"],
+    ["Reported By", "Votal AI SAST"],
+    ["CVE ID", finding.cveId || "None assigned"],
+  ]));
+  lines.push("");
+  lines.push("## Vulnerability Description");
+  lines.push("");
+  for (const paragraph of vulnerabilityDescription) {
+    lines.push(paragraph);
+    lines.push("");
+  }
+  lines.push("## Weakness Classification");
+  lines.push("");
+  lines.push(markdownTable(weaknessClassification));
   lines.push("");
   const location = formatFileAndLine(finding);
-  if (location) lines.push(location);
-  if (context.route) lines.push(`**Route:** \`${context.route}\``);
-  if (finding.cweId) {
-    lines.push(
-      `**CWE:** ${finding.cweId}${context.cweName ? ` — ${context.cweName}` : ""}`,
-    );
-  }
-  if (context.owasp) lines.push(`**OWASP:** ${context.owasp}`);
-  lines.push("");
   const snippet = formatSnippet(finding, language);
   if (snippet) {
+    lines.push("## Affected Code");
+    lines.push("");
+    if (location) lines.push(location);
+    if (context.route) lines.push(`**Route:** \`${context.route}\``);
+    lines.push("");
     lines.push(snippet);
     lines.push("");
   }
-  lines.push("### What I found");
+  lines.push("## Steps to Reproduce");
   lines.push("");
-  lines.push(summary);
-  lines.push("");
-  lines.push("### Steps to reproduce");
+  lines.push("Prerequisites: Run the application in an authorized local or staging environment with test data and logs visible.");
   lines.push("");
   for (const [index, step] of reproductionSteps.entries()) {
-    lines.push(`${index + 1}. ${step}`);
+    lines.push(`${index + 1}. **Step ${index + 1} —** ${step}`);
   }
   lines.push("");
-  lines.push("### Exploit example");
+  lines.push("## Expected Behaviour");
+  lines.push("");
+  lines.push(expectedBehavior);
+  lines.push("");
+  lines.push("## Actual Behaviour");
+  lines.push("");
+  lines.push(actualBehavior);
+  lines.push("");
+  lines.push("## Proof of Concept Payload");
+  lines.push("");
+  lines.push(`Payload used (${proofOfConceptPayload.length} bytes):`);
+  lines.push("");
+  lines.push("```");
+  lines.push(proofOfConceptPayload);
+  lines.push("```");
   lines.push("");
   lines.push(exploitExample);
   lines.push("");
-  lines.push("### Impact");
+  lines.push("## Impact");
+  lines.push("");
+  lines.push(`### ${impactHeadingFor(category, finding)}`);
   lines.push("");
   lines.push(impact);
   lines.push("");
-  lines.push("### Recommended fix");
+  lines.push("### Scope Limitations");
+  lines.push("");
+  for (const limitation of scopeLimitations) {
+    lines.push(`- ${limitation}`);
+  }
+  lines.push("");
+  lines.push("## Remediation");
+  lines.push("");
+  lines.push("### Fix Applied by Application Team");
   lines.push("");
   lines.push(recommendedFix);
   lines.push("");
-  if (betterFix) {
-    lines.push("### Even better fix");
-    lines.push("");
-    lines.push(betterFix);
-    lines.push("");
+  lines.push("### General Remediation Guidance");
+  lines.push("");
+  for (const item of remediationGuidance) {
+    lines.push(`- ${item}`);
   }
-  if (unsafeFixWarning) {
-    lines.push("### Avoid this unsafe fix");
-    lines.push("");
-    lines.push(unsafeFixWarning);
-    lines.push("");
+  lines.push("");
+  lines.push("## Disclosure Timeline");
+  lines.push("");
+  lines.push(markdownTable([
+    ["Date", "Event"],
+    ["Scan generated", "Finding identified by Votal AI SAST during source-code analysis."],
+    ["Pending", "Application team validates exploitability, applies remediation, and reruns the scan."],
+  ]));
+  lines.push("");
+  lines.push("## References");
+  lines.push("");
+  for (const reference of references) {
+    lines.push(`- ${reference}`);
   }
-  lines.push("### Validation test");
-  lines.push("");
-  lines.push(validationTest);
-  lines.push("");
-  lines.push("## Summary");
-  lines.push("");
-  lines.push(summaryTable(input.allFindings || [input.finding]));
-  lines.push("");
-  lines.push(`**Overall risk:** ${overallRisk(input.allFindings || [input.finding])}.`);
-  lines.push(finalRiskSentence(input.allFindings || [input.finding]));
 
   return {
     markdown: lines.join("\n"),
@@ -208,6 +275,14 @@ export function generateFindingReport(input: {
     betterFix,
     unsafeFixWarning,
     validationTest,
+    vulnerabilityDescription,
+    weaknessClassification,
+    expectedBehavior,
+    actualBehavior,
+    proofOfConceptPayload,
+    scopeLimitations,
+    remediationGuidance,
+    references,
   };
 }
 
@@ -361,8 +436,13 @@ export function getExploitPayload(
 ): string {
   const route = extractRoute(finding.snippet, metadataOf(finding));
   switch (category) {
-    case "COMMAND_INJECTION":
-      return "Use a harmless shell metacharacter probe such as `test; id` or `test && id` in the affected input and verify it is not interpreted by a shell.";
+    case "COMMAND_INJECTION": {
+      const assignment = sourceDerivedFormAssignment(finding);
+      if (assignment) {
+        return `Use the source-derived input \`${assignment}\` only in an authorized test environment and verify whether it reaches command execution.`;
+      }
+      return "No standalone proof-of-concept payload was generated because the scanner did not identify a concrete attacker-controlled field. Use the source-grounded Steps to Reproduce and confirm the exact input before testing.";
+    }
     case "XSS": {
       const payload = "`<img src=x onerror=alert(1)>`";
       return route ? `For route \`${route}\`, submit ${payload} in the reflected or stored field and verify the browser renders it as text, not executable HTML.` : `Submit ${payload} in the affected field and verify the browser renders it as text, not executable HTML.`;
@@ -377,6 +457,15 @@ export function getExploitPayload(
       return "Use traversal strings such as `../` and encoded variants and verify the resolved path remains inside the allowed base directory.";
     case "OPEN_REDIRECT":
       return "Provide an external absolute URL and a protocol-relative URL as the redirect target and verify both are rejected.";
+    case "INFO_DISCLOSURE":
+      if (isSensitiveLoggingFinding(finding)) {
+        return "Trigger the affected payment/account action with harmless test data, then verify the application log does not print full customer objects, tokens, email addresses, card metadata, or other PII.";
+      }
+      return "Exercise the affected endpoint or function and verify sensitive values are not exposed in responses, logs, exceptions, or client-visible output.";
+    case "XXE":
+      return "Use a harmless external-entity proof in a local test environment and verify the XML parser blocks DTD and external entity resolution before any file read or callback attempt.";
+    case "PROTOTYPE_POLLUTION":
+      return "Submit a safe object-key probe such as `{ \"__proto__\": { \"polluted\": \"yes\" } }` and verify it is rejected before any merge or assignment.";
     case "HARDCODED_SECRET":
       return "Search the repository history and current tree for the masked credential pattern, then verify the credential has been rotated without using it against production services.";
     case "CSRF":
@@ -397,7 +486,6 @@ export function getReproductionSteps(
   finding: RawFinding,
 ): string[] {
   const aiSteps = getAiReproductionSteps(finding);
-  if (aiSteps.length > 0) return aiSteps;
 
   const metadata = metadataOf(finding);
   const route = extractRoute(finding.snippet, metadata);
@@ -416,6 +504,19 @@ export function getReproductionSteps(
       ? `Confirm execution reaches the sink line \`${sink.trim()}\`.`
       : "Confirm the vulnerable code path is reachable with normal application inputs.";
 
+  if (aiSteps.length > 0) {
+    if (category === "COMMAND_INJECTION") {
+      return appendConcreteCurlIfAvailable(aiSteps, finding, route, method);
+    }
+    if (category === "INFO_DISCLOSURE" && isSensitiveLoggingFinding(finding)) {
+      return [
+        ...aiSteps,
+        ...sensitiveLoggingVerificationSteps(finding, location, route, method),
+      ];
+    }
+    return aiSteps;
+  }
+
   switch (category) {
     case "INSECURE_CONFIG":
       if (/debug\s*=\s*true|flask debug|werkzeug/i.test(`${finding.title}\n${finding.description}\n${finding.snippet || ""}`)) {
@@ -433,15 +534,17 @@ export function getReproductionSteps(
         "Run the application with production-like configuration and verify the unsafe option is active.",
         "The finding is reproduced if the risky setting remains enabled in a production or externally reachable runtime.",
       ];
-    case "COMMAND_INJECTION":
+    case "COMMAND_INJECTION": {
+      const assignment = sourceDerivedFormAssignment(finding);
       return [
         inputStep,
         evidenceStep,
-        route && method
-          ? `Verify over HTTP with: \`${curlCommand(method, route, "cmd=test%3B%20id")}\`. Use only a sandbox or disposable environment.`
-          : "Verify directly by calling the handler/function with the affected input set to a harmless metacharacter probe such as `test; id` or `test && id`.",
+        route && method && assignment
+          ? `Verify over HTTP with the source-derived request: \`${commandInjectionCurl(finding, method, route)}\`. Use only a sandbox or disposable environment.`
+          : "Direct verification: call the handler/function with the exact attacker-controlled field shown in the source. Do not use a generic payload unless the source or AI evidence identifies the real field and execution path.",
         "The finding is reproduced if the application passes the probe into shell command construction instead of rejecting it or treating it as a literal argument.",
       ];
+    }
     case "XSS":
       return [
         inputStep,
@@ -493,6 +596,34 @@ export function getReproductionSteps(
           ? `Verify over HTTP with: \`${curlCommand(method, route, "next=https%3A%2F%2Fattacker.example")}\`. Change \`next\` only if the source line shows a different redirect parameter.`
           : "Verify directly by calling the redirect path with `https://attacker.example` and `//attacker.example` as the target value.",
         "The finding is reproduced if the response redirects outside the trusted origin.",
+      ];
+    case "INFO_DISCLOSURE":
+      if (isSensitiveLoggingFinding(finding)) {
+        return sensitiveLoggingVerificationSteps(finding, location, route, method);
+      }
+      return [
+        inputStep,
+        evidenceStep,
+        route && method
+          ? `Send a safe request to the real route and inspect the response/logs: \`${curlCommand(method, route)}\`.`
+          : `Run the handler or function shown in \`${location}\` with harmless test data.`,
+        "The finding is reproduced if sensitive data is written to logs, errors, responses, or client-visible output.",
+      ];
+    case "XXE":
+      return [
+        inputStep,
+        evidenceStep,
+        "Confirm the XML input is attacker-controlled, such as a request body, uploaded XML file, webhook payload, or imported document.",
+        "In a local test environment, send XML with a harmless external entity pointing to a controlled callback URL or a temporary local file you own.",
+        "The finding is reproduced if the parser resolves the external entity or attempts the callback before rejecting DTD/external entity processing.",
+      ];
+    case "PROTOTYPE_POLLUTION":
+      return [
+        inputStep,
+        evidenceStep,
+        "Submit a safe object containing `{\"__proto__\":{\"polluted\":\"yes\"}}` or `{\"constructor\":{\"prototype\":{\"polluted\":\"yes\"}}}` to the affected endpoint/function.",
+        "After processing, create a fresh empty object and check whether it unexpectedly contains the `polluted` property.",
+        "The finding is reproduced if user-controlled keys modify `Object.prototype` or another shared prototype.",
       ];
     case "HARDCODED_SECRET":
       return [
@@ -588,6 +719,9 @@ export function getRecommendedFix(
     case "DANGEROUS_FILE_UPLOAD":
       return "Enforce file size and type allowlists, store uploads outside the web root, randomize names, and scan or transform uploaded content.";
     case "INFO_DISCLOSURE":
+      if (isSensitiveLoggingFinding(finding)) {
+        return "Do not log raw payment/customer objects. Log only a stable non-sensitive identifier, such as the internal order id or the last 4 characters of a provider id, and redact email, card, token, and customer fields before logging.";
+      }
       return "Remove sensitive data from responses/logs and expose only the minimum required fields.";
     case "INSECURE_CONFIG":
       if (/debug\s*=\s*true|flask debug|werkzeug/i.test(`${finding.title}\n${finding.description}\n${finding.snippet || ""}`)) {
@@ -683,6 +817,15 @@ function getImpact(category: FindingCategory, finding: RawFinding, context: Repo
       return "Successful exploitation can read, modify, or delete database records and may bypass application-level authorization around the affected query.";
     case "SSRF":
       return "Successful exploitation can make the server connect to internal services, metadata endpoints, or protected network locations.";
+    case "INFO_DISCLOSURE":
+      if (isSensitiveLoggingFinding(finding)) {
+        return "Anyone with access to application logs can view or retain sensitive customer/payment data longer than intended, increasing breach impact and compliance risk.";
+      }
+      return "Sensitive information can be exposed to users, logs, caches, or monitoring systems where it may be retained or accessed by unauthorized parties.";
+    case "XXE":
+      return "Successful exploitation can read local files, force server-side callbacks, or disclose internal network information through XML entity resolution.";
+    case "PROTOTYPE_POLLUTION":
+      return "Successful exploitation can alter shared object behavior, bypass authorization checks, or corrupt application state depending on how polluted properties are later used.";
     case "HARDCODED_SECRET":
       return "Anyone with repository or artifact access may reuse the credential until it is revoked, depending on the secret's permissions.";
     case "CSRF":
@@ -721,7 +864,7 @@ function detectCategory(finding: RawFinding): FindingCategory {
   if (/authz|authorization|access control|idor|cwe-862|cwe-863|cwe-639/.test(text)) return "AUTHZ_BYPASS";
   if (/authn|authentication|session|jwt/.test(text)) return "AUTHN_WEAKNESS";
   if (/upload|cwe-434/.test(text)) return "DANGEROUS_FILE_UPLOAD";
-  if (/info disclosure|information disclosure|cwe-200/.test(text)) return "INFO_DISCLOSURE";
+  if (/info disclosure|information disclosure|cwe-200|cwe-532|sensitive.*log|log.*sensitive|pii.*log|customer.*log|stripe.*log/.test(text)) return "INFO_DISCLOSURE";
   if (/config|debug|cors|misconfiguration/.test(text)) return "INSECURE_CONFIG";
   if (/redos|regular expression|catastrophic/.test(text)) return "REDOS";
   if (/secret|credential|password|token|api key|cwe-798/.test(text)) return "HARDCODED_SECRET";
@@ -737,33 +880,193 @@ function isCategory(value: string): value is FindingCategory {
   ].includes(value);
 }
 
-function summaryTable(findings: RawFinding[]): string {
-  const counts = new Map<SeverityLevel, number>();
-  for (const severity of ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] as SeverityLevel[]) counts.set(severity, 0);
-  for (const finding of findings) counts.set(finding.severity, (counts.get(finding.severity) || 0) + 1);
+function reportIdFor(scanId?: string): string {
+  return scanId ? `${scanId}-001` : "SAST-001";
+}
+
+function targetFor(
+  finding: RawFinding,
+  context: ReportContext,
+  scan?: { sourceRef?: string | null },
+  project?: { name?: string; repoUrl?: string | null },
+): string {
+  if (context.route) {
+    return context.route.startsWith("http")
+      ? context.route
+      : `http://localhost${context.route.startsWith("/") ? context.route : `/${context.route}`}`;
+  }
+  return project?.repoUrl || scan?.sourceRef || project?.name || finding.filePath || "Source code scan";
+}
+
+function affectedFieldOf(finding: RawFinding): string {
+  const metadata = metadataOf(finding);
+  const fromMetadata =
+    stringField(metadata, "affectedField") ||
+    stringField(metadata, "parameter") ||
+    stringField(metadata, "field");
+  if (fromMetadata) return fromMetadata;
+  const snippet = finding.snippet || "";
+  const patterns = [
+    /req\.(?:body|query|params)\.([A-Za-z0-9_]+)/,
+    /request\.(?:GET|POST)\[['"]([^'"]+)['"]\]/,
+    /request\.(?:args|form)\.get\(['"]([^'"]+)['"]/,
+    /\$_(?:GET|POST|REQUEST)\[['"]([^'"]+)['"]\]/,
+    /params\[['"]([^'"]+)['"]\]/,
+  ];
+  for (const pattern of patterns) {
+    const match = snippet.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return "Derived from the cited source/sink evidence";
+}
+
+function affectedComponentOf(finding: RawFinding, context: ReportContext): string {
+  const file = finding.filePath
+    ? `${finding.filePath}${finding.startLine ? `:${finding.startLine}` : ""}`
+    : "Source code component";
+  return context.route ? `${file} (${context.route})` : file;
+}
+
+function vulnerabilityDescriptionFor(finding: RawFinding, summary: string): string[] {
+  const evidence = finding.filePath
+    ? `The scanner identified the vulnerable code in ${finding.filePath}${finding.startLine ? ` at line ${finding.startLine}` : ""}.`
+    : "The scanner identified the vulnerable code path in the uploaded source.";
   return [
-    "| Severity | Count |",
-    "| -------- | ----: |",
-    `| Critical | ${String(counts.get("CRITICAL") || 0).padStart(5)} |`,
-    `| High     | ${String(counts.get("HIGH") || 0).padStart(5)} |`,
-    `| Medium   | ${String(counts.get("MEDIUM") || 0).padStart(5)} |`,
-    `| Low      | ${String(counts.get("LOW") || 0).padStart(5)} |`,
-    `| Info     | ${String(counts.get("INFO") || 0).padStart(5)} |`,
+    summary,
+    `${evidence} The issue is reported from the source evidence available in the scan, including the affected snippet, scanner metadata, and weakness classification.`,
+    "A tester can reproduce the behavior by reaching the affected input path with controlled test data and observing whether the unsafe sink executes before validation, encoding, authorization, or redaction is applied.",
+  ];
+}
+
+function weaknessClassificationFor(
+  category: FindingCategory,
+  finding: RawFinding,
+  context: ReportContext,
+): Array<[string, string]> {
+  const classification = classifyWeakness(category, finding);
+  return [
+    ["CWE", finding.cweId ? `${finding.cweId}${context.cweName ? `: ${context.cweName}` : ""}` : "Not mapped"],
+    ["OWASP", context.owasp || "Not mapped"],
+    ["Attack Vector", classification.attackVector],
+    ["Attack Complexity", classification.attackComplexity],
+    ["User Interaction", classification.userInteraction],
+    ["Scope", classification.scope],
+  ];
+}
+
+function classifyWeakness(
+  category: FindingCategory,
+  finding: RawFinding,
+): {
+  attackVector: string;
+  attackComplexity: string;
+  userInteraction: string;
+  scope: string;
+} {
+  const text = `${finding.title} ${finding.description} ${finding.cweId || ""}`.toLowerCase();
+  return {
+    attackVector: category === "HARDCODED_SECRET" || /log|secret|credential/.test(text)
+      ? "Local/source or log access"
+      : "Network",
+    attackComplexity: /race|toctou|business logic/.test(text) ? "High" : "Low",
+    userInteraction: category === "XSS" || category === "CSRF" || /click|phishing|stored/.test(text)
+      ? "Required"
+      : "None",
+    scope: ["XSS", "SSRF", "OPEN_REDIRECT", "PROTOTYPE_POLLUTION"].includes(category)
+      ? "Changed"
+      : "Unchanged",
+  };
+}
+
+function expectedBehaviorFor(category: FindingCategory, finding: RawFinding): string {
+  if (category === "INFO_DISCLOSURE" && isSensitiveLoggingFinding(finding)) {
+    return "Sensitive objects and PII should be redacted before logging, with only non-sensitive identifiers retained.";
+  }
+  if (category === "XSS") return "User-controlled input should be encoded or sanitized so it is rendered as inert text.";
+  if (category === "SQL_INJECTION") return "Database queries should use bound parameters or safe ORM APIs with static query structure.";
+  if (category === "CSRF") return "State-changing requests should be rejected unless a valid CSRF protection mechanism is present.";
+  if (category === "COMMAND_INJECTION") return "User input should never be passed to shell parsing; commands should use fixed executables and argument arrays.";
+  return "The application should validate untrusted input before it reaches the sensitive operation.";
+}
+
+function actualBehaviorFor(category: FindingCategory, finding: RawFinding, summary: string): string {
+  if (category === "INFO_DISCLOSURE" && isSensitiveLoggingFinding(finding)) {
+    return "The cited code path can log sensitive objects or PII during normal application flow.";
+  }
+  if (category === "XSS") return "The cited code path can place user-controlled input into an executable HTML or browser context.";
+  if (category === "SQL_INJECTION") return "The cited code path can construct database behavior from user-controlled input.";
+  if (category === "COMMAND_INJECTION") return "The cited code path can pass user-controlled input into command execution.";
+  return summary;
+}
+
+function proofPayload(steps: string[], exploitExample: string): string {
+  for (const step of steps) {
+    const code = step.match(/`([^`]*(?:curl|<|>|http:\/\/localhost|__proto__|\.\.\/|%27|%3C)[^`]*)`/i)?.[1];
+    if (code) return code;
+  }
+  const code = exploitExample.match(/`([^`]+)`/)?.[1];
+  return code || "No standalone payload was generated. Use the source-grounded Steps to Reproduce for verification.";
+}
+
+function impactHeadingFor(category: FindingCategory, finding: RawFinding): string {
+  const text = `${finding.title} ${finding.description} ${finding.cweId || ""}`.toLowerCase();
+  if (category === "XSS" || /html injection|cwe-80/.test(text)) return "Client-Side Content Injection";
+  if (category === "INFO_DISCLOSURE" && isSensitiveLoggingFinding(finding)) return "Sensitive Data Exposure Through Logs";
+  if (category === "COMMAND_INJECTION") return "Server-Side Command Execution Risk";
+  if (category === "SQL_INJECTION" || category === "NOSQL_INJECTION") return "Data Access and Query Manipulation";
+  if (category === "CSRF") return "Unauthorized State-Changing Action";
+  if (category === "SSRF") return "Server-Side Network Access";
+  if (category === "HARDCODED_SECRET") return "Credential Exposure";
+  return "Security Boundary Weakness";
+}
+
+function scopeLimitationsFor(finding: RawFinding): string[] {
+  return [
+    "The report is based on static analysis of the uploaded source and scanner-provided evidence.",
+    "Exploitability should be confirmed only in an authorized local, staging, or bug-bounty test environment.",
+    finding.filePath
+      ? `The confirmed scope is limited to ${finding.filePath}${finding.startLine ? `:${finding.startLine}` : ""} unless related call paths are identified.`
+      : "The confirmed scope is limited to the cited finding evidence.",
+  ];
+}
+
+function remediationGuidanceFor(
+  betterFix: string | undefined,
+  unsafeFixWarning: string | undefined,
+  validationTest: string,
+): string[] {
+  return [
+    betterFix || "Add regression coverage that proves the vulnerable path is blocked after the fix.",
+    unsafeFixWarning || "Avoid partial fixes that only block one payload shape while leaving the underlying unsafe pattern in place.",
+    validationTest,
+  ];
+}
+
+function referencesFor(finding: RawFinding, context: ReportContext): string[] {
+  const refs = new Set<string>();
+  if (finding.cweId) {
+    refs.add(`${finding.cweId}: https://cwe.mitre.org/data/definitions/${finding.cweId.replace(/CWE-/i, "")}.html`);
+  }
+  if (context.owasp) refs.add(`OWASP ${context.owasp}`);
+  const metadataRefs = metadataOf(finding).references;
+  if (Array.isArray(metadataRefs)) {
+    for (const ref of metadataRefs) {
+      if (typeof ref === "string" && ref.trim()) refs.add(ref.trim());
+    }
+  }
+  return [...refs];
+}
+
+function markdownTable(rows: Array<[string, string]>): string {
+  return [
+    "| Field | Value |",
+    "| --- | --- |",
+    ...rows.map(([field, value]) => `| ${escapeMarkdownTableCell(field)} | ${escapeMarkdownTableCell(value)} |`),
   ].join("\n");
 }
 
-function overallRisk(findings: RawFinding[]): string {
-  for (const severity of ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] as SeverityLevel[]) {
-    if (findings.some((finding) => finding.severity === severity)) return SEVERITY_LABELS[severity];
-  }
-  return "Informational";
-}
-
-function finalRiskSentence(findings: RawFinding[]): string {
-  const risk = overallRisk(findings);
-  if (risk === "Critical" || risk === "High") return "Fix the highest severity exploitable paths first, then rerun the scan.";
-  if (risk === "Medium") return "Address the confirmed issues before release and add regression coverage.";
-  return "Review informational findings and keep scanning future changes.";
+function escapeMarkdownTableCell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
 function sourceRegexFor(category: FindingCategory): RegExp {
@@ -803,11 +1106,160 @@ function curlCommand(method: string, route: string, encodedParams?: string): str
   return `curl -i -X ${normalizedMethod} "http://localhost${url}" -H "Content-Type: application/x-www-form-urlencoded" --data "${encodedParams}"`;
 }
 
+function commandInjectionCurl(
+  finding: RawFinding,
+  method: string,
+  routeOrUrl: string,
+): string {
+  const assignment = sourceDerivedFormAssignment(finding);
+  if (!assignment) {
+    return "No source-derived curl command available";
+  }
+  return curlFormAssignment(method, routeOrUrl, assignment);
+}
+
+function curlFormAssignment(
+  method: string,
+  routeOrUrl: string,
+  assignment: string,
+): string {
+  const normalizedMethod = method.toUpperCase();
+  const url = routeOrUrl.startsWith("http")
+    ? routeOrUrl
+    : `http://localhost${routeOrUrl.startsWith("/") ? routeOrUrl : `/${routeOrUrl}`}`;
+  if (normalizedMethod === "GET") {
+    const separator = url.includes("?") ? "&" : "?";
+    return `curl -i "${url}${separator}${encodeFormAssignment(assignment)}"`;
+  }
+  return `curl -i -X ${normalizedMethod} "${url}" -H "Content-Type: application/x-www-form-urlencoded" --data-urlencode ${quoteShellArg(assignment)}`;
+}
+
+function appendConcreteCurlIfAvailable(
+  steps: string[],
+  finding: RawFinding,
+  route?: string,
+  method?: string,
+): string[] {
+  if (steps.some((step) => /\bcurl\b/i.test(step))) return steps;
+  const fromSteps = curlFromStepEvidence(steps);
+  if (fromSteps) {
+    return [
+      ...steps,
+      `Run this exact request to verify the finding: \`${fromSteps}\`.`,
+    ];
+  }
+  if (route && method) {
+    const assignment = sourceDerivedFormAssignment(finding);
+    if (!assignment) return steps;
+    return [
+      ...steps,
+      `Run this source-derived request to verify the finding: \`${commandInjectionCurl(finding, method, route)}\`.`,
+    ];
+  }
+  return steps;
+}
+
+function curlFromStepEvidence(steps: string[]): string | undefined {
+  const text = steps.join("\n");
+  const method =
+    text.match(/\b(GET|POST|PUT|PATCH|DELETE)\s+request\b/i)?.[1]?.toUpperCase() ||
+    text.match(/\b-X\s+(GET|POST|PUT|PATCH|DELETE)\b/i)?.[1]?.toUpperCase();
+  const url =
+    text.match(/`(https?:\/\/[^`]+)`/)?.[1] ||
+    text.match(/\b(https?:\/\/[^\s`"')]+)/)?.[1];
+  const assignment =
+    text.match(/form data\s+`([^`]+)`/i)?.[1] ||
+    text.match(/(?:data|payload)\s+`([^`]+)`/i)?.[1];
+  if (!method || !url || !assignment || !assignment.includes("=")) return undefined;
+  return curlFormAssignment(method, url, assignment);
+}
+
+function sourceDerivedFormAssignment(finding: RawFinding): string | undefined {
+  const text = `${finding.title}\n${finding.description}\n${finding.snippet || ""}`;
+  const explicit =
+    text.match(/\b(code)=/i)?.[1] ||
+    text.match(/request\.form\.get\(["']([^"']+)["']/)?.[1] ||
+    text.match(/request\.form\[['"]([^'"]+)['"]\]/)?.[1] ||
+    text.match(/req\.body\.([A-Za-z0-9_]+)/)?.[1];
+  const field = explicit || affectedFieldOf(finding);
+  if (!field || /derived from/i.test(field)) return undefined;
+  if (/python|subprocess|compile|exec|code/i.test(text) && /\bcode\b/i.test(field)) {
+    return `${field}=import os; print(os.system('id'))`;
+  }
+  return undefined;
+}
+
+function encodeFormAssignment(assignment: string): string {
+  const [key, ...rest] = assignment.split("=");
+  return `${encodeURIComponent(key)}=${encodeURIComponent(rest.join("="))}`;
+}
+
+function quoteShellArg(value: string): string {
+  return `"${value.replace(/(["\\$`])/g, "\\$1")}"`;
+}
+
+function curlJsonCommand(
+  method: string,
+  route: string,
+  body: Record<string, unknown>,
+): string {
+  const normalizedMethod = method.toUpperCase();
+  const url = route.startsWith("/") ? route : `/${route}`;
+  const json = JSON.stringify(body).replace(/'/g, "'\\''");
+  return `curl -i -X ${normalizedMethod} "http://localhost${url}" -H "Content-Type: application/json" --data '${json}'`;
+}
+
+function sensitiveLoggingVerificationSteps(
+  finding: RawFinding,
+  location: string,
+  route?: string,
+  method?: string,
+): string[] {
+  const paymentBody = {
+    save_card: true,
+    payment_method: "pm_card_visa",
+    email: "security-test@example.com",
+  };
+  const text = `${finding.title}\n${finding.description}\n${finding.snippet || ""}`;
+  const isStripe = /stripe|customer|payment|card|checkout/i.test(text);
+
+  if (route && method) {
+    return [
+      `Start the application locally with debug/application logs visible and use only Stripe/test payment data.`,
+      isStripe
+        ? `Trigger the real affected route with a safe test request: \`${curlJsonCommand(method, route, paymentBody)}\`. Adjust field names only if the source code shows different parameter names.`
+        : `Trigger the real affected route with safe test data: \`${curlCommand(method, route)}\`.`,
+      "Watch the application logs produced during that request.",
+      "The finding is reproduced if logs contain full customer/payment objects, email, token, card metadata, or other PII instead of a redacted identifier.",
+    ];
+  }
+
+  return [
+    `Open \`${location}\` and identify the view/function that performs the sensitive action and writes to logs.`,
+    "Find the real URL mapping for that view/function in the framework routing file, such as Django `urls.py`, Express route registration, or Rails routes.",
+    isStripe
+      ? `After the real route is known, send a safe local request shaped like: \`curl -i -X POST "http://localhost/<real-route>" -H "Content-Type: application/json" --data '${JSON.stringify(paymentBody)}'\`. Replace \`<real-route>\` and field names with the values from the source code.`
+      : "Call the handler through the real route with harmless test data, or invoke the function directly in a local test.",
+    "Watch application logs during the request/function call.",
+    "The finding is reproduced if logs print full sensitive objects or PII. If only redacted IDs are logged, mark it as not exploitable.",
+  ];
+}
+
+function isSensitiveLoggingFinding(finding: RawFinding): boolean {
+  return /cwe-532|log|logger|console\.|pii|stripe|customer|payment|card|token|email/i.test(
+    `${finding.title}\n${finding.description}\n${finding.cweId || ""}\n${finding.snippet || ""}`,
+  );
+}
+
 function getAiReproductionSteps(finding: RawFinding): string[] {
   const metadata = metadataOf(finding);
   const report = objectField(metadata, "report");
   const hints = objectField(metadata, "reportHints");
-  const sources = [report.stepsToReproduce, hints.stepsToReproduce];
+  const sources = [
+    metadata.reproductionHint,
+    report.stepsToReproduce,
+    hints.stepsToReproduce,
+  ];
   for (const source of sources) {
     if (!Array.isArray(source)) continue;
     const steps = source

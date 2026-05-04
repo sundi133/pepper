@@ -9,10 +9,19 @@ import { zeroDayScanner } from "./zero-day";
 
 export function getScanners(
   scanType: string,
-  orgSettings: { enableLlmSast: boolean; enableLlmSecrets: boolean },
+  orgSettings: {
+    enableLlmSast: boolean;
+    enableLlmSecrets: boolean;
+    llmApiKey?: string;
+    llmProvider?: string;
+  },
 ): ScannerPlugin[] {
   const scanners: ScannerPlugin[] = [];
   const llmEnabled = orgSettings.enableLlmSast || orgSettings.enableLlmSecrets;
+  const useAiSast =
+    orgSettings.enableLlmSast &&
+    (Boolean(orgSettings.llmApiKey) ||
+      orgSettings.llmProvider?.toLowerCase() === "ollama");
 
   const includeSast = ["FULL", "SAST_ONLY"].includes(scanType);
   const includeSca = ["FULL", "SCA_ONLY"].includes(scanType);
@@ -20,8 +29,11 @@ export function getScanners(
   const includeFull = scanType === "FULL";
 
   if (includeSast) {
-    scanners.push(sastPatternScanner);
-    if (orgSettings.enableLlmSast) scanners.push(sastLlmScanner);
+    if (useAiSast) {
+      scanners.push(sastLlmScanner);
+    } else {
+      scanners.push(sastPatternScanner);
+    }
   }
 
   if (includeSca) {

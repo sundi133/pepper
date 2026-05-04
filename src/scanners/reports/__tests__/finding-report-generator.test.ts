@@ -24,18 +24,20 @@ function finding(overrides: Partial<RawFinding> = {}): RawFinding {
 }
 
 describe("finding report generator", () => {
-  it("individual finding markdown starts with a finding heading and not SAST result", () => {
+  it("individual finding markdown starts with the new vulnerability report heading", () => {
     const markdown = generateFindingReport({ finding: finding() }).markdown;
-    assert.match(markdown, /^### /);
+    assert.match(markdown, /^# Vulnerability Report/);
+    assert.match(markdown, /## Report Summary/);
+    assert.match(markdown, /## Weakness Classification/);
     assert.doesNotMatch(markdown, /SAST result/i);
   });
 
   it("command injection report is command-specific", () => {
     const markdown = generateFindingReport({ finding: finding() }).markdown;
     assert.match(markdown, /shell command|shell parsing|argument arrays/i);
-    assert.match(markdown, /### Steps to reproduce/);
-    assert.match(markdown, /1\. Review `src\/run\.ts:8`|1\. Open the real affected route/);
-    assert.match(markdown, /2\. Confirm/);
+    assert.match(markdown, /## Steps to Reproduce/);
+    assert.match(markdown, /1\. \*\*Step 1 —\*\* Review `src\/run\.ts:8`|1\. \*\*Step 1 —\*\* Open the real affected route/);
+    assert.match(markdown, /2\. \*\*Step 2 —\*\* Confirm/);
   });
 
   it("XSS report is XSS-specific", () => {
@@ -69,8 +71,34 @@ describe("finding report generator", () => {
       }),
     }).markdown;
     assert.match(markdown, /HTTP method `POST`/);
-    assert.match(markdown, /curl -i -X POST "http:\/\/localhost\/run"/);
+    assert.match(markdown, /No standalone payload was generated/);
+    assert.doesNotMatch(markdown, /cmd=test|test; id|test && id/);
     assert.doesNotMatch(markdown, /\/example/);
+  });
+
+  it("builds runnable curl from AI Flask form reproduction steps", () => {
+    const markdown = generateFindingReport({
+      finding: finding({
+        scanner: "SAST_LLM",
+        title: "Command Injection / Remote Code Execution",
+        description:
+          "The application directly executes user-provided Python code using subprocess.check_output.",
+        filePath: "minicompiler-main/app.py",
+        startLine: 132,
+        cweId: "CWE-77",
+        metadata: {
+          category: "COMMAND_INJECTION",
+          reportHints: {
+            stepsToReproduce: [
+              "Start the Flask application.",
+              "Send a POST request to `http://localhost:5000/compile` with the form data `code=import os; print(os.system('id'))`.",
+            ],
+          },
+        },
+      }),
+    }).markdown;
+    assert.match(markdown, /curl -i -X POST "http:\/\/localhost:5000\/compile"/);
+    assert.match(markdown, /--data-urlencode "code=import os; print\(os\.system\('id'\)\)"/);
   });
 
   it("SQL injection report is SQLi-specific", () => {
@@ -171,8 +199,63 @@ describe("finding report generator", () => {
         },
       }),
     }).markdown;
-    assert.match(markdown, /1\. Open the scanned route from metadata\./);
-    assert.match(markdown, /2\. Submit the exact reflected field shown in evidence\./);
+    assert.match(markdown, /1\. \*\*Step 1 —\*\* Open the scanned route from metadata\./);
+    assert.match(markdown, /2\. \*\*Step 2 —\*\* Submit the exact reflected field shown in evidence\./);
+  });
+
+  it("uses scanner reproduction hints for pattern findings", () => {
+    const markdown = generateFindingReport({
+      finding: finding({
+        scanner: "SAST_PATTERN",
+        title: "XML parsing without disabling external entities",
+        description:
+          "XML parsers that allow external entities can be exploited for XXE attacks.",
+        filePath: "src/parser.py",
+        startLine: 12,
+        snippet: "xml.parse(request.body)",
+        cweId: "CWE-611",
+        ruleId: "GEN-XXE-001",
+        metadata: {
+          category: "XXE",
+          reproductionHint: [
+            "Confirm the parser receives untrusted XML.",
+            "Send a harmless external entity from a local test environment.",
+          ],
+        },
+      }),
+    }).markdown;
+    assert.match(markdown, /1\. \*\*Step 1 —\*\* Confirm the parser receives untrusted XML\./);
+    assert.match(markdown, /2\. \*\*Step 2 —\*\* Send a harmless external entity/);
+    assert.doesNotMatch(markdown, /localhost:3000\/example/);
+  });
+
+  it("adds concrete logging verification to AI sensitive-log findings", () => {
+    const markdown = generateFindingReport({
+      finding: finding({
+        scanner: "SAST_LLM",
+        title: "Policy: No sensitive data in log output — PII in log",
+        description:
+          "The checkout flow logs the Stripe customer object after stripe.Customer.create.",
+        filePath: "core/views.py",
+        startLine: 255,
+        snippet: "customer = stripe.Customer.create(email=request.user.email)\nlogger.info(customer)",
+        cweId: "CWE-532",
+        ruleId: "POLICY-No sensitive data in log output",
+        metadata: {
+          reportHints: {
+            stepsToReproduce: [
+              "Set up the application and configure Stripe.",
+              "Proceed to checkout and payment.",
+            ],
+          },
+        },
+      }),
+    }).markdown;
+    assert.match(markdown, /Set up the application and configure Stripe\./);
+    assert.match(markdown, /Django `urls\.py`|<real-route>/);
+    assert.match(markdown, /curl -i -X POST "http:\/\/localhost\/<real-route>"/);
+    assert.match(markdown, /Watch application logs/);
+    assert.match(markdown, /full sensitive objects or PII/);
   });
 
   it("uses singular and plural line formatting", () => {
@@ -191,6 +274,12 @@ describe("finding report generator", () => {
   it("does not include noisy phrases", () => {
     const markdown = generateFindingReport({ finding: finding() }).markdown;
     for (const phrase of [
+      "What I found",
+      "Exploit example",
+      "Recommended fix",
+      "Even better fix",
+      "Avoid this unsafe fix",
+      "Validation test",
       "Advanced attack chain",
       "Chainability",
       "Privileges required",
@@ -214,6 +303,27 @@ describe("finding report generator", () => {
     assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   });
 
+  it("HTML report uses professional bug bounty sections and print styling", () => {
+    const html = buildHtmlFindingsReport({
+      scan: { id: "scan-1", scanType: "SAST", sourceRef: "https://target.example" },
+      project: { name: "Pepper", repoUrl: "https://target.example" },
+      findings: [finding()],
+    });
+    assert.match(html, /Vulnerability Report/);
+    assert.match(html, /Report Summary/);
+    assert.match(html, /Weakness Classification/);
+    assert.match(html, /Expected vs Actual Behaviour/);
+    assert.match(html, /Proof of Concept Payload/);
+    assert.match(html, /Bounty Awarded/);
+    assert.match(html, /Disclosure Timeline/);
+    assert.match(html, /References/);
+    assert.match(html, /Step 1 —/);
+    assert.doesNotMatch(html, /What I found|Exploit example|Recommended fix/);
+    assert.match(html, /@page\{size:Letter;margin:1in\}/);
+    assert.match(html, /font-family:Arial/);
+    assert.match(html, /#2C3E50/);
+  });
+
   it("Markdown full scan report uses the correct title", () => {
     const markdown = buildScanMarkdownReport({
       scan: { id: "scan-1", scanType: "SAST" },
@@ -221,6 +331,7 @@ describe("finding report generator", () => {
       findings: [finding()],
     });
     assert.match(markdown, /^# SAST Findings Report/);
+    assert.match(markdown, /# Vulnerability Report/);
     assert.doesNotMatch(markdown, /# SAST result/i);
   });
 });

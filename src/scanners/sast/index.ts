@@ -13,8 +13,14 @@ import { scanSensitivePaths } from "./sensitive-files";
 import {
   detectFramework,
   extractRoute,
+  extractHttpMethod,
   maskSecrets,
 } from "@/scanners/reports/finding-report-generator";
+
+const VENDORED_FRONTEND_RE =
+  /(?:^|[/\\])(?:static(?:_in_env)?|public|assets|vendor|vendors|third[_-]?party|lib|libs)[/\\].*\.(?:min\.)?js$/i;
+const KNOWN_LIBRARY_RE =
+  /(?:^|[/\\])(?:jquery|bootstrap|popper|mdb|moment|velocity|chart|chartist|slick|owl\.carousel|datatables|select2|lodash|underscore|react|vue|angular)(?:[.-]|\.min\.)/i;
 
 export const sastPatternScanner: ScannerPlugin = {
   name: "SAST_PATTERN",
@@ -37,6 +43,7 @@ export const sastPatternScanner: ScannerPlugin = {
       if (!language) return false;
       const parts = filePath.split(path.sep);
       if (parts.some((p) => SKIP_DIRECTORIES.has(p))) return false;
+      if (isVendoredFrontendAsset(filePath)) return false;
       return true;
     });
 
@@ -168,6 +175,15 @@ export const sastPatternScanner: ScannerPlugin = {
   },
 };
 
+function isVendoredFrontendAsset(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, "/");
+  if (/\.min\.(?:js|css)$/i.test(normalized)) return true;
+  if (VENDORED_FRONTEND_RE.test(normalized) && KNOWN_LIBRARY_RE.test(normalized)) {
+    return true;
+  }
+  return false;
+}
+
 export const sastLlmScanner: ScannerPlugin = {
   name: "SAST_LLM",
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
@@ -191,9 +207,11 @@ function buildSastMetadata(input: {
     language: input.language,
     framework: detectFramework(input.filePath, input.snippet, {}),
     route: extractRoute(input.snippet, {}),
+    method: extractHttpMethod(input.snippet, {}),
     fix: fixFor(category),
     references: referencesFor(input.cweId),
     sourceSinkEvidence: sourceSinkEvidence(input.snippet, category),
+    reproductionHint: reproductionHintFor(category, input),
   };
 }
 
@@ -237,13 +255,60 @@ function owaspFor(category: string, cweId?: string): string | undefined {
 function fixFor(category: string): string | undefined {
   const fixes: Record<string, string> = {
     COMMAND_INJECTION: "Avoid shell parsing. Use a fixed executable with argument arrays and allowlist user-controlled values.",
-    XSS: "Use framework autoescaping or contextual output encoding. Never concatenate untrusted input into HTML.",
+    XSS: "Encode untrusted data for the exact HTML/JavaScript/URL context before rendering it, or use framework autoescaping.",
     SQL_INJECTION: "Use parameterized queries, prepared statements, or safe ORM APIs instead of string-built SQL.",
     SSRF: "Allowlist outbound destinations and block private/link-local IP ranges after URL parsing and DNS resolution.",
     PATH_TRAVERSAL: "Normalize and resolve paths under a fixed base directory, or use opaque server-side file IDs.",
     HARDCODED_SECRET: "Rotate the secret and load replacements from a secret manager or protected environment variable.",
+    XXE: "Disable DTDs and external entity resolution in the XML parser, or replace it with a hardened XML parser.",
+    PROTOTYPE_POLLUTION: "Reject `__proto__`, `constructor`, and `prototype` keys before merging user-controlled objects.",
   };
   return fixes[category];
+}
+
+function reproductionHintFor(
+  category: string,
+  input: {
+    filePath: string;
+    snippet: string;
+    title: string;
+    description: string;
+  },
+): string[] | undefined {
+  const location = input.filePath;
+  if (category === "XSS") {
+    return [
+      `Open \`${location}\` and confirm the highlighted line writes attacker-controlled data into an HTML sink such as \`innerHTML\`, \`dangerouslySetInnerHTML\`, or raw template output.`,
+      "Run the application locally and reach the page or handler that uses this code.",
+      "Submit a harmless probe such as `<img src=x onerror=alert(1)>` in the field that reaches the highlighted sink.",
+      "The issue is reproduced only if the browser executes the probe. If the value is escaped as text, mark the finding as not exploitable.",
+    ];
+  }
+  if (category === "XXE") {
+    return [
+      `Open \`${location}\` and confirm the highlighted XML parser accepts XML from a request body, uploaded file, webhook, or other untrusted source.`,
+      "In a local test environment, send XML containing a harmless external entity that references a controlled local test file or callback URL.",
+      "The issue is reproduced only if the parser resolves the entity or attempts the callback before rejecting DTD/external entity processing.",
+      "If this parser only processes trusted static XML bundled with the app, mark the finding as not exploitable.",
+    ];
+  }
+  if (category === "PROTOTYPE_POLLUTION") {
+    return [
+      `Open \`${location}\` and confirm user-controlled object keys can reach the highlighted merge, assignment, or property access path.`,
+      "Send a safe test object containing `{\"__proto__\":{\"polluted\":\"yes\"}}` to the affected endpoint or function.",
+      "The issue is reproduced if a fresh object unexpectedly contains the `polluted` property after processing.",
+      "If the key is blocked or schema validation rejects it before the merge, mark the finding as fixed.",
+    ];
+  }
+  if (category === "PATH_TRAVERSAL") {
+    return [
+      `Open \`${location}\` and identify the filename/path input that reaches the highlighted file operation.`,
+      "In a disposable local copy, pass `../` traversal input such as `../../tmp/pepper-test` to the affected argument, form field, or API parameter.",
+      "The issue is reproduced if the resolved file path leaves the intended project/base directory.",
+      "Do not run destructive payloads. Use a harmless temporary file or directory you own.",
+    ];
+  }
+  return undefined;
 }
 
 function referencesFor(cweId?: string): string[] | undefined {

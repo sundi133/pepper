@@ -78,7 +78,9 @@ export async function GET(
     return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
   }
 
-  if (!artifact && artifactType === "HTML_FINDINGS_REPORT") {
+  const reportFindings = preferAiSastFindings(scan.findings.map(dbFindingToRawFinding));
+
+  if (artifactType === "HTML_FINDINGS_REPORT") {
     const html = buildHtmlFindingsReport({
       scan: {
         id: scan.id,
@@ -97,7 +99,7 @@ export async function GET(
         name: scan.project.name,
         repoUrl: scan.project.repoUrl,
       },
-      findings: scan.findings.map(dbFindingToRawFinding),
+      findings: reportFindings,
     });
 
     return new NextResponse(html, {
@@ -108,7 +110,7 @@ export async function GET(
     });
   }
 
-  if (!artifact && artifactType === "MARKDOWN_FINDINGS_REPORT") {
+  if (artifactType === "MARKDOWN_FINDINGS_REPORT") {
     const markdown = buildScanMarkdownReport({
       scan: {
         id: scan.id,
@@ -122,7 +124,7 @@ export async function GET(
         name: scan.project.name,
         repoUrl: scan.project.repoUrl,
       },
-      findings: scan.findings.map(dbFindingToRawFinding),
+      findings: reportFindings,
     });
 
     return new NextResponse(markdown, {
@@ -149,6 +151,12 @@ export async function GET(
       { status: 500 },
     );
   }
+}
+
+function preferAiSastFindings(findings: RawFinding[]): RawFinding[] {
+  const hasAiSast = findings.some((finding) => finding.scanner === "SAST_LLM");
+  if (!hasAiSast) return findings;
+  return findings.filter((finding) => finding.scanner !== "SAST_PATTERN");
 }
 
 function responseMeta(

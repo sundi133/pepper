@@ -247,44 +247,92 @@ export function FindingDetailContent({
 function FindingReportSections({ report }: { report: FindingReport }) {
   return (
     <>
-      <ReportSection title="What I found">
-        <p className="report-paragraph text-sm text-muted-foreground">{report.summary}</p>
+      <ReportSection title="Vulnerability Description">
+        <div className="space-y-2">
+          {report.vulnerabilityDescription.map((paragraph, index) => (
+            <p key={index} className="report-paragraph text-sm text-muted-foreground">
+              {paragraph}
+            </p>
+          ))}
+        </div>
       </ReportSection>
-      <ReportSection title="Steps to reproduce">
+      <ReportSection title="Weakness Classification">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] border-collapse text-sm">
+            <tbody>
+              {report.weaknessClassification.map(([label, value]) => (
+                <tr key={label} className="border-b border-border last:border-0">
+                  <td className="w-1/3 bg-muted/40 px-3 py-2 font-semibold text-foreground">
+                    {label}
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground">{value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </ReportSection>
+      <ReportSection title="Steps to Reproduce">
+        <p className="report-paragraph mb-3 text-sm text-muted-foreground">
+          <span className="font-semibold text-foreground">Prerequisites: </span>
+          Run the application in an authorized local or staging environment with test data and logs visible.
+        </p>
         <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
           {report.reproductionSteps.map((step, index) => (
             <li key={index} className="report-paragraph pl-1">
+              <span className="font-semibold text-foreground">Step {index + 1} — </span>
               {step}
             </li>
           ))}
         </ol>
       </ReportSection>
-      <ReportSection title="Exploit example">
-        <p className="report-paragraph text-sm text-muted-foreground">{report.exploitExample}</p>
+      <ReportSection title="Expected vs Actual Behaviour">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+            <p className="mb-1 text-sm font-semibold text-green-900">Expected Behaviour</p>
+            <p className="report-paragraph text-sm text-green-900/80">{report.expectedBehavior}</p>
+          </div>
+          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+            <p className="mb-1 text-sm font-semibold text-orange-900">Actual Behaviour</p>
+            <p className="report-paragraph text-sm text-orange-900/80">{report.actualBehavior}</p>
+          </div>
+        </div>
+      </ReportSection>
+      <ReportSection title="Proof of Concept Payload">
+        <CodeBlock code={report.proofOfConceptPayload} />
+        <p className="report-paragraph mt-3 text-sm text-muted-foreground">{report.exploitExample}</p>
       </ReportSection>
       <ReportSection title="Impact">
         <p className="report-paragraph text-sm text-muted-foreground">{report.impact}</p>
+        <p className="mt-3 text-sm font-semibold text-foreground">Scope Limitations</p>
+        <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+          {report.scopeLimitations.map((limitation) => (
+            <li key={limitation}>{limitation}</li>
+          ))}
+        </ul>
       </ReportSection>
-      <ReportSection title="Recommended fix">
+      <ReportSection title="Remediation">
+        <p className="mb-1 text-sm font-semibold text-foreground">Fix Applied by Application Team</p>
         <p className="report-paragraph text-sm text-muted-foreground">{report.recommendedFix}</p>
+        <p className="mt-3 text-sm font-semibold text-foreground">General Remediation Guidance</p>
+        <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+          {report.remediationGuidance.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
       </ReportSection>
-      {report.betterFix ? (
-        <ReportSection title="Even better fix">
-          <p className="report-paragraph text-sm text-muted-foreground">{report.betterFix}</p>
-        </ReportSection>
-      ) : null}
-      {report.unsafeFixWarning ? (
-        <ReportSection title="Avoid this unsafe fix">
-          <p className="report-paragraph text-sm text-muted-foreground">{report.unsafeFixWarning}</p>
-        </ReportSection>
-      ) : null}
-      <ReportSection title="Validation test">
-        <p className="report-paragraph text-sm text-muted-foreground">{report.validationTest}</p>
-      </ReportSection>
-      <ReportSection title="Summary">
-        <div className="report-paragraph whitespace-pre-wrap text-sm text-muted-foreground">
-          {extractSummary(report.markdown)}
-        </div>
+      <ReportSection title="References">
+        {report.references.length ? (
+          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+            {report.references.map((reference) => (
+              <li key={reference} className="break-all">
+                {reference}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="report-paragraph text-sm text-muted-foreground">No external references mapped.</p>
+        )}
       </ReportSection>
     </>
   );
@@ -380,10 +428,6 @@ function formatLocation(finding: FindingDetailFinding): string {
     return `${finding.filePath}:${finding.startLine}-${finding.endLine}`;
   }
   return `${finding.filePath}:${finding.startLine}`;
-}
-
-function extractSummary(markdown: string): string {
-  return markdown.match(/## Summary\n\n([\s\S]+)$/)?.[1]?.trim() || "";
 }
 
 function getCweUrl(cweId: string): string {

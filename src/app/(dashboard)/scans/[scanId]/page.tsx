@@ -17,6 +17,10 @@ import {
   ScanStatusBadge,
   GateResultBadge,
 } from "@/components/scans/scan-status-badge";
+import {
+  LiveScanTimeline,
+  isScannerProgressKey,
+} from "@/components/scans/live-scan-timeline";
 import { FindingsTable } from "@/components/scans/findings-table";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -24,9 +28,9 @@ import {
   Ban,
   FileJson,
   FileText,
-  PanelsTopLeft,
   AlertTriangle,
   BookOpen,
+  ShieldCheck,
   Trash2,
 } from "lucide-react";
 import {
@@ -39,6 +43,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import type { ScanEvent } from "@/scanners/types";
 
 export default function ScanDetailPage() {
   const params = useParams();
@@ -161,6 +166,20 @@ export default function ScanDetailPage() {
           {scan.status === "COMPLETED" && (
             <>
               <Button
+                variant="default"
+                onClick={() => downloadArtifact("html")}
+              >
+                <ShieldCheck className="mr-2 h-4 w-4" />
+                HTML Report
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => downloadArtifact("markdown")}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Markdown Report
+              </Button>
+              <Button
                 variant="outline"
                 onClick={() =>
                   window.open(
@@ -183,13 +202,6 @@ export default function ScanDetailPage() {
               >
                 <Download className="mr-2 h-4 w-4" />
                 Report JSON
-              </Button>
-              <Button
-                variant="default"
-                onClick={() => router.push(`/scans/${scanId}/report`)}
-              >
-                <PanelsTopLeft className="mr-2 h-4 w-4" />
-                HTML Report
               </Button>
               <Button
                 variant="outline"
@@ -264,6 +276,16 @@ export default function ScanDetailPage() {
                 <span>Scanning...</span>
                 <span className="text-muted-foreground">{scan.status}</span>
               </div>
+              <LiveScanTimeline
+                events={
+                  (
+                    scan.scannerProgress as {
+                      liveScan?: { events?: ScanEvent[]; seq?: number };
+                    } | null
+                  )?.liveScan?.events
+                }
+                isRunning={isRunning}
+              />
               <Progress
                 value={computeScanProgress(scan.scannerProgress, scan.status)}
               />
@@ -280,7 +302,9 @@ export default function ScanDetailPage() {
                           filesTotal?: number;
                         }
                       >,
-                    ).map(([name, info]) => (
+                    )
+                      .filter(([name]) => isScannerProgressKey(name))
+                      .map(([name, info]) => (
                       <Badge
                         key={name}
                         variant={
@@ -447,7 +471,9 @@ function computeScanProgress(
   if (status === "QUEUED") return 5;
   if (!scannerProgress || Object.keys(scannerProgress).length === 0) return 10;
 
-  const entries = Object.values(scannerProgress);
+  const entries = Object.entries(scannerProgress)
+    .filter(([k]) => isScannerProgressKey(k))
+    .map(([, v]) => v);
   const done = entries.filter((s) => s.status === "DONE").length;
   const total = Math.max(entries.length + 1, 3);
 

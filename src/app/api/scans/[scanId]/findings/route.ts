@@ -22,6 +22,12 @@ export async function GET(
   const where: Record<string, unknown> = { scanId };
   if (severity) where.severity = { in: severity };
   if (scanner) where.scanner = { in: scanner };
+  if (!scanner) {
+    const hasAiSast = await prisma.finding.count({
+      where: { scanId, scanner: "SAST_LLM" },
+    });
+    if (hasAiSast > 0) where.scanner = { not: "SAST_PATTERN" };
+  }
   if (filePath) where.filePath = { contains: filePath };
   if (status) where.status = { in: status };
 

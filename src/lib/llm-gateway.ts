@@ -44,6 +44,8 @@ function createOpenAIClient(config: LlmConfig): OpenAI {
     return new OpenAI({
       apiKey: config.apiKey || "",
       baseURL: config.baseUrl || "https://openrouter.ai/api/v1",
+      timeout: 180_000,
+      maxRetries: 3,
       defaultHeaders: {
         "HTTP-Referer": process.env.OPENROUTER_REFERER || "https://pepper.dev",
         "X-Title": process.env.OPENROUTER_TITLE || "Pepper SAST",
@@ -54,6 +56,8 @@ function createOpenAIClient(config: LlmConfig): OpenAI {
   return new OpenAI({
     apiKey: config.apiKey || "not-needed",
     baseURL: config.baseUrl,
+    timeout: 180_000,
+    maxRetries: 3,
   });
 }
 
@@ -146,6 +150,44 @@ export async function analyzeWithLlm(
     response_format: { type: "json_object" },
   });
   return response.choices[0]?.message?.content || "{}";
+}
+
+/** Long-form Markdown/text generation (no JSON mode — used for assessment reports). */
+export async function generateLlmText(
+  llmClient: LlmClient,
+  model: string,
+  systemPrompt: string,
+  userContent: string,
+  options?: { temperature?: number; maxTokens?: number },
+): Promise<string> {
+  const temperature = options?.temperature ?? 0.2;
+  const maxTokens = options?.maxTokens ?? 12000;
+
+  if (llmClient.type === "ollama") {
+    const response = await llmClient.client.chat({
+      model: model || llmClient.model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      options: {
+        temperature,
+        num_predict: maxTokens,
+      },
+    });
+    return response.message?.content?.trim() || "";
+  }
+
+  const response = await llmClient.client.chat.completions.create({
+    model: model || llmClient.model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userContent },
+    ],
+    temperature,
+    max_tokens: maxTokens,
+  });
+  return response.choices[0]?.message?.content?.trim() || "";
 }
 
 // ─── JSON Response Parser ─────────────────────────────────────────────

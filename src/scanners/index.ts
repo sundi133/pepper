@@ -1,4 +1,5 @@
 import { RawFinding, ScanContext, ScannerPlugin, ScanResult } from "./types";
+import { sanitizeFindingForEvent } from "./scan-events";
 import { sastPatternScanner, sastLlmScanner } from "./sast";
 import { scaScanner, parseDependencies } from "./sca";
 import { secretsPatternScanner, secretsLlmScanner } from "./secrets";
@@ -8,10 +9,19 @@ import { zeroDayScanner } from "./zero-day";
 
 export function getScanners(
   scanType: string,
-  orgSettings: { enableLlmSast: boolean; enableLlmSecrets: boolean },
+  orgSettings: {
+    enableLlmSast: boolean;
+    enableLlmSecrets: boolean;
+    llmApiKey?: string;
+    llmProvider?: string;
+  },
 ): ScannerPlugin[] {
   const scanners: ScannerPlugin[] = [];
   const llmEnabled = orgSettings.enableLlmSast || orgSettings.enableLlmSecrets;
+  const useAiSast =
+    orgSettings.enableLlmSast &&
+    (Boolean(orgSettings.llmApiKey) ||
+      orgSettings.llmProvider?.toLowerCase() === "ollama");
 
   const includeSast = ["FULL", "SAST_ONLY"].includes(scanType);
   const includeSca = ["FULL", "SCA_ONLY"].includes(scanType);
@@ -19,8 +29,11 @@ export function getScanners(
   const includeFull = scanType === "FULL";
 
   if (includeSast) {
-    scanners.push(sastPatternScanner);
-    if (orgSettings.enableLlmSast) scanners.push(sastLlmScanner);
+    if (useAiSast) {
+      scanners.push(sastLlmScanner);
+    } else {
+      scanners.push(sastPatternScanner);
+    }
   }
 
   if (includeSca) {
@@ -98,6 +111,18 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
           const deduped = deduplicator.dedupe(findings);
           if (deduped.length > 0) {
             await ctx.onBatchFindings!(scannerName, deduped);
+          }
+        }
+      : undefined,
+    onEvent: ctx.onEvent
+      ? async (event) => {
+          if (event.type === "finding_found") {
+            await ctx.onEvent!({
+              ...event,
+              finding: sanitizeFindingForEvent(event.finding),
+            });
+          } else {
+            await ctx.onEvent!(event);
           }
         }
       : undefined,

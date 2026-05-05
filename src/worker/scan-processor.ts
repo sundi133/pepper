@@ -7,6 +7,8 @@ import { ScanJobData } from "@/lib/queue";
 import { downloadObject, uploadObject } from "@/lib/minio";
 import { runScanners } from "@/scanners";
 import { buildSarif } from "@/scanners/sarif-builder";
+import { buildHtmlFindingsReport } from "@/scanners/html-report-builder";
+import { buildScanMarkdownReport } from "@/scanners/reports/scan-markdown-report-builder";
 import { generateSbom } from "@/scanners/sca/sbom-generator";
 import { ScanContext, RawFinding } from "@/scanners/types";
 import { parseDependencies } from "@/scanners/sca";
@@ -15,6 +17,12 @@ import { sendScanCompleteEmail } from "@/lib/email";
 import { enrichRawFindingsWithSource } from "@/lib/security-report";
 import { analyzeArchitecture, architectureOverviewMarkdown } from "@/scanners/sast/architecture";
 import { enrichFindingsWithSastEngine } from "@/scanners/sast/finding-enrichment";
+import { appendScanLiveEvent } from "@/lib/scan-live-events";
+import {
+  safeExtractZip,
+  SafeExtractError,
+} from "@/lib/safe-extract-zip";
+import type { ScanEvent } from "@/scanners/types";
 
 // prisma is imported from @/lib/prisma
 
@@ -33,9 +41,10 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
   log.info({ scanId, scanType, sourceType }, "Starting scan");
 
-  // Update scan status to RUNNING with initial scanner progress
-  await prisma.scan.update({
-    where: { id: scanId },
+  // The user may delete/cancel scans while a queued job is still pending.
+  // In that case, exit cleanly instead of retrying a stale job.
+  const started = await prisma.scan.updateMany({
+    where: { id: scanId, status: { not: "CANCELLED" } },
     data: {
       status: "RUNNING",
       startedAt: new Date(),
@@ -43,20 +52,94 @@ export async function processScanJob(job: Job<ScanJobData>) {
       scannerProgress: {},
     },
   });
+  if (started.count === 0) {
+    log.warn({ scanId }, "Scan no longer exists or was cancelled; skipping job");
+    return;
+  }
 
   const workDir = path.join(os.tmpdir(), `pepper-${scanId}`);
+
+  const ts = () => new Date().toISOString();
+  const emitEvent = async (e: ScanEvent) => {
+    await appendScanLiveEvent(scanId, e);
+    try {
+      await job.updateProgress({ message: e.type, event: e });
+    } catch {
+      // Job handle may be unavailable during teardown.
+    }
+  };
 
   try {
     // 1. Download and extract source
     fs.mkdirSync(workDir, { recursive: true });
 
+    await emitEvent({
+      type: "scan_started",
+      scanId,
+      timestamp: ts(),
+      totalFiles: 0,
+    });
+
+    let extractedUncompressedBytes = 0;
+
     if (sourceType === "UPLOAD") {
       const data = await downloadObject(sourceRef);
+      const maxUpload = parseInt(
+        process.env.UPLOAD_MAX_BYTES || String(100 * 1024 * 1024),
+        10,
+      );
+      if (data.length > maxUpload) {
+        throw new Error(`Upload exceeds maximum size (${maxUpload} bytes)`);
+      }
+
       const archiveExt =
         sourceRef.match(/\.(zip|tar\.gz|tgz|tar)$/i)?.[0] || ".zip";
       const archivePath = path.join(workDir, `source${archiveExt}`);
+
+      if (archiveExt.toLowerCase() === ".zip") {
+        const magic = data.subarray(0, Math.min(4, data.length));
+        if (magic.length < 2 || magic[0] !== 0x50 || magic[1] !== 0x4b) {
+          throw new Error("File is not a valid ZIP archive");
+        }
+      }
+
       fs.writeFileSync(archivePath, data);
-      await extractArchive(archivePath, workDir);
+
+      if (archivePath.toLowerCase().endsWith(".zip")) {
+        await emitEvent({
+          type: "extract_started",
+          scanId,
+          timestamp: ts(),
+        });
+        try {
+          const out = safeExtractZip(archivePath, workDir, {
+            maxFiles: parseInt(process.env.SAFE_ZIP_MAX_FILES || "50000", 10),
+            maxTotalUncompressedBytes: parseInt(
+              process.env.SAFE_ZIP_MAX_UNCOMPRESSED_BYTES ||
+                String(500 * 1024 * 1024),
+              10,
+            ),
+            maxSingleFileBytes: parseInt(
+              process.env.SAFE_ZIP_MAX_FILE_BYTES || String(20 * 1024 * 1024),
+              10,
+            ),
+          });
+          extractedUncompressedBytes = out.totalBytes;
+        } catch (err) {
+          if (err instanceof SafeExtractError) {
+            throw new Error(err.message);
+          }
+          throw err;
+        }
+      } else {
+        await emitEvent({
+          type: "extract_started",
+          scanId,
+          timestamp: ts(),
+        });
+        await extractArchive(archivePath, workDir);
+        extractedUncompressedBytes = 0;
+      }
       fs.unlinkSync(archivePath);
     } else if (sourceType === "GIT_CLONE") {
       const { execSync } = await import("child_process");
@@ -178,6 +261,14 @@ export async function processScanJob(job: Job<ScanJobData>) {
     const fileList = enumerateFiles(workDir);
     log.info({ fileCount: fileList.length }, "Files enumerated");
 
+    await emitEvent({
+      type: "extract_completed",
+      scanId,
+      timestamp: ts(),
+      totalFiles: fileList.length,
+      totalBytes: extractedUncompressedBytes,
+    });
+
     const architecture = analyzeArchitecture(workDir, fileList);
 
     // Helper: insert findings into DB and increment severity counts
@@ -232,8 +323,10 @@ export async function processScanJob(job: Job<ScanJobData>) {
       workDir,
       fileList,
       scanType,
+      scanId,
       orgSettings,
       signal: abortController.signal,
+      onEvent: emitEvent,
       onProgress: async (msg) => {
         log.info(msg);
         job.updateProgress({ message: msg });
@@ -243,6 +336,43 @@ export async function processScanJob(job: Job<ScanJobData>) {
         const fileProgressMatch = msg.match(
           /LLM SAST: (\d+)\/(\d+) files scanned \((\d+) findings\)/,
         );
+        const priorityMatch = msg.match(
+          /LLM SAST: prioritizing (\d+)\/(\d+) security-relevant files/,
+        );
+        await emitEvent({
+          type: "scan_progress",
+          scanId,
+          message: msg,
+          timestamp: ts(),
+          scanner: msg.startsWith("LLM SAST")
+            ? "SAST_LLM"
+            : msg.startsWith("SAST Pattern")
+              ? "SAST_PATTERN"
+              : msg.startsWith("SCA")
+                ? "SCA"
+                : msg.startsWith("Supply Chain")
+                  ? "MALICIOUS_PKG"
+                  : msg.startsWith("Secrets")
+                    ? "SECRETS_LLM"
+                    : msg.startsWith("IaC")
+                      ? "IAC"
+                      : msg.startsWith("Zero-Day")
+                        ? "ZERO_DAY"
+                        : undefined,
+          filesCompleted: fileProgressMatch
+            ? parseInt(fileProgressMatch[1])
+            : priorityMatch
+              ? parseInt(priorityMatch[1])
+              : undefined,
+          filesTotal: fileProgressMatch
+            ? parseInt(fileProgressMatch[2])
+            : priorityMatch
+              ? parseInt(priorityMatch[2])
+              : undefined,
+          findingsCount: fileProgressMatch
+            ? parseInt(fileProgressMatch[3])
+            : undefined,
+        });
         if (fileProgressMatch) {
           const [, filesCompleted, filesTotal, findingsCount] =
             fileProgressMatch;
@@ -306,6 +436,18 @@ export async function processScanJob(job: Job<ScanJobData>) {
       "Scan complete",
     );
 
+    const stillExists = await prisma.scan.findUnique({
+      where: { id: scanId },
+      select: { id: true, status: true },
+    });
+    if (!stillExists || stillExists.status === "CANCELLED") {
+      log.warn(
+        { scanId, status: stillExists?.status },
+        "Scan was deleted or cancelled before artifact generation; stopping job",
+      );
+      return;
+    }
+
     // 6. Generate and upload SARIF (same enrichment as DB inserts)
     const findingsForArtifacts = enrichFindingsWithSastEngine(
       result.findings,
@@ -317,10 +459,20 @@ export async function processScanJob(job: Job<ScanJobData>) {
     const sarifKey = `scans/${scanId}/results.sarif.json`;
     await uploadObject(sarifKey, sarifJson, "application/json");
 
-    await prisma.scanArtifact.create({
-      data: {
+    await prisma.scanArtifact.upsert({
+      where: {
+        scanId_type: {
+          scanId,
+          type: "SARIF",
+        },
+      },
+      create: {
         scanId,
         type: "SARIF",
+        objectKey: sarifKey,
+        size: Buffer.byteLength(sarifJson),
+      },
+      update: {
         objectKey: sarifKey,
         size: Buffer.byteLength(sarifJson),
       },
@@ -336,10 +488,20 @@ export async function processScanJob(job: Job<ScanJobData>) {
     const sbomKey = `scans/${scanId}/sbom.cyclonedx.json`;
     await uploadObject(sbomKey, sbomJson, "application/json");
 
-    await prisma.scanArtifact.create({
-      data: {
+    await prisma.scanArtifact.upsert({
+      where: {
+        scanId_type: {
+          scanId,
+          type: "SBOM_CYCLONEDX",
+        },
+      },
+      create: {
         scanId,
         type: "SBOM_CYCLONEDX",
+        objectKey: sbomKey,
+        size: Buffer.byteLength(sbomJson),
+      },
+      update: {
         objectKey: sbomKey,
         size: Buffer.byteLength(sbomJson),
       },
@@ -369,7 +531,103 @@ export async function processScanJob(job: Job<ScanJobData>) {
       }
     }
 
+    const completedAt = new Date();
+    const scanForReport = await prisma.scan.findUniqueOrThrow({
+      where: { id: scanId },
+      select: {
+        id: true,
+        scanType: true,
+        branch: true,
+        commitSha: true,
+        sourceType: true,
+        sourceRef: true,
+        startedAt: true,
+      },
+    });
+    const htmlReport = buildHtmlFindingsReport({
+      scan: {
+        ...scanForReport,
+        completedAt,
+        filesScanned: result.filesScanned,
+        depsScanned: result.depsScanned,
+        gateResult,
+      },
+      project: {
+        name: project?.name || "unknown",
+        repoUrl: project?.repoUrl,
+      },
+      findings: findingsForArtifacts,
+    });
+    const htmlReportKey = `scans/${scanId}/findings-report.html`;
+    await uploadObject(
+      htmlReportKey,
+      htmlReport,
+      "text/html; charset=utf-8",
+    );
+    await prisma.scanArtifact.upsert({
+      where: {
+        scanId_type: {
+          scanId,
+          type: "HTML_FINDINGS_REPORT",
+        },
+      },
+      create: {
+        scanId,
+        type: "HTML_FINDINGS_REPORT",
+        objectKey: htmlReportKey,
+        size: Buffer.byteLength(htmlReport),
+      },
+      update: {
+        objectKey: htmlReportKey,
+        size: Buffer.byteLength(htmlReport),
+      },
+    });
+
+    const markdownReport = buildScanMarkdownReport({
+      scan: {
+        ...scanForReport,
+      },
+      project: {
+        name: project?.name || "unknown",
+        repoUrl: project?.repoUrl,
+      },
+      findings: findingsForArtifacts,
+    });
+    const markdownReportKey = `scans/${scanId}/findings-report.md`;
+    await uploadObject(
+      markdownReportKey,
+      markdownReport,
+      "text/markdown; charset=utf-8",
+    );
+    await prisma.scanArtifact.upsert({
+      where: {
+        scanId_type: {
+          scanId,
+          type: "MARKDOWN_FINDINGS_REPORT",
+        },
+      },
+      create: {
+        scanId,
+        type: "MARKDOWN_FINDINGS_REPORT",
+        objectKey: markdownReportKey,
+        size: Buffer.byteLength(markdownReport),
+      },
+      update: {
+        objectKey: markdownReportKey,
+        size: Buffer.byteLength(markdownReport),
+      },
+    });
+
     // 9. Update scan record (severity counts already incremented per-scanner)
+    const findingTotal = await prisma.finding.count({ where: { scanId } });
+
+    await emitEvent({
+      type: "scan_completed",
+      scanId,
+      findingCount: findingTotal,
+      timestamp: ts(),
+    });
+
     const existingProgress = await prisma.scan.findUnique({
       where: { id: scanId },
       select: { scannerProgress: true },
@@ -385,12 +643,12 @@ export async function processScanJob(job: Job<ScanJobData>) {
       where: { id: scanId },
       data: {
         status: "COMPLETED",
-        completedAt: new Date(),
+        completedAt,
         filesScanned: result.filesScanned,
         depsScanned: result.depsScanned,
         gateResult,
         scannerProgress: {
-          ...progressObj,
+          ...markScannerProgressDone(progressObj),
           architectureOverview: architectureOverviewMarkdown(architecture),
           rulesVersion: "pepper-sast-engine@1.1",
         },
@@ -494,14 +752,29 @@ export async function processScanJob(job: Job<ScanJobData>) {
     }
   } catch (error) {
     log.error({ error }, "Scan failed");
-    await prisma.scan.update({
+    const errMsg = error instanceof Error ? error.message : "Unknown error";
+    try {
+      await appendScanLiveEvent(scanId, {
+        type: "scan_failed",
+        scanId,
+        error: errMsg,
+        timestamp: new Date().toISOString(),
+      });
+    } catch {
+      // non-fatal
+    }
+    const updated = await prisma.scan.updateMany({
       where: { id: scanId },
       data: {
         status: "FAILED",
         completedAt: new Date(),
-        errorMessage: error instanceof Error ? error.message : "Unknown error",
+        errorMessage: errMsg,
       },
     });
+    if (updated.count === 0) {
+      log.warn({ scanId }, "Scan failure ignored because scan was deleted");
+      return;
+    }
     throw error;
   } finally {
     // Cleanup
@@ -562,6 +835,26 @@ function countSeverities(findings: RawFinding[]) {
     counts[f.severity]++;
   }
   return counts;
+}
+
+function markScannerProgressDone(
+  progress: Record<string, unknown>,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...progress };
+  for (const [key, value] of Object.entries(progress)) {
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      "status" in value
+    ) {
+      next[key] = {
+        ...(value as Record<string, unknown>),
+        status: "DONE",
+      };
+    }
+  }
+  return next;
 }
 
 async function extractArchive(archivePath: string, destDir: string) {

@@ -31,6 +31,31 @@ interface SecurityPolicy {
   category?: string | null;
 }
 
+const DEFAULT_MAX_LLM_SAST_FILES = 120;
+const MAX_LLM_FILE_BYTES = 256 * 1024;
+const HIGH_VALUE_NAME_RE =
+  /(?:auth|login|session|token|password|admin|user|account|payment|billing|upload|download|file|webhook|api|route|controller|handler|middleware|server|app|db|database|query|sql|client|service|resolver)/i;
+const LOW_VALUE_PATH_RE =
+  /(?:^|[/\\])(?:node_modules|dist|build|coverage|vendor|public|static|assets|docs?|examples?|fixtures?|mocks?|__tests__|tests?|spec|\.github|migrations?)(?:[/\\]|$)|(?:package-lock|pnpm-lock|yarn\.lock|composer\.lock|poetry\.lock|go\.sum|Cargo\.lock)$/i;
+const LLM_CODE_EXTENSIONS = new Set([
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".php",
+  ".rb",
+  ".java",
+  ".go",
+  ".cs",
+  ".rs",
+  ".kt",
+  ".swift",
+  ".sql",
+]);
+
 async function fetchEnabledPolicies(orgId?: string): Promise<SecurityPolicy[]> {
   if (!orgId) return [];
   try {
@@ -87,6 +112,8 @@ STRICT RULES:
    - 0.8-0.9: Very likely — strong evidence, minor ambiguity about context
    - 0.7-0.8: Probable — likely vulnerable but depends on runtime context
    - Below 0.7: Do NOT report it
+5. Reproduction steps MUST be usable by a tester. When the source exposes an HTTP route, include the exact route, method, field name, and a safe curl command using localhost. Do not use fake endpoints.
+6. If curl is not appropriate, state "Direct verification" and give exact source-grounded steps, including the file/function and what output/log/result proves the issue.
 
 For each genuine vulnerability found, respond with:
 {
@@ -106,7 +133,7 @@ For each genuine vulnerability found, respond with:
       "attackScenario": "Concrete real-world attack scenario",
       "attackChain": "How an advanced attacker could chain this weakness",
       "reproductionSteps": ["Safe non-destructive step 1", "Safe non-destructive step 2"],
-      "proofOfConcept": "Safe curl, payload, CLI command, or test input",
+      "proofOfConcept": "Exact safe curl command, payload, CLI command, or direct test input grounded in the source",
       "expectedBehavior": "Expected vulnerable behavior when reproduced safely",
       "businessImpact": "Business/security impact",
       "secureCode": "Secure replacement code for this exact pattern",
@@ -253,6 +280,8 @@ export async function runLlmSastScanner(
   const findings: RawFinding[] = [];
   const maxConcurrency = parseInt(process.env.MAX_LLM_CONCURRENCY || "2");
   const chunks: Chunk[] = [];
+  const scanId = ctx.scanId ?? "";
+  const ts = () => new Date().toISOString();
 
   // Pick chunk size and response limit based on provider
   const isOllama = ctx.orgSettings.llmProvider.toLowerCase() === "ollama";
@@ -269,8 +298,23 @@ export async function runLlmSastScanner(
     "LLM context configuration",
   );
 
-  // Collect all chunks from scannable files
-  for (const filePath of ctx.fileList) {
+  const selectedFiles = selectLlmSastFiles(ctx.fileList, ctx.workDir);
+  if (selectedFiles.length < ctx.fileList.length) {
+    ctx.onProgress?.(
+      `LLM SAST: prioritizing ${selectedFiles.length}/${ctx.fileList.length} security-relevant files for deep scan...`,
+    );
+    logger.info(
+      {
+        selectedFiles: selectedFiles.length,
+        totalFiles: ctx.fileList.length,
+      },
+      "LLM SAST file selection applied",
+    );
+  }
+
+  // Collect chunks from security-relevant files only. Pattern SAST still scans
+  // the whole tree; this keeps LLM analysis fast and cost-bounded on large repos.
+  for (const filePath of selectedFiles) {
     if (ctx.signal?.aborted) break;
 
     const fullPath = path.join(ctx.workDir, filePath);
@@ -286,7 +330,9 @@ export async function runLlmSastScanner(
       const content = fs.readFileSync(fullPath, "utf-8");
       if (content.trim().length === 0) continue;
 
-      // Every file gets chunked into LLM-friendly pieces, no size limit
+      const stats = fs.statSync(fullPath);
+      if (stats.size > MAX_LLM_FILE_BYTES) continue;
+
       chunks.push(...chunkFile(content, filePath, chunkTokens, overlapTokens));
     } catch {
       continue;
@@ -297,6 +343,12 @@ export async function runLlmSastScanner(
   const totalFiles = new Set(chunks.map((c) => c.filePath)).size;
   const completedFiles = new Set<string>();
 
+  ctx.onEvent?.({
+    type: "scanner_started",
+    scanId,
+    scanner: "SAST_LLM",
+    timestamp: ts(),
+  });
   ctx.onProgress?.(
     `LLM SAST: analyzing ${totalFiles} files (${chunks.length} chunks)...`,
   );
@@ -320,16 +372,27 @@ export async function runLlmSastScanner(
 
     const batch = chunks.slice(i, i + maxConcurrency);
     const results = await Promise.allSettled(
-      batch.map((chunk) =>
-        analyzeChunk(
+      batch.map((chunk, batchIndex) => {
+        ctx.onEvent?.({
+          type: "chunk_scanning",
+          scanId,
+          scanner: "SAST_LLM",
+          filePath: chunk.filePath,
+          chunkIndex: i + batchIndex + 1,
+          totalChunks: chunks.length,
+          timestamp: ts(),
+          llmModel: ctx.orgSettings.llmModel,
+          llmProvider: ctx.orgSettings.llmProvider,
+        });
+        return analyzeChunk(
           client,
           ctx.orgSettings.llmModel,
           chunk,
           maxResponseTokens,
           finalPrompt,
           inlinePolicies.map((p) => p.name),
-        ),
-      ),
+        );
+      }),
     );
 
     const batchFindings: RawFinding[] = [];
@@ -376,7 +439,76 @@ export async function runLlmSastScanner(
     { total: chunks.length, succeeded, failed, findings: findings.length },
     "LLM SAST analysis complete",
   );
+  ctx.onEvent?.({
+    type: "scanner_completed",
+    scanId,
+    scanner: "SAST_LLM",
+    findingCount: findings.length,
+    timestamp: ts(),
+  });
   return findings;
+}
+
+function selectLlmSastFiles(fileList: string[], workDir: string): string[] {
+  const maxFiles = Math.max(
+    1,
+    parseInt(
+      process.env.LLM_SAST_MAX_FILES || String(DEFAULT_MAX_LLM_SAST_FILES),
+      10,
+    ),
+  );
+
+  const candidates = fileList
+    .map((filePath) => {
+      const ext = path.extname(filePath).toLowerCase();
+      if (!FILE_EXTENSIONS[ext] || BINARY_EXTENSIONS.has(ext)) return null;
+      if (!LLM_CODE_EXTENSIONS.has(ext)) return null;
+
+      const normalized = filePath.replace(/\\/g, "/");
+      const fullPath = path.join(workDir, filePath);
+      const parts = normalized.split("/");
+      if (parts.some((part) => SKIP_DIRECTORIES.has(part))) return null;
+      if (LOW_VALUE_PATH_RE.test(normalized)) return null;
+
+      try {
+        const stats = fs.statSync(fullPath);
+        if (!stats.isFile() || stats.size === 0 || stats.size > MAX_LLM_FILE_BYTES) {
+          return null;
+        }
+        return {
+          filePath,
+          score: scoreLlmSastFile(normalized, ext),
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter((candidate): candidate is { filePath: string; score: number } =>
+      Boolean(candidate),
+    )
+    .sort((a, b) => b.score - a.score || a.filePath.localeCompare(b.filePath));
+
+  return candidates.slice(0, maxFiles).map((candidate) => candidate.filePath);
+}
+
+function scoreLlmSastFile(filePath: string, ext: string): number {
+  let score = 0;
+  const lower = filePath.toLowerCase();
+
+  if (HIGH_VALUE_NAME_RE.test(filePath)) score += 20;
+  if (/(?:^|\/)(?:src|app|server|backend|api|routes?|controllers?|services?|lib)\//i.test(filePath)) {
+    score += 10;
+  }
+  if (/(?:route|controller|handler|middleware|resolver|service)\./i.test(filePath)) {
+    score += 8;
+  }
+  if ([".ts", ".tsx", ".js", ".jsx", ".py", ".php", ".java", ".go"].includes(ext)) {
+    score += 6;
+  }
+  if (lower.includes("test") || lower.includes("spec")) score -= 20;
+  if (lower.includes("migration") || lower.includes("fixture")) score -= 15;
+
+  return score;
 }
 
 async function analyzeChunk(

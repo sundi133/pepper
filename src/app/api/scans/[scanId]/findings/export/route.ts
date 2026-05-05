@@ -100,6 +100,16 @@ export async function GET(
     });
   }
 
+  if (format === "pdf") {
+    return NextResponse.json(
+      {
+        error:
+          "PDF report export is no longer available. Use the HTML report in the app or export JSON, Markdown, CSV, or SARIF.",
+      },
+      { status: 410 },
+    );
+  }
+
   if (format === "sarif") {
     const raw: RawFinding[] = findings.map((f) => ({
       scanner: f.scanner as RawFinding["scanner"],

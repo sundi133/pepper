@@ -94,17 +94,44 @@ For each genuine vulnerability found, respond with:
     {
       "title": "Brief vulnerability title",
       "severity": "CRITICAL|HIGH|MEDIUM|LOW",
-      "description": "What the vulnerability is, how it can be exploited, and what the impact is",
+      "description": "What the vulnerability is, the exact affected file/function/route if visible, which user-controlled input reaches which vulnerable sink, why the code is unsafe, realistic impact, and safe reproduction evidence. If the exact route or parameter is not visible in the provided code, explicitly say so and do not invent it.",
       "startLine": <exact line number>,
       "endLine": <exact line number>,
       "cweId": "CWE-XXX",
       "confidence": <0.7 to 1.0>,
-      "recommendation": "Specific fix for this code"
+      "recommendation": "Specific code-level fix for this file",
+      "metadata": {
+        "route": "HTTP route or null when not visible",
+        "method": "GET|POST|PUT|PATCH|DELETE|null",
+        "parameter": "exact user-controlled parameter/input name or null",
+        "sink": "exact vulnerable sink/API/function or null",
+        "payload": "safe non-destructive proof payload or null",
+        "stepsToReproduce": [
+          "Exact step using only evidence visible in the code",
+          "Exact expected vulnerable behavior"
+        ],
+        "impact": "Specific technical and business impact"
+      }
     }
   ]
 }
 
+Reproduction requirements:
+- Do NOT write generic steps such as "open the affected code path" or "identify the user-controlled input".
+- Use exact route, form field, query parameter, API parameter, or input source when visible in code.
+- Use safe non-destructive payloads only.
+- Do NOT invent routes, parameters, URLs, secrets, or exploit results.
+- If the exact route/parameter is unclear from the provided chunk, write: "The exact route/parameter could not be confirmed from the provided code" and provide the closest code-level reproduction based on the visible file, line, and sink.
+- Include enough source evidence for a security engineer to reproduce the issue.
+
 Focus on exploitable instances of:
+
+**OWASP 2026-READY COVERAGE MATRIX (CHECK EVERY CHUNK AGAINST THESE):**
+- OWASP Top 10 web risk classes: broken access control, cryptographic failures, injection, insecure design, security misconfiguration, vulnerable/outdated components when visible in code, auth failures, software/data integrity failures, logging/monitoring gaps, SSRF
+- OWASP API Security risk classes: object/property/function-level authorization, unrestricted resource consumption, mass assignment, security misconfiguration, unsafe API inventory patterns, SSRF, excessive data exposure, weak rate limiting on auth and expensive endpoints
+- OWASP LLM/AI app risk classes: prompt injection, insecure output handling, excessive agency/tool permissions, data leakage into prompts or logs, unsafe plugin/MCP/tool boundaries, missing human approval for destructive actions
+- Supply-chain and CI/CD risk classes: unpinned actions/images, unsafe pull_request_target workflows, dependency install scripts, unsigned webhooks, build secret exposure, artifact poisoning
+- Cloud-native and identity risk classes: tenant isolation failures, service-account overpermission, missing audit trails for privileged M2M operations, insecure OAuth/OIDC scopes, webhook replay
 
 **INJECTION & INPUT VALIDATION:**
 - SQL/NoSQL injection (raw string concatenation into queries, NOT parameterized/ORM)
@@ -118,6 +145,8 @@ Focus on exploitable instances of:
 **AUTH & ACCESS CONTROL:**
 - Authentication bypass (missing auth checks on sensitive endpoints)
 - Broken access control (missing authorization checks, IDOR)
+- Object-level authorization: fetch/update/delete by id must be scoped by authenticated user, tenant, organization, account, or role ownership
+- Property/function-level authorization: users must not update role, owner, price, status, plan, balance, isAdmin, or scope fields unless explicitly authorized
 - OAuth/OIDC flaws (missing state param, no PKCE, open redirect in callback URL, token leakage via Referer)
 - Session management flaws (weak entropy, missing invalidation on privilege change, excessive timeouts)
 - Missing cookie security attributes (Secure, HttpOnly, SameSite)
@@ -135,16 +164,21 @@ Focus on exploitable instances of:
 - WebSocket security (missing origin validation on upgrade, no auth on WS connections)
 - gRPC security (reflection enabled in production, missing TLS, no auth interceptors)
 - Missing HTTP security headers (HSTS, CSP, X-Content-Type-Options)
+- Unrestricted resource consumption: missing rate limits on login, password reset, OTP, search, export, upload, report generation, or AI endpoints
+- Excessive data exposure: API returns password hashes, tokens, secrets, internal authorization fields, other tenants' IDs, or unfiltered related objects
 
 **DESERIALIZATION & FILE HANDLING:**
 - Insecure deserialization (untrusted data passed to deserialize/pickle/eval)
 - File upload exploits (unrestricted types, path traversal in filenames, polyglot files)
 - Prototype pollution (user input merged into object prototypes)
+- Zip/XML/JSON bombs, recursive parsing, or large unbounded uploads without streaming, size limits, content-type validation, or quarantine
 
 **BUSINESS LOGIC & CONCURRENCY:**
 - Race conditions (TOCTOU in file ops, double-spend patterns, missing locks on shared state)
 - Business logic flaws (price manipulation, privilege escalation through normal flows)
 - Integer overflow/underflow in security-critical calculations
+- Workflow bypass: direct access to post-payment, post-MFA, post-approval, premium, or admin paths without checking required prior state
+- Tenant isolation flaws: tenant/org/account identifiers from URL/body must not override trusted session context
 
 **M2M & AGENT SECURITY:**
 - Overprivileged OAuth tokens/API keys for SaaS integrations
@@ -153,6 +187,7 @@ Focus on exploitable instances of:
 - AI agent/MCP connections without auth boundaries or scope limits
 - Service accounts with excessive permissions
 - Missing audit logging for M2M operations
+- LLM/agent safety: untrusted user or document content used as system/tool instructions, tool calls without allowlists, model output executed without validation, secrets included in prompts
 
 If no vulnerabilities are found, return: {"findings": []}
 When in doubt, do NOT report. False positives waste security engineers' time.`;
@@ -166,6 +201,7 @@ interface LlmFinding {
   cweId?: string;
   confidence?: number;
   recommendation?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export async function runLlmSastScanner(
@@ -193,22 +229,23 @@ export async function runLlmSastScanner(
     model: ctx.orgSettings.llmModel,
   });
 
-  // Fetch custom policies (inject into prompt — zero extra LLM calls for first 10)
+  // Fetch custom policies. The first batch is injected into the normal SAST pass;
+  // additional batches get policy-only passes to keep prompts bounded.
   const MAX_INLINE_POLICIES = 10;
+  const ADDITIONAL_POLICY_BATCH_SIZE = 10;
   const allPolicies = await fetchEnabledPolicies(ctx.orgSettings.orgId);
   const inlinePolicies = allPolicies.slice(0, MAX_INLINE_POLICIES);
+  const additionalPolicies = allPolicies.slice(MAX_INLINE_POLICIES);
   const policyPromptSection = buildPolicyPromptSection(inlinePolicies);
 
   if (allPolicies.length > 0) {
     logger.info(
-      { total: allPolicies.length, inline: inlinePolicies.length },
+      {
+        total: allPolicies.length,
+        inline: inlinePolicies.length,
+        additional: additionalPolicies.length,
+      },
       "Custom policies loaded for SAST scan",
-    );
-  }
-  if (allPolicies.length > MAX_INLINE_POLICIES) {
-    logger.warn(
-      { total: allPolicies.length, max: MAX_INLINE_POLICIES },
-      `Only first ${MAX_INLINE_POLICIES} policies injected into prompt. Remaining ${allPolicies.length - MAX_INLINE_POLICIES} will not be checked. Consider consolidating policies.`,
     );
   }
 
@@ -247,6 +284,7 @@ export async function runLlmSastScanner(
 
   // Collect all chunks from scannable files
   for (const filePath of ctx.fileList) {
+    await ctx.waitIfPaused?.();
     if (ctx.signal?.aborted) break;
 
     const fullPath = path.join(ctx.workDir, filePath);
@@ -280,7 +318,6 @@ export async function runLlmSastScanner(
   // Process chunks with concurrency limit
   let succeeded = 0;
   let failed = 0;
-  const totalBatches = Math.ceil(chunks.length / maxConcurrency);
 
   // Track which chunks belong to each file so we know when a file is fully done
   const chunksPerFile = new Map<string, number>();
@@ -293,9 +330,9 @@ export async function runLlmSastScanner(
   }
 
   for (let i = 0; i < chunks.length; i += maxConcurrency) {
+    await ctx.waitIfPaused?.();
     if (ctx.signal?.aborted) break;
 
-    const batchNum = Math.floor(i / maxConcurrency) + 1;
     const batch = chunks.slice(i, i + maxConcurrency);
     const results = await Promise.allSettled(
       batch.map((chunk) =>
@@ -350,8 +387,75 @@ export async function runLlmSastScanner(
     );
   }
 
+  for (
+    let policyIndex = 0;
+    policyIndex < additionalPolicies.length;
+    policyIndex += ADDITIONAL_POLICY_BATCH_SIZE
+  ) {
+    await ctx.waitIfPaused?.();
+    if (ctx.signal?.aborted) break;
+
+    const policyBatch = additionalPolicies.slice(
+      policyIndex,
+      policyIndex + ADDITIONAL_POLICY_BATCH_SIZE,
+    );
+    const policyPrompt = `${SYSTEM_PROMPT}${buildPolicyPromptSection(policyBatch)}
+
+IMPORTANT: This is an additional custom policy pass. Report only violations of the custom organization policies listed above. Do not report general vulnerabilities in this pass.`;
+
+    ctx.onProgress?.(
+      `LLM SAST: checking additional policies ${policyIndex + 1}-${policyIndex + policyBatch.length} of ${additionalPolicies.length}`,
+    );
+
+    for (let i = 0; i < chunks.length; i += maxConcurrency) {
+      await ctx.waitIfPaused?.();
+      if (ctx.signal?.aborted) break;
+
+      const batch = chunks.slice(i, i + maxConcurrency);
+      const results = await Promise.allSettled(
+        batch.map((chunk) =>
+          analyzeChunk(
+            client,
+            ctx.orgSettings.llmModel,
+            chunk,
+            maxResponseTokens,
+            policyPrompt,
+            policyBatch.map((p) => p.name),
+          ),
+        ),
+      );
+
+      const batchFindings: RawFinding[] = [];
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          batchFindings.push(...result.value);
+          findings.push(...result.value);
+          succeeded++;
+        } else {
+          failed++;
+          logger.error(
+            { err: result.reason },
+            "LLM SAST additional policy analysis rejected",
+          );
+        }
+      }
+
+      if (batchFindings.length > 0 && ctx.onBatchFindings) {
+        await ctx.onBatchFindings("SAST_LLM", batchFindings);
+      }
+    }
+  }
+
   logger.info(
-    { total: chunks.length, succeeded, failed, findings: findings.length },
+    {
+      total: chunks.length,
+      succeeded,
+      failed,
+      findings: findings.length,
+      additionalPolicyPasses: Math.ceil(
+        additionalPolicies.length / ADDITIONAL_POLICY_BATCH_SIZE,
+      ),
+    },
     "LLM SAST analysis complete",
   );
   return findings;
@@ -433,9 +537,12 @@ async function analyzeChunk(
         ruleId: isPolicy
           ? `POLICY-${matchedPolicy || "CUSTOM"}`
           : `LLM-${f.cweId || "GENERIC"}`,
-        metadata: matchedPolicy
-          ? { policyName: matchedPolicy, type: "policy-violation" }
-          : undefined,
+        metadata: {
+          ...(f.metadata || {}),
+          ...(matchedPolicy
+            ? { policyName: matchedPolicy, type: "policy-violation" }
+            : {}),
+        },
       };
     });
   } catch (err) {

@@ -106,6 +106,11 @@ async function checkDueSchedules() {
           enableLlmSast: orgSettings?.enableLlmSast ?? true,
           enableLlmSecrets: orgSettings?.enableLlmSecrets ?? true,
           osvApiUrl: orgSettings?.osvApiUrl || "https://api.osv.dev",
+          vulnDbMode: (orgSettings?.vulnDbMode || "online") as
+            | "online"
+            | "mirror"
+            | "offline",
+          orgId: project.organizationId,
         },
         buildGate: project.buildGate
           ? {

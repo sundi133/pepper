@@ -17,7 +17,9 @@ export const secretsPatternScanner: ScannerPlugin = {
     const findings: RawFinding[] = [];
 
     for (const filePath of ctx.fileList) {
+      await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
+      if (isGeneratedOrDatabasePath(filePath)) continue;
 
       const ext = path.extname(filePath).toLowerCase();
       if (BINARY_EXTENSIONS.has(ext)) continue;
@@ -123,6 +125,15 @@ export const secretsPatternScanner: ScannerPlugin = {
   },
 };
 
+function isGeneratedOrDatabasePath(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, "/").toLowerCase();
+  const basename = path.basename(normalized);
+  if (/\.(sqlite|sqlite3|db|mdb|accdb)$/.test(basename)) return true;
+  if (normalized.includes("/migrations/")) return true;
+  if (normalized.includes("/__pycache__/")) return true;
+  return false;
+}
+
 export const secretsLlmScanner: ScannerPlugin = {
   name: "SECRETS_LLM",
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
@@ -132,6 +143,7 @@ export const secretsLlmScanner: ScannerPlugin = {
     const patternFindings = await secretsPatternScanner.scan(ctx);
     if (patternFindings.length === 0) return [];
 
+    await ctx.waitIfPaused?.();
     ctx.onProgress?.(
       `Secrets LLM: classifying ${patternFindings.length} candidates...`,
     );

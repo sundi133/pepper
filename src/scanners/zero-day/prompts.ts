@@ -28,6 +28,14 @@ ANALYSIS METHODOLOGY
    - What happens if I skip steps in a multi-step workflow?
    - What happens if I send two identical requests simultaneously?
    - What happens if I manipulate timestamps, tokens, or flags?
+   - What happens if I replay webhooks, queue messages, or background jobs?
+   - What happens if untrusted user content is routed into AI tools, plugins, MCP servers, or automation agents?
+
+4. **MAP TO MODERN OWASP RISK AREAS** - Prioritize high-impact classes
+   - OWASP Top 10: broken access control, insecure design, auth failures, software/data integrity failures, SSRF, logging gaps
+   - OWASP API Security: object/property/function authorization, unrestricted resource consumption, mass assignment, excessive data exposure
+   - OWASP LLM/AI app risks: prompt injection, insecure output handling, excessive agency, sensitive information disclosure, unsafe tool/plugin boundaries
+   - Cloud-native risks: tenant isolation, service account scope, webhook trust, CI/CD privilege, secrets in automation
 
 ═══════════════════════════════════════════════════════════════
 VULNERABILITY CATEGORIES (with concrete examples)
@@ -88,6 +96,8 @@ Look for endpoints where a user-supplied ID is used to fetch/modify a resource W
 - **Sort/order injection**: ORDER BY user-controlled column names enabling data inference
 - **Webhook replay**: Re-sending a captured webhook payload to trigger duplicate actions
 - **Time-of-check-to-time-of-use (TOCTOU)**: Permission checked at request start, but resource state changes before action completes
+- **AI prompt/tool injection**: User-controlled or retrieved content changes system behavior, calls tools, exfiltrates secrets, or bypasses policy
+- **Insecure output handling**: LLM output is used as code, SQL, shell, workflow config, or privileged API input without validation
 
 🔴 **Trust Boundary Violations**
 - **Internal API trust**: Backend service trusts data from another service without re-validating
@@ -95,6 +105,8 @@ Look for endpoints where a user-supplied ID is used to fetch/modify a resource W
 - **Queue/event trust**: Event handler trusts message payload without verifying sender authority
 - **Confused deputy**: Service A calls Service B on behalf of User X, but Service B doesn't verify X's permissions
 - **Import/export abuse**: Importing a CSV/JSON that sets fields the user shouldn't be able to set
+- **Model/tool boundary abuse**: LLM, MCP, plugin, browser automation, or background agents perform privileged actions based on untrusted content
+- **CI/CD trust abuse**: Pull request, package script, artifact, or workflow input crosses into deploy or secret-bearing context
 
 🔴 **Unsafe State Management**
 - **Incomplete rollback on error**: Partial state left after failed operation (money deducted but order not created)
@@ -114,6 +126,8 @@ Look for endpoints where a user-supplied ID is used to fetch/modify a resource W
 - **Unbounded operations**: API that triggers N+1 queries, recursive operations without depth limit
 - **File/memory bombs**: Zip bombs, XML billion laughs, large file uploads without streaming
 - **Lock starvation**: Long-held database locks blocking other operations
+- **AI cost exhaustion**: Public endpoints trigger unbounded LLM calls, long prompts, tool loops, or expensive report generation
+- **Tenant noisy-neighbor abuse**: One tenant can consume shared queues, workers, storage, vector DB, or rate-limit budgets
 
 ═══════════════════════════════════════════════════════════════
 OUTPUT FORMAT
@@ -131,7 +145,8 @@ For each finding respond with:
       "endLine": <exact line number>,
       "cweId": "CWE-XXX",
       "confidence": <0.8 to 1.0>,
-      "attackVector": "Step-by-step exploitation path that a pentester could follow",
+      "attackVector": "Step-by-step exploitation path using only visible code evidence. Include exact endpoint, parameter/input, safe payload, and expected result when visible. If exact route/parameter is not visible, say: The exact route/parameter could not be confirmed from the provided code.",
+      "stepsToReproduce": ["Concrete validation steps based only on visible code evidence. If exact route/parameter is not visible, provide code-review validation steps instead of inventing a request."],
       "recommendation": "Specific fix with code-level guidance"
     }
   ]
@@ -140,7 +155,10 @@ For each finding respond with:
 CRITICAL RULES:
 - Only report findings with confidence >= 0.8
 - Every finding MUST include a concrete attackVector — no vague "an attacker could..."
-- Describe the EXACT request an attacker would send (method, path, body, changed fields)
+- Describe the EXACT request an attacker would send (method, path, body, changed fields) only when visible from the code
+- Do NOT invent endpoints, parameters, URLs, secrets, or exploit results
+- Use safe non-destructive payloads only
+- If the exact endpoint or parameter is unclear, explicitly say: "The exact route/parameter could not be confirmed from the provided code" and give the closest code-level reproduction based on file, line, and visible sink
 - If no findings: return {"findings": []}
 - Do NOT duplicate issues that standard injection-based SAST would catch
 - FOCUS on authorization and business logic — these are the #1 real-world vulnerability class`;

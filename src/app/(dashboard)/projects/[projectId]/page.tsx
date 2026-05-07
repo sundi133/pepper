@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -23,21 +23,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Settings } from "lucide-react";
+import { Settings, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 export default function ProjectDetailPage() {
   const params = useParams();
   const projectId = params.projectId as string;
+  const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [deletingScanId, setDeletingScanId] = useState<string | null>(null);
 
-  useEffect(() => {
+  function fetchProject() {
     fetch(`/api/projects/${projectId}`)
       .then((res) => res.json())
       .then(setProject)
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    fetchProject();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   if (loading)
@@ -51,6 +60,51 @@ export default function ProjectDetailPage() {
 
   const scans = (project.scans as Array<Record<string, unknown>>) || [];
 
+  async function handleDeleteProject() {
+    if (
+      !confirm(
+        `Delete project "${project.name as string}" and all of its scans? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to delete project");
+      toast.success("Project deleted");
+      router.push("/projects");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete project",
+      );
+      setDeleting(false);
+    }
+  }
+
+  async function handleDeleteScan(scanId: string) {
+    if (!confirm("Delete this scan and all of its findings?")) return;
+
+    setDeletingScanId(scanId);
+    try {
+      const res = await fetch(`/api/scans/${scanId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to delete scan");
+      toast.success("Scan deleted");
+      fetchProject();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete scan",
+      );
+    } finally {
+      setDeletingScanId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -61,6 +115,14 @@ export default function ProjectDetailPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            disabled={deleting}
+            onClick={handleDeleteProject}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </Button>
           <Link href={`/projects/${projectId}/settings`}>
             <Button variant="outline">
               <Settings className="mr-2 h-4 w-4" />
@@ -126,6 +188,7 @@ export default function ProjectDetailPage() {
                   <TableHead>Gate</TableHead>
                   <TableHead>Files</TableHead>
                   <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -155,13 +218,31 @@ export default function ProjectDetailPage() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <GateResultBadge result={scan.gateResult as string} />
+                      {scan.status === "COMPLETED" ? (
+                        <GateResultBadge result={scan.gateResult as string} />
+                      ) : (
+                        <span className="text-sm text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {scan.filesScanned as number}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {new Date(scan.createdAt as string).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          deletingScanId === scan.id ||
+                          scan.status === "RUNNING" ||
+                          scan.status === "PAUSED"
+                        }
+                        onClick={() => handleDeleteScan(scan.id as string)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

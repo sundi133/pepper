@@ -10,7 +10,7 @@ const createProjectSchema = z.object({
   defaultBranch: z.string().default("main"),
 });
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 

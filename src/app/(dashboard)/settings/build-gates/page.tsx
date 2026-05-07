@@ -23,7 +23,7 @@ import {
 import { toast } from "sonner";
 
 export default function BuildGatesPage() {
-  const { projects } = useProjects();
+  const { projects, refresh } = useProjects();
   const [selectedProject, setSelectedProject] = useState("");
   const [loading, setLoading] = useState(false);
   const [gate, setGate] = useState({
@@ -34,12 +34,27 @@ export default function BuildGatesPage() {
     failOnNew: true,
   });
 
-  async function loadGate(projectId: string) {
+  function loadGate(projectId: string) {
     setSelectedProject(projectId);
     const project = projects.find((p: { id: string }) => p.id === projectId);
     if (project?.buildGate) {
       setGate(project.buildGate);
+    } else {
+      setGate({
+        maxCritical: 0,
+        maxHigh: 5,
+        maxMedium: 20,
+        maxLow: -1,
+        failOnNew: true,
+      });
     }
+  }
+
+  function updateGateNumber(
+    key: "maxCritical" | "maxHigh" | "maxMedium" | "maxLow",
+    value: string,
+  ) {
+    setGate((g) => ({ ...g, [key]: value === "" ? -1 : parseInt(value, 10) }));
   }
 
   async function handleSave() {
@@ -54,10 +69,14 @@ export default function BuildGatesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId: selectedProject, ...gate }),
       });
-      if (!res.ok) throw new Error("Failed to save");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to save");
       toast.success("Build gate saved");
-    } catch {
-      toast.error("Failed to save build gate");
+      refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save build gate",
+      );
     } finally {
       setLoading(false);
     }
@@ -105,10 +124,7 @@ export default function BuildGatesPage() {
                     type="number"
                     value={gate.maxCritical}
                     onChange={(e) =>
-                      setGate((g) => ({
-                        ...g,
-                        maxCritical: parseInt(e.target.value),
-                      }))
+                      updateGateNumber("maxCritical", e.target.value)
                     }
                     min={-1}
                   />
@@ -122,10 +138,7 @@ export default function BuildGatesPage() {
                     type="number"
                     value={gate.maxHigh}
                     onChange={(e) =>
-                      setGate((g) => ({
-                        ...g,
-                        maxHigh: parseInt(e.target.value),
-                      }))
+                      updateGateNumber("maxHigh", e.target.value)
                     }
                     min={-1}
                   />
@@ -136,10 +149,7 @@ export default function BuildGatesPage() {
                     type="number"
                     value={gate.maxMedium}
                     onChange={(e) =>
-                      setGate((g) => ({
-                        ...g,
-                        maxMedium: parseInt(e.target.value),
-                      }))
+                      updateGateNumber("maxMedium", e.target.value)
                     }
                     min={-1}
                   />
@@ -150,10 +160,7 @@ export default function BuildGatesPage() {
                     type="number"
                     value={gate.maxLow}
                     onChange={(e) =>
-                      setGate((g) => ({
-                        ...g,
-                        maxLow: parseInt(e.target.value),
-                      }))
+                      updateGateNumber("maxLow", e.target.value)
                     }
                     min={-1}
                   />

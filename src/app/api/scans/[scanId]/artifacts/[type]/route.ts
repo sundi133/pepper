@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { downloadObject } from "@/lib/minio";
 
 export async function GET(
@@ -11,6 +11,10 @@ export async function GET(
   if ("error" in auth) return auth.error;
 
   const { scanId, type } = await params;
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId) {
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
+  }
 
   const typeMap: Record<string, string> = {
     sarif: "SARIF",
@@ -26,12 +30,11 @@ export async function GET(
     );
   }
 
-  const artifact = await prisma.scanArtifact.findUnique({
+  const artifact = await prisma.scanArtifact.findFirst({
     where: {
-      scanId_type: {
-        scanId,
-        type: artifactType as "SARIF" | "SBOM_CYCLONEDX" | "SCAN_LOG",
-      },
+      scanId,
+      type: artifactType as "SARIF" | "SBOM_CYCLONEDX" | "SCAN_LOG",
+      scan: { project: { organizationId: orgId } },
     },
   });
 

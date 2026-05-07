@@ -58,9 +58,21 @@ export async function POST(req: NextRequest) {
       scanParams = createScanSchema.parse(body);
     }
 
-    // Verify project exists and user has access
-    const project = await prisma.project.findUnique({
-      where: { id: scanParams.projectId },
+    const orgId = getDefaultOrgId(auth.session);
+    if (!orgId) {
+      return NextResponse.json({ error: "No organization" }, { status: 403 });
+    }
+
+    if (!fileBuffer && !scanParams.repoUrl && !scanParams.svnUrl) {
+      return NextResponse.json(
+        { error: "Provide a repository URL, SVN URL, or upload a source archive" },
+        { status: 400 },
+      );
+    }
+
+    // Verify project exists in the caller's organization.
+    const project = await prisma.project.findFirst({
+      where: { id: scanParams.projectId, organizationId: orgId },
       include: { organization: true, buildGate: true },
     });
 
@@ -143,6 +155,10 @@ export async function POST(req: NextRequest) {
         enableLlmSast: orgSettings?.enableLlmSast ?? true,
         enableLlmSecrets: orgSettings?.enableLlmSecrets ?? true,
         osvApiUrl: orgSettings?.osvApiUrl || "https://api.osv.dev",
+        vulnDbMode: (orgSettings?.vulnDbMode || "online") as
+          | "online"
+          | "mirror"
+          | "offline",
         orgId: project.organizationId,
       },
       buildGate: project.buildGate

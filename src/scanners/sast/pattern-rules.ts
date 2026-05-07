@@ -7,6 +7,7 @@ import { goRules } from "./rules/go";
 import { javaRules } from "./rules/java";
 import { phpRules } from "./rules/php";
 import { genericRules } from "./rules/generic";
+import { owaspRules } from "./rules/owasp";
 
 export const ALL_PATTERN_RULES: PatternRule[] = [
   ...javascriptRules,
@@ -14,6 +15,7 @@ export const ALL_PATTERN_RULES: PatternRule[] = [
   ...goRules,
   ...javaRules,
   ...phpRules,
+  ...owaspRules,
   ...genericRules,
 ];
 

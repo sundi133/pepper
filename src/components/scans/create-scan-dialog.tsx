@@ -7,7 +7,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -29,9 +28,18 @@ interface Project {
   name: string;
 }
 
-export function CreateScanDialog({ projects }: { projects: Project[] }) {
+interface CreateScanFormProps {
+  projects: Project[];
+  onCancel?: () => void;
+  onCreated?: () => void;
+}
+
+export function CreateScanForm({
+  projects,
+  onCancel,
+  onCreated,
+}: CreateScanFormProps) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [projectId, setProjectId] = useState("");
   const [scanType, setScanType] = useState("FULL");
@@ -88,7 +96,7 @@ export function CreateScanDialog({ projects }: { projects: Project[] }) {
 
       const result = await res.json();
       toast.success("Scan created successfully");
-      setOpen(false);
+      onCreated?.();
       router.push(`/scans/${result.scanId}`);
     } catch (error) {
       toast.error(
@@ -98,6 +106,178 @@ export function CreateScanDialog({ projects }: { projects: Project[] }) {
       setLoading(false);
     }
   }
+
+  return (
+    <>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label>Project</Label>
+          <Select value={projectId} onValueChange={setProjectId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a project" />
+            </SelectTrigger>
+            <SelectContent>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Scan Type</Label>
+          <Select value={scanType} onValueChange={setScanType}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="FULL">Full Scan</SelectItem>
+              <SelectItem value="SAST_ONLY">SAST Only</SelectItem>
+              <SelectItem value="SCA_ONLY">SCA Only</SelectItem>
+              <SelectItem value="SECRETS_ONLY">Secrets Only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Source</Label>
+          <div className="flex gap-1 rounded-md border p-1">
+            {(["upload", "git", "svn"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setSourceMode(mode)}
+                className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                  sourceMode === mode
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {mode === "upload" ? "ZIP / TAR" : mode === "git" ? "Git" : "SVN"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {sourceMode === "upload" && (
+          <div className="space-y-2">
+            <Label>Source Code (ZIP/TAR)</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="file"
+                accept=".zip,.tar,.tar.gz,.tgz"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+              />
+              {file && (
+                <span className="text-sm text-muted-foreground">
+                  {(file.size / 1024 / 1024).toFixed(1)} MB
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {sourceMode === "git" && (
+          <>
+            <div className="space-y-2">
+              <Label>Repository URL</Label>
+              <Input
+                placeholder="https://github.com/org/repo.git"
+                value={repoUrl}
+                onChange={(e) => setRepoUrl(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Branch (optional)</Label>
+              <Input
+                placeholder="Leave blank to use repository default"
+                value={branch}
+                onChange={(e) => setBranch(e.target.value)}
+              />
+            </div>
+          </>
+        )}
+
+        {sourceMode === "svn" && (
+          <>
+            <div className="space-y-2">
+              <Label>SVN Repository URL</Label>
+              <Input
+                placeholder="https://svn.riouxsvn.com/my-repo/trunk"
+                value={svnUrl}
+                onChange={(e) => setSvnUrl(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Full URL to the SVN path you want to scan (e.g. repo root,
+                /trunk, or a specific branch).
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Revision (optional)</Label>
+              <Input
+                placeholder="HEAD (latest)"
+                value={svnRevision}
+                onChange={(e) => setSvnRevision(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                A revision number (e.g. 42) or leave blank for HEAD.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <Label>Username (optional)</Label>
+                <Input
+                  placeholder="svn-user"
+                  value={svnUsername}
+                  onChange={(e) => setSvnUsername(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Password (optional)</Label>
+                <Input
+                  type="password"
+                  placeholder="password"
+                  value={svnPassword}
+                  onChange={(e) => setSvnPassword(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+              <p>
+                Requires <code>svn</code> CLI on the worker. The worker runs{" "}
+                <code>svn export</code> to fetch the code without .svn metadata,
+                then scans it like any other source.
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="mt-6 flex justify-end gap-2">
+        {onCancel && (
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
+        <Button onClick={handleSubmit} disabled={loading}>
+          {loading ? (
+            "Creating..."
+          ) : (
+            <>
+              <Upload className="mr-2 h-4 w-4" />
+              Start Scan
+            </>
+          )}
+        </Button>
+      </div>
+    </>
+  );
+}
+
+export function CreateScanDialog({ projects }: { projects: Project[] }) {
+  const [open, setOpen] = useState(false);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -117,170 +297,12 @@ export function CreateScanDialog({ projects }: { projects: Project[] }) {
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label>Project</Label>
-            <Select value={projectId} onValueChange={setProjectId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a project" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Scan Type</Label>
-            <Select value={scanType} onValueChange={setScanType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="FULL">Full Scan</SelectItem>
-                <SelectItem value="SAST_ONLY">SAST Only</SelectItem>
-                <SelectItem value="SCA_ONLY">SCA Only</SelectItem>
-                <SelectItem value="SECRETS_ONLY">Secrets Only</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Source</Label>
-            <div className="flex gap-1 rounded-md border p-1">
-              {(["upload", "git", "svn"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setSourceMode(mode)}
-                  className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-                    sourceMode === mode
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {mode === "upload"
-                    ? "ZIP / TAR"
-                    : mode === "git"
-                      ? "Git"
-                      : "SVN"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {sourceMode === "upload" && (
-            <div className="space-y-2">
-              <Label>Source Code (ZIP/TAR)</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="file"
-                  accept=".zip,.tar,.tar.gz,.tgz"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                />
-                {file && (
-                  <span className="text-sm text-muted-foreground">
-                    {(file.size / 1024 / 1024).toFixed(1)} MB
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {sourceMode === "git" && (
-            <>
-              <div className="space-y-2">
-                <Label>Repository URL</Label>
-                <Input
-                  placeholder="https://github.com/org/repo.git"
-                  value={repoUrl}
-                  onChange={(e) => setRepoUrl(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Branch (optional)</Label>
-                <Input
-                  placeholder="main"
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                />
-              </div>
-            </>
-          )}
-
-          {sourceMode === "svn" && (
-            <>
-              <div className="space-y-2">
-                <Label>SVN Repository URL</Label>
-                <Input
-                  placeholder="https://svn.riouxsvn.com/my-repo/trunk"
-                  value={svnUrl}
-                  onChange={(e) => setSvnUrl(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Full URL to the SVN path you want to scan (e.g. repo root,
-                  /trunk, or a specific branch).
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label>Revision (optional)</Label>
-                <Input
-                  placeholder="HEAD (latest)"
-                  value={svnRevision}
-                  onChange={(e) => setSvnRevision(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  A revision number (e.g. 42) or leave blank for HEAD.
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-2">
-                  <Label>Username (optional)</Label>
-                  <Input
-                    placeholder="svn-user"
-                    value={svnUsername}
-                    onChange={(e) => setSvnUsername(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Password (optional)</Label>
-                  <Input
-                    type="password"
-                    placeholder="password"
-                    value={svnPassword}
-                    onChange={(e) => setSvnPassword(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
-                <p>
-                  Requires <code>svn</code> CLI on the worker. The worker runs{" "}
-                  <code>svn export</code> to fetch the code without .svn
-                  metadata, then scans it like any other source.
-                </p>
-              </div>
-            </>
-          )}
+          <CreateScanForm
+            projects={projects}
+            onCancel={() => setOpen(false)}
+            onCreated={() => setOpen(false)}
+          />
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={loading}>
-            {loading ? (
-              "Creating..."
-            ) : (
-              <>
-                <Upload className="mr-2 h-4 w-4" />
-                Start Scan
-              </>
-            )}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

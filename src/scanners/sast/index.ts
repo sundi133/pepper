@@ -16,6 +16,7 @@ export const sastPatternScanner: ScannerPlugin = {
     const findings: RawFinding[] = [];
 
     for (const filePath of ctx.fileList) {
+      await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
 
       const ext = path.extname(filePath).toLowerCase();

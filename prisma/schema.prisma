@@ -157,6 +157,8 @@ model Scan {
 enum ScanStatus {
   QUEUED
   RUNNING
+  PAUSED
+  STOPPED
   COMPLETED
   FAILED
   CANCELLED

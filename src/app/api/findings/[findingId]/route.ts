@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import {
+  enrichFindingWithReport,
+  findingHasStoredReport,
+} from "@/lib/finding-report";
 import { z } from "zod";
 
 const updateStatusSchema = z.object({
@@ -22,10 +26,25 @@ export async function PATCH(
   if ("error" in auth) return auth.error;
 
   const { findingId } = await params;
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId) {
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
+  }
 
   try {
     const body = await req.json();
     const data = updateStatusSchema.parse(body);
+
+    const existing = await prisma.finding.findFirst({
+      where: {
+        id: findingId,
+        scan: { project: { organizationId: orgId } },
+      },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Finding not found" }, { status: 404 });
+    }
 
     const finding = await prisma.finding.update({
       where: { id: findingId },
@@ -37,7 +56,14 @@ export async function PATCH(
       },
     });
 
-    return NextResponse.json(finding);
+    const enrichedFinding = enrichFindingWithReport(finding);
+    if (!findingHasStoredReport(finding)) {
+      await prisma.finding.update({
+        where: { id: finding.id },
+        data: { metadata: enrichedFinding.metadata as object },
+      });
+    }
+    return NextResponse.json(enrichedFinding);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -60,14 +86,29 @@ export async function GET(
   if ("error" in auth) return auth.error;
 
   const { findingId } = await params;
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId) {
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
+  }
 
-  const finding = await prisma.finding.findUnique({
-    where: { id: findingId },
+  const finding = await prisma.finding.findFirst({
+    where: {
+      id: findingId,
+      scan: { project: { organizationId: orgId } },
+    },
   });
 
   if (!finding) {
     return NextResponse.json({ error: "Finding not found" }, { status: 404 });
   }
 
-  return NextResponse.json(finding);
+  const enrichedFinding = enrichFindingWithReport(finding);
+  if (!findingHasStoredReport(finding)) {
+    await prisma.finding.update({
+      where: { id: finding.id },
+      data: { metadata: enrichedFinding.metadata as object },
+    });
+  }
+
+  return NextResponse.json(enrichedFinding);
 }

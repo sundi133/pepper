@@ -9,7 +9,7 @@ import { RawFinding, ScanContext, ScannerPlugin } from "../types";
 import {
   detectIacFileType,
   SKIP_DIRECTORIES,
-  MAX_FILE_SIZE_BYTES,
+  LLM_MAX_FILE_SIZE_BYTES,
   LLM_MAX_RESPONSE_TOKENS,
   OLLAMA_MAX_RESPONSE_TOKENS,
 } from "@/lib/constants";
@@ -24,20 +24,33 @@ STRICT RULES:
 
 CHECK FOR THESE CATEGORIES:
 
+**OWASP / CLOUD-NATIVE HIGH IMPACT RISKS:**
+- Security misconfiguration that exposes management planes, metadata services, databases, queues, buckets, dashboards, or internal services
+- Software/data integrity risks in CI/CD such as unpinned actions, mutable images, unsafe pull_request_target, unsigned artifacts, or deployment from untrusted branches
+- Broken access control in IAM, RBAC, Kubernetes roles, service accounts, organization/project policies, and cross-account trust
+- Sensitive data exposure through environment variables, build logs, artifacts, cache keys, state files, or IaC outputs
+- AI/agent and automation risks: overprivileged CI tokens, MCP/tool credentials in jobs, LLM/API keys exposed to untrusted pull requests, autonomous deploy jobs without approval
+
 **SECRETS & CREDENTIALS:**
 - Hardcoded API keys, passwords, tokens, access keys in config
 - Secrets not using secure secret management (Vault, SSM, K8s Secrets)
 - Credentials visible in environment variables or logs
+- Terraform state, pipeline artifacts, Docker build args, Helm values, or Kubernetes manifests leaking credentials
 
 **ACCESS CONTROL & IAM:**
 - Overly permissive IAM policies (*, admin, full access)
 - Public access to private resources (S3, databases, ports)
 - Missing authentication/authorization on endpoints
+- Kubernetes ClusterRole/RoleBinding granting cluster-admin or wildcard verbs/resources to broad subjects
+- Cloud role trust policies allowing external accounts, public principals, or broad service principals without conditions
+- CI/CD service accounts with deploy/admin permissions available to pull requests or non-protected branches
 
 **ENCRYPTION & TRANSPORT:**
 - Missing encryption at rest or in transit
 - Disabled TLS verification
 - Weak or deprecated cipher suites
+- Public load balancers, ingress, or service mesh routes lacking TLS or strict redirect
+- Cloud storage, queues, disks, databases, backups, and logs without customer-managed or provider-managed encryption
 
 **CONTAINER SECURITY:**
 - Running as root (no USER directive in Dockerfile)
@@ -45,22 +58,29 @@ CHECK FOR THESE CATEGORIES:
 - Docker socket mounted into containers
 - Missing resource limits (memory, CPU)
 - Using :latest tags (supply chain risk)
+- Writable root filesystem, hostPath mounts, hostNetwork/hostPID/hostIPC, disabled seccomp/AppArmor/SELinux, or missing readOnlyRootFilesystem
+- Images without digests, SBOM/provenance, or vulnerability gates in deployment workflows
 
 **NETWORK SECURITY:**
 - Open ingress rules (0.0.0.0/0) on sensitive ports
 - Missing network segmentation/policies
 - Exposed management ports
+- Cloud metadata service exposure, missing IMDSv2, overly broad egress, unrestricted pod-to-pod traffic, or public database endpoints
 
 **CI/CD PIPELINE SECURITY:**
 - pull_request_target with checkout of untrusted PR code
 - Third-party actions/orbs not pinned to SHA
 - Secrets exposed in pipeline logs
 - Missing branch protection for deployments
+- Package install scripts running before trust is established
+- Deployments triggered by untrusted tags, forks, comments, workflow_dispatch inputs, or mutable artifacts
+- OIDC federation trust without repository, branch, environment, or audience restrictions
 
 **M2M / WEBHOOK SECURITY:**
 - Webhook endpoints without HMAC/signature verification
 - Service account tokens without rotation or expiration
 - Overprivileged OAuth scopes for integrations
+- Replayable webhook/event workflows without timestamp, nonce, idempotency, or deduplication controls
 
 For each finding respond with:
 {
@@ -112,6 +132,7 @@ export const iacScanner: ScannerPlugin = {
     // Collect IaC files
     const iacFiles: { filePath: string; iacType: string }[] = [];
     for (const filePath of ctx.fileList) {
+      await ctx.waitIfPaused?.();
       const parts = filePath.split(path.sep);
       if (parts.some((p) => SKIP_DIRECTORIES.has(p))) continue;
 
@@ -132,6 +153,7 @@ export const iacScanner: ScannerPlugin = {
     const maxConcurrency = parseInt(process.env.MAX_LLM_CONCURRENCY || "2");
 
     for (let i = 0; i < iacFiles.length; i += maxConcurrency) {
+      await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
 
       const batch = iacFiles.slice(i, i + maxConcurrency);
@@ -140,10 +162,11 @@ export const iacScanner: ScannerPlugin = {
           const fullPath = path.join(ctx.workDir, filePath);
           try {
             const stat = fs.statSync(fullPath);
-            if (stat.size > MAX_FILE_SIZE_BYTES) return [];
+            if (stat.size > LLM_MAX_FILE_SIZE_BYTES) return [];
 
             const content = fs.readFileSync(fullPath, "utf-8");
             if (content.trim().length === 0) return [];
+            const lines = content.split("\n");
 
             const userContent = `File: ${filePath}\nType: ${iacType}\n\n\`\`\`\n${content}\n\`\`\``;
 
@@ -174,6 +197,7 @@ export const iacScanner: ScannerPlugin = {
                 filePath,
                 startLine: f.startLine,
                 endLine: f.endLine,
+                snippet: buildSnippet(lines, f.startLine, f.endLine),
                 cweId: f.cweId,
                 confidence: f.confidence ?? 0.7,
                 ruleId: `IAC-${f.cweId || "MISC"}`,
@@ -211,4 +235,18 @@ function normalizeSeverity(s: string): RawFinding["severity"] {
     return upper as RawFinding["severity"];
   }
   return "MEDIUM";
+}
+
+function buildSnippet(
+  lines: string[],
+  startLine?: number,
+  endLine?: number,
+): string | undefined {
+  if (!startLine || startLine < 1) return undefined;
+  const start = Math.max(0, startLine - 3);
+  const end = Math.min(lines.length, (endLine || startLine) + 2);
+  return lines
+    .slice(start, end)
+    .map((line, index) => `${start + index + 1}: ${line}`)
+    .join("\n");
 }

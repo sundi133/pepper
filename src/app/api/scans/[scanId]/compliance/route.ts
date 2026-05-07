@@ -26,8 +26,8 @@ export async function GET(
     return NextResponse.json({ error: "No organization" }, { status: 403 });
 
   // Check for cached compliance report in scan metadata
-  const scan = await prisma.scan.findUnique({
-    where: { id: scanId },
+  const scan = await prisma.scan.findFirst({
+    where: { id: scanId, project: { organizationId: orgId } },
     select: { scannerProgress: true, projectId: true },
   });
 
@@ -216,13 +216,24 @@ export async function GET(
  * Clear cached compliance report (force regeneration on next GET)
  */
 export async function DELETE(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ scanId: string }> },
 ) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
   const { scanId } = await params;
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId)
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
+
+  const scan = await prisma.scan.findFirst({
+    where: { id: scanId, project: { organizationId: orgId } },
+    select: { id: true },
+  });
+  if (!scan) {
+    return NextResponse.json({ error: "Scan not found" }, { status: 404 });
+  }
 
   try {
     await prisma.$executeRaw`

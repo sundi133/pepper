@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import {
@@ -40,8 +40,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { jsonFetcher } from "@/lib/fetcher";
 
 const THEME_COLORS: Record<string, string> = {
   Organizational:
@@ -113,9 +112,15 @@ export default function ComplianceReportPage() {
   const scanId = params.scanId as string;
   const { data, isLoading, error, mutate } = useSWR(
     `/api/scans/${scanId}/compliance`,
-    fetcher,
+    jsonFetcher,
   );
   const [selectedFrameworks, setSelectedFrameworks] = useState<string[]>([]);
+  const reports: FrameworkReport[] = data?.reports || [];
+  const frameworkNames = reports.map((report) => report.framework);
+  const activeFrameworks =
+    selectedFrameworks.length === 0
+      ? frameworkNames
+      : selectedFrameworks.filter((name) => frameworkNames.includes(name));
 
   async function handleRegenerate() {
     try {
@@ -157,31 +162,19 @@ export default function ComplianceReportPage() {
     );
   }
 
-  const reports: FrameworkReport[] = data.reports || [];
-  const frameworkNames = reports.map((report) => report.framework);
-
-  useEffect(() => {
-    setSelectedFrameworks((current) => {
-      if (frameworkNames.length === 0) return [];
-      if (current.length === 0) return frameworkNames;
-
-      const next = current.filter((name) => frameworkNames.includes(name));
-      return next.length > 0 ? next : frameworkNames;
-    });
-  }, [data.generatedAt, frameworkNames.join("|")]);
-
   const visibleReports = reports.filter((report) =>
-    selectedFrameworks.includes(report.framework),
+    activeFrameworks.includes(report.framework),
   );
 
   function toggleFramework(framework: string, checked: boolean) {
     setSelectedFrameworks((current) => {
+      const selected = current.length === 0 ? frameworkNames : current;
       if (checked) {
-        return current.includes(framework) ? current : [...current, framework];
+        return selected.includes(framework) ? selected : [...selected, framework];
       }
 
-      if (current.length === 1) return current;
-      return current.filter((name) => name !== framework);
+      if (selected.length === 1) return selected;
+      return selected.filter((name) => name !== framework);
     });
   }
 
@@ -330,7 +323,7 @@ export default function ComplianceReportPage() {
               variant="outline"
               size="sm"
               onClick={() => setSelectedFrameworks(frameworkNames)}
-              disabled={frameworkNames.length === selectedFrameworks.length}
+              disabled={frameworkNames.length === activeFrameworks.length}
             >
               Select All
             </Button>
@@ -345,7 +338,7 @@ export default function ComplianceReportPage() {
                 className="flex items-center gap-3 rounded-md border px-3 py-2 text-sm"
               >
                 <Checkbox
-                  checked={selectedFrameworks.includes(report.framework)}
+                  checked={activeFrameworks.includes(report.framework)}
                   onCheckedChange={(checked) =>
                     toggleFramework(report.framework, checked === true)
                   }
@@ -477,7 +470,7 @@ export default function ComplianceReportPage() {
               <CardTitle>Finding → Control Mapping</CardTitle>
               <CardDescription>
                 Each finding with its mapped controls and relevance level. Hover
-                over a control badge for the LLM's reasoning.
+                over a control badge for the LLM&apos;s reasoning.
               </CardDescription>
             </CardHeader>
             <CardContent>

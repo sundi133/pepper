@@ -50,7 +50,8 @@ export const packageLockParser: DependencyParser = {
           lock.packages as Record<string, { version?: string; dev?: boolean }>,
         )) {
           if (!pkgPath || pkgPath === "") continue;
-          const name = pkgPath.replace(/^node_modules\//, "");
+          const name = packageNameFromLockPath(pkgPath);
+          if (!name) continue;
           if (info.version) {
             deps.push({
               name,
@@ -89,4 +90,14 @@ export const packageLockParser: DependencyParser = {
 
 function cleanVersion(version: string): string {
   return version.replace(/^[\^~>=<]+/, "").trim();
+}
+
+function packageNameFromLockPath(pkgPath: string): string | undefined {
+  const candidate = pkgPath.split("node_modules/").filter(Boolean).pop();
+  if (!candidate) return undefined;
+  const segments = candidate.split("/");
+  if (candidate.startsWith("@") && segments.length >= 2) {
+    return `${segments[0]}/${segments[1]}`;
+  }
+  return segments[0];
 }

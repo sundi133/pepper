@@ -215,8 +215,9 @@ async function fetchPypiMeta(
 
 async function fetchMavenMeta(
   pkgName: string,
-  _version: string,
+  version: string,
 ): Promise<PkgMetadata | null> {
+  void version;
   try {
     const [groupId, artifactId] = pkgName.split(":");
     if (!groupId || !artifactId) return null;
@@ -282,8 +283,9 @@ async function fetchGoMeta(
 
 async function fetchCratesMeta(
   pkgName: string,
-  _version: string,
+  version: string,
 ): Promise<PkgMetadata | null> {
+  void version;
   try {
     const response = await fetch(
       `https://crates.io/api/v1/crates/${encodeURIComponent(pkgName)}`,
@@ -319,8 +321,9 @@ async function fetchCratesMeta(
 
 async function fetchRubyGemsMeta(
   pkgName: string,
-  _version: string,
+  version: string,
 ): Promise<PkgMetadata | null> {
+  void version;
   try {
     const response = await fetch(
       `https://rubygems.org/api/v1/gems/${encodeURIComponent(pkgName)}.json`,
@@ -440,40 +443,49 @@ interface ScriptLlmFinding {
 export const maliciousPkgScanner: ScannerPlugin = {
   name: "MALICIOUS_PKG",
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
+    await ctx.waitIfPaused?.();
     const { dependencies } = parseDependencies(ctx.workDir, ctx.fileList);
     if (dependencies.length === 0) return [];
 
     const findings: RawFinding[] = [];
     const osvApiUrl = ctx.orgSettings.osvApiUrl || "https://api.osv.dev";
+    const useVulnerabilityDb = ctx.orgSettings.vulnDbMode !== "offline";
 
     // ────────────────────────────────────────────────────────────────────
     // PHASE 1: OSV Malware Advisory Check (batch API — fast, free, authoritative)
     // ────────────────────────────────────────────────────────────────────
-    ctx.onProgress?.(
-      `Supply Chain: batch-checking ${dependencies.length} packages against OSV malware database...`,
-    );
+    if (useVulnerabilityDb) {
+      ctx.onProgress?.(
+        `Supply Chain: batch-checking ${dependencies.length} packages against OSV malware database...`,
+      );
 
-    const malwareMap = await batchQueryOsvForMalware(dependencies, osvApiUrl);
+      await ctx.waitIfPaused?.();
+      const malwareMap = await batchQueryOsvForMalware(dependencies, osvApiUrl);
 
-    for (const [depIdx, hits] of malwareMap) {
-      const dep = dependencies[depIdx];
-      for (const hit of hits) {
-        findings.push({
-          scanner: "MALICIOUS_PKG",
-          severity: "CRITICAL",
-          title: `Known malicious package: ${dep.name}@${dep.version} (${hit.id})`,
-          description: `${hit.summary || hit.details || "This package has been flagged as malicious by the OpenSSF Malicious Packages database."}\n\nAdvisory: ${hit.id}\nPackage: ${dep.name}@${dep.version} (${dep.ecosystem})\n\nRecommendation: Remove this package immediately and audit any systems where it was installed.`,
-          ruleId: hit.id,
-          cweId: "CWE-506",
-          confidence: 1.0,
-          metadata: {
-            ecosystem: dep.ecosystem,
-            version: dep.version,
-            osvId: hit.id,
-            source: "osv-malware-db",
-          },
-        });
+      for (const [depIdx, hits] of malwareMap) {
+        const dep = dependencies[depIdx];
+        for (const hit of hits) {
+          findings.push({
+            scanner: "MALICIOUS_PKG",
+            severity: "CRITICAL",
+            title: `Known malicious package: ${dep.name}@${dep.version} (${hit.id})`,
+            description: `${hit.summary || hit.details || "This package has been flagged as malicious by the OpenSSF Malicious Packages database."}\n\nAdvisory: ${hit.id}\nPackage: ${dep.name}@${dep.version} (${dep.ecosystem})\n\nRecommendation: Remove this package immediately and audit any systems where it was installed.`,
+            ruleId: hit.id,
+            cweId: "CWE-506",
+            confidence: 1.0,
+            metadata: {
+              ecosystem: dep.ecosystem,
+              version: dep.version,
+              osvId: hit.id,
+              source: "osv-malware-db",
+            },
+          });
+        }
       }
+    } else {
+      ctx.onProgress?.(
+        "Supply Chain: vulnerability database is offline; skipping OSV malware advisory lookup",
+      );
     }
 
     const phase1Count = findings.length;
@@ -492,6 +504,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
     const depsWithScripts: { dep: Dependency; meta: PkgMetadata }[] = [];
 
     for (let i = 0; i < dependencies.length; i += REG_CONCURRENCY) {
+      await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
 
       const batch = dependencies.slice(i, i + REG_CONCURRENCY);
@@ -586,6 +599,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
 
     const BATCH_SIZE = 30;
     for (let i = 0; i < dependencies.length; i += BATCH_SIZE) {
+      await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
 
       const batch = dependencies.slice(i, i + BATCH_SIZE);
@@ -642,6 +656,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
       );
 
       for (const { dep, meta } of depsWithScripts) {
+        await ctx.waitIfPaused?.();
         if (ctx.signal?.aborted) break;
 
         const scriptEntries = Object.entries(meta.installScripts)
@@ -693,6 +708,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
 
     // 3c. Also check local package.json scripts (for repos that don't publish to npm)
     for (const filePath of ctx.fileList) {
+      await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
       if (path.basename(filePath) !== "package.json") continue;
       if (filePath.includes("node_modules")) continue;

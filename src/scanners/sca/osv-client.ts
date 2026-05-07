@@ -1,4 +1,5 @@
 import { Dependency, RawFinding } from "../types";
+import { logger } from "@/lib/logger";
 
 interface OsvQuery {
   package: { name: string; ecosystem: string };
@@ -44,9 +45,20 @@ export async function queryOsvBatch(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ queries }),
+        signal: AbortSignal.timeout(30000),
       });
 
-      if (!response.ok) continue;
+      if (!response.ok) {
+        logger.warn(
+          {
+            status: response.status,
+            batchStart: i,
+            batchSize: batch.length,
+          },
+          "OSV vulnerability batch request failed",
+        );
+        continue;
+      }
 
       const data: OsvBatchResponse = await response.json();
 
@@ -80,8 +92,15 @@ export async function queryOsvBatch(
           });
         }
       }
-    } catch {
-      // OSV API unavailable, skip this batch
+    } catch (error) {
+      logger.warn(
+        {
+          err: error,
+          batchStart: i,
+          batchSize: batch.length,
+        },
+        "OSV vulnerability batch request errored",
+      );
       continue;
     }
   }

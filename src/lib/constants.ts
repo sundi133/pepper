@@ -28,6 +28,8 @@ export const SCANNER_LABELS = {
 export const SCAN_STATUS_LABELS = {
   QUEUED: "Queued",
   RUNNING: "Running",
+  PAUSED: "Paused",
+  STOPPED: "Stopped",
   COMPLETED: "Completed",
   FAILED: "Failed",
   CANCELLED: "Cancelled",
@@ -169,7 +171,10 @@ export function detectIacFileType(filePath: string): IacFileType | null {
     lower.includes("/k8s/") ||
     lower.includes("/kubernetes/") ||
     lower.includes("/manifests/") ||
-    lower.includes("/deploy/")
+    lower.includes("/deploy/") ||
+    /^(deployment|service|ingress|configmap|secret|daemonset|statefulset|cronjob|job|pod|namespace|role|rolebinding|clusterrole|clusterrolebinding)\.ya?ml$/i.test(
+      basename,
+    )
   )
     return "kubernetes";
   if (

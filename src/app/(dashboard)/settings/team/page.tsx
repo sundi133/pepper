@@ -46,7 +46,10 @@ export default function TeamPage() {
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
-    if (!email) return;
+    if (!email || password.length < 8) {
+      toast.error("Email and an initial password of at least 8 characters are required");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -57,10 +60,11 @@ export default function TeamPage() {
           email,
           name,
           role,
-          password: password || undefined,
+          password,
         }),
       });
-      if (!res.ok) throw new Error("Failed to invite");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to invite");
 
       toast.success("User invited");
       setEmail("");
@@ -68,10 +72,12 @@ export default function TeamPage() {
       setPassword("");
 
       // Refresh members
-      const data = await fetch("/api/users").then((r) => r.json());
-      setMembers(data.members || []);
-    } catch {
-      toast.error("Failed to invite user");
+      const refreshed = await fetch("/api/users").then((r) => r.json());
+      setMembers(refreshed.members || []);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to invite user",
+      );
     } finally {
       setLoading(false);
     }
@@ -145,7 +151,12 @@ export default function TeamPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Initial password"
+                  minLength={8}
+                  required
                 />
+                <p className="text-xs text-muted-foreground">
+                  Required for first login. Minimum 8 characters.
+                </p>
               </div>
             </div>
             <Button type="submit" disabled={loading}>

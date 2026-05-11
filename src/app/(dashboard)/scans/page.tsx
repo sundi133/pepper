@@ -1,7 +1,12 @@
 "use client";
 
 import { useScans, useProjects } from "@/hooks/use-scan-polling";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   ScanStatusBadge,
   GateResultBadge,
@@ -15,20 +20,109 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { RotateCcw, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
+
+const ARCHIVE_EXTENSION_REGEX = /\.(tar\.gz|zip|tgz|tar)$/i;
+
+function getScanSourceName(scan: Record<string, unknown>) {
+  const sourceRef = scan.sourceRef as string | undefined;
+  const sourceType = scan.sourceType as string | undefined;
+  const scanId = scan.id as string;
+
+  if (!sourceRef) return `${scanId.slice(0, 8)}...`;
+
+  if (sourceType === "UPLOAD") {
+    const fileName = sourceRef.split("/").pop() || sourceRef;
+    const sourceName = fileName.replace(ARCHIVE_EXTENSION_REGEX, "");
+    return sourceName === "source" ? `${scanId.slice(0, 8)}...` : sourceName;
+  }
+
+  try {
+    const url = new URL(sourceRef);
+    return (url.pathname.split("/").filter(Boolean).pop() || sourceRef).replace(
+      /\.git$/i,
+      "",
+    );
+  } catch {
+    return (sourceRef.split(/[\\/]/).pop() || sourceRef).replace(/\.git$/i, "");
+  }
+}
 
 export default function ScansPage() {
-  const { scans, isLoading } = useScans();
+  const { scans, isLoading, refresh } = useScans();
   const { projects } = useProjects();
+  const router = useRouter();
+  const [rescanningId, setRescanningId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleRescan(scanId: string) {
+    setRescanningId(scanId);
+    try {
+      const res = await fetch(`/api/scans/${scanId}/rescan`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to start rescan");
+      toast.success("Rescan queued");
+      router.push(`/scans/${data.scanId}`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to start rescan",
+      );
+      setRescanningId(null);
+    }
+  }
+
+  async function handleDeleteScan(scanId: string) {
+    if (!confirm("Delete this scan and all of its findings?")) return;
+
+    setDeletingId(scanId);
+    try {
+      const res = await fetch(`/api/scans/${scanId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to delete scan");
+      toast.success("Scan deleted");
+      refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete scan",
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
+    <TooltipProvider>
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <PageBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Projects", href: "/projects" },
+          { label: "Scans" },
+        ]}
+      />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Scans</h1>
-          <p className="text-muted-foreground">All scan activity</p>
+          <p className="text-muted-foreground">
+            Review findings from the table. Use New scan to enter project,
+            type, and source in a dialog.
+          </p>
         </div>
-        <CreateScanDialog projects={projects} />
+        <CreateScanDialog projects={projects} onScanCreated={() => refresh()} />
       </div>
 
       <Card>
@@ -46,7 +140,7 @@ export default function ScansPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Scan ID</TableHead>
+                  <TableHead>Source</TableHead>
                   <TableHead>Project</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Branch</TableHead>
@@ -55,17 +149,19 @@ export default function ScansPage() {
                   <TableHead>Total</TableHead>
                   <TableHead>Gate</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {scans.map((scan: Record<string, unknown>) => (
                   <TableRow key={scan.id as string}>
-                    <TableCell className="text-xs font-mono text-muted-foreground">
+                    <TableCell className="max-w-48">
                       <Link
                         href={`/scans/${scan.id}`}
-                        className="hover:underline"
+                        className="font-medium hover:underline"
+                        title={scan.sourceRef as string | undefined}
                       >
-                        {(scan.id as string).slice(0, 8)}...
+                        {getScanSourceName(scan)}
                       </Link>
                     </TableCell>
                     <TableCell>
@@ -99,7 +195,8 @@ export default function ScansPage() {
                           {(scan.criticalCount as number) +
                             (scan.highCount as number) +
                             (scan.mediumCount as number) +
-                            (scan.lowCount as number)}
+                            (scan.lowCount as number) +
+                            (scan.infoCount as number)}
                         </span>
                       )}
                     </TableCell>
@@ -111,6 +208,42 @@ export default function ScansPage() {
                     <TableCell className="text-sm text-muted-foreground">
                       {new Date(scan.createdAt as string).toLocaleString()}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={rescanningId === scan.id}
+                              onClick={() => handleRescan(scan.id as string)}
+                              aria-label="Retry Scan"
+                            >
+                              <RotateCcw className="h-4 w-4" aria-hidden />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Retry Scan</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={
+                                deletingId === scan.id ||
+                                scan.status === "RUNNING" ||
+                                scan.status === "PAUSED"
+                              }
+                              onClick={() => handleDeleteScan(scan.id as string)}
+                              aria-label="Delete Scan"
+                            >
+                              <Trash2 className="h-4 w-4" aria-hidden />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete Scan</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -119,5 +252,6 @@ export default function ScansPage() {
         </CardContent>
       </Card>
     </div>
+    </TooltipProvider>
   );
 }

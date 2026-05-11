@@ -121,6 +121,7 @@ export function parseDependencies(
 export const scaScanner: ScannerPlugin = {
   name: "SCA",
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
+    await ctx.waitIfPaused?.();
     const { dependencies, parsedFiles } = parseDependencies(
       ctx.workDir,
       ctx.fileList,
@@ -132,6 +133,17 @@ export const scaScanner: ScannerPlugin = {
 
     if (dependencies.length === 0) return [];
 
+    if (ctx.orgSettings.vulnDbMode === "offline") {
+      ctx.onProgress?.(
+        "SCA: vulnerability database is offline; skipping OSV vulnerability lookup",
+      );
+      return [];
+    }
+
+    await ctx.waitIfPaused?.();
+    ctx.onProgress?.(
+      `SCA: querying OSV for ${dependencies.length} dependencies...`,
+    );
     const findings = await queryOsvBatch(
       dependencies,
       ctx.orgSettings.osvApiUrl,
@@ -142,4 +154,3 @@ export const scaScanner: ScannerPlugin = {
   },
 };
 
-export { parseDependencies as getDependencies };

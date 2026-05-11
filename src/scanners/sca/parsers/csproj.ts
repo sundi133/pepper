@@ -7,7 +7,7 @@ import { Dependency, DependencyParser } from "../../types";
 export const csprojParser: DependencyParser = {
   filePatterns: [], // Matched by extension in parseDependencies
   ecosystem: "NuGet",
-  parse(content: string, filePath: string): Dependency[] {
+  parse(content: string): Dependency[] {
     const deps: Dependency[] = [];
 
     // Match: <PackageReference Include="Name" Version="1.0.0" />

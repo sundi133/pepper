@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 
 interface Policy {
   id: string;
@@ -209,6 +210,12 @@ export default function PoliciesPage() {
 
   return (
     <div className="max-w-4xl space-y-6">
+      <PageBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Policies" },
+        ]}
+      />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Custom Security Policies</h1>

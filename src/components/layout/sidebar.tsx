@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   FolderOpen,
   Scan,
-  Settings,
   Users,
   Zap,
   ShieldCheck,
@@ -35,16 +34,23 @@ export function Sidebar() {
 
   return (
     <aside className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-64 lg:flex-col">
-      <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r bg-card px-6 pb-4">
-        <div className="flex h-16 shrink-0 items-center gap-2">
-          <Shield className="h-8 w-8 text-primary" />
-          <span className="text-xl font-bold">Pepper</span>
+      <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-border/80 bg-card px-6 pb-4 shadow-sm">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/60 pb-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Shield className="h-5 w-5" aria-hidden />
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="text-lg font-bold tracking-tight">Pepper</span>
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              SAST
+            </span>
+          </div>
         </div>
 
         <nav className="flex flex-1 flex-col">
           <ul className="flex flex-1 flex-col gap-y-7">
             <li>
-              <ul className="-mx-2 space-y-1">
+              <ul className="-mx-2 space-y-0.5">
                 {navigation.map((item) => {
                   const isActive = pathname.startsWith(item.href);
                   return (
@@ -52,13 +58,19 @@ export function Sidebar() {
                       <Link
                         href={item.href}
                         className={cn(
-                          "group flex gap-x-3 rounded-md p-2 text-sm font-medium leading-6",
+                          "flex gap-x-3 rounded-lg px-2.5 py-2 text-sm font-medium leading-6 transition-colors duration-150",
                           isActive
-                            ? "bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                            ? "bg-primary/12 text-primary shadow-sm ring-1 ring-primary/15"
+                            : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
                         )}
                       >
-                        <item.icon className="h-5 w-5 shrink-0" />
+                        <item.icon
+                          className={cn(
+                            "h-5 w-5 shrink-0 transition-opacity",
+                            isActive ? "opacity-100" : "opacity-80",
+                          )}
+                          aria-hidden
+                        />
                         {item.name}
                       </Link>
                     </li>
@@ -68,10 +80,10 @@ export function Sidebar() {
             </li>
 
             <li>
-              <div className="text-xs font-semibold leading-6 text-muted-foreground">
+              <div className="px-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Settings
               </div>
-              <ul className="-mx-2 mt-2 space-y-1">
+              <ul className="-mx-2 mt-2 space-y-0.5">
                 {settingsNav.map((item) => {
                   const isActive = pathname === item.href;
                   return (
@@ -79,13 +91,19 @@ export function Sidebar() {
                       <Link
                         href={item.href}
                         className={cn(
-                          "group flex gap-x-3 rounded-md p-2 text-sm font-medium leading-6",
+                          "flex gap-x-3 rounded-lg px-2.5 py-2 text-sm font-medium leading-6 transition-colors duration-150",
                           isActive
-                            ? "bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                            ? "bg-primary/12 text-primary shadow-sm ring-1 ring-primary/15"
+                            : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
                         )}
                       >
-                        <item.icon className="h-5 w-5 shrink-0" />
+                        <item.icon
+                          className={cn(
+                            "h-5 w-5 shrink-0 transition-opacity",
+                            isActive ? "opacity-100" : "opacity-80",
+                          )}
+                          aria-hidden
+                        />
                         {item.name}
                       </Link>
                     </li>

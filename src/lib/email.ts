@@ -37,8 +37,16 @@ async function getSmtpConfig(orgId: string): Promise<SmtpConfig | null> {
     user: settings.smtpUser || undefined,
     password: settings.smtpPassword || undefined,
     fromAddress: settings.smtpFromAddress || "noreply@pepper-sast.local",
-    useTls: settings.smtpUseTls,
+    useTls: settings.smtpUseTls ?? true,
   };
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function createTransport(config: SmtpConfig) {
@@ -154,6 +162,120 @@ export async function sendScanCompleteEmail(
       { err, to: params.to },
       "Failed to send scan completion email",
     );
+    return false;
+  }
+}
+
+export interface TeamInviteEmailParams {
+  to: string;
+  invitedName?: string | null;
+  organizationName: string;
+  role: string;
+  /** True when a new User row was created (first-time Pepper account). */
+  isNewUser: boolean;
+  /**
+   * Plaintext initial password from the invite form. Only included in the
+   * email for new accounts. Email is not a secure channel—use only when
+   * acceptable for your deployment (e.g. internal Mailpit testing).
+   */
+  initialPassword?: string;
+}
+
+/**
+ * Notifies a user they were added to an organization. SMTP must be configured
+ * (env or org settings); otherwise logs and returns false without throwing.
+ * For **new** accounts, the message includes sign-in email and initial password
+ * when `initialPassword` is passed. For existing users added to the org, the
+ * password field is omitted (their password is not changed by invite).
+ */
+export async function sendTeamInviteEmail(
+  orgId: string,
+  params: TeamInviteEmailParams,
+): Promise<boolean> {
+  try {
+    const config = await getSmtpConfig(orgId);
+    if (!config) {
+      logger.info(
+        { to: params.to },
+        "Team invite email skipped: no SMTP configured",
+      );
+      return false;
+    }
+
+    const baseUrl =
+      process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const loginUrl = `${baseUrl.replace(/\/$/, "")}/login`;
+    const orgName = escapeHtml(params.organizationName);
+    const displayName = params.invitedName
+      ? escapeHtml(params.invitedName)
+      : "there";
+    const roleLabel = escapeHtml(params.role);
+
+    const subject = `[Pepper] You’ve been added to ${params.organizationName}`;
+
+    const loginEmail = escapeHtml(params.to);
+    const pwd = params.initialPassword?.trim();
+    const showInitialPassword = Boolean(
+      params.isNewUser && pwd && pwd.length > 0,
+    );
+    const passwordHtml = pwd ? escapeHtml(pwd) : "";
+
+    const bodyNew = showInitialPassword
+      ? `
+          <p>You now have a Pepper account for <strong>${orgName}</strong> with role <strong>${roleLabel}</strong>.</p>
+          <div style="margin:16px 0;padding:14px 16px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;margin-bottom:6px;">Sign-in email</div>
+            <div style="font-size:15px;font-weight:500;color:#111827;word-break:break-all;margin-bottom:14px;">${loginEmail}</div>
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;margin-bottom:6px;">Initial password</div>
+            <div style="font-size:15px;font-weight:500;color:#111827;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;word-break:break-all;">${passwordHtml}</div>
+          </div>
+          <p style="font-size:13px;color:#92400e;line-height:1.5;">Email is not a secure channel. Anyone who can read this message can use these credentials—change your password after first login if your deployment supports it.</p>
+          <p style="font-size:14px;color:#4b5563;line-height:1.5;">Use the button below to open Pepper and sign in.</p>`
+      : `
+          <p>You now have a Pepper account for <strong>${orgName}</strong> with role <strong>${roleLabel}</strong>.</p>
+          <div style="margin:16px 0;padding:14px 16px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;margin-bottom:6px;">Sign-in email</div>
+            <div style="font-size:15px;font-weight:500;color:#111827;word-break:break-all;">${loginEmail}</div>
+          </div>
+          <p style="font-size:14px;color:#4b5563;line-height:1.5;">Your administrator chose an <strong>initial password</strong> when they created your account. It was not included in this message—get it from them securely, then sign in below.</p>`;
+
+    const bodyExisting = `
+          <p>You’ve been granted access to <strong>${orgName}</strong> with role <strong>${roleLabel}</strong>.</p>
+          <div style="margin:16px 0;padding:14px 16px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;margin-bottom:6px;">Organization account</div>
+            <div style="font-size:15px;font-weight:500;color:#111827;word-break:break-all;">${loginEmail}</div>
+          </div>
+          <p style="font-size:14px;color:#4b5563;line-height:1.5;">Sign in with your existing Pepper password for this email address.</p>`;
+
+    const html = `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;color:#374151;">
+        <div style="background:#1e1b4b;padding:24px;border-radius:8px 8px 0 0;color:white;">
+          <h2 style="margin:0;">Team invitation</h2>
+          <p style="margin:4px 0 0;opacity:0.8;">${orgName}</p>
+        </div>
+        <div style="border:1px solid #e5e7eb;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
+          <p>Hi ${displayName},</p>
+          ${params.isNewUser ? bodyNew : bodyExisting}
+          <div style="text-align:center;margin:24px 0;">
+            <a href="${escapeHtml(loginUrl)}" style="display:inline-block;background:#4f46e5;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;">Sign in to Pepper</a>
+          </div>
+          <p style="font-size:12px;color:#9ca3af;">If you did not expect this message, contact your organization administrator.</p>
+        </div>
+      </div>
+    `;
+
+    const transport = createTransport(config);
+    await transport.sendMail({
+      from: config.fromAddress,
+      to: params.to,
+      subject,
+      html,
+    });
+
+    logger.info({ to: params.to, orgId }, "Team invite email sent");
+    return true;
+  } catch (err) {
+    logger.error({ err, to: params.to }, "Failed to send team invite email");
     return false;
   }
 }

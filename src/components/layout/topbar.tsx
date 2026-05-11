@@ -24,13 +24,18 @@ export function Topbar() {
     : session?.user?.email?.[0]?.toUpperCase() || "U";
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b bg-background px-4 sm:gap-x-6 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-border/80 bg-background/80 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:gap-x-6 sm:px-6 lg:px-8">
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
         <div className="flex flex-1" />
-        <div className="flex items-center gap-x-4 lg:gap-x-6">
-          <span className="text-sm text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-x-4 lg:gap-x-6">
+          <span className="hidden max-w-[16rem] truncate text-sm font-medium text-muted-foreground sm:inline">
             {session?.user?.memberships?.[0]?.organizationName ||
               "Organization"}
+          </span>
+          <span className="max-w-[10rem] truncate text-sm font-medium text-muted-foreground sm:hidden">
+            {(session?.user?.memberships?.[0]?.organizationName || "Org").split(
+              " ",
+            )[0]}
           </span>
 
           <DropdownMenu>

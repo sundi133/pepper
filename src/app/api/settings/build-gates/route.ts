@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -16,9 +16,23 @@ export async function PUT(req: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId) {
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
+  }
+
   try {
     const body = await req.json();
     const data = updateSchema.parse(body);
+
+    const project = await prisma.project.findFirst({
+      where: { id: data.projectId, organizationId: orgId },
+      select: { id: true },
+    });
+
+    if (!project) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
 
     const buildGate = await prisma.buildGate.upsert({
       where: { projectId: data.projectId },

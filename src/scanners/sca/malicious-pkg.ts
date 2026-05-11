@@ -10,6 +10,7 @@ import { parseDependencies } from "./index";
 import {
   LLM_MAX_RESPONSE_TOKENS,
   OLLAMA_MAX_RESPONSE_TOKENS,
+  MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 
@@ -215,8 +216,9 @@ async function fetchPypiMeta(
 
 async function fetchMavenMeta(
   pkgName: string,
-  _version: string,
+  version: string,
 ): Promise<PkgMetadata | null> {
+  void version;
   try {
     const [groupId, artifactId] = pkgName.split(":");
     if (!groupId || !artifactId) return null;
@@ -282,8 +284,9 @@ async function fetchGoMeta(
 
 async function fetchCratesMeta(
   pkgName: string,
-  _version: string,
+  version: string,
 ): Promise<PkgMetadata | null> {
+  void version;
   try {
     const response = await fetch(
       `https://crates.io/api/v1/crates/${encodeURIComponent(pkgName)}`,
@@ -319,8 +322,9 @@ async function fetchCratesMeta(
 
 async function fetchRubyGemsMeta(
   pkgName: string,
-  _version: string,
+  version: string,
 ): Promise<PkgMetadata | null> {
+  void version;
   try {
     const response = await fetch(
       `https://rubygems.org/api/v1/gems/${encodeURIComponent(pkgName)}.json`,
@@ -365,7 +369,7 @@ For each batch of package names and versions, analyze for:
 2. **SUSPICIOUS NAMES**: Names mimicking system utilities, random/obfuscated strings, or impersonating organizations
 
 STRICT RULES:
-- Only flag packages with confidence >= 0.7
+- Only flag packages with confidence >= 0.65
 - Do NOT flag legitimate popular packages or their well-known extensions
 - If uncertain, do NOT report
 
@@ -379,7 +383,7 @@ Respond with:
       "severity": "CRITICAL|HIGH|MEDIUM",
       "similarTo": "legitimate package it mimics",
       "description": "Why this package is suspicious",
-      "confidence": <0.7 to 1.0>,
+      "confidence": <0.65 to 1.0>,
       "recommendation": "What to do"
     }
   ]
@@ -407,7 +411,7 @@ Respond with:
       "severity": "CRITICAL|HIGH|MEDIUM",
       "description": "What the script does and why it's dangerous",
       "scriptKey": "preinstall|install|postinstall",
-      "confidence": <0.7 to 1.0>,
+      "confidence": <0.65 to 1.0>,
       "recommendation": "What to do"
     }
   ]
@@ -440,40 +444,49 @@ interface ScriptLlmFinding {
 export const maliciousPkgScanner: ScannerPlugin = {
   name: "MALICIOUS_PKG",
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
+    await ctx.waitIfPaused?.();
     const { dependencies } = parseDependencies(ctx.workDir, ctx.fileList);
     if (dependencies.length === 0) return [];
 
     const findings: RawFinding[] = [];
     const osvApiUrl = ctx.orgSettings.osvApiUrl || "https://api.osv.dev";
+    const useVulnerabilityDb = ctx.orgSettings.vulnDbMode !== "offline";
 
     // ────────────────────────────────────────────────────────────────────
     // PHASE 1: OSV Malware Advisory Check (batch API — fast, free, authoritative)
     // ────────────────────────────────────────────────────────────────────
-    ctx.onProgress?.(
-      `Supply Chain: batch-checking ${dependencies.length} packages against OSV malware database...`,
-    );
+    if (useVulnerabilityDb) {
+      ctx.onProgress?.(
+        `Supply Chain: batch-checking ${dependencies.length} packages against OSV malware database...`,
+      );
 
-    const malwareMap = await batchQueryOsvForMalware(dependencies, osvApiUrl);
+      await ctx.waitIfPaused?.();
+      const malwareMap = await batchQueryOsvForMalware(dependencies, osvApiUrl);
 
-    for (const [depIdx, hits] of malwareMap) {
-      const dep = dependencies[depIdx];
-      for (const hit of hits) {
-        findings.push({
-          scanner: "MALICIOUS_PKG",
-          severity: "CRITICAL",
-          title: `Known malicious package: ${dep.name}@${dep.version} (${hit.id})`,
-          description: `${hit.summary || hit.details || "This package has been flagged as malicious by the OpenSSF Malicious Packages database."}\n\nAdvisory: ${hit.id}\nPackage: ${dep.name}@${dep.version} (${dep.ecosystem})\n\nRecommendation: Remove this package immediately and audit any systems where it was installed.`,
-          ruleId: hit.id,
-          cweId: "CWE-506",
-          confidence: 1.0,
-          metadata: {
-            ecosystem: dep.ecosystem,
-            version: dep.version,
-            osvId: hit.id,
-            source: "osv-malware-db",
-          },
-        });
+      for (const [depIdx, hits] of malwareMap) {
+        const dep = dependencies[depIdx];
+        for (const hit of hits) {
+          findings.push({
+            scanner: "MALICIOUS_PKG",
+            severity: "CRITICAL",
+            title: `Known malicious package: ${dep.name}@${dep.version} (${hit.id})`,
+            description: `${hit.summary || hit.details || "This package has been flagged as malicious by the OpenSSF Malicious Packages database."}\n\nAdvisory: ${hit.id}\nPackage: ${dep.name}@${dep.version} (${dep.ecosystem})\n\nRecommendation: Remove this package immediately and audit any systems where it was installed.`,
+            ruleId: hit.id,
+            cweId: "CWE-506",
+            confidence: 1.0,
+            metadata: {
+              ecosystem: dep.ecosystem,
+              version: dep.version,
+              osvId: hit.id,
+              source: "osv-malware-db",
+            },
+          });
+        }
       }
+    } else {
+      ctx.onProgress?.(
+        "Supply Chain: vulnerability database is offline; skipping OSV malware advisory lookup",
+      );
     }
 
     const phase1Count = findings.length;
@@ -492,6 +505,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
     const depsWithScripts: { dep: Dependency; meta: PkgMetadata }[] = [];
 
     for (let i = 0; i < dependencies.length; i += REG_CONCURRENCY) {
+      await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
 
       const batch = dependencies.slice(i, i + REG_CONCURRENCY);
@@ -584,8 +598,9 @@ export const maliciousPkgScanner: ScannerPlugin = {
       `Supply Chain: LLM analyzing ${dependencies.length} packages for typosquatting...`,
     );
 
-    const BATCH_SIZE = 30;
+    const BATCH_SIZE = 26;
     for (let i = 0; i < dependencies.length; i += BATCH_SIZE) {
+      await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
 
       const batch = dependencies.slice(i, i + BATCH_SIZE);
@@ -608,7 +623,11 @@ export const maliciousPkgScanner: ScannerPlugin = {
         );
 
         for (const f of parsed.findings || []) {
-          if (!f.packageName || !f.severity || (f.confidence ?? 0) < 0.7)
+          if (
+            !f.packageName ||
+            !f.severity ||
+            (f.confidence ?? 0) < MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT
+          )
             continue;
 
           findings.push({
@@ -620,7 +639,8 @@ export const maliciousPkgScanner: ScannerPlugin = {
               : f.description,
             ruleId: `MAL-${f.type || "PKG"}`,
             cweId: f.type === "TYPOSQUAT" ? "CWE-506" : "CWE-829",
-            confidence: f.confidence ?? 0.7,
+            confidence:
+              f.confidence ?? MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT,
             metadata: {
               ecosystem: batch.find((d) => d.name === f.packageName)?.ecosystem,
               version: f.version,
@@ -642,6 +662,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
       );
 
       for (const { dep, meta } of depsWithScripts) {
+        await ctx.waitIfPaused?.();
         if (ctx.signal?.aborted) break;
 
         const scriptEntries = Object.entries(meta.installScripts)
@@ -662,7 +683,12 @@ export const maliciousPkgScanner: ScannerPlugin = {
           }>(raw, { findings: [] });
 
           for (const f of parsed.findings || []) {
-            if (!f.title || !f.severity || (f.confidence ?? 0) < 0.7) continue;
+            if (
+              !f.title ||
+              !f.severity ||
+              (f.confidence ?? 0) < MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT
+            )
+              continue;
 
             findings.push({
               scanner: "MALICIOUS_PKG",
@@ -673,7 +699,8 @@ export const maliciousPkgScanner: ScannerPlugin = {
                 : f.description,
               ruleId: `MAL-SCRIPT-${f.scriptKey || "INSTALL"}`,
               cweId: "CWE-506",
-              confidence: f.confidence ?? 0.7,
+              confidence:
+                f.confidence ?? MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT,
               metadata: {
                 ecosystem: "npm",
                 version: dep.version,
@@ -693,6 +720,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
 
     // 3c. Also check local package.json scripts (for repos that don't publish to npm)
     for (const filePath of ctx.fileList) {
+      await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
       if (path.basename(filePath) !== "package.json") continue;
       if (filePath.includes("node_modules")) continue;
@@ -732,7 +760,12 @@ export const maliciousPkgScanner: ScannerPlugin = {
         }>(raw, { findings: [] });
 
         for (const f of parsed.findings || []) {
-          if (!f.title || !f.severity || (f.confidence ?? 0) < 0.7) continue;
+          if (
+            !f.title ||
+            !f.severity ||
+            (f.confidence ?? 0) < MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT
+          )
+            continue;
 
           findings.push({
             scanner: "MALICIOUS_PKG",
@@ -744,7 +777,8 @@ export const maliciousPkgScanner: ScannerPlugin = {
             filePath,
             ruleId: `MAL-SCRIPT-${f.scriptKey || "INSTALL"}`,
             cweId: "CWE-506",
-            confidence: f.confidence ?? 0.7,
+            confidence:
+              f.confidence ?? MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT,
             metadata: { source: "llm-local-script-analysis" },
           });
         }

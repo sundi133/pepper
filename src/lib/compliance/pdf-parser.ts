@@ -4,6 +4,7 @@
  */
 import * as fs from "fs";
 import * as path from "path";
+import { execFileSync } from "child_process";
 import { logger } from "@/lib/logger";
 
 export interface ComplianceControl {
@@ -37,12 +38,11 @@ export function parseCompliancePdf(
   try {
     // Read PDF as text — works because these PDFs are text-based
     // In production, use a proper PDF parser; for now, we exec pdftotext
-    const { execSync } = require("child_process");
     let text: string;
 
     try {
       // Try pdftotext first (most accurate)
-      text = execSync(`pdftotext -layout "${filePath}" -`, {
+      text = execFileSync("pdftotext", ["-layout", filePath, "-"], {
         encoding: "utf-8",
         timeout: 30000,
       });
@@ -290,12 +290,10 @@ function collectOwaspSectionText(lines: string[], sectionName: string): string[]
  */
 let _frameworkCache: ComplianceFramework[] | null = null;
 
-export function loadAllFrameworks(
-  complianceDir?: string,
-): ComplianceFramework[] {
+export function loadAllFrameworks(): ComplianceFramework[] {
   if (_frameworkCache) return _frameworkCache;
 
-  const dir = complianceDir || path.join(process.cwd(), "compliance");
+  const dir = path.join(process.cwd(), "compliance");
 
   if (!fs.existsSync(dir)) {
     logger.info({ dir }, "No compliance directory found");

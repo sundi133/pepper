@@ -14,15 +14,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 
 export default function NewProjectPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [nameTouched, setNameTouched] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
+  const nameError =
+    !name.trim() && (nameTouched || submitAttempted)
+      ? "Project name is required."
+      : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitAttempted(true);
     if (!name.trim()) {
       toast.error("Project name is required");
       return;
@@ -52,6 +61,13 @@ export default function NewProjectPage() {
 
   return (
     <div className="max-w-2xl">
+      <PageBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Projects", href: "/projects" },
+          { label: "New project" },
+        ]}
+      />
       <h1 className="text-2xl font-bold mb-6">Create New Project</h1>
 
       <Card>
@@ -65,14 +81,21 @@ export default function NewProjectPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Project Name *</Label>
+              <Label htmlFor="name">Project name *</Label>
               <Input
                 id="name"
                 value={name}
+                onBlur={() => setNameTouched(true)}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="My Application"
                 required
+                aria-invalid={Boolean(nameError)}
               />
+              {nameError && (
+                <p className="text-sm text-destructive" role="alert">
+                  {nameError}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

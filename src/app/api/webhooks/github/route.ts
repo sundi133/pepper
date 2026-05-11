@@ -80,6 +80,10 @@ export async function POST(req: NextRequest) {
         enableLlmSast: settings?.enableLlmSast ?? true,
         enableLlmSecrets: settings?.enableLlmSecrets ?? true,
         osvApiUrl: settings?.osvApiUrl || "https://api.osv.dev",
+        vulnDbMode: (settings?.vulnDbMode || "online") as
+          | "online"
+          | "mirror"
+          | "offline",
       },
       buildGate: project.buildGate
         ? {

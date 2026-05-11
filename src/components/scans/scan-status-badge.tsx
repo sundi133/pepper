@@ -1,7 +1,15 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCircle2, XCircle, Clock, Ban } from "lucide-react";
+import {
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Ban,
+  Pause,
+  Square,
+} from "lucide-react";
 
 const statusConfig: Record<
   string,
@@ -13,6 +21,8 @@ const statusConfig: Record<
 > = {
   QUEUED: { label: "Queued", variant: "secondary", icon: Clock },
   RUNNING: { label: "Running", variant: "default", icon: Loader2 },
+  PAUSED: { label: "Paused", variant: "secondary", icon: Pause },
+  STOPPED: { label: "Stopped", variant: "outline", icon: Square },
   COMPLETED: { label: "Completed", variant: "outline", icon: CheckCircle2 },
   FAILED: { label: "Failed", variant: "destructive", icon: XCircle },
   CANCELLED: { label: "Cancelled", variant: "secondary", icon: Ban },

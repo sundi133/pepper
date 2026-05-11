@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { z } from "zod";
 
 const updatePolicySchema = z.object({
@@ -19,11 +19,25 @@ export async function PATCH(
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId) {
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
+  }
+
   const { policyId } = await params;
 
   try {
     const body = await req.json();
     const data = updatePolicySchema.parse(body);
+
+    const existingPolicy = await prisma.securityPolicy.findFirst({
+      where: { id: policyId, organizationId: orgId },
+      select: { id: true },
+    });
+
+    if (!existingPolicy) {
+      return NextResponse.json({ error: "Policy not found" }, { status: 404 });
+    }
 
     const policy = await prisma.securityPolicy.update({
       where: { id: policyId },
@@ -52,8 +66,20 @@ export async function DELETE(
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId) {
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
+  }
+
   const { policyId } = await params;
 
-  await prisma.securityPolicy.delete({ where: { id: policyId } });
+  const result = await prisma.securityPolicy.deleteMany({
+    where: { id: policyId, organizationId: orgId },
+  });
+
+  if (result.count === 0) {
+    return NextResponse.json({ error: "Policy not found" }, { status: 404 });
+  }
+
   return NextResponse.json({ success: true });
 }

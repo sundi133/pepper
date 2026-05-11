@@ -49,6 +49,7 @@ export interface ScanJobData {
     enableLlmSast: boolean;
     enableLlmSecrets: boolean;
     osvApiUrl: string;
+    vulnDbMode: "online" | "mirror" | "offline";
     orgId?: string;
   };
   buildGate?: {

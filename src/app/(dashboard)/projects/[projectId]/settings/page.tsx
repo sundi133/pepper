@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 
 type ProjectSettings = {
   id: string;
@@ -32,6 +33,14 @@ export default function ProjectSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [crumbProjectName, setCrumbProjectName] = useState("Project");
+  const [nameTouched, setNameTouched] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
+  const nameError =
+    !name.trim() && (nameTouched || submitAttempted)
+      ? "Project name is required."
+      : null;
 
   useEffect(() => {
     let mounted = true;
@@ -46,6 +55,7 @@ export default function ProjectSettingsPage() {
 
         setName(project.name || "");
         setDescription(project.description || "");
+        setCrumbProjectName(project.name || "Project");
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Failed to load project",
@@ -63,6 +73,7 @@ export default function ProjectSettingsPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitAttempted(true);
     if (!name.trim()) {
       toast.error("Project name is required");
       return;
@@ -94,11 +105,31 @@ export default function ProjectSettingsPage() {
   }
 
   if (loading) {
-    return <p className="py-12 text-center text-muted-foreground">Loading...</p>;
+    return (
+      <div className="max-w-2xl space-y-6">
+        <PageBreadcrumb
+          items={[
+            { label: "Dashboard", href: "/dashboard" },
+            { label: "Projects", href: "/projects" },
+            { label: crumbProjectName, href: `/projects/${projectId}` },
+            { label: "Settings" },
+          ]}
+        />
+        <p className="py-12 text-center text-muted-foreground">Loading...</p>
+      </div>
+    );
   }
 
   return (
     <div className="max-w-2xl space-y-6">
+      <PageBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Projects", href: "/projects" },
+          { label: crumbProjectName, href: `/projects/${projectId}` },
+          { label: "Settings" },
+        ]}
+      />
       <div className="flex items-center gap-3">
         <Link href={`/projects/${projectId}`}>
           <Button variant="outline" size="sm">
@@ -122,14 +153,21 @@ export default function ProjectSettingsPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Project Name *</Label>
+              <Label htmlFor="name">Project name *</Label>
               <Input
                 id="name"
                 value={name}
+                onBlur={() => setNameTouched(true)}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="My Application"
                 required
+                aria-invalid={Boolean(nameError)}
               />
+              {nameError && (
+                <p className="text-sm text-destructive" role="alert">
+                  {nameError}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { z } from "zod";
 
 const bulkUpdateSchema = z.object({
@@ -18,13 +18,20 @@ const bulkUpdateSchema = z.object({
 export async function PATCH(req: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId) {
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
+  }
 
   try {
     const body = await req.json();
     const data = bulkUpdateSchema.parse(body);
 
     const result = await prisma.finding.updateMany({
-      where: { id: { in: data.findingIds } },
+      where: {
+        id: { in: data.findingIds },
+        scan: { project: { organizationId: orgId } },
+      },
       data: {
         status: data.status,
         statusNote: data.statusNote || null,

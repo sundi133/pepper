@@ -20,20 +20,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
+
+const DEFAULT_SETTINGS = {
+  llmProvider: "openai",
+  llmBaseUrl: "https://api.openai.com/v1",
+  llmModel: "gpt-4o-mini",
+  llmApiKey: "",
+  hasApiKey: false,
+  enableLlmSast: true,
+  enableLlmSecrets: true,
+  osvApiUrl: "https://api.osv.dev",
+  vulnDbMode: "online",
+};
+
+type LlmSettings = typeof DEFAULT_SETTINGS;
 
 export default function LlmSettingsPage() {
   const [loading, setLoading] = useState(false);
-  const [settings, setSettings] = useState({
-    llmProvider: "openai",
-    llmBaseUrl: "https://api.openai.com/v1",
-    llmModel: "gpt-4o-mini",
-    llmApiKey: "",
-    hasApiKey: false,
-    enableLlmSast: true,
-    enableLlmSecrets: true,
-    osvApiUrl: "https://api.osv.dev",
-    vulnDbMode: "online",
-  });
+  const [settings, setSettings] = useState<LlmSettings>(DEFAULT_SETTINGS);
 
   useEffect(() => {
     fetch("/api/settings/llm")
@@ -41,16 +46,16 @@ export default function LlmSettingsPage() {
       .then((data) => setSettings((s) => ({ ...s, ...data })));
   }, []);
 
-  async function handleSave() {
+  async function saveSettings(nextSettings: LlmSettings, silent = false) {
     setLoading(true);
     try {
       const res = await fetch("/api/settings/llm", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(nextSettings),
       });
       if (!res.ok) throw new Error("Failed to save");
-      toast.success("Settings saved");
+      if (!silent) toast.success("Settings saved");
     } catch {
       toast.error("Failed to save settings");
     } finally {
@@ -58,8 +63,28 @@ export default function LlmSettingsPage() {
     }
   }
 
+  async function handleSave() {
+    await saveSettings(settings);
+  }
+
+  async function updateSettings(
+    patch: Partial<
+      Pick<LlmSettings, "enableLlmSast" | "enableLlmSecrets" | "vulnDbMode">
+    >,
+  ) {
+    const nextSettings = { ...settings, ...patch };
+    setSettings(nextSettings);
+    await saveSettings(nextSettings, true);
+  }
+
   return (
     <div className="max-w-2xl space-y-6">
+      <PageBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "LLM config" },
+        ]}
+      />
       <div>
         <h1 className="text-2xl font-bold">LLM Configuration</h1>
         <p className="text-muted-foreground">
@@ -207,9 +232,8 @@ export default function LlmSettingsPage() {
             </div>
             <Switch
               checked={settings.enableLlmSast}
-              onCheckedChange={(v) =>
-                setSettings((s) => ({ ...s, enableLlmSast: v }))
-              }
+              disabled={loading}
+              onCheckedChange={(v) => updateSettings({ enableLlmSast: v })}
             />
           </div>
 
@@ -222,9 +246,8 @@ export default function LlmSettingsPage() {
             </div>
             <Switch
               checked={settings.enableLlmSecrets}
-              onCheckedChange={(v) =>
-                setSettings((s) => ({ ...s, enableLlmSecrets: v }))
-              }
+              disabled={loading}
+              onCheckedChange={(v) => updateSettings({ enableLlmSecrets: v })}
             />
           </div>
         </CardContent>
@@ -243,7 +266,9 @@ export default function LlmSettingsPage() {
             <Select
               value={settings.vulnDbMode}
               onValueChange={(v) =>
-                setSettings((s) => ({ ...s, vulnDbMode: v }))
+                updateSettings({
+                  vulnDbMode: v as LlmSettings["vulnDbMode"],
+                })
               }
             >
               <SelectTrigger>
@@ -253,7 +278,7 @@ export default function LlmSettingsPage() {
                 <SelectItem value="online">Online (OSV.dev API)</SelectItem>
                 <SelectItem value="mirror">Mirrored (Self-hosted)</SelectItem>
                 <SelectItem value="offline">
-                  Offline (Bundled snapshot)
+                  Offline (Disable DB lookup)
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -263,6 +288,7 @@ export default function LlmSettingsPage() {
             <Label>OSV API URL</Label>
             <Input
               value={settings.osvApiUrl}
+              disabled={settings.vulnDbMode === "offline"}
               onChange={(e) =>
                 setSettings((s) => ({ ...s, osvApiUrl: e.target.value }))
               }

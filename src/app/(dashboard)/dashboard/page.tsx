@@ -40,6 +40,7 @@ import {
   Legend,
 } from "recharts";
 import { SCANNER_LABELS } from "@/lib/constants";
+import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -84,6 +85,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <PageBreadcrumb items={[{ label: "Dashboard" }]} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Dashboard</h1>

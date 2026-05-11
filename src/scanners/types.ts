@@ -21,9 +21,11 @@ export interface ScanContext {
     enableLlmSast: boolean;
     enableLlmSecrets: boolean;
     osvApiUrl: string;
+    vulnDbMode: "online" | "mirror" | "offline";
     orgId?: string;
   };
   signal?: AbortSignal;
+  waitIfPaused?: () => Promise<void>;
   onProgress?: (message: string) => void;
   onScannerComplete?: (
     scannerName: string,

@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 
 export default function IntegrationsPage() {
   const webhookUrl =
@@ -27,6 +28,12 @@ export default function IntegrationsPage() {
 
   return (
     <div className="max-w-2xl space-y-6">
+      <PageBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Integrations" },
+        ]}
+      />
       <div>
         <h1 className="text-2xl font-bold">Integrations</h1>
         <p className="text-muted-foreground">

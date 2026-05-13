@@ -23,6 +23,7 @@ import {
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { buildRepoContextSummary } from "@/lib/llm-repo-context";
 
 // ─── Custom Policy Integration ────────────────────────────────────────
 
@@ -93,7 +94,7 @@ For each genuine vulnerability found, respond with:
     {
       "title": "Brief vulnerability title",
       "severity": "CRITICAL|HIGH|MEDIUM|LOW",
-      "description": "What the vulnerability is, the exact affected file/function/route if visible, which user-controlled input reaches which vulnerable sink, why the code is unsafe, realistic impact, and safe reproduction evidence. If the exact route or parameter is not visible in the provided code, explicitly say so and do not invent it.",
+      "description": "Plain-language: what is wrong, affected file/function/route if visible, data flow to the sink, impact, and safe reproduction hints. Do NOT paste large fenced code blocks, do NOT use a heading or label 'Code evidence', and do NOT duplicate the provided chunk (the product shows path and line range separately). If the exact route or parameter is not visible, say so and do not invent it.",
       "startLine": <exact line number>,
       "endLine": <exact line number>,
       "cweId": "CWE-XXX",
@@ -109,7 +110,8 @@ For each genuine vulnerability found, respond with:
           "Exact step using only evidence visible in the code",
           "Exact expected vulnerable behavior"
         ],
-        "impact": "Specific technical and business impact"
+        "impact": "Specific technical and business impact",
+        "findingLayer": "application-code|web-template|manifest-dependencies|container-build|ci-or-deploy-config|null"
       }
     }
   ]
@@ -121,7 +123,7 @@ Reproduction requirements:
 - Use safe non-destructive payloads only.
 - Do NOT invent routes, parameters, URLs, secrets, or exploit results.
 - If the exact route/parameter is unclear from the provided chunk, write: "The exact route/parameter could not be confirmed from the provided code" and provide the closest code-level reproduction based on the visible file, line, and sink.
-- Include enough source evidence for a security engineer to reproduce the issue.
+- Reference file, line, function, and sink names; do not paste the full source chunk into description or metadata text fields.
 
 Focus on exploitable instances of:
 
@@ -189,7 +191,13 @@ Focus on exploitable instances of:
 - LLM/agent safety: untrusted user or document content used as system/tool instructions, tool calls without allowlists, model output executed without validation, secrets included in prompts
 
 If no vulnerabilities are found, return: {"findings": []}
-When in doubt, do NOT report. False positives waste security engineers' time.`;
+When in doubt, do NOT report. False positives waste security engineers' time.
+
+REPOSITORY-AWARE REVIEW (Pepper also runs SCA, secrets, IaC, and zero-day passes):
+- Each user message starts with a REPOSITORY CONTEXT block (paths only), similar to an unzip + find inventory. Use it to spot nested app copies, sibling Dockerfiles, or multiple manifest trees that may drift.
+- When the chunk is a manifest, Dockerfile/compose, CI workflow, Terraform, or HTML/Jinja template, prioritize concrete line-level issues visible there. For dependency hygiene, cite only versions and constraints shown in the chunk — do not invent CVE IDs. You may describe clear EOL / ancient stack risk with honest confidence (typically ≤0.85) without naming a CVE.
+- You may reference duplicate paths from the context only when the chunk provides evidence (e.g. conflicting pins visible in this file while the context lists sibling requirements files).
+- In metadata when it is obvious from the chunk, set "findingLayer" to one of: "application-code" | "web-template" | "manifest-dependencies" | "container-build" | "ci-or-deploy-config".`;
 
 interface LlmFinding {
   title: string;
@@ -252,6 +260,8 @@ export async function runLlmSastScanner(
   const finalPrompt = policyPromptSection
     ? SYSTEM_PROMPT + policyPromptSection
     : SYSTEM_PROMPT;
+
+  const repoContextBlock = buildRepoContextSummary(ctx.fileList);
 
   logger.info(
     {
@@ -344,6 +354,7 @@ export async function runLlmSastScanner(
           maxResponseTokens,
           finalPrompt,
           inlinePolicies.map((p) => p.name),
+          repoContextBlock,
         ),
       ),
     );
@@ -422,6 +433,7 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
             maxResponseTokens,
             policyPrompt,
             policyBatch.map((p) => p.name),
+            repoContextBlock,
           ),
         ),
       );
@@ -469,8 +481,9 @@ async function analyzeChunk(
   maxResponseTokens: number,
   systemPrompt: string = SYSTEM_PROMPT,
   policyNames: string[] = [],
+  repoContextBlock = "",
 ): Promise<RawFinding[]> {
-  const userContent = `File: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n\n\`\`\`\n${chunk.content}\n\`\`\``;
+  const userContent = `${repoContextBlock}\n--- CURRENT FILE CHUNK ---\nFile: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n\n\`\`\`\n${chunk.content}\n\`\`\``;
 
   try {
     logger.info(

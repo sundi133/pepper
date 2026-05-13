@@ -16,6 +16,7 @@ import {
   IAC_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import { buildRepoContextSummary } from "@/lib/llm-repo-context";
 
 const IAC_SYSTEM_PROMPT = `You are an expert Infrastructure as Code (IaC) security auditor. Analyze the provided configuration file for security misconfigurations, hardcoded secrets, and compliance violations.
 
@@ -90,18 +91,20 @@ For each finding respond with:
     {
       "title": "Brief misconfiguration title",
       "severity": "CRITICAL|HIGH|MEDIUM|LOW",
-      "description": "What is misconfigured and why it's dangerous",
+      "description": "Plain-language explanation: what is wrong, why it is risky in deployment, and who/what is affected. Do NOT paste Dockerfile/YAML/JSON blocks here, do NOT use a heading or label 'Code evidence', and do NOT repeat the same lines that are already in the file (the UI shows the file path and line numbers separately).",
       "startLine": <line number>,
       "endLine": <line number>,
       "cweId": "CWE-XXX",
       "confidence": <0.65 to 1.0>,
-      "recommendation": "Specific fix with code example"
+      "recommendation": "Concrete fix: short numbered or bulleted steps, optional one-line example directive only if it clarifies the fix (not a full file dump)"
     }
   ]
 }
 
 If no misconfigurations found, return: {"findings": []}
-Do NOT report theoretical issues. Only report concrete misconfigurations.`;
+Do NOT report theoretical issues. Only report concrete misconfigurations.
+
+The user message includes a REPOSITORY CONTEXT (paths only) from the full scan. Use it to notice multiple Dockerfiles, duplicate compose stacks, or sibling IaC roots — still cite only lines present in the provided file content.`;
 
 interface IacLlmFinding {
   title: string;
@@ -151,6 +154,7 @@ export const iacScanner: ScannerPlugin = {
       `IaC Security: analyzing ${iacFiles.length} configuration files...`,
     );
 
+    const repoContextBlock = buildRepoContextSummary(ctx.fileList);
     const findings: RawFinding[] = [];
     const maxConcurrency = MAX_LLM_CONCURRENCY;
 
@@ -170,7 +174,7 @@ export const iacScanner: ScannerPlugin = {
             if (content.trim().length === 0) return [];
             const lines = content.split("\n");
 
-            const userContent = `File: ${filePath}\nType: ${iacType}\n\n\`\`\`\n${content}\n\`\`\``;
+            const userContent = `${repoContextBlock}\n--- CURRENT FILE ---\nFile: ${filePath}\nType: ${iacType}\n\n\`\`\`\n${content}\n\`\`\``;
 
             const raw = await analyzeWithLlm(
               client,

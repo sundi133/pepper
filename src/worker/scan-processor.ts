@@ -9,6 +9,7 @@ import { runScanners } from "@/scanners";
 import { ScanContext, RawFinding } from "@/scanners/types";
 import { createScanLogger } from "@/lib/logger";
 import { sendScanCompleteEmail } from "@/lib/email";
+import { extractArchive } from "@/lib/extract-archive";
 import { enrichFindingWithReport } from "@/lib/finding-report";
 
 // prisma is imported from @/lib/prisma
@@ -102,12 +103,16 @@ export async function processScanJob(job: Job<ScanJobData>) {
     } else if (sourceType === "GIT_CLONE") {
       const { execFileSync } = await import("child_process");
       const repoUrl = job.data.repoUrl || sourceRef;
+      const repoLog = job.data.repoUrlDisplay || repoUrl;
       const branch = job.data.branch?.trim();
       const cloneArgs = ["clone", "--depth", "1"];
       if (branch) cloneArgs.push("--branch", branch);
       cloneArgs.push(repoUrl, path.join(workDir, "repo"));
       try {
-        execFileSync("git", cloneArgs, { timeout: 120000 });
+        execFileSync("git", cloneArgs, {
+          timeout: 120000,
+          windowsHide: process.platform === "win32",
+        });
       } catch (error) {
         const message =
           error instanceof Error
@@ -118,13 +123,16 @@ export async function processScanJob(job: Job<ScanJobData>) {
         }
 
         log.warn(
-          { branch, repoUrl },
+          { branch, repoUrl: repoLog },
           "Git branch was not found; retrying clone with repository default branch",
         );
         execFileSync(
           "git",
           ["clone", "--depth", "1", repoUrl, path.join(workDir, "repo")],
-          { timeout: 120000 },
+          {
+            timeout: 120000,
+            windowsHide: process.platform === "win32",
+          },
         );
       }
       // Move contents up
@@ -143,10 +151,13 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
       // Verify svn CLI is available
       try {
-        execFileSync("svn", ["--version", "--quiet"], { timeout: 5000 });
+        execFileSync("svn", ["--version", "--quiet"], {
+          timeout: 5000,
+          windowsHide: process.platform === "win32",
+        });
       } catch {
         throw new Error(
-          "SVN CLI not found. Install Subversion (e.g. `brew install subversion`) on the worker.",
+          "SVN CLI not found. Install Subversion on the worker (e.g. apt install subversion, brew install subversion, or Windows: https://subversion.apache.org/packages.html).",
         );
       }
 
@@ -170,7 +181,10 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
       log.info({ svnUrl, svnRevision }, "SVN export starting");
       try {
-        execFileSync("svn", exportArgs, { timeout: 300000 });
+        execFileSync("svn", exportArgs, {
+          timeout: 300000,
+          windowsHide: process.platform === "win32",
+        });
       } catch (svnErr) {
         const msg = svnErr instanceof Error ? svnErr.message : String(svnErr);
         if (msg.includes("E170013") || msg.includes("Unable to connect")) {
@@ -213,6 +227,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
         const revOutput = execFileSync("svn", infoArgs, {
           timeout: 30000,
           encoding: "utf-8",
+          windowsHide: process.platform === "win32",
         }).trim();
 
         if (revOutput && /^\d+$/.test(revOutput)) {
@@ -682,20 +697,3 @@ function normalizeFindingTitle(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-async function extractArchive(archivePath: string, destDir: string) {
-  const { execFileSync } = await import("child_process");
-
-  if (archivePath.endsWith(".zip")) {
-    execFileSync("unzip", ["-o", "-q", archivePath, "-d", destDir], {
-      timeout: 60000,
-    });
-  } else if (archivePath.endsWith(".tar.gz") || archivePath.endsWith(".tgz")) {
-    execFileSync("tar", ["-xzf", archivePath, "-C", destDir], {
-      timeout: 60000,
-    });
-  } else if (archivePath.endsWith(".tar")) {
-    execFileSync("tar", ["-xf", archivePath, "-C", destDir], {
-      timeout: 60000,
-    });
-  }
-}

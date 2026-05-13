@@ -69,9 +69,7 @@ export async function GET(
       gateResult: true,
       createdAt: true,
       completedAt: true,
-      filesScanned: true,
-      depsScanned: true,
-      project: { select: { name: true } },
+      project: { select: { name: true, repoUrl: true } },
     },
   });
   if (!scan) {
@@ -175,284 +173,197 @@ function buildHtmlReport({
     gateResult: string;
     createdAt: Date;
     completedAt: Date | null;
-    filesScanned: number;
-    depsScanned: number;
-    project: { name: string } | null;
+    project: { name: string; repoUrl: string | null } | null;
   };
   findings: ReportFinding[];
 }): string {
   const generatedAt = new Date();
-  const counts = countFindingsBySeverity(findings);
-  const grouped = groupFindingsByScanner(findings);
   const projectName = scan.project?.name || "Scan";
-  const source = scan.sourceType === "SVN_CHECKOUT" && scan.sourceRef
-    ? `SVN ${scan.sourceRef}`
-    : scan.branch
-      ? `Branch ${scan.branch}`
-      : scan.sourceType;
-  const commit = scan.commitSha ? scan.commitSha.slice(0, 12) : "N/A";
+  const repoUrl = safeHttpUrl(scan.project?.repoUrl ?? undefined);
+  const repoDisplay = scan.project?.repoUrl?.trim() || "";
+  const lastScanAt = scan.completedAt ?? scan.createdAt;
+  const sourceLine =
+    scan.sourceType === "SVN_CHECKOUT" && scan.sourceRef
+      ? `SVN ${scan.sourceRef}`
+      : scan.branch
+        ? `Branch ${scan.branch}${scan.commitSha ? ` · ${scan.commitSha.slice(0, 12)}` : ""}`
+        : scan.sourceType;
 
-  return `<!doctype html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(projectName)} Findings Report</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(`Security Report — ${projectName}`)}</title>
   <style>
-    :root {
-      color-scheme: light;
-      --bg: #f4f7fb;
-      --panel: #ffffff;
-      --ink: #172033;
-      --muted: #667085;
-      --line: #d9e2ef;
-      --brand: #0f766e;
-      --brand-dark: #134e4a;
-      --critical: #b42318;
-      --high: #c2410c;
-      --medium: #b7791f;
-      --low: #2563eb;
-      --info: #475467;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--ink);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      line-height: 1.55;
-    }
-    .page { max-width: 1180px; margin: 0 auto; padding: 40px 28px 56px; }
-    .hero {
-      overflow: hidden;
-      border-radius: 28px;
-      background: linear-gradient(135deg, #0f172a 0%, #134e4a 56%, #0f766e 100%);
-      color: #fff;
-      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
-    }
-    .hero-inner { padding: 38px; }
-    .eyebrow { margin: 0 0 10px; color: #b7f7ed; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
-    h1 { margin: 0; font-size: clamp(32px, 5vw, 56px); line-height: 1.04; letter-spacing: -0.04em; }
-    .subtitle { max-width: 820px; margin: 18px 0 0; color: #d5fff9; font-size: 16px; }
-    .hero-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 30px; }
-    .hero-card { border: 1px solid rgba(255,255,255,.18); border-radius: 18px; background: rgba(255,255,255,.1); padding: 16px; }
-    .hero-card span { display: block; color: #b7f7ed; font-size: 12px; font-weight: 700; text-transform: uppercase; }
-    .hero-card strong { display: block; margin-top: 5px; font-size: 18px; word-break: break-word; }
-    .section { margin-top: 28px; border: 1px solid var(--line); border-radius: 24px; background: var(--panel); box-shadow: 0 16px 45px rgba(16,24,40,.07); }
-    .section-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); padding: 24px 28px; }
-    h2 { margin: 0; font-size: 22px; letter-spacing: -0.02em; }
-    .muted { color: var(--muted); }
-    .summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; padding: 24px 28px; }
-    .metric { border: 1px solid var(--line); border-radius: 18px; padding: 18px; background: #fbfdff; }
-    .metric span { display: block; color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
-    .metric strong { display: block; margin-top: 8px; font-size: 30px; line-height: 1; }
-    .critical { color: var(--critical); } .high { color: var(--high); } .medium { color: var(--medium); } .low { color: var(--low); } .info { color: var(--info); }
-    .details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 0 28px 28px; }
-    .detail { border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; }
-    .detail span { display: block; color: var(--muted); font-size: 12px; font-weight: 700; }
-    .detail strong { display: block; margin-top: 4px; word-break: break-word; }
-    .scanner-group { padding: 24px 28px 30px; }
-    .scanner-group + .scanner-group { border-top: 1px solid var(--line); }
-    .scanner-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
-    .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 10px; background: #eef6ff; color: #175cd3; font-size: 12px; font-weight: 800; }
-    .finding { border: 1px solid var(--line); border-radius: 20px; background: #fff; overflow: hidden; }
-    .finding + .finding { margin-top: 16px; }
-    .finding-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; background: #fbfdff; border-bottom: 1px solid var(--line); padding: 20px; }
-    .finding h3 { margin: 8px 0 0; font-size: 19px; line-height: 1.3; }
-    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-    .chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 9px; color: var(--muted); font-size: 12px; font-weight: 700; }
-    .sev { border-radius: 999px; padding: 6px 11px; color: #fff; font-size: 12px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
-    .sev-critical { background: var(--critical); } .sev-high { background: var(--high); } .sev-medium { background: var(--medium); } .sev-low { background: var(--low); } .sev-info { background: var(--info); }
-    .finding-body { padding: 22px; }
-    .report-block {
-      border-left: 4px solid #ccfbf1;
-      border-radius: 14px;
-      background: #fbfdff;
-      padding: 16px 18px;
-    }
-    .report-block + .report-block { margin-top: 16px; }
-    .report-block h4 { margin: 0 0 8px; color: var(--brand-dark); font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
-    .report-text { margin: 0; color: #344054; white-space: pre-wrap; overflow-wrap: anywhere; }
-    ol { margin: 0; padding-left: 22px; color: #344054; }
-    li + li { margin-top: 8px; }
-    pre { margin: 0; max-height: 440px; overflow: auto; border-radius: 16px; background: #0b1020; color: #e6edf6; padding: 18px; font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
-    .evidence-card {
-      margin-top: 18px;
-      border: 1px solid #b7d7ff;
-      border-left: 4px solid var(--low);
-      border-radius: 16px;
-      background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
-      padding: 18px;
-    }
-    .evidence-card h4 { margin: 0 0 10px; color: #1849a9; font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
-    .empty { padding: 34px 28px; text-align: center; color: var(--muted); }
-    .footer { margin-top: 26px; color: var(--muted); font-size: 12px; text-align: center; }
-    @media print {
-      body { background: #fff; }
-      .page { max-width: none; padding: 0; }
-      .hero, .section { box-shadow: none; break-inside: avoid; }
-      .finding { break-inside: avoid; }
-    }
-    @media (max-width: 900px) {
-      .hero-grid, .summary-grid, .details { grid-template-columns: 1fr; }
-      .section-header, .finding-head, .scanner-title { flex-direction: column; align-items: flex-start; }
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1a1a2e; background: #f8f9fa; padding: 2rem; }
+    .container { max-width: 900px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 2rem; }
+    h1 { color: #1a1a2e; border-bottom: 3px solid #6366f1; padding-bottom: 0.5rem; margin-bottom: 1rem; font-size: 1.75rem; }
+    h2 { color: #374151; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb; font-size: 1.25rem; }
+    .meta { color: #6b7280; font-size: 0.875rem; margin-bottom: 0.35rem; }
+    .meta a { color: #4f46e5; word-break: break-all; }
+    .vuln-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem; margin: 0.75rem 0; }
+    .vuln-header { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .vuln-header strong { flex: 1 1 200px; min-width: 0; }
+    .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+    .badge-sev-critical { background: #fee2e2; color: #dc2626; }
+    .badge-sev-high { background: #ffedd5; color: #ea580c; }
+    .badge-sev-medium { background: #fef3c7; color: #d97706; }
+    .badge-sev-low { background: #d1fae5; color: #059669; }
+    .badge-sev-info { background: #dbeafe; color: #2563eb; }
+    .badge-status { background: #e5e7eb; color: #374151; text-transform: none; font-weight: 500; }
+    .loc { color: #6b7280; font-size: 0.875rem; margin-bottom: 0.75rem; }
+    .field { margin-bottom: 0.75rem; }
+    .field .label { font-weight: 600; color: #374151; display: block; margin-bottom: 0.25rem; }
+    .field .body { color: #4b5563; font-size: 0.9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .repro-steps { margin-top: 0.35rem; }
+    .repro-step { margin-top: 0.65rem; padding-top: 0.65rem; border-top: 1px solid #e5e7eb; }
+    .repro-step:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+    .repro-step .step-tag { font-weight: 700; color: #4338ca; font-size: 0.85rem; margin-bottom: 0.2rem; }
+    ol.remed { margin: 0.35rem 0 0 1.1rem; padding-left: 0.5rem; color: #4b5563; font-size: 0.9rem; }
+    ol.remed li { margin-top: 0.35rem; }
+    .empty { text-align: center; color: #6b7280; padding: 2rem; }
+    .footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 0.875rem; }
+    @media print { body { background: #fff; padding: 0; } .container { box-shadow: none; } }
   </style>
 </head>
 <body>
-  <main class="page">
-    <section class="hero">
-      <div class="hero-inner">
-        <p class="eyebrow">Pepper Security Findings Report</p>
-        <h1>${escapeHtml(projectName)}</h1>
-        <p class="subtitle">Professional HTML report for scan ${escapeHtml(scan.id)}. Generated ${formatDate(generatedAt)} with ${findings.length} findings across ${grouped.length} scanner groups.</p>
-        <div class="hero-grid">
-          ${renderHeroCard("Scan Type", scan.scanType)}
-          ${renderHeroCard("Status", scan.status)}
-          ${renderHeroCard("Gate Result", scan.gateResult)}
-          ${renderHeroCard("Commit", commit)}
-        </div>
-      </div>
-    </section>
+  <div class="container">
+    <h1>Security Report</h1>
+    <p class="meta"><strong>Project:</strong> ${escapeHtml(projectName)}</p>
+    ${
+      repoUrl
+        ? `<p class="meta"><strong>Repository:</strong> <a href="${escapeHtml(repoUrl)}" rel="noopener noreferrer">${escapeHtml(repoDisplay)}</a></p>`
+        : repoDisplay
+          ? `<p class="meta"><strong>Repository:</strong> ${escapeHtml(repoDisplay)}</p>`
+          : ""
+    }
+    <p class="meta"><strong>Last scan:</strong> ${escapeHtml(formatDate(lastScanAt))}</p>
+    <p class="meta"><strong>Source:</strong> ${escapeHtml(sourceLine)} · Gate ${escapeHtml(scan.gateResult)} · ${escapeHtml(scan.status)}</p>
 
-    <section class="section">
-      <div class="section-header">
-        <div>
-          <h2>Executive Summary</h2>
-          <p class="muted">Severity distribution and scan context for triage.</p>
-        </div>
-        <span class="badge">${findings.length} total findings</span>
-      </div>
-      <div class="summary-grid">
-        ${renderMetric("Critical", counts.CRITICAL, "critical")}
-        ${renderMetric("High", counts.HIGH, "high")}
-        ${renderMetric("Medium", counts.MEDIUM, "medium")}
-        ${renderMetric("Low", counts.LOW, "low")}
-        ${renderMetric("Info", counts.INFO, "info")}
-      </div>
-      <div class="details">
-        ${renderDetail("Source", source)}
-        ${renderDetail("Created", formatDate(scan.createdAt))}
-        ${renderDetail("Completed", scan.completedAt ? formatDate(scan.completedAt) : "N/A")}
-        ${renderDetail("Files Scanned", String(scan.filesScanned))}
-        ${renderDetail("Dependencies Scanned", String(scan.depsScanned))}
-        ${renderDetail("Generated", formatDate(generatedAt))}
-      </div>
-    </section>
+    <h2>Vulnerabilities (${findings.length})</h2>
+    ${
+      findings.length === 0
+        ? `<p class="empty">No findings were detected for this scan.</p>`
+        : findings.map(renderVulnCard).join("")
+    }
 
-    <section class="section">
-      <div class="section-header">
-        <div>
-          <h2>Findings</h2>
-          <p class="muted">Each finding includes summary, reproduction guidance, impact, remediation, and code evidence when available.</p>
-        </div>
-      </div>
-      ${
-        grouped.length === 0
-          ? `<div class="empty">No findings were detected for this scan.</div>`
-          : grouped.map(renderScannerGroup).join("")
-      }
-    </section>
-
-    <p class="footer">Generated by Pepper. Treat reproduced vulnerabilities only in authorized environments.</p>
-  </main>
+    <div class="footer">Generated ${escapeHtml(formatDate(generatedAt))} · Pepper SAST — reproduce only in authorized environments.</div>
+  </div>
 </body>
 </html>`;
 }
 
-function renderHeroCard(label: string, value: string): string {
-  return `<div class="hero-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+function safeHttpUrl(url: string | undefined): string | null {
+  if (!url) return null;
+  const t = url.trim();
+  if (/^https:\/\//i.test(t) || /^http:\/\//i.test(t)) return t;
+  return null;
 }
 
-function renderMetric(label: string, value: number, className: string): string {
-  return `<div class="metric"><span>${escapeHtml(label)}</span><strong class="${className}">${value}</strong></div>`;
+function severityBadgeClass(sev: string): string {
+  const s = sev.toUpperCase();
+  if (s === "CRITICAL") return "badge-sev-critical";
+  if (s === "HIGH") return "badge-sev-high";
+  if (s === "MEDIUM") return "badge-sev-medium";
+  if (s === "LOW") return "badge-sev-low";
+  return "badge-sev-info";
 }
 
-function renderDetail(label: string, value: string): string {
-  return `<div class="detail"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
-}
+function renderVulnCard(finding: ReportFinding): string {
+  const report = readStoredReport(finding.metadata) || fallbackReport(finding);
+  const location = formatLocation(finding);
+  const statusLabel = (finding.status || "OPEN").replace(/_/g, " ").toLowerCase();
+  const scanner = scannerLabel(finding.scanner);
 
-function renderScannerGroup(group: {
-  scanner: string;
-  label: string;
-  findings: ReportFinding[];
-}): string {
-  return `<div class="scanner-group">
-    <div class="scanner-title">
-      <h2>${escapeHtml(group.label)}</h2>
-      <span class="badge">${group.findings.length} findings</span>
+  return `<div class="vuln-card">
+    <div class="vuln-header">
+      <span class="badge ${severityBadgeClass(finding.severity)}">${escapeHtml(finding.severity)}</span>
+      <strong>${escapeHtml(report.vulnerabilityName || finding.title)}</strong>
+      <span class="badge badge-status">${escapeHtml(statusLabel)}</span>
     </div>
-    ${group.findings.map(renderFinding).join("")}
+    <p class="loc">${location ? `${escapeHtml(location)}` : "Location not recorded"} · ${escapeHtml(scanner)}</p>
+    <div class="field">
+      <span class="label">Summary</span>
+      <div class="body">${escapeHtml(report.summary || "N/A")}</div>
+    </div>
+    ${renderReproductionFields(report.stepsToReproduce)}
+    <div class="field">
+      <span class="label">Impact</span>
+      <div class="body">${escapeHtml(report.impact || "N/A")}</div>
+    </div>
+    ${renderRemediationFields(report.remediation)}
   </div>`;
 }
 
-function renderFinding(finding: ReportFinding): string {
-  const report = readStoredReport(finding.metadata) || fallbackReport(finding);
-  const location = formatLocation(finding);
-  const chips = [
-    finding.status ? `Status: ${finding.status.replace(/_/g, " ")}` : "",
-    finding.ruleId ? `Rule: ${finding.ruleId}` : "",
-    finding.cweId || "",
-    finding.cveId || "",
-    location ? `Location: ${location}` : "",
-    finding.confidence != null ? `Confidence: ${Math.round(finding.confidence * 100)}%` : "",
-  ].filter(Boolean);
-
-  return `<article class="finding">
-    <div class="finding-head">
-      <div>
-        <span class="sev sev-${finding.severity.toLowerCase()}">${escapeHtml(finding.severity)}</span>
-        <h3>${escapeHtml(report.vulnerabilityName || finding.title)}</h3>
-        <div class="chips">${chips.map((chip) => `<span class="chip">${escapeHtml(chip)}</span>`).join("")}</div>
-      </div>
-      <span class="badge">${escapeHtml(scannerLabel(finding.scanner))}</span>
-    </div>
-    <div class="finding-body">
-      ${renderReportBlock("Summary", report.summary)}
-      ${renderListBlock("Steps to Reproduce", report.stepsToReproduce)}
-      ${renderReportBlock("Impact", report.impact)}
-      ${renderListBlock("Remediation", report.remediation)}
-      ${renderEvidenceBlock(finding)}
-    </div>
-  </article>`;
+function renderReproductionFields(items: string[]): string {
+  const steps = normalizeReproductionSteps(items);
+  if (steps.length === 0) return "";
+  const body = steps
+    .map(
+      (text, index) => `<div class="repro-step">
+        <div class="step-tag">Step ${index + 1}</div>
+        <div class="body">${escapeHtml(text)}</div>
+      </div>`,
+    )
+    .join("");
+  return `<div class="field">
+    <span class="label">Steps to reproduce</span>
+    <div class="repro-steps">${body}</div>
+  </div>`;
 }
 
-function renderReportBlock(title: string, text: string): string {
-  return `<section class="report-block"><h4>${escapeHtml(title)}</h4><p class="report-text">${escapeHtml(text || "N/A")}</p></section>`;
+function renderRemediationFields(items: string[]): string {
+  if (!items.length) return "";
+  const lis = items.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  return `<div class="field">
+    <span class="label">Remediation</span>
+    <ol class="remed">${lis}</ol>
+  </div>`;
 }
 
-function renderListBlock(title: string, items: string[]): string {
-  if (items.length === 0) return "";
-  return `<section class="report-block"><h4>${escapeHtml(title)}</h4><ol>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol></section>`;
-}
+/** Expand combined blobs into discrete steps and render as Step 1, Step 2, … */
+function normalizeReproductionSteps(items: string[]): string[] {
+  const trimmed = items
+    .map((s) => (typeof s === "string" ? s.trim() : ""))
+    .filter(Boolean);
+  if (trimmed.length === 0) return [];
 
-function renderEvidenceBlock(finding: ReportFinding): string {
-  if (!finding.snippet) return "";
-  return `<section class="evidence-card"><h4>Code Evidence</h4><pre>${escapeHtml(finding.snippet)}</pre></section>`;
-}
+  const merged = trimmed.join("\n");
 
-function countFindingsBySeverity(findings: ReportFinding[]) {
-  return findings.reduce(
-    (counts, finding) => {
-      if (finding.severity in counts) {
-        counts[finding.severity as keyof typeof counts] += 1;
-      }
-      return counts;
-    },
-    { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 },
-  );
-}
-
-function groupFindingsByScanner(findings: ReportFinding[]) {
-  const groups = new Map<string, ReportFinding[]>();
-  for (const finding of findings) {
-    groups.set(finding.scanner, [...(groups.get(finding.scanner) || []), finding]);
+  let chunks: string[] = merged.split(/\n(?=\s*(?:\d+[\.)]\s|[-*•]\s))/);
+  if (chunks.length <= 1) {
+    chunks = merged.split(/\n\n+/).map((s) => s.trim()).filter(Boolean);
   }
-  return Array.from(groups.entries()).map(([scanner, groupFindings]) => ({
-    scanner,
-    label: scannerLabel(scanner),
-    findings: groupFindings,
-  }));
+  if (chunks.length <= 1 && merged.includes("\n")) {
+    chunks = merged.split("\n").map((s) => s.trim()).filter(Boolean);
+  }
+  if (chunks.length <= 1) {
+    chunks = [merged];
+  }
+
+  const stripMarkers = (s: string) =>
+    s.replace(/^\s*(?:\d+[\.)]\s*|[-*•]\s*)/, "").trim();
+
+  let steps = chunks.map(stripMarkers).filter(Boolean);
+  if (steps.length === 0) steps = trimmed;
+
+  const single = steps[0];
+  if (
+    steps.length === 1 &&
+    single.length > 320 &&
+    !single.includes("\n") &&
+    /[.!?]\s+\S/.test(single)
+  ) {
+    const sentences = single
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 20);
+    if (sentences.length >= 2) return sentences.slice(0, 14);
+  }
+
+  return steps;
 }
 
 function readStoredReport(metadata: unknown): StoredReport | undefined {

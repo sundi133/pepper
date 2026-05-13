@@ -25,6 +25,7 @@ import Link from "next/link";
 import { RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { mutate } from "swr";
 import { useRouter } from "next/navigation";
 import {
   Tooltip,
@@ -76,6 +77,10 @@ export default function ScansPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Failed to start rescan");
       toast.success("Rescan queued");
+      await Promise.all([
+        mutate("/api/notifications?summary=unread"),
+        mutate("/api/notifications"),
+      ]);
       router.push(`/scans/${data.scanId}`);
     } catch (error) {
       toast.error(

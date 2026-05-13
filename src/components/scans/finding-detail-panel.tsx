@@ -12,7 +12,8 @@ import { SeverityBadge } from "./scan-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SCANNER_LABELS } from "@/lib/constants";
-import { Shield, ExternalLink } from "lucide-react";
+import { findingReportSummaryLead } from "@/lib/finding-report";
+import { ExternalLink } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -243,19 +244,9 @@ function readStoredReport(value: unknown): FindingReport | undefined {
 }
 
 function buildSummary(finding: Finding): string {
-  const location = formatLocation(finding);
-  const sink = readString(finding.metadata?.sink);
-  const parameter = readString(finding.metadata?.parameter);
   const description = stripGeneratedSections(finding.description);
-
-  return [
-    parameter || sink || location
-      ? `${parameter ? `User-controlled input from \`${parameter}\`` : "A user-controlled input source"}${sink ? ` reaches \`${sink}\`` : " reaches the affected operation"}${location ? ` in \`${location}\`` : ""}.`
-      : "",
-    description,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  const lead = findingReportSummaryLead(finding);
+  return [lead, description].filter(Boolean).join("\n\n");
 }
 
 function formatTitle(finding: Finding): string {
@@ -264,18 +255,9 @@ function formatTitle(finding: Finding): string {
     : finding.title;
 }
 
-function formatLocation(finding: Finding): string {
-  if (!finding.filePath) return "";
-  if (!finding.startLine) return finding.filePath;
-  return `${finding.filePath}:${finding.startLine}${
-    finding.endLine && finding.endLine !== finding.startLine
-      ? `-${finding.endLine}`
-      : ""
-  }`;
-}
-
 function stripGeneratedSections(description: string): string {
   return description
+    .split(/\nCode evidence:\s*/i)[0]
     .split(/\nRecommendation:\s*/i)[0]
     .split(/\nAttack Vector:\s*/i)[0]
     .split(/\nExample Request:\s*/i)[0]
@@ -404,19 +386,6 @@ export function FindingDetailPanel({
           <div className="space-y-5 px-6 py-5">
             <FindingReportSections finding={finding} />
 
-            {/* Code Snippet */}
-            {finding.snippet && (
-              <section>
-                <h4 className="text-sm font-semibold flex items-center gap-2 mb-2">
-                  <Shield className="h-4 w-4 text-muted-foreground" />
-                  Vulnerable Code
-                </h4>
-                <pre className="rounded-lg bg-zinc-950 border border-zinc-800 p-4 text-sm text-zinc-100 overflow-x-auto font-mono leading-relaxed max-h-48">
-                  {finding.snippet}
-                </pre>
-              </section>
-            )}
-
           </div>
         </ScrollArea>
       </SheetContent>
@@ -517,18 +486,6 @@ export function FindingDetailInline({
 
       <div className="w-full max-w-full space-y-5 overflow-hidden p-5">
         <FindingReportSections finding={finding} />
-
-        {finding.snippet && (
-          <section>
-            <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-              <Shield className="h-4 w-4 text-muted-foreground" />
-              Vulnerable Code
-            </h4>
-            <pre className="max-h-64 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-zinc-800 bg-zinc-950 p-4 font-mono text-sm leading-relaxed text-zinc-100">
-              {finding.snippet}
-            </pre>
-          </section>
-        )}
       </div>
     </div>
   );

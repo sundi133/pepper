@@ -23,6 +23,7 @@ import {
   ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import { buildRepoContextSummary } from "@/lib/llm-repo-context";
 
 interface ZeroDayLlmFinding {
   title: string;
@@ -75,6 +76,7 @@ export const zeroDayScanner: ScannerPlugin = {
     const findings: RawFinding[] = [];
     const maxConcurrency = MAX_LLM_CONCURRENCY;
     const chunks: Chunk[] = [];
+    const repoContextBlock = buildRepoContextSummary(ctx.fileList);
 
     for (const filePath of targetFiles) {
       await ctx.waitIfPaused?.();
@@ -112,6 +114,7 @@ export const zeroDayScanner: ScannerPlugin = {
             ctx.orgSettings.llmModel,
             chunk,
             maxResponseTokens,
+            repoContextBlock,
           ),
         ),
       );
@@ -141,8 +144,9 @@ async function analyzeChunk(
   model: string,
   chunk: Chunk,
   maxResponseTokens: number,
+  repoContextBlock: string,
 ): Promise<RawFinding[]> {
-  const userContent = `File: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n\n\`\`\`\n${chunk.content}\n\`\`\``;
+  const userContent = `${repoContextBlock}\n--- CURRENT FILE CHUNK ---\nFile: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n\n\`\`\`\n${chunk.content}\n\`\`\``;
 
   try {
     const raw = await analyzeWithLlm(

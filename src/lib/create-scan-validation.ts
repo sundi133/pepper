@@ -1,5 +1,14 @@
 export type CreateScanSourceMode = "upload" | "git" | "svn";
 
+/** Select value meaning: create a new project from this scan’s source. */
+export const CREATE_PROJECT_ON_SCAN_VALUE = "__new__";
+
+export function isExistingProjectSelection(projectId: string): boolean {
+  const t = projectId?.trim();
+  if (!t || t === CREATE_PROJECT_ON_SCAN_VALUE) return false;
+  return true;
+}
+
 export type CreateScanFieldErrors = {
   project?: string;
   source?: string;
@@ -13,10 +22,6 @@ export function validateCreateScanFields(input: {
   svnUrl: string;
 }): CreateScanFieldErrors {
   const errors: CreateScanFieldErrors = {};
-
-  if (!input.projectId?.trim()) {
-    errors.project = "Project is required.";
-  }
 
   if (input.sourceMode === "upload") {
     if (!input.file) {

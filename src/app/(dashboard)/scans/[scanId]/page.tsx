@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useScanPolling, useFindings } from "@/hooks/use-scan-polling";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +34,7 @@ import {
   Check,
 } from "lucide-react";
 import { toast } from "sonner";
+import { mutate } from "swr";
 import { useRouter } from "next/navigation";
 import { nextFindingSelection } from "@/lib/create-scan-validation";
 
@@ -120,6 +121,21 @@ export default function ScanDetailPage() {
     filters,
     scan?.status,
   );
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      window.location.hash !== "#scan-findings"
+    ) {
+      return;
+    }
+    const el = document.getElementById("scan-findings");
+    if (!el) return;
+    const t = window.setTimeout(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [scanId, scan?.status, findings]);
 
   if (isLoading) {
     return (
@@ -249,6 +265,10 @@ export default function ScanDetailPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Failed to start rescan");
       toast.success("Rescan queued");
+      await Promise.all([
+        mutate("/api/notifications?summary=unread"),
+        mutate("/api/notifications"),
+      ]);
       router.push(`/scans/${data.scanId}`);
     } catch (error) {
       toast.error(
@@ -503,7 +523,11 @@ export default function ScanDetailPage() {
 
       {/* Findings */}
       {(hasReportableFindings || isActive) && (
-        <Card>
+        <Card
+          id="scan-findings"
+          tabIndex={-1}
+          className="scroll-mt-24 outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+        >
           <CardHeader>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
               <CardTitle>Findings ({visibleFindingCount})</CardTitle>

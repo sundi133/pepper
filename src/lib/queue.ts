@@ -36,6 +36,8 @@ export interface ScanJobData {
   baseSha?: string;
   commitSha?: string;
   repoUrl?: string;
+  /** Original repo URL without credentials (for logs / parity). */
+  repoUrlDisplay?: string;
   svnUrl?: string;
   svnRevision?: string;
   svnUsername?: string;

@@ -8,6 +8,8 @@ Your mission is to find vulnerabilities that standard SAST tools CANNOT catch �
 IMPORTANT: Do NOT report standard injection issues (SQLi, XSS, command injection, path traversal, hardcoded secrets).
 Those are handled by another scanner. Focus EXCLUSIVELY on logic-level and authorization flaws.
 
+Each user message begins with a REPOSITORY CONTEXT (paths only) from the full extracted tree. Use it to infer multi-root layouts, duplicate services, or where authorization might be split across packages — but only assert issues supported by the current code chunk.
+
 ═══════════════════════════════════════════════════════════════
 ANALYSIS METHODOLOGY
 ═══════════════════════════════════════════════════════════════
@@ -140,13 +142,13 @@ For each finding respond with:
       "title": "Clear vulnerability title",
       "severity": "CRITICAL|HIGH|MEDIUM|LOW",
       "category": "IDOR|Business Logic|Race Condition|Trust Boundary|State Management|Auth Logic|Multi-tenant|Dynamic Attack|Crypto|Resource Exhaustion|Parameter Tampering",
-      "description": "What the vulnerability is, why standard tools miss it, and the business impact",
+      "description": "Plain-language: what is wrong, why pattern-based SAST misses it, and business impact. Do NOT paste large source blocks, fenced code, or a 'Code evidence' section — the UI shows file path and line range separately.",
       "startLine": <exact line number>,
       "endLine": <exact line number>,
       "cweId": "CWE-XXX",
       "confidence": <0.72 to 1.0>,
-      "attackVector": "Step-by-step exploitation path using only visible code evidence. Include exact endpoint, parameter/input, safe payload, and expected result when visible. If exact route/parameter is not visible, say: The exact route/parameter could not be confirmed from the provided code.",
-      "stepsToReproduce": ["Concrete validation steps based only on visible code evidence. If exact route/parameter is not visible, provide code-review validation steps instead of inventing a request."],
+      "attackVector": "Short prose walkthrough: who abuses what trust boundary and how. Name endpoints/params only when clearly visible in the snippet. Do NOT dump multi-line source or fenced blocks. If the route/parameter is unclear, say: The exact route/parameter could not be confirmed from the provided code.",
+      "stepsToReproduce": ["Short bullets: how to validate (requests, auth context changes, or code-review checks). No fenced code dumps; reference file and function names instead of pasting the snippet."],
       "recommendation": "Specific fix with code-level guidance"
     }
   ]
@@ -159,6 +161,7 @@ CRITICAL RULES:
 - Do NOT invent endpoints, parameters, URLs, secrets, or exploit results
 - Use safe non-destructive payloads only
 - If the exact endpoint or parameter is unclear, explicitly say: "The exact route/parameter could not be confirmed from the provided code" and give the closest code-level reproduction based on file, line, and visible sink
+- Keep description, attackVector, and stepsToReproduce concise; never duplicate the raw snippet as "evidence" or under a "Code evidence" heading
 - If no findings: return {"findings": []}
 - Do NOT duplicate issues that standard injection-based SAST would catch
 - FOCUS on authorization and business logic — these are the #1 real-world vulnerability class`;

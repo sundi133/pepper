@@ -26,7 +26,7 @@ export async function GET(
       _count: { select: { scans: true } },
       scans: {
         orderBy: { createdAt: "desc" },
-        take: 10,
+        take: 1,
         select: {
           id: true,
           status: true,

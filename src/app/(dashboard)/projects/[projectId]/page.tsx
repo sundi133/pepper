@@ -22,7 +22,6 @@ import {
   ScanStatusBadge,
   GateResultBadge,
 } from "@/components/scans/scan-status-badge";
-import { CreateScanDialog } from "@/components/scans/create-scan-dialog";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 import {
   Tooltip,
@@ -30,14 +29,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Settings, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -96,6 +87,7 @@ export default function ProjectDetailPage() {
   }
 
   const scans = (project.scans as Array<Record<string, unknown>>) || [];
+  const scan = scans[0] as Record<string, unknown> | undefined;
 
   async function executeDeleteProject() {
     setDeleting(true);
@@ -168,10 +160,6 @@ export default function ProjectDetailPage() {
               Settings
             </Button>
           </Link>
-          <CreateScanDialog
-            projects={[{ id: projectId, name: project.name as string }]}
-            triggerVariant="default"
-          />
         </div>
       </div>
 
@@ -206,94 +194,84 @@ export default function ProjectDetailPage() {
         </Card>
       )}
 
-      {/* Scan History */}
+      {/* Single project scan */}
       <Card>
         <CardHeader>
-          <CardTitle>Scan History</CardTitle>
-          <CardDescription>Recent scans for this project</CardDescription>
+          <CardTitle>Project scan</CardTitle>
+          <CardDescription>
+            One scan per project. Start or replace it from{" "}
+            <Link href="/scans/new" className="font-medium text-primary hover:underline">
+              New Scan
+            </Link>{" "}
+            in the sidebar (this page is view-only for scanning).
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {scans.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              No scans yet. Start your first scan.
+          {!scan ? (
+            <p className="text-center text-sm text-muted-foreground py-8">
+              No scan yet. Go to{" "}
+              <Link
+                href="/scans/new"
+                className="font-medium text-primary hover:underline"
+              >
+                New Scan
+              </Link>{" "}
+              in the sidebar, select this project, and start a scan (one per
+              project).
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Branch</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Findings</TableHead>
-                  <TableHead>Gate</TableHead>
-                  <TableHead>Files</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {scans.map((scan) => (
-                  <TableRow key={scan.id as string}>
-                    <TableCell>
-                      <Link
-                        href={`/scans/${scan.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {scan.scanType as string}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {(scan.branch as string) || "-"}
-                    </TableCell>
-                    <TableCell>
-                      <ScanStatusBadge status={scan.status as string} />
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm">
-                        {(scan.criticalCount as number) +
-                          (scan.highCount as number) +
-                          (scan.mediumCount as number) +
-                          (scan.lowCount as number) +
-                          (scan.infoCount as number)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {scan.status === "COMPLETED" ? (
-                        <GateResultBadge result={scan.gateResult as string} />
-                      ) : (
-                        <span className="text-sm text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {scan.filesScanned as number}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(scan.createdAt as string).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={
-                              deletingScanId === scan.id ||
-                              scan.status === "RUNNING" ||
-                              scan.status === "PAUSED"
-                            }
-                            onClick={() => setScanToDelete(scan.id as string)}
-                            aria-label="Delete Scan"
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Delete Scan</TooltipContent>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="flex flex-col gap-4 rounded-lg border border-border/60 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href={`/scans/${scan.id as string}`}
+                    className="font-semibold text-foreground hover:text-primary hover:underline"
+                  >
+                    {scan.scanType as string}
+                  </Link>
+                  <ScanStatusBadge status={scan.status as string} />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Branch: {(scan.branch as string) || "—"} · Files scanned:{" "}
+                  {scan.filesScanned as number} ·{" "}
+                  {new Date(scan.createdAt as string).toLocaleString()}
+                </p>
+                <p className="text-sm">
+                  Findings:{" "}
+                  <span className="font-medium">
+                    {(scan.criticalCount as number) +
+                      (scan.highCount as number) +
+                      (scan.mediumCount as number) +
+                      (scan.lowCount as number) +
+                      (scan.infoCount as number)}
+                  </span>
+                  {scan.status === "COMPLETED" ? (
+                    <span className="ml-2 inline-flex align-middle">
+                      <GateResultBadge result={scan.gateResult as string} />
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    disabled={
+                      deletingScanId === (scan.id as string) ||
+                      scan.status === "RUNNING" ||
+                      scan.status === "PAUSED"
+                    }
+                    onClick={() => setScanToDelete(scan.id as string)}
+                    aria-label="Delete scan"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Delete scan</TooltipContent>
+              </Tooltip>
+            </div>
           )}
         </CardContent>
       </Card>

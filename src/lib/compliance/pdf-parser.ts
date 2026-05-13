@@ -45,6 +45,7 @@ export function parseCompliancePdf(
       text = execFileSync("pdftotext", ["-layout", filePath, "-"], {
         encoding: "utf-8",
         timeout: 30000,
+        windowsHide: process.platform === "win32",
       });
     } catch {
       // Fallback: read as-is (some PDFs are already text-like)

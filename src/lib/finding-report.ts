@@ -22,7 +22,7 @@ export interface StoredFindingReport {
   remediation: string[];
 }
 
-const CURRENT_REPORT_VERSION = 2;
+const CURRENT_REPORT_VERSION = 5;
 
 export function enrichFindingWithReport<T extends FindingReportInput>(
   finding: T,
@@ -69,7 +69,6 @@ export function buildStoredFindingReport(
   const description = sanitizeReportText(
     readString(metadata.summary) || stripGeneratedSections(finding.description),
   );
-  const evidence = buildEvidenceBlock(finding);
   const metadataSteps = readStringArray(metadata.stepsToReproduce)
     .map(sanitizeReportText)
     .filter(isSafeReportText);
@@ -85,7 +84,6 @@ export function buildStoredFindingReport(
     summary: [
       buildSummaryLead({ finding, parameter, sink, location }),
       description,
-      evidence,
       buildConsequenceSentence(finding),
       `This issue should be treated as **${finding.severity}**${readString(metadata.severityJustification) ? ` because ${readString(metadata.severityJustification)}.` : " based on the reachable impact and available evidence."}`,
     ]
@@ -144,18 +142,41 @@ function buildSummaryLead(input: {
   const { finding, parameter, sink, location } = input;
   const where = location ? ` in \`${location}\`` : "";
 
+  if (scannerFamily(finding) === "iac") {
+    return location
+      ? `Misconfiguration in infrastructure-as-code at \`${location}\`.`
+      : "Misconfiguration in infrastructure-as-code.";
+  }
+
+  if (scannerFamily(finding) === "zero-day") {
+    return location
+      ? `Potential business-logic or authorization issue at \`${location}\`.`
+      : "Potential business-logic or authorization issue in the reported code.";
+  }
+
   switch (scannerFamily(finding)) {
     case "sca":
       return `A vulnerable dependency was identified${where}.`;
     case "secrets":
       return `A secret or credential-like value was identified${where}.`;
-    case "iac":
-      return `An infrastructure or deployment configuration weakness was identified${where}.`;
-    case "zero-day":
-      return `A logic or authorization weakness was identified${where}.`;
-    default:
+    default: {
+      if (!parameter && !sink) {
+        return location
+          ? `Security finding at \`${location}\`.`
+          : "Security finding in the reported application code.";
+      }
       return `${parameter ? `User-controlled input from \`${parameter}\`` : "A user-controlled input source"} reaches ${sink ? `\`${sink}\`` : "the vulnerable operation"}${where}.`;
+    }
   }
+}
+
+/** Client-safe summary opener (matches stored report lead logic). */
+export function findingReportSummaryLead(finding: FindingReportInput): string {
+  const metadata = normalizeMetadata(finding.metadata);
+  const location = formatLocation(finding);
+  const sink = readString(metadata.sink) || inferSink(finding);
+  const parameter = readString(metadata.parameter) || inferParameter(finding);
+  return buildSummaryLead({ finding, parameter, sink, location });
 }
 
 function buildSteps(input: {
@@ -193,38 +214,53 @@ function buildSteps(input: {
   }
 
   if (family === "iac") {
+    const fp = input.finding.filePath || "the configuration file";
+    const start = input.finding.startLine ?? 1;
+    const end = Math.max(
+      input.finding.endLine ?? start,
+      start + 6,
+    );
+    const sedRange = `${start},${end}`;
+    const loc =
+      location || (input.finding.startLine != null ? `${fp}:${start}` : fp);
     return [
-      "Inspect the reported infrastructure, container, or CI/CD configuration in a safe local or test environment.",
-      "Confirm the insecure setting exists exactly as reported by the scanner.",
-      "Validate the configuration against the intended security baseline or policy.",
-      location
-        ? `Confirm the finding maps to \`${location}\`.`
-        : "Confirm the finding maps to the reported configuration evidence.",
+      `Open \`${loc}\` in your editor and read a few lines above and below the reference so you see the full directive or block (for example COPY, ENV, a Kubernetes securityContext, or an ingress rule).`,
+      `State the concrete risk in one plain sentence (what is exposed, overprivileged, or leaked if this ships as written).`,
+      `From your repository root in a terminal, run sed -n '${sedRange}p' with that file path substituted (add quotes around the path if it contains spaces). This only prints lines; it does not modify files.`,
+      `Change the configuration to match your security baseline, then re-run your usual IaC or pipeline check on this file to confirm the issue is gone.`,
     ];
   }
 
   if (family === "zero-day") {
+    const fp = input.finding.filePath || "the affected source file";
+    const start = input.finding.startLine ?? 1;
+    const end = Math.max(input.finding.endLine ?? start, start + 8);
+    const sedRange = `${start},${end}`;
+    const loc =
+      location || (input.finding.startLine != null ? `${fp}:${start}` : fp);
     const metadata = normalizeMetadata(input.finding.metadata);
     const attackVector = sanitizeReportText(
       readString(metadata.attackVector) ||
         extractLabeledSection(input.finding.description, "Attack Vector") ||
         "",
     );
+    const printContext = `From the repository root in a terminal, run sed -n '${sedRange}p' with that file path substituted (add quotes around the path if it contains spaces). This only prints lines; it does not modify files.`;
+    const base: string[] = [
+      `Open \`${loc}\` in your editor. Trace from the entry point (handler, resolver, job, or query) to where a trust boundary should apply (ownership, role, tenant, payment, or workflow state).`,
+      `In one sentence, describe the gap: what check is missing or wrong compared to what the business rule should enforce?`,
+      printContext,
+    ];
     if (attackVector) {
       return [
-        location
-          ? `Review the reported code path at \`${location}\`.`
-          : "Review the reported code path in the source evidence.",
-        attackVector,
-        "Validate the issue only in an authorized local or test environment. Do not invent routes, parameters, or payloads that are not visible in the code evidence.",
+        ...base,
+        `Reviewer walkthrough (stay within visible code; do not invent URLs or fields): ${attackVector}`,
+        `Validate only in an authorized local or staging app, or with a focused unit/integration test. If a route or parameter is not in the repository, document that gap instead of guessing a HTTP request.`,
       ];
     }
     return [
-      location
-        ? `Review \`${location}\` and the reachable caller/view/controller that uses it.`
-        : "Review the reachable caller/view/controller for the reported logic path.",
-      "Confirm whether the code enforces object-level authorization, tenant ownership, role checks, or the business rule described in the finding.",
-      "If the route or request parameter is not visible in the available code evidence, validate through code review before attempting a runtime reproduction.",
+      ...base,
+      `Follow imports and router wiring until you see where authentication, object-level authorization, or tenant filters should run — then confirm whether they actually run on this path.`,
+      `Add or adjust a regression test that fails when the bug returns, rather than relying only on manual checks.`,
     ];
   }
 
@@ -293,11 +329,6 @@ function scannerFamily(
   if (scanner === "IAC") return "iac";
   if (scanner === "ZERO_DAY") return "zero-day";
   return "sast";
-}
-
-function buildEvidenceBlock(finding: FindingReportInput): string {
-  if (!finding.snippet?.trim()) return "";
-  return `Code evidence:\n\n\`\`\`${languageForFile(finding.filePath)}\n${finding.snippet.trim()}\n\`\`\``;
 }
 
 function buildConsequenceSentence(finding: FindingReportInput): string {
@@ -519,6 +550,7 @@ function extractLabeledSection(
 function stripGeneratedSections(description: string): string {
   return sanitizeReportText(
     description
+      .split(/\nCode evidence:\s*/i)[0]
       .split(/\nRecommendation:\s*/i)[0]
       .split(/\nAttack Vector:\s*/i)[0]
       .split(/\nExample Request:\s*/i)[0]
@@ -547,17 +579,6 @@ function looksLikeCodeApi(value: string): boolean {
   return /^(subprocess\.check_output|subprocess\.run|os\.system|exec|eval|spawn|popen|open|readFile|writeFile)$/i.test(
     value.trim(),
   );
-}
-
-function languageForFile(filePath?: string | null): string {
-  if (!filePath) return "text";
-  if (filePath.endsWith(".py")) return "python";
-  if (/\.[jt]sx?$/.test(filePath)) return "typescript";
-  if (filePath.endsWith(".php")) return "php";
-  if (filePath.endsWith(".java")) return "java";
-  if (filePath.endsWith(".go")) return "go";
-  if (/Dockerfile$/i.test(filePath)) return "dockerfile";
-  return "text";
 }
 
 function normalizeMetadata(metadata: unknown): Record<string, unknown> {

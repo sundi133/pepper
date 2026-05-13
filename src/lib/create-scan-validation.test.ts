@@ -5,7 +5,7 @@ import {
 } from "./create-scan-validation";
 
 describe("validateCreateScanFields", () => {
-  it("requires project", () => {
+  it("does not require an existing project when git URL is set", () => {
     expect(
       validateCreateScanFields({
         projectId: "",
@@ -13,10 +13,30 @@ describe("validateCreateScanFields", () => {
         file: null,
         repoUrl: "https://github.com/a/b.git",
         svnUrl: "",
-      }).project,
-    ).toBe("Project is required.");
+      }),
+    ).toEqual({});
+    expect(
+      validateCreateScanFields({
+        projectId: "__new__",
+        sourceMode: "git",
+        file: null,
+        repoUrl: "https://github.com/a/b.git",
+        svnUrl: "",
+      }),
+    ).toEqual({});
   });
 
+  it("requires git repo URL for new project without upload/svn", () => {
+    expect(
+      validateCreateScanFields({
+        projectId: "__new__",
+        sourceMode: "git",
+        file: null,
+        repoUrl: "  ",
+        svnUrl: "",
+      }).source,
+    ).toBe("Source Code is required.");
+  });
   it("requires git repo URL", () => {
     expect(
       validateCreateScanFields({

@@ -34,6 +34,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "No matching project found" });
     }
 
+    const { removeAllScansForProject } = await import(
+      "@/lib/remove-project-scans"
+    );
+    await removeAllScansForProject(project.id);
+
     const settings = project.organization.settings;
 
     const scan = await prisma.scan.create({
@@ -82,7 +87,12 @@ export async function POST(req: NextRequest) {
         : undefined,
     };
 
-    await scanQueue.add("scan", jobData, { jobId: scan.id });
+    const job = await scanQueue.add("scan", jobData, { jobId: scan.id });
+
+    await prisma.scan.update({
+      where: { id: scan.id },
+      data: { jobId: job.id },
+    });
 
     return NextResponse.json({ scanId: scan.id, status: "QUEUED" });
   }

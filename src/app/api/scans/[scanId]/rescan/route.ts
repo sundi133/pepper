@@ -9,6 +9,7 @@ function resolveGitDefaultBranch(repoUrl: string) {
     const output = execFileSync("git", ["ls-remote", "--symref", repoUrl, "HEAD"], {
       encoding: "utf8",
       timeout: 30000,
+      windowsHide: process.platform === "win32",
     });
     const match = output.match(/^ref:\s+refs\/heads\/(.+)\s+HEAD/m);
     return match?.[1];
@@ -53,6 +54,7 @@ export async function POST(
     );
   }
 
+  const projectId = originalScan.projectId;
   const orgSettings = await prisma.orgSettings.findUnique({
     where: { organizationId: orgId },
   });
@@ -64,6 +66,9 @@ export async function POST(
         originalScan.branch ||
         undefined
       : originalScan.branch || undefined;
+
+  const { removeAllScansForProject } = await import("@/lib/remove-project-scans");
+  await removeAllScansForProject(projectId);
 
   const scan = await prisma.scan.create({
     data: {
@@ -121,6 +126,20 @@ export async function POST(
     where: { id: scan.id },
     data: { jobId: job.id },
   });
+
+  try {
+    const { createScanQueuedNotification } = await import(
+      "@/lib/scan-notifications"
+    );
+    await createScanQueuedNotification({
+      userId: auth.session.user.id,
+      organizationId: orgId,
+      scanId: scan.id,
+      projectName: originalScan.project.name,
+    });
+  } catch (e) {
+    console.error("Failed to record notification:", e);
+  }
 
   return NextResponse.json(
     { scanId: scan.id, status: "QUEUED" },

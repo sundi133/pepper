@@ -10,98 +10,138 @@ export async function GET() {
   if (!orgId)
     return NextResponse.json({ error: "No organization" }, { status: 403 });
 
-  // 1. Trend data — severity counts per completed scan (last 30 scans)
-  const recentScans = await prisma.scan.findMany({
-    where: {
-      status: "COMPLETED",
-      project: { organizationId: orgId },
-    },
-    orderBy: { completedAt: "asc" },
-    take: 30,
-    select: {
-      id: true,
-      completedAt: true,
-      criticalCount: true,
-      highCount: true,
-      mediumCount: true,
-      lowCount: true,
-      project: { select: { name: true } },
-    },
-  });
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
 
-  const trend = recentScans.map((s) => ({
-    date: s.completedAt?.toISOString().split("T")[0] || "",
-    label: s.project.name,
-    critical: s.criticalCount,
-    high: s.highCount,
-    medium: s.mediumCount,
-    low: s.lowCount,
-  }));
-
-  // 2. Severity breakdown — aggregate across all findings in org
-  const severityBreakdown = await prisma.finding.groupBy({
-    by: ["severity"],
-    _count: true,
-    where: {
-      scan: { project: { organizationId: orgId } },
-    },
-  });
+  const [
+    severityBreakdown,
+    projectCount,
+    memberCount,
+    monitoredSchedules,
+    secretsFindingCount,
+    dependencyFindingCount,
+    resolvedThisMonth,
+    lastScan,
+    recentProjects,
+    recentScansForFeed,
+  ] = await Promise.all([
+    prisma.finding.groupBy({
+      by: ["severity"],
+      _count: true,
+      where: {
+        scan: { project: { organizationId: orgId } },
+      },
+    }),
+    prisma.project.count({ where: { organizationId: orgId } }),
+    prisma.orgMember.count({ where: { organizationId: orgId } }),
+    prisma.scanSchedule.count({
+      where: { enabled: true, project: { organizationId: orgId } },
+    }),
+    prisma.finding.count({
+      where: {
+        scan: { project: { organizationId: orgId } },
+        scanner: { in: ["SECRETS_PATTERN", "SECRETS_LLM"] },
+      },
+    }),
+    prisma.finding.count({
+      where: {
+        scan: { project: { organizationId: orgId } },
+        scanner: { in: ["SCA", "MALICIOUS_PKG"] },
+      },
+    }),
+    prisma.finding.count({
+      where: {
+        scan: { project: { organizationId: orgId } },
+        status: "RESOLVED",
+        statusUpdatedAt: { gte: startOfMonth },
+      },
+    }),
+    prisma.scan.findFirst({
+      where: { project: { organizationId: orgId } },
+      orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        status: true,
+        scanType: true,
+        completedAt: true,
+        createdAt: true,
+      },
+    }),
+    prisma.project.findMany({
+      where: { organizationId: orgId },
+      orderBy: { updatedAt: "desc" },
+      take: 6,
+      select: {
+        id: true,
+        name: true,
+        updatedAt: true,
+        scans: {
+          where: { status: "COMPLETED" },
+          orderBy: { completedAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            criticalCount: true,
+            highCount: true,
+            mediumCount: true,
+            lowCount: true,
+            infoCount: true,
+            completedAt: true,
+          },
+        },
+      },
+    }),
+    prisma.scan.findMany({
+      where: { project: { organizationId: orgId } },
+      orderBy: { createdAt: "desc" },
+      take: 12,
+      select: {
+        id: true,
+        status: true,
+        scanType: true,
+        createdAt: true,
+        project: { select: { name: true } },
+      },
+    }),
+  ]);
 
   const severity = severityBreakdown.map((s) => ({
     name: s.severity,
     count: s._count,
   }));
 
-  // 3. Scanner distribution
-  const scannerBreakdown = await prisma.finding.groupBy({
-    by: ["scanner"],
-    _count: true,
-    where: {
-      scan: { project: { organizationId: orgId } },
-    },
-  });
+  const overview = {
+    projectCount,
+    memberCount,
+    monitoredSchedules,
+    secretsFindingCount,
+    dependencyFindingCount,
+    resolvedThisMonth,
+    lastScanAt: lastScan?.completedAt ?? lastScan?.createdAt ?? null,
+    lastScanStatus: lastScan?.status ?? null,
+    recentProjects: recentProjects.map((p) => {
+      const s = p.scans[0];
+      return {
+        id: p.id,
+        name: p.name,
+        updatedAt: p.updatedAt.toISOString(),
+        lastScanAt: s?.completedAt?.toISOString() ?? null,
+        criticalCount: s?.criticalCount ?? 0,
+        highCount: s?.highCount ?? 0,
+        mediumCount: s?.mediumCount ?? 0,
+        lowCount: s?.lowCount ?? 0,
+        infoCount: s?.infoCount ?? 0,
+      };
+    }),
+    activities: recentScansForFeed.map((s) => ({
+      id: s.id,
+      status: s.status,
+      scanType: s.scanType,
+      createdAt: s.createdAt.toISOString(),
+      projectName: s.project.name,
+    })),
+  };
 
-  const scanners = scannerBreakdown.map((s) => ({
-    name: s.scanner,
-    count: s._count,
-  }));
-
-  // 4. Top vulnerable files (top 10)
-  const topFiles = await prisma.finding.groupBy({
-    by: ["filePath"],
-    _count: true,
-    where: {
-      scan: { project: { organizationId: orgId } },
-      filePath: { not: null },
-    },
-    orderBy: { _count: { filePath: "desc" } },
-    take: 10,
-  });
-
-  const files = topFiles.map((f) => ({
-    filePath: f.filePath || "unknown",
-    count: f._count,
-  }));
-
-  // 5. Finding status breakdown
-  const statusBreakdown = await prisma.finding.groupBy({
-    by: ["status"],
-    _count: true,
-    where: {
-      scan: { project: { organizationId: orgId } },
-    },
-  });
-
-  const statuses = statusBreakdown.map((s) => ({
-    name: s.status,
-    count: s._count,
-  }));
-
-  return NextResponse.json({
-    trend,
-    severity,
-    scanners,
-    topFiles: files,
-    statuses,
-  });
+  return NextResponse.json({ severity, overview });
 }

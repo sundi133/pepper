@@ -43,14 +43,27 @@ export function useScans(projectId?: string, page = 1) {
   };
 }
 
-export function useProjects() {
-  const { data, error, isLoading, mutate } = useSWR(
-    "/api/projects",
-    jsonFetcher,
-    {
-      refreshInterval: 60000,
-    },
-  );
+export type ProjectListFilters = {
+  q?: string;
+  source?: "all" | "repo" | "upload";
+  sort?: "recent" | "name" | "vulns" | "grade";
+};
+
+export function useProjects(filters?: ProjectListFilters) {
+  const params = new URLSearchParams();
+  if (filters?.q) params.set("q", filters.q);
+  if (filters?.source && filters.source !== "all") {
+    params.set("source", filters.source);
+  }
+  if (filters?.sort && filters.sort !== "recent") {
+    params.set("sort", filters.sort);
+  }
+  const qs = params.toString();
+  const url = qs ? `/api/projects?${qs}` : "/api/projects";
+
+  const { data, error, isLoading, mutate } = useSWR(url, jsonFetcher, {
+    refreshInterval: 60000,
+  });
 
   return {
     projects: data?.projects || [],

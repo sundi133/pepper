@@ -11,8 +11,8 @@ export default function DashboardLayout({
       <Sidebar />
       <div className="flex min-h-screen flex-col lg:pl-64">
         <Topbar />
-        <main className="flex-1 bg-background px-4 py-5 sm:px-6 lg:px-8">
-          <div className="mx-auto w-full max-w-[90rem]">{children}</div>
+        <main className="flex-1 px-4 py-5 sm:px-6 lg:px-8">
+          <div className="page-shell">{children}</div>
         </main>
       </div>
     </div>

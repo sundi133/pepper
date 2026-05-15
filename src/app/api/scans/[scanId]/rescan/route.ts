@@ -83,6 +83,9 @@ export async function POST(
     },
   });
 
+  const useOrgGithubToken =
+    sourceType === "GIT_CLONE" && originalScan.project.connectedViaGithub;
+
   const jobData: ScanJobData = {
     scanId: scan.id,
     projectId: scan.projectId,
@@ -91,6 +94,9 @@ export async function POST(
     scanType: originalScan.scanType as ScanJobData["scanType"],
     baseSha: originalScan.baseSha || undefined,
     repoUrl: sourceType === "GIT_CLONE" ? originalScan.sourceRef : undefined,
+    repoUrlDisplay:
+      sourceType === "GIT_CLONE" ? originalScan.sourceRef : undefined,
+    useOrgGithubToken,
     svnUrl: sourceType === "SVN_CHECKOUT" ? originalScan.sourceRef : undefined,
     branch,
     orgSettings: {

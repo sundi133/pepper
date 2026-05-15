@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Environment — Pepper SAST</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo">P</div>
+        <div><h1>Pepper SAST</h1><span>Documentation</span></div>
+      </div>
+      <nav>
+        <section><h2>Guide</h2><ul>
+          <li><a href="index.html">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="user-guide.html">How to use</a></li>
+        </ul></section>
+        <section><h2>Settings</h2><ul>
+          <li><a href="settings.html">All settings</a></li>
+        </ul></section>
+        <section><h2>Deploy</h2><ul>
+          <li><a href="configuration.html" class="active">Environment</a></li>
+        </ul></section>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <h1>Environment variables</h1>
+      <p class="lead">
+        Copy <code>.env.example</code> to <code>.env</code> for local development.
+        Docker Compose deployments use additional variables documented in <code>README.md</code>.
+      </p>
+
+      <h2 id="core">Core services</h2>
+      <table>
+        <thead><tr><th>Variable</th><th>Required</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>DATABASE_URL</code></td><td>Yes</td><td>PostgreSQL connection string</td></tr>
+          <tr><td><code>REDIS_URL</code></td><td>Yes</td><td>Redis for BullMQ job queue</td></tr>
+          <tr><td><code>MINIO_ENDPOINT</code></td><td>Yes</td><td>S3-compatible storage host</td></tr>
+          <tr><td><code>MINIO_PORT</code></td><td>Yes</td><td>MinIO port (e.g. 9000)</td></tr>
+          <tr><td><code>MINIO_ACCESS_KEY</code></td><td>Yes</td><td>MinIO access key</td></tr>
+          <tr><td><code>MINIO_SECRET_KEY</code></td><td>Yes</td><td>MinIO secret key</td></tr>
+          <tr><td><code>MINIO_USE_SSL</code></td><td>No</td><td><code>true</code> / <code>false</code></td></tr>
+          <tr><td><code>MINIO_BUCKET</code></td><td>Yes</td><td>Bucket for scan artifacts</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="auth">Authentication</h2>
+      <table>
+        <thead><tr><th>Variable</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>NEXTAUTH_SECRET</code></td><td>Session signing / encryption secret (long random string)</td></tr>
+          <tr><td><code>NEXTAUTH_URL</code></td><td>Public app URL (e.g. <code>http://localhost:3000</code>)</td></tr>
+          <tr><td><code>ADMIN_EMAIL</code></td><td>Seed script default admin email</td></tr>
+          <tr><td><code>ADMIN_PASSWORD</code></td><td>Seed script default admin password — change after first login</td></tr>
+          <tr><td><code>NEXT_PUBLIC_SOURCE_CODE_URL</code></td><td>Optional link on login page</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="github">GitHub</h2>
+      <table>
+        <thead><tr><th>Variable</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>GITHUB_ID</code> / <code>GITHUB_SECRET</code></td><td>Optional NextAuth GitHub login</td></tr>
+          <tr><td><code>GITHUB_OAUTH_CLIENT_ID</code></td><td>OAuth app for Repositories + fix PR (falls back to <code>GITHUB_ID</code>)</td></tr>
+          <tr><td><code>GITHUB_OAUTH_CLIENT_SECRET</code></td><td>OAuth secret (falls back to <code>GITHUB_SECRET</code>)</td></tr>
+          <tr><td><code>TOKEN_ENCRYPTION_KEY</code></td><td>Encrypts stored GitHub tokens (defaults to <code>NEXTAUTH_SECRET</code>)</td></tr>
+          <tr><td><code>GITHUB_WEBHOOK_SECRET</code></td><td>HMAC secret for <code>/api/webhooks/github</code></td></tr>
+          <tr><td><code>GITHUB_PR_TOKEN</code> / <code>GITHUB_TOKEN</code></td><td>Legacy PAT — not used when OAuth is connected</td></tr>
+        </tbody>
+      </table>
+      <pre>Authorization callback URL:
+{NEXTAUTH_URL}/api/integrations/github/callback
+
+OAuth scopes requested: read:user repo</pre>
+
+      <h2 id="gitlab">GitLab</h2>
+      <table>
+        <thead><tr><th>Variable</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>GITLAB_ID</code> / <code>GITLAB_SECRET</code></td><td>Optional GitLab OAuth</td></tr>
+          <tr><td><code>GITLAB_URL</code></td><td>GitLab instance base (default <code>https://gitlab.com</code>)</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="llm-env">LLM &amp; worker</h2>
+      <table>
+        <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>OPENROUTER_API_KEY</code></td><td>—</td><td>Cloud LLM via OpenRouter</td></tr>
+          <tr><td><code>OPENROUTER_MODEL</code></td><td>—</td><td>Default model when using OpenRouter env key</td></tr>
+          <tr><td><code>WORKER_CONCURRENCY</code></td><td>2</td><td>Parallel scan jobs per worker</td></tr>
+          <tr><td><code>MAX_LLM_CONCURRENCY</code></td><td>5</td><td>Parallel LLM calls within a scan</td></tr>
+          <tr><td><code>LLM_CHUNK_TOKENS</code></td><td>3000</td><td>Code chunk size for API models</td></tr>
+          <tr><td><code>LLM_CHUNK_OVERLAP_TOKENS</code></td><td>200</td><td>Overlap between chunks</td></tr>
+          <tr><td><code>LLM_MAX_RESPONSE_TOKENS</code></td><td>4096</td><td>Max LLM response tokens</td></tr>
+          <tr><td><code>OLLAMA_CHUNK_TOKENS</code></td><td>1200</td><td>Chunk size for local Ollama</td></tr>
+          <tr><td><code>OLLAMA_CHUNK_OVERLAP_TOKENS</code></td><td>100</td><td>Ollama overlap</td></tr>
+          <tr><td><code>OLLAMA_MAX_RESPONSE_TOKENS</code></td><td>2048</td><td>Ollama max response</td></tr>
+          <tr><td><code>LLM_MIN_CONFIDENCE</code></td><td>0.7</td><td>Drop LLM findings below this confidence</td></tr>
+          <tr><td><code>OLLAMA_HOST</code></td><td>—</td><td>Docker: host Ollama URL (see README)</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="email">Email (SMTP)</h2>
+      <table>
+        <thead><tr><th>Variable</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>SMTP_HOST</code></td><td>Mail server hostname</td></tr>
+          <tr><td><code>SMTP_PORT</code></td><td>Usually 587 (TLS) or 465</td></tr>
+          <tr><td><code>SMTP_USER</code> / <code>SMTP_PASSWORD</code></td><td>Credentials</td></tr>
+          <tr><td><code>SMTP_FROM</code></td><td>From address</td></tr>
+          <tr><td><code>SMTP_TLS</code></td><td><code>true</code> to use STARTTLS</td></tr>
+        </tbody>
+      </table>
+      <p>Local dev: use Mailpit or similar on port 1025/8025.</p>
+
+      <h2>Docker-only (README)</h2>
+      <p>Production Compose may also define:</p>
+      <ul>
+        <li><code>POSTGRES_PASSWORD</code>, <code>PEPPER_PORT</code>, <code>WORKER_REPLICAS</code></li>
+        <li><code>PEPPER_IMAGE</code>, <code>PEPPER_VERSION</code> for private registries</li>
+      </ul>
+
+      <div class="callout">
+        UI settings (LLM provider, policies, build gates) are stored in PostgreSQL per organization.
+        Environment variables act as defaults and fallbacks for LLM keys and SMTP.
+      </div>
+    </main>
+  </div>
+</body>
+</html>

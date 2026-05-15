@@ -216,7 +216,6 @@ export default function DashboardPage() {
         </div>
         <div className="flex w-full flex-col gap-2 sm:max-w-md sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:max-w-none lg:shrink-0">
           <CreateScanDialog
-            projects={projects}
             triggerLabel="New Scan"
             triggerClassName="w-full bg-primary font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 sm:w-auto"
             onScanCreated={() => {

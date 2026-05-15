@@ -19,9 +19,25 @@ model Organization {
   members          OrgMember[]
   projects         Project[]
   settings         OrgSettings?
+  githubConnection OrgGithubConnection?
   apiKeys          ApiKey[]
   securityPolicies SecurityPolicy[]
   notifications    Notification[]
+}
+
+/// Org-scoped GitHub OAuth (repository import & private clone). Token stored encrypted.
+model OrgGithubConnection {
+  id               String    @id @default(cuid())
+  organizationId   String    @unique
+  githubUserId     String?
+  githubLogin      String?
+  accessTokenEnc   String    @db.Text
+  scope            String?
+  tokenExpiresAt   DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 model OrgMember {
@@ -112,10 +128,19 @@ model Project {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  /// Set when imported via GitHub OAuth (unique per org).
+  githubRepoId       Int?
+  githubOwner        String?
+  githubRepoName     String?
+  primaryLanguage    String?
+  connectedViaGithub Boolean @default(false)
+
   organization Organization @relation(fields: [organizationId], references: [id])
   scans        Scan[]
   buildGate    BuildGate?
   schedule     ScanSchedule?
+
+  @@unique([organizationId, githubRepoId])
 }
 
 model Scan {
@@ -329,6 +354,8 @@ model OrgSettings {
   llmApiKey        String? @db.Text
   enableLlmSast    Boolean @default(true)
   enableLlmSecrets Boolean @default(true)
+  /** Fine-grained or classic PAT: contents + pull requests (repo scope for classic). Used only to open fix PRs. */
+  githubPrToken    String? @db.Text
   osvApiUrl        String  @default("https://api.osv.dev")
   vulnDbMode       String  @default("online")
 

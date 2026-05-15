@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Settings — Pepper SAST</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo">P</div>
+        <div><h1>Pepper SAST</h1><span>Documentation</span></div>
+      </div>
+      <nav>
+        <section><h2>Guide</h2><ul>
+          <li><a href="index.html">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="user-guide.html">How to use</a></li>
+        </ul></section>
+        <section><h2>Settings</h2><ul>
+          <li><a href="settings.html" class="active">All settings</a></li>
+          <li><a href="#llm">LLM config</a></li>
+          <li><a href="#policies">Policies</a></li>
+          <li><a href="#build-gates">Build gates</a></li>
+          <li><a href="#team">Team</a></li>
+          <li><a href="#integrations">Integrations</a></li>
+        </ul></section>
+        <section><h2>Deploy</h2><ul>
+          <li><a href="configuration.html">Environment</a></li>
+        </ul></section>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <h1>Settings reference</h1>
+      <p class="lead">
+        All organization settings live under the <strong>Settings</strong> section in the left sidebar.
+        Changes apply to your current organization only.
+      </p>
+
+      <h2 id="llm">LLM configuration</h2>
+      <div class="card">
+        <p class="path">/settings/llm</p>
+        <p>API: <code>GET</code> / <code>PUT /api/settings/llm</code></p>
+        <p>Configure the model used for AI-assisted SAST, LLM secret detection, zero-day analysis, <strong>Suggest fix</strong>, and <strong>Open fix PR</strong> file rewriting.</p>
+      </div>
+
+      <h3>Fields</h3>
+      <table>
+        <thead><tr><th>Field</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Provider</strong></td><td>Preset: OpenAI, OpenRouter, Azure, Ollama, or custom. Sets default base URL and model.</td></tr>
+          <tr><td><strong>Base URL</strong></td><td>OpenAI-compatible API root (e.g. <code>https://api.openai.com/v1</code>, <code>https://openrouter.ai/api/v1</code>, <code>http://localhost:11434</code> for Ollama).</td></tr>
+          <tr><td><strong>Model</strong></td><td>Model ID sent to the API (e.g. <code>gpt-4o-mini</code>, <code>google/gemini-2.5-flash</code>, <code>qwen2.5-coder:7b</code>).</td></tr>
+          <tr><td><strong>API key</strong></td><td>Stored encrypted per organization. Leave blank on save to keep existing key. Env fallback: <code>LLM_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>OPENROUTER_API_KEY</code>.</td></tr>
+          <tr><td><strong>Enable LLM SAST</strong></td><td>When on, full scans use LLM code analysis instead of pattern-only SAST; enables zero-day scanner on full scans.</td></tr>
+          <tr><td><strong>Enable LLM secrets</strong></td><td>When on, secrets scanner uses LLM in addition to patterns.</td></tr>
+          <tr><td><strong>OSV API URL</strong></td><td>Software composition / vulnerability database endpoint (default OSV.dev).</td></tr>
+          <tr><td><strong>Vuln DB mode</strong></td><td><code>online</code> (query OSV) or offline mode when air-gapped.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>Ollama tip:</strong> Run Ollama on the host; set base URL to your Ollama host. Use README model table for memory vs quality tradeoffs.
+      </div>
+
+      <h2 id="policies">Security policies</h2>
+      <div class="card">
+        <p class="path">/settings/policies</p>
+        <p>API: <code>GET/POST /api/settings/policies</code>, <code>PATCH/DELETE /api/settings/policies/[policyId]</code></p>
+        <p>Organization-wide rules expressed in natural language. LLM SAST uses enabled policies as extra context when analyzing code.</p>
+      </div>
+
+      <h3>Creating a policy</h3>
+      <ul>
+        <li><strong>Name</strong> — Short label.</li>
+        <li><strong>Rule</strong> — What to flag (plain English). Example: “Flag hardcoded API keys in source files.”</li>
+        <li><strong>Severity</strong> — CRITICAL, HIGH, MEDIUM, LOW.</li>
+        <li><strong>Category</strong> — Optional tag (Configuration, Auth, etc.).</li>
+        <li><strong>Enabled</strong> — Toggle without deleting.</li>
+      </ul>
+      <p>Use example templates on the page to seed common policies.</p>
+
+      <h2 id="build-gates">Build gates</h2>
+      <div class="card">
+        <p class="path">/settings/build-gates</p>
+        <p>API: <code>PUT /api/settings/build-gates</code> with <code>projectId</code></p>
+        <p>Per-project thresholds evaluated when a scan completes. Result stored on the scan as <code>gateResult</code>: PASS, FAIL, or WARN.</p>
+      </div>
+
+      <h3>Fields</h3>
+      <table>
+        <thead><tr><th>Field</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Max critical</strong></td><td>Fail if critical count exceeds this (default 0 = no critical allowed).</td></tr>
+          <tr><td><strong>Max high / medium / low</strong></td><td>Upper limits per severity. Use <code>-1</code> for unlimited (UI empty = -1).</td></tr>
+          <tr><td><strong>Fail on new</strong></td><td>When enabled, fail if any finding is new compared to the previous completed scan on the same project.</td></tr>
+        </tbody>
+      </table>
+      <p>Select a project from the dropdown, adjust thresholds, click <strong>Save</strong>. View gate status on the project page and scan list.</p>
+
+      <h2 id="team">Team</h2>
+      <div class="card">
+        <p class="path">/settings/team</p>
+        <p>API: <code>GET/POST /api/users</code>, <code>PATCH/DELETE /api/users/[memberId]</code></p>
+        <p>Manage organization membership and roles.</p>
+      </div>
+
+      <h3>Roles</h3>
+      <table>
+        <thead><tr><th>Role</th><th>Typical use</th></tr></thead>
+        <tbody>
+          <tr><td><code>ADMIN</code></td><td>Full org settings, team management</td></tr>
+          <tr><td><code>SECURITY</code></td><td>Run scans, triage findings, configure policies</td></tr>
+          <tr><td><code>DEVELOPER</code></td><td>View and update finding status, open fix PRs</td></tr>
+          <tr><td><code>VIEWER</code></td><td>Read-only access</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Invite flow</h3>
+      <ol>
+        <li>Enter email and role, send invite.</li>
+        <li>New users receive credentials by email when SMTP is configured.</li>
+        <li>Existing users are added to the org immediately.</li>
+      </ol>
+
+      <h2 id="integrations">Integrations</h2>
+      <div class="card">
+        <p class="path">/settings/integrations</p>
+        <p>Connect external systems and automate scans.</p>
+      </div>
+
+      <h3>GitHub (OAuth)</h3>
+      <ul>
+        <li>One authorization for: repository import, private git clone on worker, <strong>Open fix PR</strong>.</li>
+        <li><strong>Connect GitHub</strong> → OAuth flow → token stored encrypted (<code>TOKEN_ENCRYPTION_KEY</code> or <code>NEXTAUTH_SECRET</code>).</li>
+        <li><strong>Disconnect</strong> revokes and removes stored token.</li>
+        <li>Manage repos on <a href="user-guide.html#repositories">Repositories</a> page.</li>
+      </ul>
+      <p>No personal access token UI — OAuth only for fix PRs.</p>
+
+      <h3>GitLab webhook</h3>
+      <ul>
+        <li>Copy webhook URL: <code>{your-app}/api/webhooks/gitlab</code></li>
+        <li>Configure in GitLab project → Webhooks for push/MR events.</li>
+        <li>Set <code>GITLAB_*</code> env vars if using GitLab OAuth (optional).</li>
+      </ul>
+
+      <h3>GitHub webhook</h3>
+      <p>
+        <code>POST /api/webhooks/github</code> — set <code>GITHUB_WEBHOOK_SECRET</code> in env and configure the secret in your GitHub repo/org webhook.
+      </p>
+
+      <h3>CI / API key</h3>
+      <p>
+        The integrations page shows a sample <code>curl</code> to <code>POST /api/scans</code> with an API key header.
+        Create API keys via your deployment’s admin/seed process or future UI.
+      </p>
+
+      <h2>Project settings (not under Settings menu)</h2>
+      <div class="card">
+        <p class="path">/projects/[projectId]/settings</p>
+        <p>Edit <strong>project name</strong> and <strong>description</strong> only.</p>
+        <p>
+          <strong>Scan schedule</strong> is not in this UI — use
+          <code>PUT /api/projects/{projectId}/schedule</code> (see README).
+        </p>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

@@ -166,7 +166,6 @@ export default function ProjectsPage() {
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
           <CreateScanDialog
-            projects={typedProjects}
             triggerLabel="New Scan"
             triggerClassName="w-full bg-primary font-semibold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto"
             onScanCreated={() => refresh()}

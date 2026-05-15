@@ -43,6 +43,8 @@ export interface ScanJobData {
   svnUsername?: string;
   svnPassword?: string;
   branch?: string;
+  /** Resolve org GitHub OAuth token at worker runtime (never sent from browser). */
+  useOrgGithubToken?: boolean;
   orgSettings: {
     llmProvider: string;
     llmBaseUrl: string;

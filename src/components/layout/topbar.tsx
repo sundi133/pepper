@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { LogOut, Search, User, Bell, Shield } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { MobileNav } from "@/components/layout/mobile-nav";
 
 const unreadFetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -27,8 +28,8 @@ export function Topbar() {
   const { data: unreadData, mutate: mutateUnread } = useSWR<{
     unreadCount: number;
   }>("/api/notifications?summary=unread", unreadFetcher, {
-    refreshInterval: 30_000,
-    dedupingInterval: 2_000,
+    refreshInterval: 10_000,
+    dedupingInterval: 1_000,
   });
 
   useEffect(() => {
@@ -50,8 +51,10 @@ export function Topbar() {
     : session?.user?.email?.[0]?.toUpperCase() || "U";
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 w-full shrink-0 items-center justify-between gap-x-3 border-b border-border/50 bg-background/90 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/75 sm:gap-x-5 sm:px-6 lg:px-8">
-      <div className="relative min-w-0 max-w-xl flex-1">
+    <header className="sticky top-0 z-40 flex h-14 w-full shrink-0 items-center gap-3 border-b border-border bg-background/95 px-3 backdrop-blur-md supports-[backdrop-filter]:bg-background/90 sm:px-6 lg:h-16 lg:px-8">
+      <MobileNav />
+
+      <div className="relative min-w-0 flex-1 max-w-md lg:max-w-lg">
         <Search
           className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
           aria-hidden
@@ -59,11 +62,12 @@ export function Topbar() {
         <Input
           type="search"
           placeholder="Search projects, vulnerabilities…"
-          className="h-10 w-full border-border/60 bg-background/80 pl-9 shadow-none"
+          className="h-9 w-full border-border bg-muted/40 pl-9 shadow-none lg:h-10 dark:bg-background/80"
           aria-label="Search"
         />
       </div>
-      <div className="flex shrink-0 items-center gap-x-1 sm:gap-x-2">
+
+      <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
         <ThemeToggle />
         <Button
           type="button"

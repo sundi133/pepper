@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>How to use — Pepper SAST</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo">P</div>
+        <div><h1>Pepper SAST</h1><span>Documentation</span></div>
+      </div>
+      <nav>
+        <section><h2>Guide</h2><ul>
+          <li><a href="index.html">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="user-guide.html" class="active">How to use</a></li>
+        </ul></section>
+        <section><h2>On this page</h2><ul>
+          <li><a href="#dashboard">Dashboard</a></li>
+          <li><a href="#new-scan">New scan</a></li>
+          <li><a href="#projects">Projects</a></li>
+          <li><a href="#repositories">Repositories</a></li>
+          <li><a href="#scan-detail">Scan detail</a></li>
+          <li><a href="#findings">Findings</a></li>
+          <li><a href="#open-fix-pr">Open fix PR</a></li>
+          <li><a href="#compliance">Compliance</a></li>
+        </ul></section>
+        <section><h2>Settings</h2><ul>
+          <li><a href="settings.html">All settings</a></li>
+        </ul></section>
+        <section><h2>Deploy</h2><ul>
+          <li><a href="configuration.html">Environment</a></li>
+        </ul></section>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <h1>How to use Pepper</h1>
+      <p class="lead">Day-to-day workflows: scans, projects, GitHub, and remediation.</p>
+
+      <h2 id="dashboard">Dashboard</h2>
+      <p><span class="badge">Route</span> <code>/dashboard</code></p>
+      <p>
+        Organization overview: finding counts by severity, recent projects, activity feed, and shortcuts to start a scan.
+        Use <strong>New Scan</strong> from the sidebar or embedded dialog to queue work quickly.
+      </p>
+
+      <h2 id="new-scan">New Security Scan</h2>
+      <p><span class="badge">Route</span> <code>/scans/new</code></p>
+
+      <h3>Steps</h3>
+      <ol class="steps">
+        <li>Choose or create a <strong>project</strong> (container for scans and build gates).</li>
+        <li>Select <strong>scan type</strong>: Full, SAST only, SCA only, or Secrets only.</li>
+        <li>Pick a <strong>source</strong>:
+          <ul>
+            <li><strong>Repository</strong> — GitHub/GitLab HTTPS clone URL and optional branch.</li>
+            <li><strong>Upload</strong> — <code>.zip</code>, <code>.tar</code>, <code>.tar.gz</code>, or <code>.tgz</code> archive.</li>
+          </ul>
+        </li>
+        <li>Submit. The scan is created and enqueued; the worker picks it up when running.</li>
+      </ol>
+
+      <h3>Git clone without pasting a token</h3>
+      <p>
+        If <strong>GitHub is connected</strong> under Repositories, private GitHub URLs clone using your org OAuth token.
+        The personal access token field is hidden on the new-scan form when OAuth is active.
+      </p>
+
+      <h3>SVN</h3>
+      <p>
+        SVN scans are created via the API with <code>sourceType: SVN_CHECKOUT</code>. The worker needs the
+        <code>svn</code> binary installed. See README for examples.
+      </p>
+
+      <h2 id="projects">Projects</h2>
+      <p><span class="badge">Route</span> <code>/projects</code>, <code>/projects/[id]</code></p>
+      <ul>
+        <li>Each project holds scans, optional <code>repoUrl</code>, default branch, and GitHub metadata when imported.</li>
+        <li>Project cards show security grade and open finding counts.</li>
+        <li><strong>Project settings</strong> (<code>/projects/[id]/settings</code>) — edit name and description only.</li>
+        <li>Build gate summary appears on the project page when configured.</li>
+      </ul>
+
+      <h2 id="repositories">Repositories (GitHub)</h2>
+      <p><span class="badge">Route</span> <code>/repositories</code></p>
+
+      <h3>Connect GitHub</h3>
+      <ol class="steps">
+        <li>Click <strong>Connect GitHub</strong> (or use Settings → Integrations).</li>
+        <li>Authorize the OAuth app on GitHub (<code>read:user</code> and <code>repo</code> scopes).</li>
+        <li>Return to Pepper — status shows your GitHub username.</li>
+      </ol>
+
+      <h3>Import repositories</h3>
+      <ul>
+        <li><strong>Picker</strong> — Select repos from your GitHub account; Pepper creates/links projects and queues an initial full scan.</li>
+        <li><strong>Add repository by URL</strong> — Enter <code>owner/repo</code> or <code>https://github.com/owner/repo</code> for any repo your account can access (not only the picker list).</li>
+      </ul>
+
+      <div class="callout">
+        Configure OAuth in <code>.env</code>: <code>GITHUB_OAUTH_CLIENT_ID</code>,
+        <code>GITHUB_OAUTH_CLIENT_SECRET</code>, callback
+        <code>{NEXTAUTH_URL}/api/integrations/github/callback</code>.
+      </div>
+
+      <h2 id="scan-detail">Scan detail</h2>
+      <p><span class="badge">Route</span> <code>/scans/[scanId]</code></p>
+      <ul>
+        <li>Live status while <code>QUEUED</code>, <code>RUNNING</code>, or <code>PAUSED</code>.</li>
+        <li><strong>Pause / Resume / Stop / Cancel</strong> for active scans.</li>
+        <li><strong>Rescan</strong> from the scans list to run again on the same project.</li>
+        <li>Findings grouped by scanner family (SAST, Secrets, SCA, IaC, Zero-Day).</li>
+        <li>Filter by severity and scanner type.</li>
+        <li>Export findings as CSV or HTML report.</li>
+        <li>Download artifacts (e.g. SBOM) when produced.</li>
+      </ul>
+
+      <h2 id="findings">Working with findings</h2>
+      <p>Click a row to expand the detail panel.</p>
+      <ul>
+        <li><strong>Suggest fix</strong> — LLM-generated summary, developer steps, optional unified diff (read-only guidance).</li>
+        <li><strong>Open fix PR</strong> — Creates a GitHub branch, commits an LLM-rewritten file, opens a pull request (see below).</li>
+        <li><strong>Status</strong> — Mark Open, Confirmed, False positive, Accepted risk, Fixed.</li>
+        <li><strong>View on GitHub</strong> — Line link when the scan has a GitHub repo context.</li>
+      </ul>
+
+      <h2 id="open-fix-pr">Open fix PR</h2>
+      <p>Automated remediation workflow tied to GitHub OAuth (no PAT required when connected).</p>
+
+      <h3>Requirements</h3>
+      <ul>
+        <li>GitHub connected for your organization.</li>
+        <li>LLM API key configured (org Settings → LLM or <code>LLM_API_KEY</code> / <code>OPENROUTER_API_KEY</code> in env).</li>
+        <li>Finding must have a <strong>file path</strong>.</li>
+        <li>A <strong>GitHub repository</strong> linked to the project or scan, or you provide <code>owner/repo</code> when prompted.</li>
+        <li>Your GitHub user must have <strong>push (write) access</strong> to that repository.</li>
+      </ul>
+
+      <h3>Flow</h3>
+      <ol class="steps">
+        <li>Click <strong>Open fix PR</strong> on a finding.</li>
+        <li>Confirm the dialog (explains that Pepper fetches the file from GitHub and uses the LLM).</li>
+        <li>If GitHub is not connected, you are redirected to OAuth and returned to the scan with <code>?github=connected&amp;openPr={findingId}</code>.</li>
+        <li>If the scan has no GitHub repo, enter <code>owner/repo</code> or a GitHub URL when prompted.</li>
+        <li>Pepper creates branch <code>pepper-security-…</code>, commits the fix, opens a PR. A link opens in a new tab.</li>
+      </ol>
+
+      <div class="callout danger">
+        <strong>Common errors</strong>
+        <ul>
+          <li><strong>Not Found</strong> — File path does not exist on GitHub at that branch, or wrong repo for an upload scan.</li>
+          <li><strong>Cannot push</strong> — You can read a public repo but cannot create branches (use your fork or a repo you own).</li>
+          <li><strong>Failed to create branch</strong> — No write access, org SAML SSO not authorized, or branch naming rules on the repo.</li>
+        </ul>
+      </div>
+
+      <h2 id="compliance">Compliance mapping</h2>
+      <p><span class="badge">Route</span> <code>/scans/[scanId]/compliance</code></p>
+      <p>
+        Maps findings to framework themes (e.g. OWASP, PCI). Refresh and export from the compliance page after the scan completes.
+      </p>
+
+      <h2>Notifications</h2>
+      <p><span class="badge">Route</span> <code>/notifications</code> (also via top bar)</p>
+      <p>In-app notifications for scan completion and gate failures. Email requires SMTP in <a href="configuration.html#email">environment</a> and per-user preferences.</p>
+
+      <h2>CI / API scanning</h2>
+      <p>
+        Trigger scans from CI using <code>POST /api/scans</code> with an API key. Copy the webhook URL and example from
+        <a href="settings.html#integrations">Settings → Integrations</a>.
+      </p>
+    </main>
+  </div>
+</body>
+</html>

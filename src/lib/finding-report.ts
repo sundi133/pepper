@@ -1,3 +1,5 @@
+import { isPatternBasedScanner } from "@/lib/constants";
+
 export interface FindingReportInput {
   title: string;
   severity: string;
@@ -27,6 +29,10 @@ const CURRENT_REPORT_VERSION = 5;
 export function enrichFindingWithReport<T extends FindingReportInput>(
   finding: T,
 ): T {
+  if (isPatternBasedScanner(finding.scanner)) {
+    return finding;
+  }
+
   const metadata = normalizeMetadata(finding.metadata);
   if (
     metadata.reportSections &&

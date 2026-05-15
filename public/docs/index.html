@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pepper SAST — Documentation</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo">P</div>
+        <div>
+          <h1>Pepper SAST</h1>
+          <span>Documentation</span>
+        </div>
+      </div>
+      <nav>
+        <section>
+          <h2>Guide</h2>
+          <ul>
+            <li><a href="index.html" class="active">Overview</a></li>
+            <li><a href="getting-started.html">Getting started</a></li>
+            <li><a href="user-guide.html">How to use</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Settings</h2>
+          <ul>
+            <li><a href="settings.html">All settings</a></li>
+            <li><a href="settings.html#llm">LLM config</a></li>
+            <li><a href="settings.html#policies">Policies</a></li>
+            <li><a href="settings.html#build-gates">Build gates</a></li>
+            <li><a href="settings.html#team">Team</a></li>
+            <li><a href="settings.html#integrations">Integrations</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Deploy</h2>
+          <ul>
+            <li><a href="configuration.html">Environment</a></li>
+          </ul>
+        </section>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <h1>Pepper SAST documentation</h1>
+      <p class="lead">
+        AI-powered static application security testing (SAST) for your organization.
+        This guide covers installation, day-to-day usage, and every settings screen in the web UI.
+      </p>
+
+      <h2>What Pepper does</h2>
+      <p>
+        Pepper scans source code for security issues using multiple engines: pattern-based and
+        LLM-assisted SAST, secret detection, software composition analysis (SCA), infrastructure-as-code
+        checks, and optional zero-day-style logic analysis. Results appear as findings with severity,
+        remediation guidance, compliance mapping, and optional GitHub fix pull requests.
+      </p>
+
+      <h2>Architecture (high level)</h2>
+      <ul>
+        <li><strong>Web app</strong> — Next.js UI and REST API (<code>npm run dev</code>)</li>
+        <li><strong>Worker</strong> — BullMQ consumer that clones/uploads code, runs scanners, evaluates build gates (<code>npm run worker</code>)</li>
+        <li><strong>PostgreSQL</strong> — Organizations, projects, scans, findings, settings</li>
+        <li><strong>Redis</strong> — Job queue</li>
+        <li><strong>MinIO</strong> — Scan artifacts and uploaded archives</li>
+        <li><strong>LLM</strong> — Ollama (local) or OpenAI-compatible APIs (OpenRouter, Azure, etc.)</li>
+      </ul>
+
+      <h2>Main navigation (sidebar)</h2>
+      <table>
+        <thead>
+          <tr><th>Menu item</th><th>Route</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Dashboard</td><td><code>/dashboard</code></td><td>Org overview, stats, quick actions</td></tr>
+          <tr><td>New Scan</td><td><code>/scans/new</code></td><td>Start a scan from Git URL, upload, or SVN</td></tr>
+          <tr><td>Projects</td><td><code>/projects</code></td><td>Projects, grades, finding counts</td></tr>
+          <tr><td>Repositories</td><td><code>/repositories</code></td><td>GitHub OAuth, import or manual repo URL</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Settings (sidebar section)</h3>
+      <table>
+        <thead>
+          <tr><th>Setting</th><th>Route</th><th>Documentation</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>LLM Config</td><td><code>/settings/llm</code></td><td><a href="settings.html#llm">LLM config</a></td></tr>
+          <tr><td>Policies</td><td><code>/settings/policies</code></td><td><a href="settings.html#policies">Security policies</a></td></tr>
+          <tr><td>Build Gates</td><td><code>/settings/build-gates</code></td><td><a href="settings.html#build-gates">Build gates</a></td></tr>
+          <tr><td>Team</td><td><code>/settings/team</code></td><td><a href="settings.html#team">Team &amp; roles</a></td></tr>
+          <tr><td>Integrations</td><td><code>/settings/integrations</code></td><td><a href="settings.html#integrations">GitHub, webhooks, CI</a></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Scan types</h2>
+      <table>
+        <thead>
+          <tr><th>Type</th><th>What runs</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>FULL</code></td><td>SAST (pattern or LLM), SCA, secrets, IaC, zero-day (if LLM SAST enabled)</td></tr>
+          <tr><td><code>SAST_ONLY</code></td><td>Static analysis only</td></tr>
+          <tr><td><code>SCA_ONLY</code></td><td>Dependency / supply-chain only</td></tr>
+          <tr><td><code>SECRETS_ONLY</code></td><td>Secret scanning only</td></tr>
+          <tr><td><code>INCREMENTAL</code></td><td>Reserved for delta scans (limited support)</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Source types</h2>
+      <table>
+        <thead>
+          <tr><th>Source</th><th>How it works</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>GIT_CLONE</code></td><td>Clone from HTTPS URL; optional token or org GitHub OAuth token for private repos</td></tr>
+          <tr><td><code>UPLOAD</code></td><td>Zip/tar archive uploaded to MinIO and extracted on the worker</td></tr>
+          <tr><td><code>SVN_CHECKOUT</code></td><td>Subversion checkout (requires <code>svn</code> on worker)</td></tr>
+          <tr><td><code>WEBHOOK</code></td><td>Triggered by GitHub/GitLab push or MR events</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Documentation map</h2>
+      <div class="card">
+        <h3><a href="getting-started.html">Getting started</a></h3>
+        <p>Install dependencies, configure <code>.env</code>, seed database, run app + worker, first login.</p>
+      </div>
+      <div class="card">
+        <h3><a href="user-guide.html">How to use Pepper</a></h3>
+        <p>Projects, scans, findings, GitHub repositories, open fix PR, compliance export, notifications.</p>
+      </div>
+      <div class="card">
+        <h3><a href="settings.html">Settings reference</a></h3>
+        <p>Every settings screen: fields, behavior, and API endpoints.</p>
+      </div>
+      <div class="card">
+        <h3><a href="configuration.html">Environment variables</a></h3>
+        <p>Complete <code>.env</code> reference for local and Docker deployments.</p>
+      </div>
+
+      <div class="callout">
+        Open these HTML files in a browser from the <code>docs/</code> folder, or serve with
+        <code>npx serve docs</code> for local browsing.
+      </div>
+    </main>
+  </div>
+</body>
+</html>

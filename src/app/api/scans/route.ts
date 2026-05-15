@@ -5,6 +5,8 @@ import { scanQueue, ScanJobData } from "@/lib/queue";
 import { uploadObject, ensureBucket } from "@/lib/minio";
 import { z } from "zod";
 import { withGitCredentials } from "@/lib/git-repo-url";
+import { parseGithubRepo } from "@/lib/github-source-link";
+import { getOrgGithubAccessToken } from "@/lib/github-connection";
 import { createProjectWithBuildGate } from "@/lib/create-project-with-build-gate";
 import {
   projectNameFromGitUrl,
@@ -181,6 +183,14 @@ export async function POST(req: NextRequest) {
       data: { sourceRef },
     });
 
+    const orgGhToken = await getOrgGithubAccessToken(orgId);
+    const useOAuthClone = Boolean(
+      scanParams.repoUrl?.trim() &&
+        parseGithubRepo(scanParams.repoUrl) &&
+        orgGhToken &&
+        !scanParams.repoToken?.trim(),
+    );
+
     // Enqueue job
     const cloneRepoUrl =
       scanParams.repoUrl && scanParams.repoToken?.trim()
@@ -208,6 +218,7 @@ export async function POST(req: NextRequest) {
       svnUsername: scanParams.svnUsername,
       svnPassword: scanParams.svnPassword,
       branch: scanParams.branch,
+      useOrgGithubToken: useOAuthClone,
       orgSettings: {
         llmProvider: orgSettings?.llmProvider || "openai",
         llmBaseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",

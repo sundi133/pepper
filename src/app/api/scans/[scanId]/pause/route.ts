@@ -35,5 +35,17 @@ export async function POST(
     data: { status: "PAUSED" },
   });
 
+  try {
+    const { notifyScanLifecycleFromApi } = await import("@/lib/scan-notifications");
+    await notifyScanLifecycleFromApi({
+      scanId,
+      organizationId: orgId,
+      actorUserId: auth.session.user.id,
+      type: "SCAN_PAUSED",
+    });
+  } catch (e) {
+    console.error("Failed to record notification:", e);
+  }
+
   return NextResponse.json({ scanId, status: "PAUSED" });
 }

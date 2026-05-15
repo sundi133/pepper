@@ -113,6 +113,20 @@ export async function POST(
       data: { jobId: job.id },
     });
 
+    try {
+      const { createScanQueuedNotification } = await import(
+        "@/lib/scan-notifications"
+      );
+      await createScanQueuedNotification({
+        userId: auth.session.user.id,
+        organizationId: orgId,
+        scanId,
+        projectName: scan.project.name,
+      });
+    } catch (e) {
+      console.error("Failed to record notification:", e);
+    }
+
     return NextResponse.json({ scanId, status: "QUEUED" });
   }
 
@@ -120,6 +134,18 @@ export async function POST(
     where: { id: scanId },
     data: { status: "RUNNING" },
   });
+
+  try {
+    const { notifyScanLifecycleFromApi } = await import("@/lib/scan-notifications");
+    await notifyScanLifecycleFromApi({
+      scanId,
+      organizationId: orgId,
+      actorUserId: auth.session.user.id,
+      type: "SCAN_RESUMED",
+    });
+  } catch (e) {
+    console.error("Failed to record notification:", e);
+  }
 
   return NextResponse.json({ scanId, status: "RUNNING" });
 }

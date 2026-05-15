@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { ReactNode } from "react";
 import {
   Sheet,
@@ -11,9 +12,27 @@ import {
 import { SeverityBadge } from "./scan-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { SCANNER_LABELS } from "@/lib/constants";
+import { SCANNER_LABELS, isPatternBasedScanner } from "@/lib/constants";
 import { findingReportSummaryLead } from "@/lib/finding-report";
-import { ExternalLink } from "lucide-react";
+import {
+  githubBlobLineUrl,
+  parseGithubRepo,
+  resolveGithubRepoUrlForOpenPr,
+} from "@/lib/github-source-link";
+import {
+  type FixPrScanSourceContext,
+  fixPrUnavailableReason,
+  resolveGithubRepoForFixPr,
+} from "@/lib/open-fix-pr-client";
+import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
+import { ExternalLink, Sparkles, GitPullRequest } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -22,6 +41,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const FINDING_STATUSES = [
   { value: "OPEN", label: "Open", color: "bg-yellow-100 text-yellow-800" },
@@ -65,16 +90,21 @@ interface Finding {
   metadata?: Record<string, unknown>;
 }
 
+/** Scan/repo context for GitHub line links, AI fix, and opening a fix PR. */
+export type FindingScanSourceContext = FixPrScanSourceContext;
+
 interface FindingDetailPanelProps {
   finding: Finding | null;
   open: boolean;
   onClose: () => void;
   onStatusChange?: (findingId: string, status: string) => void;
+  sourceContext?: FindingScanSourceContext;
 }
 
 type FindingDetailInlineProps = {
   finding: Finding | null;
   onStatusChange?: (findingId: string, status: string) => void;
+  sourceContext?: FindingScanSourceContext;
 };
 
 interface FindingReport {
@@ -96,7 +126,125 @@ function getCveUrl(cveId: string): string {
   return `https://nvd.nist.gov/vuln/detail/${cveId}`;
 }
 
+function formatFindingLocation(finding: Finding): string {
+  if (!finding.filePath) return "";
+  const line = finding.startLine;
+  const end = finding.endLine;
+  const linePart =
+    line != null
+      ? end != null && end !== line
+        ? `:${line}-${end}`
+        : `:${line}`
+      : "";
+  return `${finding.filePath}${linePart}`;
+}
+
+function githubCodeUrl(
+  source: FindingScanSourceContext | undefined,
+  finding: Finding,
+): string | null {
+  if (!source || !finding.filePath) return null;
+  const repoUrl = resolveGithubRepoUrlForOpenPr({
+    projectRepoUrl: source.repoUrl,
+    scanSourceType: source.sourceType,
+    scanSourceRef: source.scanSourceRef,
+  });
+  if (!repoUrl) return null;
+  return githubBlobLineUrl({
+    repoUrl,
+    commitSha: source.commitSha,
+    branch: source.branch,
+    defaultBranch: source.defaultBranch ?? "main",
+    filePath: finding.filePath,
+    startLine: finding.startLine,
+  });
+}
+
+function PatternMatchReport({ finding }: { finding: Finding }) {
+  const body = stripGeneratedSections(finding.description);
+  return (
+    <section className="space-y-4 rounded-xl border border-border/60 bg-muted/20 p-4 shadow-sm">
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        This match comes from a <strong className="text-foreground">pattern-based</strong>{" "}
+        rule. Treat it as a quick signal: confirm in code, then use an{" "}
+        <strong className="text-foreground">AI-assisted scan</strong> on the same project for
+        a full narrative, curl-style repro hints where possible, and{" "}
+        <strong className="text-foreground">Suggest AI fix</strong>.
+      </p>
+      {body ? (
+        <ReportBlock title="Scanner message">
+          <ReportRichText text={body} />
+        </ReportBlock>
+      ) : null}
+      {finding.snippet ? (
+        <ReportBlock title="Code evidence">
+          <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-background/80 p-3 text-xs font-mono leading-relaxed text-foreground">
+            {finding.snippet}
+          </pre>
+        </ReportBlock>
+      ) : null}
+    </section>
+  );
+}
+
+function InlineBackticks({ text }: { text: string }) {
+  const parts = text.split(/(`[^`]+`)/g);
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.startsWith("`") && part.endsWith("`") ? (
+          <code
+            key={index}
+            className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground"
+          >
+            {part.slice(1, -1)}
+          </code>
+        ) : (
+          <span key={index}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+/** Renders markdown-style fenced blocks and inline `code` in report strings. */
+function ReportRichText({ text }: { text: string }) {
+  const segments = text.split(/(```[\w-]*\n[\s\S]*?```)/g);
+  return (
+    <div className="space-y-2">
+      {segments.map((seg, i) => {
+        if (seg.startsWith("```")) {
+          const cleaned = seg
+            .replace(/^```[\w-]*\n?/, "")
+            .replace(/\n?```\s*$/u, "");
+          return (
+            <pre
+              key={i}
+              className="overflow-x-auto rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono leading-relaxed text-foreground"
+            >
+              {cleaned}
+            </pre>
+          );
+        }
+        if (!seg) return null;
+        return (
+          <p
+            key={i}
+            className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground"
+          >
+            <InlineBackticks text={seg} />
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 function FindingReportSections({ finding }: { finding: Finding }) {
+  if (isPatternBasedScanner(finding.scanner)) {
+    return <PatternMatchReport finding={finding} />;
+  }
+
   const report = buildFindingReport(finding);
 
   return (
@@ -108,18 +256,20 @@ function FindingReportSections({ finding }: { finding: Finding }) {
       </ReportBlock>
 
       <ReportBlock title="Summary">
-        <ReportText text={report.summary} />
+        <ReportRichText text={report.summary} />
       </ReportBlock>
 
       {report.stepsToReproduce.length > 0 && (
         <ReportBlock title="Steps to Reproduce">
-          <ol className="space-y-2">
+          <ol className="space-y-3">
             {report.stepsToReproduce.map((step, index) => (
               <li key={index} className="flex gap-3 text-sm text-muted-foreground">
-                <span className="mt-0.5 font-medium text-foreground">
+                <span className="mt-0.5 shrink-0 font-medium text-foreground">
                   {index + 1}.
                 </span>
-                <ReportText text={step} />
+                <div className="min-w-0 flex-1">
+                  <ReportRichText text={step} />
+                </div>
               </li>
             ))}
           </ol>
@@ -127,17 +277,19 @@ function FindingReportSections({ finding }: { finding: Finding }) {
       )}
 
       <ReportBlock title="Impact">
-        <ReportText text={report.impact} />
+        <ReportRichText text={report.impact} />
       </ReportBlock>
 
       <ReportBlock title="Remediation">
-        <ol className="space-y-2">
+        <ol className="space-y-3">
           {report.remediation.map((step, index) => (
             <li key={index} className="flex gap-3 text-sm text-muted-foreground">
-              <span className="mt-0.5 font-medium text-foreground">
+              <span className="mt-0.5 shrink-0 font-medium text-foreground">
                 {index + 1}.
               </span>
-              <ReportText text={step} />
+              <div className="min-w-0 flex-1">
+                <ReportRichText text={step} />
+              </div>
             </li>
           ))}
         </ol>
@@ -163,29 +315,11 @@ function ReportBlock({
   );
 }
 
-function ReportText({ text }: { text: string }) {
-  const parts = text.split(/(`[^`]+`)/g);
-  return (
-    <p className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">
-      {parts.map((part, index) =>
-        part.startsWith("`") && part.endsWith("`") ? (
-          <code
-            key={index}
-            className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground"
-          >
-            {part.slice(1, -1)}
-          </code>
-        ) : (
-          <span key={index}>{part}</span>
-        ),
-      )}
-    </p>
-  );
-}
-
 function buildFindingReport(finding: Finding): FindingReport {
-  const stored = readStoredReport(finding.metadata?.reportSections);
-  if (stored) return stored;
+  if (!isPatternBasedScanner(finding.scanner)) {
+    const stored = readStoredReport(finding.metadata?.reportSections);
+    if (stored) return stored;
+  }
 
   const recommendation = extractRecommendation(finding.description);
   return {
@@ -283,6 +417,225 @@ function readStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string");
 }
 
+type SuggestFixResponse = {
+  summary: string;
+  developerFix: string;
+  verificationSteps: string[];
+  optionalUnifiedDiff: string | null;
+};
+
+function FindingLocationRow({
+  finding,
+  sourceContext,
+}: {
+  finding: Finding;
+  sourceContext?: FindingScanSourceContext;
+}) {
+  const loc = formatFindingLocation(finding);
+  const gh = githubCodeUrl(sourceContext, finding);
+  if (!loc && !gh) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 pt-1">
+      {loc ? (
+        <code className="max-w-full break-all rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
+          {loc}
+        </code>
+      ) : null}
+      {gh ? (
+        <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs" asChild>
+          <a href={gh} target="_blank" rel="noopener noreferrer">
+            View on GitHub
+            <ExternalLink className="h-3 w-3 shrink-0" />
+          </a>
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function SuggestAiFixButton({
+  finding,
+  scanId,
+}: {
+  finding: Finding;
+  scanId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<SuggestFixResponse | null>(null);
+
+  async function run() {
+    setOpen(true);
+    setLoading(true);
+    setData(null);
+    try {
+      const res = await fetch(
+        `/api/scans/${scanId}/findings/${finding.id}/suggest-fix`,
+        { method: "POST" },
+      );
+      const j = (await res.json()) as SuggestFixResponse & { error?: string };
+      if (!res.ok) {
+        throw new Error(j.error || "Failed to generate suggestion");
+      }
+      setData({
+        summary: j.summary,
+        developerFix: j.developerFix,
+        verificationSteps: j.verificationSteps,
+        optionalUnifiedDiff: j.optionalUnifiedDiff,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to generate suggestion");
+      setOpen(false);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="h-8 gap-1.5 text-xs font-medium"
+        disabled={loading}
+        onClick={() => void run()}
+      >
+        <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        {loading ? "Generating…" : "Suggest AI fix"}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[85vh] max-w-2xl gap-0 overflow-hidden p-0 sm:max-w-2xl">
+          <DialogHeader className="border-b border-border/60 px-6 py-4">
+            <DialogTitle className="text-left text-base">AI fix suggestion</DialogTitle>
+            <p className="text-left text-xs text-muted-foreground">
+              Generated with your organization LLM settings or server{" "}
+              <code className="rounded bg-muted px-1">LLM_API_KEY</code> /{" "}
+              <code className="rounded bg-muted px-1">OPENAI_API_KEY</code>. Review before
+              applying; this does not open a pull request automatically.
+            </p>
+          </DialogHeader>
+          <div className="max-h-[calc(85vh-8rem)] overflow-y-auto px-6 py-4 space-y-5">
+            {loading ? (
+              <p className="text-sm text-muted-foreground">Calling the model…</p>
+            ) : data ? (
+              <>
+                <ReportBlock title="Summary">
+                  <ReportRichText text={data.summary} />
+                </ReportBlock>
+                <ReportBlock title="What to change">
+                  <ReportRichText text={data.developerFix || "_No detailed fix text returned._"} />
+                </ReportBlock>
+                {data.verificationSteps.length > 0 ? (
+                  <ReportBlock title="Verify the fix">
+                    <ol className="list-decimal space-y-2 pl-4 text-sm text-muted-foreground">
+                      {data.verificationSteps.map((s, i) => (
+                        <li key={i} className="leading-relaxed">
+                          <ReportRichText text={s} />
+                        </li>
+                      ))}
+                    </ol>
+                  </ReportBlock>
+                ) : null}
+                {data.optionalUnifiedDiff ? (
+                  <ReportBlock title="Suggested patch (diff)">
+                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono">
+                      {data.optionalUnifiedDiff}
+                    </pre>
+                  </ReportBlock>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function OpenFixPrButton({
+  finding,
+  sourceContext,
+}: {
+  finding: Finding;
+  sourceContext?: FindingScanSourceContext;
+}) {
+  const [busy, setBusy] = useState(false);
+  const scanId = sourceContext?.scanId?.trim();
+  if (!scanId) return null;
+
+  const blockReason = fixPrUnavailableReason(sourceContext, finding.filePath);
+  const hasGithubRepo = Boolean(resolveGithubRepoForFixPr(sourceContext));
+  const canOpen = !blockReason;
+
+  async function openPr() {
+    let manualRepoUrl: string | undefined;
+    if (!hasGithubRepo) {
+      const input = window.prompt(
+        "Enter the GitHub repository for this fix PR (owner/repo or https://github.com/owner/repo):",
+      );
+      if (!input?.trim()) return;
+      manualRepoUrl = input.trim();
+    }
+
+    setBusy(true);
+    try {
+      const outcome = await runOpenFixPrFlow(scanId!, finding.id, {
+        repoUrl: manualRepoUrl,
+      });
+      if ("redirected" in outcome) return;
+      if (!outcome.ok) {
+        if (outcome.code !== "CANCELLED") {
+          toast.error(outcome.error);
+        }
+        return;
+      }
+      toast.success("Pull request opened");
+      window.open(outcome.pullRequestUrl, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to open pull request");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const label = busy ? "Opening…" : "Open fix PR";
+  const button = (
+    <Button
+      type="button"
+      variant="default"
+      size="sm"
+      className="h-8 gap-1.5 text-xs font-semibold"
+      disabled={busy || !canOpen}
+      onClick={() => void openPr()}
+    >
+      <GitPullRequest className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      {label}
+    </Button>
+  );
+
+  if (canOpen) {
+    return button;
+  }
+
+  const hint = `${blockReason} Connect GitHub via OAuth when prompted. You can also enter owner/repo when opening the PR.`;
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex cursor-default">
+            {button}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-xs text-balance">
+          {hint}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────
 
 export function FindingDetailPanel({
@@ -290,6 +643,7 @@ export function FindingDetailPanel({
   open,
   onClose,
   onStatusChange,
+  sourceContext,
 }: FindingDetailPanelProps) {
   if (!finding) return null;
 
@@ -327,8 +681,15 @@ export function FindingDetailPanel({
             <SheetTitle className="text-left text-lg leading-tight">
               {finding.title}
             </SheetTitle>
+            <FindingLocationRow finding={finding} sourceContext={sourceContext} />
             {/* Status Control */}
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {sourceContext?.scanId ? (
+                <>
+                  <SuggestAiFixButton finding={finding} scanId={sourceContext.scanId} />
+                  <OpenFixPrButton finding={finding} sourceContext={sourceContext} />
+                </>
+              ) : null}
               <span className="text-xs text-muted-foreground">Status:</span>
               <Select
                 value={finding.status || "OPEN"}
@@ -396,6 +757,7 @@ export function FindingDetailPanel({
 export function FindingDetailInline({
   finding,
   onStatusChange,
+  sourceContext,
 }: FindingDetailInlineProps) {
   if (!finding) return null;
 
@@ -459,8 +821,15 @@ export function FindingDetailInline({
             <h3 className="break-words text-lg font-semibold leading-tight">
               {finding.title}
             </h3>
+            <FindingLocationRow finding={finding} sourceContext={sourceContext} />
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {sourceContext?.scanId ? (
+              <>
+                <SuggestAiFixButton finding={finding} scanId={sourceContext.scanId} />
+                <OpenFixPrButton finding={finding} sourceContext={sourceContext} />
+              </>
+            ) : null}
             <Select
               value={finding.status || "OPEN"}
               onValueChange={handleStatusChange}

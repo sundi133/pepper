@@ -16,6 +16,8 @@ async function main() {
     process.env.LLM_BASE_URL || "https://openrouter.ai/api/v1";
   const llmModel = process.env.LLM_MODEL || "google/gemini-2.5-flash";
   const llmApiKey = process.env.LLM_API_KEY;
+  // Open fix PR uses GitHub OAuth (Repositories); PAT no longer seeded by default.
+  const githubPrToken: string | undefined = undefined;
 
   // Create default organization
   const org = await prisma.organization.upsert({
@@ -36,6 +38,7 @@ async function main() {
       llmBaseUrl,
       llmModel,
       ...(llmApiKey ? { llmApiKey } : {}),
+      ...(githubPrToken ? { githubPrToken } : {}),
     },
     create: {
       organizationId: org.id,
@@ -43,6 +46,7 @@ async function main() {
       llmBaseUrl,
       llmModel,
       ...(llmApiKey ? { llmApiKey } : {}),
+      ...(githubPrToken ? { githubPrToken } : {}),
     },
   });
 

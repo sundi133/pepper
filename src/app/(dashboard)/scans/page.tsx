@@ -1,6 +1,6 @@
 "use client";
 
-import { useScans, useProjects } from "@/hooks/use-scan-polling";
+import { useScans } from "@/hooks/use-scan-polling";
 import {
   Card,
   CardContent,
@@ -63,7 +63,6 @@ function getScanSourceName(scan: Record<string, unknown>) {
 
 export default function ScansPage() {
   const { scans, isLoading, refresh } = useScans();
-  const { projects } = useProjects();
   const router = useRouter();
   const [rescanningId, setRescanningId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -123,11 +122,11 @@ export default function ScansPage() {
         <div>
           <h1 className="text-2xl font-bold">Scans</h1>
           <p className="text-muted-foreground">
-            Review findings from the table. Use New scan to enter project,
-            type, and source in a dialog.
+            Review findings from the table. Use New scan to queue a scan from the
+            dialog.
           </p>
         </div>
-        <CreateScanDialog projects={projects} onScanCreated={() => refresh()} />
+        <CreateScanDialog onScanCreated={() => refresh()} />
       </div>
 
       <Card>

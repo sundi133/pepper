@@ -52,5 +52,17 @@ export async function POST(
     data: { status: "CANCELLED", completedAt: new Date() },
   });
 
+  try {
+    const { notifyScanLifecycleFromApi } = await import("@/lib/scan-notifications");
+    await notifyScanLifecycleFromApi({
+      scanId,
+      organizationId: orgId,
+      actorUserId: auth.session.user.id,
+      type: "SCAN_CANCELLED",
+    });
+  } catch (e) {
+    console.error("Failed to record notification:", e);
+  }
+
   return NextResponse.json({ scanId, status: "CANCELLED" });
 }

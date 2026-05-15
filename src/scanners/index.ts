@@ -76,7 +76,8 @@ export function getScanners(
     );
   }
 
-  if (includeFull || includeSast) {
+  // IaC is a separate concern from application SAST; only run on full scans.
+  if (includeFull) {
     scanners.push(iacScanner);
   }
 

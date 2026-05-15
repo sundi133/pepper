@@ -102,8 +102,20 @@ export async function processScanJob(job: Job<ScanJobData>) {
       fs.unlinkSync(archivePath);
     } else if (sourceType === "GIT_CLONE") {
       const { execFileSync } = await import("child_process");
-      const repoUrl = job.data.repoUrl || sourceRef;
+      const { withGitCredentials } = await import("@/lib/git-repo-url");
+      let repoUrl = job.data.repoUrl || sourceRef;
       const repoLog = job.data.repoUrlDisplay || repoUrl;
+      if (job.data.useOrgGithubToken && job.data.orgSettings.orgId) {
+        const { getOrgGithubAccessToken } = await import(
+          "@/lib/github-connection"
+        );
+        const ghToken = await getOrgGithubAccessToken(
+          job.data.orgSettings.orgId,
+        );
+        if (ghToken) {
+          repoUrl = withGitCredentials(repoLog, ghToken);
+        }
+      }
       const branch = job.data.branch?.trim();
       const cloneArgs = ["clone", "--depth", "1"];
       if (branch) cloneArgs.push("--branch", branch);
@@ -431,6 +443,15 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
     log.info({ gateResult }, "Scan completed successfully");
 
+    try {
+      const { notifyScanLifecycleFromWorker } = await import(
+        "@/lib/scan-notifications"
+      );
+      await notifyScanLifecycleFromWorker(scanId, "SCAN_COMPLETED");
+    } catch (notifyErr) {
+      log.warn({ notifyErr }, "In-app notification failed (non-blocking)");
+    }
+
     // 10. Send email notification (non-blocking)
     try {
       if (job.data.sourceType !== "WEBHOOK") {
@@ -539,6 +560,14 @@ export async function processScanJob(job: Job<ScanJobData>) {
         errorMessage: error instanceof Error ? error.message : "Unknown error",
       },
     });
+    try {
+      const { notifyScanLifecycleFromWorker } = await import(
+        "@/lib/scan-notifications"
+      );
+      await notifyScanLifecycleFromWorker(scanId, "SCAN_FAILED");
+    } catch {
+      /* non-blocking */
+    }
     throw error;
   } finally {
     // Cleanup

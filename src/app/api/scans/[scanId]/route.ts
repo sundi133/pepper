@@ -21,7 +21,15 @@ export async function GET(
   const scan = await prisma.scan.findFirst({
     where: { id: scanId, project: { organizationId: orgId } },
     include: {
-      project: { select: { id: true, name: true, organizationId: true } },
+      project: {
+        select: {
+          id: true,
+          name: true,
+          organizationId: true,
+          repoUrl: true,
+          defaultBranch: true,
+        },
+      },
       artifacts: { select: { type: true, objectKey: true, size: true } },
       _count: { select: { findings: true } },
     },

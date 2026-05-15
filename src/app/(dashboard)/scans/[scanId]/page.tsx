@@ -37,6 +37,7 @@ import { toast } from "sonner";
 import { mutate } from "swr";
 import { useRouter } from "next/navigation";
 import { nextFindingSelection } from "@/lib/create-scan-validation";
+import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
 
 /** Stronger scan toolbar outline buttons (readable while a scan is running). */
 const scanToolbarOutlineClass =
@@ -64,14 +65,14 @@ const FINDING_SECTIONS = [
   {
     id: "SAST",
     title: "SAST Findings",
-    scanners: ["SAST_LLM"],
-    description: "LLM-based static code analysis findings",
+    scanners: ["SAST_LLM", "SAST_PATTERN"],
+    description: "Static application security findings (AI and pattern-based)",
   },
   {
     id: "SECRETS",
     title: "Secrets Findings",
-    scanners: ["SECRETS_LLM"],
-    description: "LLM-confirmed leaked credential findings",
+    scanners: ["SECRETS_LLM", "SECRETS_PATTERN"],
+    description: "Leaked or exposed credential findings (AI and pattern-based)",
   },
   {
     id: "SCA",
@@ -137,6 +138,35 @@ export default function ScanDetailPage() {
     return () => window.clearTimeout(t);
   }, [scanId, scan?.status, findings]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || isLoading || !scan) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("github") !== "connected") return;
+    const openPrFindingId = params.get("openPr");
+    if (!openPrFindingId) return;
+
+    const resumeKey = `openPr:${scanId}:${openPrFindingId}`;
+    if (sessionStorage.getItem(resumeKey)) return;
+    sessionStorage.setItem(resumeKey, "1");
+
+    router.replace(`/scans/${scanId}`, { scroll: false });
+
+    void (async () => {
+      toast.message("GitHub connected — opening fix pull request…");
+      const outcome = await runOpenFixPrFlow(scanId, openPrFindingId, {
+        skipConfirm: true,
+      });
+      if ("redirected" in outcome) return;
+      if (!outcome.ok) {
+        toast.error(outcome.error);
+        return;
+      }
+      toast.success("Pull request opened");
+      window.open(outcome.pullRequestUrl, "_blank", "noopener,noreferrer");
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once after OAuth return
+  }, [scanId, isLoading, scan, router]);
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -181,16 +211,22 @@ export default function ScanDetailPage() {
     scan.mediumCount +
     scan.lowCount +
     scan.infoCount;
-  const visibleFindings = (findings as Finding[]).filter(
-    (finding) =>
-      finding.scanner !== "SAST_PATTERN" &&
-      finding.scanner !== "SECRETS_PATTERN",
-  );
+  const visibleFindings = findings as Finding[];
   const visibleFindingCount =
     visibleFindings.length === totalFindings
       ? String(visibleFindings.length)
       : `${visibleFindings.length} of ${totalFindings}`;
   const findingSections = groupFindingsBySection(visibleFindings);
+
+  const fixPrSource = {
+    scanId: scan.id,
+    sourceType: scan.sourceType,
+    repoUrl: scan.project?.repoUrl ?? null,
+    scanSourceRef: scan.sourceRef ?? null,
+    defaultBranch: scan.project?.defaultBranch ?? "main",
+    branch: scan.branch ?? null,
+    commitSha: scan.commitSha ?? null,
+  };
 
   const project = scan.project as
     | { id?: string; name?: string }
@@ -555,8 +591,12 @@ export default function ScanDetailPage() {
                   <SelectContent>
                     <SelectItem value="all">All Scanners</SelectItem>
                     <SelectItem value="SAST_LLM">SAST (AI)</SelectItem>
+                    <SelectItem value="SAST_PATTERN">SAST (Pattern)</SelectItem>
                     <SelectItem value="SCA">SCA</SelectItem>
                     <SelectItem value="SECRETS_LLM">Secrets (AI)</SelectItem>
+                    <SelectItem value="SECRETS_PATTERN">
+                      Secrets (Pattern)
+                    </SelectItem>
                     <SelectItem value="IAC">IaC Security</SelectItem>
                     <SelectItem value="MALICIOUS_PKG">Supply Chain</SelectItem>
                     <SelectItem value="ZERO_DAY">Zero-Day (AI)</SelectItem>
@@ -569,6 +609,7 @@ export default function ScanDetailPage() {
             {findingSections.length === 0 ? (
               <FindingsTable
                 findings={visibleFindings}
+                fixPrSource={fixPrSource}
                 onSelect={(f) =>
                   setSelectedFinding((prev) => nextFindingSelection(prev, f))
                 }
@@ -577,6 +618,19 @@ export default function ScanDetailPage() {
                 renderExpanded={(finding) => (
                   <FindingDetailInline
                     finding={finding}
+                    sourceContext={
+                      scan
+                        ? {
+                            scanId: scan.id,
+                            sourceType: scan.sourceType,
+                            repoUrl: scan.project?.repoUrl ?? null,
+                            scanSourceRef: scan.sourceRef ?? null,
+                            defaultBranch: scan.project?.defaultBranch ?? "main",
+                            branch: scan.branch ?? null,
+                            commitSha: scan.commitSha ?? null,
+                          }
+                        : undefined
+                    }
                     onStatusChange={() => refreshFindings()}
                   />
                 )}
@@ -598,6 +652,7 @@ export default function ScanDetailPage() {
                     </div>
                     <FindingsTable
                       findings={section.findings}
+                      fixPrSource={fixPrSource}
                       onSelect={(f) =>
                         setSelectedFinding((prev) =>
                           nextFindingSelection(prev, f),
@@ -608,6 +663,20 @@ export default function ScanDetailPage() {
                       renderExpanded={(finding) => (
                         <FindingDetailInline
                           finding={finding}
+                          sourceContext={
+                            scan
+                              ? {
+                                  scanId: scan.id,
+                                  sourceType: scan.sourceType,
+                                  repoUrl: scan.project?.repoUrl ?? null,
+                                  scanSourceRef: scan.sourceRef ?? null,
+                                  defaultBranch:
+                                    scan.project?.defaultBranch ?? "main",
+                                  branch: scan.branch ?? null,
+                                  commitSha: scan.commitSha ?? null,
+                                }
+                              : undefined
+                          }
                           onStatusChange={() => refreshFindings()}
                         />
                       )}

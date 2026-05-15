@@ -108,6 +108,7 @@ For each genuine vulnerability found, respond with:
         "payload": "safe non-destructive proof payload or null",
         "stepsToReproduce": [
           "Exact step using only evidence visible in the code",
+          "When route+method are non-null, include a step with a fenced bash curl example (127.0.0.1 or example.com, safe placeholder body/query) so a developer can paste and adapt it",
           "Exact expected vulnerable behavior"
         ],
         "impact": "Specific technical and business impact",

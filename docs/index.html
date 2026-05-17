@@ -21,8 +21,26 @@
           <h2>Guide</h2>
           <ul>
             <li><a href="index.html" class="active">Overview</a></li>
+            <li><a href="faq.html">Feature FAQ</a></li>
             <li><a href="getting-started.html">Getting started</a></li>
             <li><a href="user-guide.html">How to use</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Features</h2>
+          <ul>
+            <li><a href="faq.html#sbom">SBOM (CycloneDX + SPDX)</a></li>
+            <li><a href="faq.html#sast">SAST</a></li>
+            <li><a href="faq.html#sca">SCA</a></li>
+            <li><a href="faq.html#dast">DAST (dapper)</a></li>
+            <li><a href="faq.html#container">Container scanning</a></li>
+            <li><a href="faq.html#code-signing">Code signing</a></li>
+            <li><a href="faq.html#precommit">Pre-commit hook</a></li>
+            <li><a href="faq.html#integrations">Integrations</a></li>
+            <li><a href="faq.html#ai">AI features</a></li>
+            <li><a href="faq.html#compliance">Compliance</a></li>
+            <li><a href="faq.html#audit">Audit log</a></li>
+            <li><a href="faq.html#trends">Trends</a></li>
           </ul>
         </section>
         <section>
@@ -37,9 +55,12 @@
           </ul>
         </section>
         <section>
-          <h2>Deploy</h2>
+          <h2>Operate</h2>
           <ul>
-            <li><a href="configuration.html">Environment</a></li>
+            <li><a href="deployment.html">Deployment</a></li>
+            <li><a href="ci-cd.html">CI/CD recipes</a></li>
+            <li><a href="api.html">API reference</a></li>
+            <li><a href="configuration.html">Environment vars</a></li>
           </ul>
         </section>
       </nav>
@@ -126,12 +147,34 @@
 
       <h2>Documentation map</h2>
       <div class="card">
+        <h3><a href="faq.html">Feature FAQ</a></h3>
+        <p>The twelve capabilities of Pepper — SBOM, SAST, SCA, DAST, container
+          scanning, code signing, pre-commit hook, integrations, AI features,
+          compliance, audit log, trends — with deep links into the rest of the docs.</p>
+      </div>
+      <div class="card">
         <h3><a href="getting-started.html">Getting started</a></h3>
         <p>Install dependencies, configure <code>.env</code>, seed database, run app + worker, first login.</p>
       </div>
       <div class="card">
         <h3><a href="user-guide.html">How to use Pepper</a></h3>
         <p>Projects, scans, findings, GitHub repositories, open fix PR, compliance export, notifications.</p>
+      </div>
+      <div class="card">
+        <h3><a href="deployment.html">Deployment</a></h3>
+        <p>Docker quickstart, manual install, database schema lifecycle
+          (<code>npm run db:setup</code>), worker scaling, optional binaries
+          (Trivy, cosign), air-gapped operation, troubleshooting.</p>
+      </div>
+      <div class="card">
+        <h3><a href="ci-cd.html">CI/CD recipes</a></h3>
+        <p>Copy-paste GitHub Actions, GitLab CI, and Jenkins templates that fail
+          builds on policy breach, upload SBOMs, and sign them with cosign.</p>
+      </div>
+      <div class="card">
+        <h3><a href="api.html">API reference</a></h3>
+        <p>Every REST endpoint: scans, artifacts, findings, integrations, API keys,
+          audit log, trends, pre-commit, IDE.</p>
       </div>
       <div class="card">
         <h3><a href="settings.html">Settings reference</a></h3>
@@ -143,8 +186,9 @@
       </div>
 
       <div class="callout">
-        Open these HTML files in a browser from the <code>docs/</code> folder, or serve with
-        <code>npx serve docs</code> for local browsing.
+        These pages are published live at
+        <a href="https://docs.pepper.votal.ai">docs.pepper.votal.ai</a> via GitHub Pages.
+        For local browsing, run <code>npx serve docs</code> in the repo root.
       </div>
     </main>
   </div>

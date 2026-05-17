@@ -1,0 +1,57 @@
+# Publishes the Pepper documentation site to GitHub Pages.
+#
+# Custom domain: docs.pepper.votal.ai (configured via docs/CNAME).
+#
+# Setup checklist (one-time, in the repository settings):
+#   1. Settings -> Pages -> Source: "GitHub Actions"
+#   2. Settings -> Pages -> Custom domain: enter `docs.pepper.votal.ai`
+#      (GitHub will read this from the CNAME file on the published artifact)
+#   3. DNS: add a CNAME record for `docs.pepper.votal.ai` pointing to
+#      `<your-github-org>.github.io` and wait for cert provisioning.
+#
+# Triggers: every push to main that touches `docs/**`, and manual dispatch.
+
+name: Publish docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate CNAME
+        run: |
+          test -f docs/CNAME
+          grep -q '^docs\.pepper\.votal\.ai' docs/CNAME
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

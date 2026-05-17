@@ -30,13 +30,15 @@ COPY --from=api-build /app/prisma ./prisma
 COPY --from=api-build /app/prisma.config.ts ./
 COPY --from=api-build /app/src/generated ./src/generated
 COPY --from=api-build /app/compliance ./compliance
+COPY --from=api-build /app/scripts/docker-entrypoint-api.sh /usr/local/bin/docker-entrypoint-api.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-api.sh
 
 ENV NODE_ENV=production
 ENV PORT=3000
 EXPOSE 3000
 
-# Run migrations and seed on startup, then start the app
-CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed.ts && npm start"]
+# Apply schema (migrate + push), seed, then start the Next.js server.
+CMD ["/usr/local/bin/docker-entrypoint-api.sh"]
 
 # ─── Worker ─────────────────────────────────────────────────────────
 FROM base AS worker

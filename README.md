@@ -294,9 +294,8 @@ cp .env.example .env
 # 3. Start infrastructure (Postgres, Redis, MinIO)
 docker compose up -d postgres redis minio
 
-# 4. Push DB schema and seed admin user
-npm run db:push
-npm run db:seed
+# 4. Apply migrations, push DB schema, and seed admin user
+npm run db:setup    # = migrate deploy (idempotent) + db push + seed
 
 # 5. Start the web server
 npm run dev         # http://localhost:3000

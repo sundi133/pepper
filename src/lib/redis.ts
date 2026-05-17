@@ -11,6 +11,19 @@ function createRedis(): IORedis {
   });
 }
 
+function parseRedisConnection(urlString: string) {
+  const url = new URL(urlString);
+  const isTls = url.protocol === "rediss:";
+  return {
+    host: url.hostname,
+    port: parseInt(url.port || "6379", 10),
+    username: decodeURIComponent(url.username || "default"),
+    password: url.password ? decodeURIComponent(url.password) : undefined,
+    tls: isTls ? {} : undefined,
+    maxRetriesPerRequest: null as null,
+  };
+}
+
 // Lazy singleton — only connects when first accessed at runtime
 export const redis = new Proxy({} as IORedis, {
   get(_target, prop) {
@@ -22,12 +35,5 @@ export const redis = new Proxy({} as IORedis, {
 });
 
 export const redisConnection = {
-  get host() {
-    return new URL(process.env.REDIS_URL || "redis://localhost:6379").hostname;
-  },
-  get port() {
-    return parseInt(
-      new URL(process.env.REDIS_URL || "redis://localhost:6379").port || "6379",
-    );
-  },
+  ...parseRedisConnection(process.env.REDIS_URL || "redis://localhost:6379"),
 };

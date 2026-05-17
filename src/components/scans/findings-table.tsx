@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import {
   Table,
   TableBody,
@@ -21,8 +21,20 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SCANNER_LABELS } from "@/lib/constants";
-import { FileCode, ChevronRight } from "lucide-react";
+import {
+  type FixPrScanSourceContext,
+  fixPrUnavailableReason,
+  resolveGithubRepoForFixPr,
+} from "@/lib/open-fix-pr-client";
+import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
+import { FileCode, ChevronDown, ChevronRight, GitPullRequest } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface Finding {
   id: string;
@@ -33,9 +45,13 @@ interface Finding {
   status?: string;
   filePath?: string;
   startLine?: number;
+  endLine?: number;
+  snippet?: string;
   ruleId?: string;
   cweId?: string;
+  cveId?: string;
   confidence?: number;
+  metadata?: Record<string, unknown>;
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -68,6 +84,9 @@ interface FindingsTableProps {
   onSelect?: (finding: Finding) => void;
   selectedId?: string;
   onBulkStatusChange?: () => void;
+  renderExpanded?: (finding: Finding) => ReactNode;
+  /** When set, each row shows an action to open a GitHub fix PR for findings with a file path. */
+  fixPrSource?: FixPrScanSourceContext;
 }
 
 export function FindingsTable({
@@ -75,6 +94,8 @@ export function FindingsTable({
   onSelect,
   selectedId,
   onBulkStatusChange,
+  renderExpanded,
+  fixPrSource,
 }: FindingsTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<string>("");
@@ -193,69 +214,181 @@ export function FindingsTable({
               />
             </TableHead>
             <TableHead className="w-24">Severity</TableHead>
-            <TableHead>Finding</TableHead>
+            <TableHead>Bug / Vulnerability</TableHead>
             <TableHead className="w-24">Status</TableHead>
             <TableHead className="w-32">Scanner</TableHead>
             <TableHead className="w-48">File</TableHead>
+            {fixPrSource ? (
+              <TableHead className="w-11 text-center" title="Open GitHub fix PR">
+                <span className="sr-only">Open fix PR</span>
+                <GitPullRequest
+                  className="mx-auto h-4 w-4 text-muted-foreground"
+                  aria-hidden
+                />
+              </TableHead>
+            ) : null}
             <TableHead className="w-8" />
           </TableRow>
         </TableHeader>
         <TableBody>
           {findings.map((finding) => (
-            <TableRow
-              key={finding.id}
-              className={`cursor-pointer ${selectedId === finding.id ? "bg-muted" : ""}`}
-            >
-              <TableCell onClick={(e) => e.stopPropagation()}>
-                <Checkbox
-                  checked={selected.has(finding.id)}
-                  onCheckedChange={() => toggleOne(finding.id)}
-                />
-              </TableCell>
-              <TableCell onClick={() => onSelect?.(finding)}>
-                <SeverityBadge severity={finding.severity} />
-              </TableCell>
-              <TableCell onClick={() => onSelect?.(finding)}>
-                <div>
-                  <p className="font-medium text-sm">{finding.title}</p>
-                  {finding.cweId && (
-                    <span className="text-xs text-muted-foreground">
-                      {finding.cweId}
+            <Fragment key={finding.id}>
+              <TableRow
+                className={`cursor-pointer ${selectedId === finding.id ? "bg-muted" : ""}`}
+              >
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={selected.has(finding.id)}
+                    onCheckedChange={() => toggleOne(finding.id)}
+                  />
+                </TableCell>
+                <TableCell onClick={() => onSelect?.(finding)}>
+                  <SeverityBadge severity={finding.severity} />
+                </TableCell>
+                <TableCell onClick={() => onSelect?.(finding)}>
+                  <div>
+                    <p className="font-medium text-sm">{finding.title}</p>
+                    {finding.cweId && (
+                      <span className="text-xs text-muted-foreground">
+                        {finding.cweId}
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell onClick={() => onSelect?.(finding)}>
+                  {finding.status && STATUS_LABELS[finding.status] && (
+                    <span
+                      className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${STATUS_LABELS[finding.status].color}`}
+                    >
+                      {STATUS_LABELS[finding.status].label}
                     </span>
                   )}
-                </div>
-              </TableCell>
-              <TableCell onClick={() => onSelect?.(finding)}>
-                {finding.status && STATUS_LABELS[finding.status] && (
-                  <span
-                    className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${STATUS_LABELS[finding.status].color}`}
+                </TableCell>
+                <TableCell onClick={() => onSelect?.(finding)}>
+                  <Badge variant="outline" className="text-xs">
+                    {SCANNER_LABELS[
+                      finding.scanner as keyof typeof SCANNER_LABELS
+                    ] || finding.scanner}
+                  </Badge>
+                </TableCell>
+                <TableCell onClick={() => onSelect?.(finding)}>
+                  {finding.filePath && (
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {finding.filePath}
+                      {finding.startLine ? `:${finding.startLine}` : ""}
+                    </span>
+                  )}
+                </TableCell>
+                {fixPrSource ? (
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <FindingFixPrIcon
+                      finding={finding}
+                      fixPrSource={fixPrSource}
+                    />
+                  </TableCell>
+                ) : null}
+                <TableCell onClick={() => onSelect?.(finding)}>
+                  {selectedId === finding.id ? (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
+                  )}
+                </TableCell>
+              </TableRow>
+              {selectedId === finding.id && renderExpanded && (
+                <TableRow>
+                  <TableCell
+                    colSpan={fixPrSource ? 8 : 7}
+                    className="bg-muted/30 p-4 align-top text-foreground"
                   >
-                    {STATUS_LABELS[finding.status].label}
-                  </span>
-                )}
-              </TableCell>
-              <TableCell onClick={() => onSelect?.(finding)}>
-                <Badge variant="outline" className="text-xs">
-                  {SCANNER_LABELS[
-                    finding.scanner as keyof typeof SCANNER_LABELS
-                  ] || finding.scanner}
-                </Badge>
-              </TableCell>
-              <TableCell onClick={() => onSelect?.(finding)}>
-                {finding.filePath && (
-                  <span className="text-xs text-muted-foreground font-mono">
-                    {finding.filePath}
-                    {finding.startLine ? `:${finding.startLine}` : ""}
-                  </span>
-                )}
-              </TableCell>
-              <TableCell onClick={() => onSelect?.(finding)}>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </TableCell>
-            </TableRow>
+                    <div className="w-full max-w-full min-w-0 overflow-x-auto">
+                      {renderExpanded(finding)}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </Fragment>
           ))}
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+function FindingFixPrIcon({
+  finding,
+  fixPrSource,
+}: {
+  finding: Finding;
+  fixPrSource: FixPrScanSourceContext;
+}) {
+  const [busy, setBusy] = useState(false);
+  const scanId = fixPrSource.scanId.trim();
+  const blockReason = fixPrUnavailableReason(fixPrSource, finding.filePath);
+  const hasGithubRepo = Boolean(
+    fixPrSource && resolveGithubRepoForFixPr(fixPrSource),
+  );
+  const canOpen = !blockReason;
+
+  async function openPr() {
+    let manualRepoUrl: string | undefined;
+    if (!hasGithubRepo) {
+      const input = window.prompt(
+        "Enter GitHub repository (owner/repo or URL) for this fix PR:",
+      );
+      if (!input?.trim()) return;
+      manualRepoUrl = input.trim();
+    }
+
+    setBusy(true);
+    try {
+      const outcome = await runOpenFixPrFlow(scanId, finding.id, {
+        repoUrl: manualRepoUrl,
+      });
+      if ("redirected" in outcome) return;
+      if (!outcome.ok) {
+        if (outcome.code !== "CANCELLED") toast.error(outcome.error);
+        return;
+      }
+      toast.success("Pull request opened");
+      window.open(outcome.pullRequestUrl, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to open pull request");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const iconButton = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8 shrink-0"
+      disabled={busy || !canOpen}
+      aria-label={busy ? "Opening pull request" : "Open fix pull request on GitHub"}
+      onClick={() => void openPr()}
+    >
+      <GitPullRequest className="h-4 w-4" aria-hidden />
+    </Button>
+  );
+
+  if (canOpen) {
+    return iconButton;
+  }
+
+  const hint = `${blockReason} Connect GitHub via OAuth when prompted; set LLM under Settings → LLM.`;
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">{iconButton}</span>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="max-w-xs text-balance">
+          {hint}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

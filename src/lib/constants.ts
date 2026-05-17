@@ -14,6 +14,14 @@ export const SEVERITY_COLORS = {
   INFO: "outline",
 } as const;
 
+/** Pattern-only findings: no synthetic LLM-style report blocks. */
+export const PATTERN_BASED_SCANNERS = new Set(["SAST_PATTERN", "SECRETS_PATTERN"]);
+
+export function isPatternBasedScanner(scanner: string | undefined): boolean {
+  if (!scanner) return false;
+  return PATTERN_BASED_SCANNERS.has(scanner);
+}
+
 export const SCANNER_LABELS = {
   SAST_PATTERN: "SAST (Pattern)",
   SAST_LLM: "SAST (AI)",
@@ -28,6 +36,8 @@ export const SCANNER_LABELS = {
 export const SCAN_STATUS_LABELS = {
   QUEUED: "Queued",
   RUNNING: "Running",
+  PAUSED: "Paused",
+  STOPPED: "Stopped",
   COMPLETED: "Completed",
   FAILED: "Failed",
   CANCELLED: "Cancelled",
@@ -169,7 +179,10 @@ export function detectIacFileType(filePath: string): IacFileType | null {
     lower.includes("/k8s/") ||
     lower.includes("/kubernetes/") ||
     lower.includes("/manifests/") ||
-    lower.includes("/deploy/")
+    lower.includes("/deploy/") ||
+    /^(deployment|service|ingress|configmap|secret|daemonset|statefulset|cronjob|job|pod|namespace|role|rolebinding|clusterrole|clusterrolebinding)\.ya?ml$/i.test(
+      basename,
+    )
   )
     return "kubernetes";
   if (
@@ -186,28 +199,63 @@ export function detectIacFileType(filePath: string): IacFileType | null {
 }
 
 export const MAX_FILE_SIZE_BYTES = 1024 * 1024; // 1MB — skip threshold for pattern scanners
-export const LLM_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB — LLM scanner chunks large files instead of skipping
+export const LLM_MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024; // 8MB — LLM scanners chunk large files instead of skipping
 
 // LLM context configuration — all configurable via env vars
 // Chunk size = how much code is sent per LLM request (in estimated tokens)
 // Response tokens = max tokens the LLM can generate in its response
 export const MAX_CHUNK_TOKENS = parseInt(
-  process.env.LLM_CHUNK_TOKENS || "3000",
+  process.env.LLM_CHUNK_TOKENS || "4800",
 );
 export const CHUNK_OVERLAP_TOKENS = parseInt(
-  process.env.LLM_CHUNK_OVERLAP_TOKENS || "200",
+  process.env.LLM_CHUNK_OVERLAP_TOKENS || "360",
 );
 export const LLM_MAX_RESPONSE_TOKENS = parseInt(
-  process.env.LLM_MAX_RESPONSE_TOKENS || "4096",
+  process.env.LLM_MAX_RESPONSE_TOKENS || "8192",
 );
 
-// Ollama/local model defaults — smaller chunks for faster CPU inference
+// Ollama/local model defaults — still smaller than cloud defaults but deeper than before
 export const OLLAMA_MAX_CHUNK_TOKENS = parseInt(
-  process.env.OLLAMA_CHUNK_TOKENS || "1200",
+  process.env.OLLAMA_CHUNK_TOKENS || "2400",
 );
 export const OLLAMA_CHUNK_OVERLAP_TOKENS = parseInt(
-  process.env.OLLAMA_CHUNK_OVERLAP_TOKENS || "100",
+  process.env.OLLAMA_CHUNK_OVERLAP_TOKENS || "200",
 );
 export const OLLAMA_MAX_RESPONSE_TOKENS = parseInt(
-  process.env.OLLAMA_MAX_RESPONSE_TOKENS || "2048",
+  process.env.OLLAMA_MAX_RESPONSE_TOKENS || "6144",
+);
+
+/** Parallel LLM file/chunk requests inside a scanner (SAST / IaC / zero-day). */
+export const MAX_LLM_CONCURRENCY = parseInt(
+  process.env.MAX_LLM_CONCURRENCY || "4",
+  10,
+);
+
+/** Default minimum model confidence to keep an LLM finding (SAST / IaC / supply-chain LLM phases). */
+export const LLM_MIN_CONFIDENCE_DEFAULT = parseFloat(
+  process.env.LLM_MIN_CONFIDENCE || "0.65",
+);
+
+export const IAC_MIN_CONFIDENCE_DEFAULT = parseFloat(
+  process.env.IAC_MIN_CONFIDENCE || "0.65",
+);
+
+export const ZERO_DAY_MIN_CONFIDENCE_DEFAULT = parseFloat(
+  process.env.ZERO_DAY_MIN_CONFIDENCE || "0.72",
+);
+
+export const MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT = parseFloat(
+  process.env.MALICIOUS_PKG_MIN_CONFIDENCE || "0.65",
+);
+
+/** Zero-day: max high-priority paths before adding broader files. */
+export const ZERO_DAY_PRIORITY_FILES = parseInt(
+  process.env.ZERO_DAY_PRIORITY_FILES || "96",
+  10,
+);
+
+/** Zero-day: total source files sent to the LLM (priority first, then others). */
+export const ZERO_DAY_MAX_FILES = parseInt(
+  process.env.ZERO_DAY_MAX_FILES || "160",
+  10,
 );

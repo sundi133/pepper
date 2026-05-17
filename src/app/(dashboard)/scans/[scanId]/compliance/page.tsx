@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import {
@@ -40,8 +40,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { jsonFetcher } from "@/lib/fetcher";
+import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 
 const THEME_COLORS: Record<string, string> = {
   Organizational:
@@ -113,9 +113,18 @@ export default function ComplianceReportPage() {
   const scanId = params.scanId as string;
   const { data, isLoading, error, mutate } = useSWR(
     `/api/scans/${scanId}/compliance`,
-    fetcher,
+    jsonFetcher,
   );
+  const { data: scanMeta } = useSWR(`/api/scans/${scanId}`, jsonFetcher, {
+    revalidateOnFocus: false,
+  });
   const [selectedFrameworks, setSelectedFrameworks] = useState<string[]>([]);
+  const reports: FrameworkReport[] = data?.reports || [];
+  const frameworkNames = reports.map((report) => report.framework);
+  const activeFrameworks =
+    selectedFrameworks.length === 0
+      ? frameworkNames
+      : selectedFrameworks.filter((name) => frameworkNames.includes(name));
 
   async function handleRegenerate() {
     try {
@@ -127,61 +136,80 @@ export default function ComplianceReportPage() {
     }
   }
 
+  const complianceShellCrumbs = [
+    { label: "Dashboard", href: "/dashboard" },
+    { label: "Projects", href: "/projects" },
+    { label: "Scan", href: `/scans/${scanId}` },
+    { label: "Compliance" },
+  ];
+
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-muted-foreground">
-          Generating compliance report using AI...
-        </p>
-        <p className="text-xs text-muted-foreground">
-          This may take 30-60 seconds for large scans
-        </p>
+      <div className="space-y-6">
+        <PageBreadcrumb items={complianceShellCrumbs} />
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">
+            Generating compliance report using AI...
+          </p>
+          <p className="text-xs text-muted-foreground">
+            This may take 30-60 seconds for large scans
+          </p>
+        </div>
       </div>
     );
   }
 
   if (error || !data || data.error) {
     return (
-      <div className="text-center py-12 space-y-4">
-        <p className="text-destructive">
-          {data?.error || "Failed to load compliance report"}
-        </p>
-        <Link href={`/scans/${scanId}`}>
-          <Button variant="outline">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Scan
-          </Button>
-        </Link>
+      <div className="space-y-6">
+        <PageBreadcrumb items={complianceShellCrumbs} />
+        <div className="text-center py-12 space-y-4">
+          <p className="text-destructive">
+            {data?.error || "Failed to load compliance report"}
+          </p>
+          <Link href={`/scans/${scanId}`}>
+            <Button variant="outline">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Scan
+            </Button>
+          </Link>
+        </div>
       </div>
     );
   }
 
-  const reports: FrameworkReport[] = data.reports || [];
-  const frameworkNames = reports.map((report) => report.framework);
-
-  useEffect(() => {
-    setSelectedFrameworks((current) => {
-      if (frameworkNames.length === 0) return [];
-      if (current.length === 0) return frameworkNames;
-
-      const next = current.filter((name) => frameworkNames.includes(name));
-      return next.length > 0 ? next : frameworkNames;
-    });
-  }, [data.generatedAt, frameworkNames.join("|")]);
-
   const visibleReports = reports.filter((report) =>
-    selectedFrameworks.includes(report.framework),
+    activeFrameworks.includes(report.framework),
   );
+
+  const project = scanMeta?.project as
+    | { id?: string; name?: string }
+    | undefined;
+  const complianceBreadcrumbs = [
+    { label: "Dashboard", href: "/dashboard" },
+    { label: "Projects", href: "/projects" },
+    ...(project?.id && project?.name
+      ? [{ label: project.name, href: `/projects/${project.id}` }]
+      : []),
+    {
+      label: scanMeta?.scanType
+        ? `${String(scanMeta.scanType)} scan`
+        : "Scan",
+      href: `/scans/${scanId}`,
+    },
+    { label: "Compliance" },
+  ];
 
   function toggleFramework(framework: string, checked: boolean) {
     setSelectedFrameworks((current) => {
+      const selected = current.length === 0 ? frameworkNames : current;
       if (checked) {
-        return current.includes(framework) ? current : [...current, framework];
+        return selected.includes(framework) ? selected : [...selected, framework];
       }
 
-      if (current.length === 1) return current;
-      return current.filter((name) => name !== framework);
+      if (selected.length === 1) return selected;
+      return selected.filter((name) => name !== framework);
     });
   }
 
@@ -268,6 +296,8 @@ export default function ComplianceReportPage() {
 
   return (
     <div className="space-y-6">
+      <PageBreadcrumb items={complianceBreadcrumbs} />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
@@ -330,7 +360,7 @@ export default function ComplianceReportPage() {
               variant="outline"
               size="sm"
               onClick={() => setSelectedFrameworks(frameworkNames)}
-              disabled={frameworkNames.length === selectedFrameworks.length}
+              disabled={frameworkNames.length === activeFrameworks.length}
             >
               Select All
             </Button>
@@ -345,7 +375,7 @@ export default function ComplianceReportPage() {
                 className="flex items-center gap-3 rounded-md border px-3 py-2 text-sm"
               >
                 <Checkbox
-                  checked={selectedFrameworks.includes(report.framework)}
+                  checked={activeFrameworks.includes(report.framework)}
                   onCheckedChange={(checked) =>
                     toggleFramework(report.framework, checked === true)
                   }
@@ -434,7 +464,9 @@ export default function ComplianceReportPage() {
                       <TableCell className="font-mono font-bold">
                         {control.controlId}
                       </TableCell>
-                      <TableCell>{control.title}</TableCell>
+                      <TableCell className="max-w-[min(20rem,40vw)] align-top text-sm leading-snug break-words">
+                        {control.title}
+                      </TableCell>
                       <TableCell>
                         <Badge
                           variant="outline"
@@ -477,7 +509,7 @@ export default function ComplianceReportPage() {
               <CardTitle>Finding → Control Mapping</CardTitle>
               <CardDescription>
                 Each finding with its mapped controls and relevance level. Hover
-                over a control badge for the LLM's reasoning.
+                over a control badge for the LLM&apos;s reasoning.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -497,9 +529,11 @@ export default function ComplianceReportPage() {
                         <TableCell>
                           <SeverityBadge severity={f.severity} />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="max-w-md align-top break-words">
                           <div>
-                            <p className="font-medium text-sm">{f.title}</p>
+                            <p className="font-medium text-sm leading-snug">
+                              {f.title}
+                            </p>
                             {f.cweId && (
                               <span className="text-xs text-muted-foreground">
                                 {f.cweId}
@@ -528,12 +562,12 @@ export default function ComplianceReportPage() {
                                 </TooltipTrigger>
                                 <TooltipContent
                                   side="bottom"
-                                  className="max-w-xs"
+                                  className="max-w-lg whitespace-normal text-left leading-relaxed"
                                 >
                                   <p className="font-medium">
                                     {c.controlId}: {c.title}
                                   </p>
-                                  <p className="text-xs mt-1 opacity-80">
+                                  <p className="text-xs mt-2 text-muted-foreground">
                                     [{c.relevance}] {c.reasoning}
                                   </p>
                                 </TooltipContent>

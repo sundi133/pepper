@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { downloadObject } from "@/lib/minio";
 
 export async function GET(
@@ -11,27 +11,23 @@ export async function GET(
   if ("error" in auth) return auth.error;
 
   const { scanId, type } = await params;
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId) {
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
+  }
 
-  const typeMap: Record<string, string> = {
-    sarif: "SARIF",
-    sbom: "SBOM_CYCLONEDX",
-    log: "SCAN_LOG",
-  };
-
-  const artifactType = typeMap[type.toLowerCase()];
-  if (!artifactType) {
+  if (type.toLowerCase() !== "log") {
     return NextResponse.json(
-      { error: "Invalid artifact type. Use: sarif, sbom, or log" },
+      { error: "Invalid artifact type. Use: log" },
       { status: 400 },
     );
   }
 
-  const artifact = await prisma.scanArtifact.findUnique({
+  const artifact = await prisma.scanArtifact.findFirst({
     where: {
-      scanId_type: {
-        scanId,
-        type: artifactType as "SARIF" | "SBOM_CYCLONEDX" | "SCAN_LOG",
-      },
+      scanId,
+      type: "SCAN_LOG",
+      scan: { project: { organizationId: orgId } },
     },
   });
 
@@ -41,17 +37,10 @@ export async function GET(
 
   try {
     const data = await downloadObject(artifact.objectKey);
-    const filename =
-      type === "sarif"
-        ? "results.sarif.json"
-        : type === "sbom"
-          ? "sbom.cyclonedx.json"
-          : "scan.log";
-
     return new NextResponse(new Uint8Array(data), {
       headers: {
         "Content-Type": "application/json",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": `attachment; filename="scan.log"`,
       },
     });
   } catch {

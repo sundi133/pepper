@@ -16,7 +16,7 @@ import {
   parseLlmJsonResponse,
   LlmConfig,
 } from "@/lib/llm-gateway";
-import { ComplianceFramework, ComplianceControl } from "./pdf-parser";
+import { ComplianceFramework } from "./pdf-parser";
 import { logger } from "@/lib/logger";
 
 export interface FindingForMapping {

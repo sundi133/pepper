@@ -45,6 +45,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "No matching project found" });
     }
 
+    const { removeAllScansForProject } = await import(
+      "@/lib/remove-project-scans"
+    );
+    await removeAllScansForProject(project.id);
+
     const settings = project.organization.settings;
 
     // Create scan
@@ -80,6 +85,10 @@ export async function POST(req: NextRequest) {
         enableLlmSast: settings?.enableLlmSast ?? true,
         enableLlmSecrets: settings?.enableLlmSecrets ?? true,
         osvApiUrl: settings?.osvApiUrl || "https://api.osv.dev",
+        vulnDbMode: (settings?.vulnDbMode || "online") as
+          | "online"
+          | "mirror"
+          | "offline",
       },
       buildGate: project.buildGate
         ? {
@@ -92,7 +101,12 @@ export async function POST(req: NextRequest) {
         : undefined,
     };
 
-    await scanQueue.add("scan", jobData, { jobId: scan.id });
+    const job = await scanQueue.add("scan", jobData, { jobId: scan.id });
+
+    await prisma.scan.update({
+      where: { id: scan.id },
+      data: { jobId: job.id },
+    });
 
     return NextResponse.json({ scanId: scan.id, status: "QUEUED" });
   }

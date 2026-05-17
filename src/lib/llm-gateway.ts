@@ -112,7 +112,7 @@ export async function analyzeWithLlm(
       format: "json",
       options: {
         temperature,
-        num_predict: options?.maxTokens ?? 4096,
+        num_predict: options?.maxTokens ?? 8192,
       },
     });
     return response.message?.content || "{}";
@@ -129,7 +129,7 @@ export async function analyzeWithLlm(
         { role: "user", content: userContent },
       ],
       temperature,
-      max_tokens: options?.maxTokens ?? 4096,
+      max_tokens: options?.maxTokens ?? 8192,
     });
     return response.choices[0]?.message?.content || "{}";
   }
@@ -142,7 +142,7 @@ export async function analyzeWithLlm(
       { role: "user", content: userContent },
     ],
     temperature,
-    max_tokens: options?.maxTokens ?? 4096,
+    max_tokens: options?.maxTokens ?? 8192,
     response_format: { type: "json_object" },
   });
   return response.choices[0]?.message?.content || "{}";

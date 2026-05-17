@@ -36,11 +36,15 @@ export interface ScanJobData {
   baseSha?: string;
   commitSha?: string;
   repoUrl?: string;
+  /** Original repo URL without credentials (for logs / parity). */
+  repoUrlDisplay?: string;
   svnUrl?: string;
   svnRevision?: string;
   svnUsername?: string;
   svnPassword?: string;
   branch?: string;
+  /** Resolve org GitHub OAuth token at worker runtime (never sent from browser). */
+  useOrgGithubToken?: boolean;
   orgSettings: {
     llmProvider: string;
     llmBaseUrl: string;
@@ -49,6 +53,7 @@ export interface ScanJobData {
     enableLlmSast: boolean;
     enableLlmSecrets: boolean;
     osvApiUrl: string;
+    vulnDbMode: "online" | "mirror" | "offline";
     orgId?: string;
   };
   buildGate?: {

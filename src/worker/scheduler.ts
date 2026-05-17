@@ -76,6 +76,11 @@ async function checkDueSchedules() {
         where: { organizationId: project.organizationId },
       });
 
+      const { removeAllScansForProject } = await import(
+        "@/lib/remove-project-scans"
+      );
+      await removeAllScansForProject(project.id);
+
       // Create scan record
       const scan = await prisma.scan.create({
         data: {
@@ -106,6 +111,11 @@ async function checkDueSchedules() {
           enableLlmSast: orgSettings?.enableLlmSast ?? true,
           enableLlmSecrets: orgSettings?.enableLlmSecrets ?? true,
           osvApiUrl: orgSettings?.osvApiUrl || "https://api.osv.dev",
+          vulnDbMode: (orgSettings?.vulnDbMode || "online") as
+            | "online"
+            | "mirror"
+            | "offline",
+          orgId: project.organizationId,
         },
         buildGate: project.buildGate
           ? {

@@ -1,17 +1,21 @@
 "use client";
 
 import useSWR from "swr";
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { jsonFetcher } from "@/lib/fetcher";
 
 export function useScanPolling(scanId: string | null) {
   const { data, error, isLoading } = useSWR(
     scanId ? `/api/scans/${scanId}` : null,
-    fetcher,
+    jsonFetcher,
     {
       refreshInterval: (data) => {
         if (!data) return 3000;
-        if (data.status === "QUEUED" || data.status === "RUNNING") return 3000;
+        if (
+          data.status === "QUEUED" ||
+          data.status === "RUNNING" ||
+          data.status === "PAUSED"
+        )
+          return 3000;
         return 0; // stop polling when complete
       },
     },
@@ -26,7 +30,7 @@ export function useScans(projectId?: string, page = 1) {
 
   const { data, error, isLoading, mutate } = useSWR(
     `/api/scans?${params}`,
-    fetcher,
+    jsonFetcher,
     { refreshInterval: 30000 },
   );
 
@@ -39,8 +43,25 @@ export function useScans(projectId?: string, page = 1) {
   };
 }
 
-export function useProjects() {
-  const { data, error, isLoading, mutate } = useSWR("/api/projects", fetcher, {
+export type ProjectListFilters = {
+  q?: string;
+  source?: "all" | "repo" | "upload";
+  sort?: "recent" | "name" | "vulns" | "grade";
+};
+
+export function useProjects(filters?: ProjectListFilters) {
+  const params = new URLSearchParams();
+  if (filters?.q) params.set("q", filters.q);
+  if (filters?.source && filters.source !== "all") {
+    params.set("source", filters.source);
+  }
+  if (filters?.sort && filters.sort !== "recent") {
+    params.set("sort", filters.sort);
+  }
+  const qs = params.toString();
+  const url = qs ? `/api/projects?${qs}` : "/api/projects";
+
+  const { data, error, isLoading, mutate } = useSWR(url, jsonFetcher, {
     refreshInterval: 60000,
   });
 
@@ -57,12 +78,15 @@ export function useFindings(
   filters?: Record<string, string>,
   scanStatus?: string,
 ) {
-  const params = new URLSearchParams({ page: "1", limit: "100", ...filters });
-  const isActive = scanStatus === "QUEUED" || scanStatus === "RUNNING";
+  const params = new URLSearchParams({ page: "1", limit: "500", ...filters });
+  const isActive =
+    scanStatus === "QUEUED" ||
+    scanStatus === "RUNNING" ||
+    scanStatus === "PAUSED";
 
   const { data, error, isLoading, mutate } = useSWR(
     `/api/scans/${scanId}/findings?${params}`,
-    fetcher,
+    jsonFetcher,
     {
       refreshInterval: isActive ? 3000 : 0,
     },

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Getting started — Pepper SAST</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo">P</div>
+        <div><h1>Pepper SAST</h1><span>Documentation</span></div>
+      </div>
+      <nav>
+        <section><h2>Guide</h2><ul>
+          <li><a href="index.html">Overview</a></li>
+          <li><a href="getting-started.html" class="active">Getting started</a></li>
+          <li><a href="user-guide.html">How to use</a></li>
+        </ul></section>
+        <section><h2>Settings</h2><ul>
+          <li><a href="settings.html">All settings</a></li>
+          <li><a href="settings.html#llm">LLM config</a></li>
+          <li><a href="settings.html#policies">Policies</a></li>
+          <li><a href="settings.html#build-gates">Build gates</a></li>
+          <li><a href="settings.html#team">Team</a></li>
+          <li><a href="settings.html#integrations">Integrations</a></li>
+        </ul></section>
+        <section><h2>Deploy</h2><ul>
+          <li><a href="configuration.html">Environment</a></li>
+        </ul></section>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <h1>Getting started</h1>
+      <p class="lead">Run Pepper locally for development or use Docker Compose for a full stack.</p>
+
+      <h2>Prerequisites</h2>
+      <ul>
+        <li><strong>Node.js 20+</strong> and npm</li>
+        <li><strong>Docker</strong> for PostgreSQL, Redis, and MinIO (or your own instances)</li>
+        <li><strong>Worker process</strong> must run separately from the web app</li>
+        <li>Optional: <strong>Ollama</strong> for local AI scanning, or an <strong>OpenRouter/OpenAI</strong> API key</li>
+        <li>Optional: <strong>Subversion</strong> CLI on the worker for SVN scans</li>
+      </ul>
+
+      <h2>Local development setup</h2>
+      <ol class="steps">
+        <li>
+          <strong>Clone and install</strong>
+          <pre>cd pepper-update-pepper-sast
+npm install</pre>
+        </li>
+        <li>
+          <strong>Start infrastructure</strong> — PostgreSQL, Redis, MinIO (see project <code>docker-compose.yml</code> or README).
+        </li>
+        <li>
+          <strong>Configure environment</strong>
+          <pre>cp .env.example .env
+# Edit DATABASE_URL, REDIS_URL, MINIO_*, NEXTAUTH_SECRET, NEXTAUTH_URL</pre>
+          See <a href="configuration.html">Environment variables</a> for every option.
+        </li>
+        <li>
+          <strong>Initialize database</strong>
+          <pre>npx prisma db push
+npm run db:seed</pre>
+          Default admin from seed: <code>ADMIN_EMAIL</code> / <code>ADMIN_PASSWORD</code> in <code>.env</code>.
+        </li>
+        <li>
+          <strong>Run the web app</strong>
+          <pre>npm run dev</pre>
+          Open <a href="http://localhost:3000">http://localhost:3000</a> and sign in.
+        </li>
+        <li>
+          <strong>Run the worker</strong> (second terminal)
+          <pre>npm run worker</pre>
+          Without the worker, scans stay <code>QUEUED</code> forever.
+        </li>
+      </ol>
+
+      <h2>First-time configuration checklist</h2>
+      <table>
+        <thead><tr><th>Step</th><th>Where</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>LLM provider + API key</td><td><a href="settings.html#llm">Settings → LLM Config</a></td><td>AI SAST, secrets, suggest-fix, open fix PR</td></tr>
+          <tr><td>GitHub OAuth app</td><td><a href="configuration.html#github">.env</a> + <a href="settings.html#integrations">Integrations</a></td><td>Import repos, private clone, fix PRs</td></tr>
+          <tr><td>Connect GitHub</td><td><a href="user-guide.html#repositories">Repositories</a></td><td>Link org account</td></tr>
+          <tr><td>Build gates (optional)</td><td><a href="settings.html#build-gates">Settings → Build Gates</a></td><td>Fail scans that exceed thresholds</td></tr>
+          <tr><td>Invite team</td><td><a href="settings.html#team">Settings → Team</a></td><td>Multi-user access</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Docker / on-prem quick start</h2>
+      <p>See the root <code>README.md</code> for <code>./setup.sh</code>, image versions, Ollama on the host, air-gapped deploy, backup/restore, and upgrade steps.</p>
+
+      <div class="callout warn">
+        <strong>Scan scheduling</strong> is configured via the REST API
+        (<code>PUT /api/projects/{projectId}/schedule</code>), not a dedicated UI on the project settings page.
+        Project settings in the UI only edit name and description.
+      </div>
+
+      <h2>Verify the stack</h2>
+      <ul>
+        <li><code>GET /api/health</code> — app health</li>
+        <li>Start a small <strong>New Scan</strong> from an upload or public GitHub repo</li>
+        <li>Watch scan status move from <code>QUEUED</code> → <code>RUNNING</code> → <code>COMPLETED</code></li>
+        <li>Worker logs should show file enumeration and scanner progress</li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

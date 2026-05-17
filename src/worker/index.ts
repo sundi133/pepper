@@ -63,17 +63,16 @@ async function main() {
   });
 
   // Graceful shutdown
+  const schedulerInterval = startScheduler();
   const shutdown = async () => {
     logger.info("Shutting down worker...");
+    clearInterval(schedulerInterval);
     await worker.close();
     process.exit(0);
   };
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
-
-  // Start scan scheduler (checks for due scheduled scans every 60s)
-  const schedulerInterval = startScheduler();
 
   logger.info({ concurrency }, "Worker started and waiting for jobs");
 }

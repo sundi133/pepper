@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { z } from "zod";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
@@ -41,14 +41,16 @@ export async function GET(req: NextRequest) {
 }
 
 const updateSchema = z.object({
-  llmProvider: z.string().optional(),
+  llmProvider: z
+    .enum(["ollama", "openai", "openrouter", "azure", "vllm", "custom"])
+    .optional(),
   llmBaseUrl: z.string().url().optional(),
-  llmModel: z.string().optional(),
+  llmModel: z.string().min(1).optional(),
   llmApiKey: z.string().optional(),
   enableLlmSast: z.boolean().optional(),
   enableLlmSecrets: z.boolean().optional(),
   osvApiUrl: z.string().url().optional(),
-  vulnDbMode: z.string().optional(),
+  vulnDbMode: z.enum(["online", "mirror", "offline"]).optional(),
 });
 
 export async function PUT(req: NextRequest) {

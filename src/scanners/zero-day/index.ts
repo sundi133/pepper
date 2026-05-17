@@ -19,8 +19,11 @@ import {
   OLLAMA_CHUNK_OVERLAP_TOKENS,
   LLM_MAX_RESPONSE_TOKENS,
   OLLAMA_MAX_RESPONSE_TOKENS,
+  MAX_LLM_CONCURRENCY,
+  ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import { buildRepoContextSummary } from "@/lib/llm-repo-context";
 
 interface ZeroDayLlmFinding {
   title: string;
@@ -32,7 +35,9 @@ interface ZeroDayLlmFinding {
   cweId?: string;
   confidence?: number;
   attackVector?: string;
+  stepsToReproduce?: string[];
   recommendation?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export const zeroDayScanner: ScannerPlugin = {
@@ -69,10 +74,12 @@ export const zeroDayScanner: ScannerPlugin = {
     );
 
     const findings: RawFinding[] = [];
-    const maxConcurrency = parseInt(process.env.MAX_LLM_CONCURRENCY || "2");
+    const maxConcurrency = MAX_LLM_CONCURRENCY;
     const chunks: Chunk[] = [];
+    const repoContextBlock = buildRepoContextSummary(ctx.fileList);
 
     for (const filePath of targetFiles) {
+      await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
 
       const ext = path.extname(filePath).toLowerCase();
@@ -96,6 +103,7 @@ export const zeroDayScanner: ScannerPlugin = {
 
     // Process chunks with concurrency limit
     for (let i = 0; i < chunks.length; i += maxConcurrency) {
+      await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
 
       const batch = chunks.slice(i, i + maxConcurrency);
@@ -106,6 +114,7 @@ export const zeroDayScanner: ScannerPlugin = {
             ctx.orgSettings.llmModel,
             chunk,
             maxResponseTokens,
+            repoContextBlock,
           ),
         ),
       );
@@ -135,8 +144,9 @@ async function analyzeChunk(
   model: string,
   chunk: Chunk,
   maxResponseTokens: number,
+  repoContextBlock: string,
 ): Promise<RawFinding[]> {
-  const userContent = `File: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n\n\`\`\`\n${chunk.content}\n\`\`\``;
+  const userContent = `${repoContextBlock}\n--- CURRENT FILE CHUNK ---\nFile: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n\n\`\`\`\n${chunk.content}\n\`\`\``;
 
   try {
     const raw = await analyzeWithLlm(
@@ -153,7 +163,12 @@ async function analyzeChunk(
     );
 
     return (parsed.findings || [])
-      .filter((f) => f.title && f.severity && (f.confidence ?? 0) >= 0.8)
+      .filter(
+        (f) =>
+          f.title &&
+          f.severity &&
+          (f.confidence ?? 0) >= ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
+      )
       .map((f) => ({
         scanner: "ZERO_DAY" as const,
         severity: normalizeSeverity(f.severity),
@@ -167,9 +182,20 @@ async function analyzeChunk(
         filePath: chunk.filePath,
         startLine: f.startLine,
         endLine: f.endLine,
+        snippet: buildSnippet(chunk, f.startLine, f.endLine),
         cweId: f.cweId,
-        confidence: f.confidence ?? 0.8,
+        confidence: f.confidence ?? ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
         ruleId: `ZD-${f.cweId || "NOVEL"}`,
+        metadata: {
+          ...(f.metadata || {}),
+          category: f.category,
+          attackVector: f.attackVector,
+          recommendation: f.recommendation,
+          stepsToReproduce: normalizeStepsToReproduce(
+            f.stepsToReproduce,
+            f.attackVector,
+          ),
+        },
       }));
   } catch (err) {
     logger.error(
@@ -178,6 +204,37 @@ async function analyzeChunk(
     );
     return [];
   }
+}
+
+function normalizeStepsToReproduce(
+  steps: string[] | undefined,
+  attackVector: string | undefined,
+): string[] {
+  const cleanSteps = (steps || [])
+    .filter((step): step is string => typeof step === "string")
+    .map((step) => step.trim())
+    .filter(Boolean);
+  if (cleanSteps.length > 0) return cleanSteps;
+  return attackVector?.trim() ? [attackVector.trim()] : [];
+}
+
+function buildSnippet(
+  chunk: Chunk,
+  startLine?: number,
+  endLine?: number,
+): string | undefined {
+  if (!startLine || startLine < 1) return undefined;
+  const lines = chunk.content.split("\n");
+  const relativeStart = Math.max(0, startLine - chunk.startLine - 2);
+  const relativeEnd = Math.min(
+    lines.length,
+    (endLine || startLine) - chunk.startLine + 3,
+  );
+  if (relativeEnd <= relativeStart) return undefined;
+  return lines
+    .slice(relativeStart, relativeEnd)
+    .map((line, index) => `${chunk.startLine + relativeStart + index}: ${line}`)
+    .join("\n");
 }
 
 function normalizeSeverity(s: string): RawFinding["severity"] {

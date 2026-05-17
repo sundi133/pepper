@@ -4,16 +4,29 @@ import * as os from "os";
 import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import { ScanJobData } from "@/lib/queue";
-import { downloadObject, uploadObject } from "@/lib/minio";
+import { downloadObject } from "@/lib/minio";
 import { runScanners } from "@/scanners";
-import { buildSarif } from "@/scanners/sarif-builder";
-import { generateSbom } from "@/scanners/sca/sbom-generator";
 import { ScanContext, RawFinding } from "@/scanners/types";
-import { parseDependencies } from "@/scanners/sca";
 import { createScanLogger } from "@/lib/logger";
 import { sendScanCompleteEmail } from "@/lib/email";
+import { extractArchive } from "@/lib/extract-archive";
+import { enrichFindingWithReport } from "@/lib/finding-report";
 
 // prisma is imported from @/lib/prisma
+
+class ScanCancelledError extends Error {
+  constructor() {
+    super("Scan cancelled");
+    this.name = "ScanCancelledError";
+  }
+}
+
+class ScanStoppedError extends Error {
+  constructor() {
+    super("Scan stopped");
+    this.name = "ScanStoppedError";
+  }
+}
 
 export async function processScanJob(job: Job<ScanJobData>) {
   const {
@@ -30,9 +43,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
   log.info({ scanId, scanType, sourceType }, "Starting scan");
 
-  // Update scan status to RUNNING with initial scanner progress
-  await prisma.scan.update({
-    where: { id: scanId },
+  const markRunning = await prisma.scan.updateMany({
+    where: { id: scanId, status: { notIn: ["CANCELLED", "STOPPED"] } },
     data: {
       status: "RUNNING",
       startedAt: new Date(),
@@ -40,12 +52,45 @@ export async function processScanJob(job: Job<ScanJobData>) {
       scannerProgress: {},
     },
   });
+  if (markRunning.count === 0) {
+    abortController.abort();
+    log.info("Scan was cancelled before worker started");
+    return;
+  }
+
+  async function assertScanActive() {
+    let loggedPaused = false;
+    while (true) {
+      const scan = await prisma.scan.findUnique({
+        where: { id: scanId },
+        select: { status: true },
+      });
+      if (scan?.status === "STOPPED") {
+        abortController.abort();
+        throw new ScanStoppedError();
+      }
+      if (scan?.status === "CANCELLED" || abortController.signal.aborted) {
+        abortController.abort();
+        throw new ScanCancelledError();
+      }
+      if (scan?.status !== "PAUSED") {
+        if (loggedPaused) log.info("Scan resumed");
+        return;
+      }
+      if (!loggedPaused) {
+        log.info("Scan paused; waiting for resume");
+        loggedPaused = true;
+      }
+      await sleep(3000);
+    }
+  }
 
   const workDir = path.join(os.tmpdir(), `pepper-${scanId}`);
 
   try {
     // 1. Download and extract source
     fs.mkdirSync(workDir, { recursive: true });
+    await assertScanActive();
 
     if (sourceType === "UPLOAD") {
       const data = await downloadObject(sourceRef);
@@ -56,13 +101,52 @@ export async function processScanJob(job: Job<ScanJobData>) {
       await extractArchive(archivePath, workDir);
       fs.unlinkSync(archivePath);
     } else if (sourceType === "GIT_CLONE") {
-      const { execSync } = await import("child_process");
-      const repoUrl = job.data.repoUrl || sourceRef;
-      const branch = job.data.branch || "main";
-      execSync(
-        `git clone --depth 1 --branch ${branch} ${repoUrl} ${workDir}/repo`,
-        { timeout: 120000 },
-      );
+      const { execFileSync } = await import("child_process");
+      const { withGitCredentials } = await import("@/lib/git-repo-url");
+      let repoUrl = job.data.repoUrl || sourceRef;
+      const repoLog = job.data.repoUrlDisplay || repoUrl;
+      if (job.data.useOrgGithubToken && job.data.orgSettings.orgId) {
+        const { getOrgGithubAccessToken } = await import(
+          "@/lib/github-connection"
+        );
+        const ghToken = await getOrgGithubAccessToken(
+          job.data.orgSettings.orgId,
+        );
+        if (ghToken) {
+          repoUrl = withGitCredentials(repoLog, ghToken);
+        }
+      }
+      const branch = job.data.branch?.trim();
+      const cloneArgs = ["clone", "--depth", "1"];
+      if (branch) cloneArgs.push("--branch", branch);
+      cloneArgs.push(repoUrl, path.join(workDir, "repo"));
+      try {
+        execFileSync("git", cloneArgs, {
+          timeout: 120000,
+          windowsHide: process.platform === "win32",
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : String(error);
+        if (!branch || !message.includes("Remote branch")) {
+          throw error;
+        }
+
+        log.warn(
+          { branch, repoUrl: repoLog },
+          "Git branch was not found; retrying clone with repository default branch",
+        );
+        execFileSync(
+          "git",
+          ["clone", "--depth", "1", repoUrl, path.join(workDir, "repo")],
+          {
+            timeout: 120000,
+            windowsHide: process.platform === "win32",
+          },
+        );
+      }
       // Move contents up
       const repoDir = path.join(workDir, "repo");
       if (fs.existsSync(repoDir)) {
@@ -79,10 +163,13 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
       // Verify svn CLI is available
       try {
-        execFileSync("svn", ["--version", "--quiet"], { timeout: 5000 });
+        execFileSync("svn", ["--version", "--quiet"], {
+          timeout: 5000,
+          windowsHide: process.platform === "win32",
+        });
       } catch {
         throw new Error(
-          "SVN CLI not found. Install Subversion (e.g. `brew install subversion`) on the worker.",
+          "SVN CLI not found. Install Subversion on the worker (e.g. apt install subversion, brew install subversion, or Windows: https://subversion.apache.org/packages.html).",
         );
       }
 
@@ -106,7 +193,10 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
       log.info({ svnUrl, svnRevision }, "SVN export starting");
       try {
-        execFileSync("svn", exportArgs, { timeout: 300000 });
+        execFileSync("svn", exportArgs, {
+          timeout: 300000,
+          windowsHide: process.platform === "win32",
+        });
       } catch (svnErr) {
         const msg = svnErr instanceof Error ? svnErr.message : String(svnErr);
         if (msg.includes("E170013") || msg.includes("Unable to connect")) {
@@ -149,6 +239,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
         const revOutput = execFileSync("svn", infoArgs, {
           timeout: 30000,
           encoding: "utf-8",
+          windowsHide: process.platform === "win32",
         }).trim();
 
         if (revOutput && /^\d+$/.test(revOutput)) {
@@ -170,6 +261,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
         fs.rmSync(repoDir, { recursive: true, force: true });
       }
     }
+    await assertScanActive();
 
     // 2. Enumerate files
     const fileList = enumerateFiles(workDir);
@@ -178,24 +270,28 @@ export async function processScanJob(job: Job<ScanJobData>) {
     // Helper: insert findings into DB and increment severity counts
     async function insertFindings(findings: RawFinding[]) {
       if (findings.length === 0) return;
+      await assertScanActive();
       await prisma.finding.createMany({
-        data: findings.map((f) => ({
-          scanId,
-          scanner: f.scanner,
-          severity: f.severity,
-          title: f.title,
-          description: f.description,
-          filePath: f.filePath,
-          startLine: f.startLine,
-          endLine: f.endLine,
-          snippet: f.snippet,
-          ruleId: f.ruleId,
-          cweId: f.cweId,
-          cveId: f.cveId,
-          confidence: f.confidence,
-          metadata: f.metadata as object,
-          masked: f.masked ?? false,
-        })),
+        data: findings.map((finding) => {
+          const f = enrichFindingWithReport(finding);
+          return {
+            scanId,
+            scanner: f.scanner,
+            severity: f.severity,
+            title: f.title,
+            description: f.description,
+            filePath: f.filePath,
+            startLine: f.startLine,
+            endLine: f.endLine,
+            snippet: f.snippet,
+            ruleId: f.ruleId,
+            cweId: f.cweId,
+            cveId: f.cveId,
+            confidence: f.confidence,
+            metadata: f.metadata as object,
+            masked: f.masked ?? false,
+          };
+        }),
       });
       const counts = countSeverities(findings);
       await prisma.scan.update({
@@ -220,7 +316,9 @@ export async function processScanJob(job: Job<ScanJobData>) {
       scanType,
       orgSettings,
       signal: abortController.signal,
+      waitIfPaused: assertScanActive,
       onProgress: async (msg) => {
+        await assertScanActive();
         log.info(msg);
         job.updateProgress({ message: msg });
 
@@ -252,6 +350,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
         scannerName: string,
         findings: RawFinding[],
       ) => {
+        await assertScanActive();
         log.info(
           { scanner: scannerName, findings: findings.length },
           "Scanner completed — inserting findings",
@@ -268,6 +367,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
         `;
       },
       onBatchFindings: async (scannerName: string, findings: RawFinding[]) => {
+        await assertScanActive();
         log.info(
           { scanner: scannerName, findings: findings.length },
           "Batch findings — inserting intermediate results",
@@ -287,46 +387,13 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
     // 4. Run scanners (findings are inserted incrementally via onScannerComplete)
     const result = await runScanners(ctx);
+    await assertScanActive();
     log.info(
       { findings: result.findings.length, deps: result.depsScanned },
       "Scan complete",
     );
 
-    // 6. Generate and upload SARIF
-    const sarif = buildSarif(result.findings);
-    const sarifJson = JSON.stringify(sarif, null, 2);
-    const sarifKey = `scans/${scanId}/results.sarif.json`;
-    await uploadObject(sarifKey, sarifJson, "application/json");
-
-    await prisma.scanArtifact.create({
-      data: {
-        scanId,
-        type: "SARIF",
-        objectKey: sarifKey,
-        size: Buffer.byteLength(sarifJson),
-      },
-    });
-
-    // 7. Generate and upload SBOM
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-    });
-    const dependencies = parseDependencies(workDir, fileList).dependencies;
-    const sbom = generateSbom(dependencies, project?.name || "unknown");
-    const sbomJson = JSON.stringify(sbom, null, 2);
-    const sbomKey = `scans/${scanId}/sbom.cyclonedx.json`;
-    await uploadObject(sbomKey, sbomJson, "application/json");
-
-    await prisma.scanArtifact.create({
-      data: {
-        scanId,
-        type: "SBOM_CYCLONEDX",
-        objectKey: sbomKey,
-        size: Buffer.byteLength(sbomJson),
-      },
-    });
-
-    // 8. Evaluate build gate (read current counts from DB since they were set incrementally)
+    // 6. Evaluate build gate (read current counts from DB since they were set incrementally)
     let gateResult: "PASSED" | "FAILED" = "PASSED";
     if (buildGate) {
       const currentScan = await prisma.scan.findUniqueOrThrow({
@@ -336,9 +403,14 @@ export async function processScanJob(job: Job<ScanJobData>) {
           highCount: true,
           mediumCount: true,
           lowCount: true,
+          createdAt: true,
         },
       });
+      const hasNewFindings = buildGate.failOnNew
+        ? await scanHasNewFindings(scanId, projectId, currentScan.createdAt)
+        : false;
       if (
+        hasNewFindings ||
         (buildGate.maxCritical >= 0 &&
           currentScan.criticalCount > buildGate.maxCritical) ||
         (buildGate.maxHigh >= 0 && currentScan.highCount > buildGate.maxHigh) ||
@@ -351,18 +423,34 @@ export async function processScanJob(job: Job<ScanJobData>) {
     }
 
     // 9. Update scan record (severity counts already incremented per-scanner)
-    await prisma.scan.update({
-      where: { id: scanId },
-      data: {
-        status: "COMPLETED",
-        completedAt: new Date(),
+    let completed = await markScanCompleted(scanId, {
+      filesScanned: result.filesScanned,
+      depsScanned: result.depsScanned,
+      gateResult,
+    });
+    if (completed.count === 0) {
+      await assertScanActive();
+      completed = await markScanCompleted(scanId, {
         filesScanned: result.filesScanned,
         depsScanned: result.depsScanned,
         gateResult,
-      },
-    });
+      });
+      if (completed.count === 0) {
+        abortController.abort();
+        throw new ScanCancelledError();
+      }
+    }
 
     log.info({ gateResult }, "Scan completed successfully");
+
+    try {
+      const { notifyScanLifecycleFromWorker } = await import(
+        "@/lib/scan-notifications"
+      );
+      await notifyScanLifecycleFromWorker(scanId, "SCAN_COMPLETED");
+    } catch (notifyErr) {
+      log.warn({ notifyErr }, "In-app notification failed (non-blocking)");
+    }
 
     // 10. Send email notification (non-blocking)
     try {
@@ -404,12 +492,10 @@ export async function processScanJob(job: Job<ScanJobData>) {
               member?.emailOnScanComplete ||
               (member?.emailOnGateFail && gateResult === "FAILED") ||
               (member?.emailOnCritical &&
-                (
-                  await prisma.scan.findUnique({
-                    where: { id: scanId },
-                    select: { criticalCount: true },
-                  })
-                )?.criticalCount! > 0);
+                ((await prisma.scan.findUnique({
+                  where: { id: scanId },
+                  select: { criticalCount: true },
+                }))?.criticalCount ?? 0) > 0);
 
             if (shouldEmail) {
               const scanCounts = await prisma.scan.findUnique({
@@ -456,15 +542,32 @@ export async function processScanJob(job: Job<ScanJobData>) {
       log.warn({ emailErr }, "Email notification failed (non-blocking)");
     }
   } catch (error) {
+    if (error instanceof ScanCancelledError) {
+      log.info("Scan cancelled");
+      return;
+    }
+    if (error instanceof ScanStoppedError) {
+      log.info("Scan stopped with partial findings preserved");
+      return;
+    }
+
     log.error({ error }, "Scan failed");
-    await prisma.scan.update({
-      where: { id: scanId },
+    await prisma.scan.updateMany({
+      where: { id: scanId, status: { notIn: ["CANCELLED", "STOPPED"] } },
       data: {
         status: "FAILED",
         completedAt: new Date(),
         errorMessage: error instanceof Error ? error.message : "Unknown error",
       },
     });
+    try {
+      const { notifyScanLifecycleFromWorker } = await import(
+        "@/lib/scan-notifications"
+      );
+      await notifyScanLifecycleFromWorker(scanId, "SCAN_FAILED");
+    } catch {
+      /* non-blocking */
+    }
     throw error;
   } finally {
     // Cleanup
@@ -474,6 +577,30 @@ export async function processScanJob(job: Job<ScanJobData>) {
       // ignore cleanup errors
     }
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function markScanCompleted(
+  scanId: string,
+  data: {
+    filesScanned: number;
+    depsScanned: number;
+    gateResult: "PASSED" | "FAILED";
+  },
+) {
+  return prisma.scan.updateMany({
+    where: { id: scanId, status: "RUNNING" },
+    data: {
+      status: "COMPLETED",
+      completedAt: new Date(),
+      filesScanned: data.filesScanned,
+      depsScanned: data.depsScanned,
+      gateResult: data.gateResult,
+    },
+  });
 }
 
 function enumerateFiles(dir: string, prefix = ""): string[] {
@@ -527,16 +654,75 @@ function countSeverities(findings: RawFinding[]) {
   return counts;
 }
 
-async function extractArchive(archivePath: string, destDir: string) {
-  const { execSync } = await import("child_process");
+async function scanHasNewFindings(
+  scanId: string,
+  projectId: string,
+  createdAt: Date,
+): Promise<boolean> {
+  const previousScan = await prisma.scan.findFirst({
+    where: {
+      projectId,
+      status: "COMPLETED",
+      id: { not: scanId },
+      createdAt: { lt: createdAt },
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      findings: {
+        select: {
+          scanner: true,
+          ruleId: true,
+          cweId: true,
+          cveId: true,
+          filePath: true,
+          startLine: true,
+          title: true,
+        },
+      },
+    },
+  });
 
-  if (archivePath.endsWith(".zip")) {
-    execSync(`unzip -o -q "${archivePath}" -d "${destDir}"`, {
-      timeout: 60000,
-    });
-  } else if (archivePath.endsWith(".tar.gz") || archivePath.endsWith(".tgz")) {
-    execSync(`tar -xzf "${archivePath}" -C "${destDir}"`, { timeout: 60000 });
-  } else if (archivePath.endsWith(".tar")) {
-    execSync(`tar -xf "${archivePath}" -C "${destDir}"`, { timeout: 60000 });
+  if (!previousScan) {
+    return false;
   }
+
+  const previousKeys = new Set(previousScan.findings.map(findingFingerprint));
+  const currentFindings = await prisma.finding.findMany({
+    where: { scanId, status: { not: "FALSE_POSITIVE" } },
+    select: {
+      scanner: true,
+      ruleId: true,
+      cweId: true,
+      cveId: true,
+      filePath: true,
+      startLine: true,
+      title: true,
+    },
+  });
+
+  return currentFindings.some(
+    (finding) => !previousKeys.has(findingFingerprint(finding)),
+  );
 }
+
+function findingFingerprint(finding: {
+  scanner: string;
+  ruleId: string | null;
+  cweId: string | null;
+  cveId: string | null;
+  filePath: string | null;
+  startLine: number | null;
+  title: string;
+}): string {
+  return [
+    finding.scanner,
+    finding.ruleId || finding.cveId || finding.cweId || normalizeFindingTitle(finding.title),
+    finding.filePath || "",
+    finding.startLine ? Math.floor(finding.startLine / 5) : 0,
+  ].join(":");
+}
+
+function normalizeFindingTitle(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+

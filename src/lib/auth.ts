@@ -43,8 +43,19 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.userId = user.id;
+      }
+
+      const userId =
+        (typeof user?.id === "string" ? user.id : undefined) ??
+        (typeof token.userId === "string" ? token.userId : undefined);
+      const shouldLoadMemberships =
+        userId !== undefined &&
+        (Boolean(user) || token.memberships === undefined);
+
+      if (shouldLoadMemberships) {
         const memberships = await prisma.orgMember.findMany({
-          where: { userId: user.id },
+          where: { userId },
+          orderBy: { createdAt: "asc" },
           include: { organization: { select: { name: true, slug: true } } },
         });
         token.memberships = memberships.map((m) => ({

@@ -107,7 +107,6 @@ src/scanners/
 │   │                           #   Phase 1: OSV batch for MAL-* advisories
 │   │                           #   Phase 2: Registry metadata (npm/PyPI/Maven/Go/Cargo/RubyGems)
 │   │                           #   Phase 3: LLM typosquat + install script analysis
-│   ├── sbom-generator.ts       # CycloneDX SBOM output
 │   └── parsers/                # Dependency manifest parsers (12 ecosystems):
 │       ├── package-json.ts     # npm: package.json, package-lock.json
 │       ├── requirements-txt.ts # PyPI: requirements.txt, Pipfile.lock
@@ -140,7 +139,6 @@ src/scanners/
 │   │                           # trust boundaries, auth flaws, parameter tampering, etc.
 │   └── file-prioritizer.ts     # Selects high-value files (auth, payment, API, admin)
 │
-├── sarif-builder.ts            # SARIF 2.1.0 output generator
 └── diff-parser.ts              # Git diff parser (for incremental scans)
 ```
 
@@ -156,10 +154,9 @@ src/worker/
 │                               #   2. Enumerate files
 │                               #   3. Run all scanners (parallel)
 │                               #   4. Insert findings to DB (streaming)
-│                               #   5. Generate SARIF + SBOM artifacts
-│                               #   6. Evaluate build gate
-│                               #   7. Send email notification
-│                               #   8. Cleanup temp files
+│                               #   5. Evaluate build gate
+│                               #   6. Send email notification
+│                               #   7. Cleanup temp files
 └── scheduler.ts                # Cron-like scheduler:
                                 #   Checks every 60s for due ScanSchedule records
                                 #   Creates Scan + enqueues BullMQ job
@@ -242,9 +239,8 @@ User/Webhook/Scheduler
   │  4. Stream findings to DB ◄──────────────────────┘    │
   │     (onBatchFindings + onScannerComplete)              │
   │                                                       │
-  │  5. Generate SARIF + SBOM ──▶ MinIO                   │
-  │  6. Evaluate build gate                               │
-  │  7. Send email notification (SMTP)                    │
+  │  5. Evaluate build gate                               │
+  │  6. Send email notification (SMTP)                    │
   └───────────────────────────────────────────────────────┘
 ```
 

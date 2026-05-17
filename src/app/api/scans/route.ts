@@ -4,10 +4,21 @@ import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { scanQueue, ScanJobData } from "@/lib/queue";
 import { uploadObject, ensureBucket } from "@/lib/minio";
 import { z } from "zod";
+import { withGitCredentials } from "@/lib/git-repo-url";
+import { parseGithubRepo } from "@/lib/github-source-link";
+import { getOrgGithubAccessToken } from "@/lib/github-connection";
+import { createProjectWithBuildGate } from "@/lib/create-project-with-build-gate";
+import {
+  projectNameFromGitUrl,
+  projectNameFromSvnUrl,
+  projectNameFromUploadFilename,
+} from "@/lib/project-name-from-source";
 
 const createScanSchema = z
   .object({
-    projectId: z.string(),
+    projectId: z.string().optional(),
+    /** When `projectId` is omitted, overrides inferred name from URL or file. */
+    newProjectName: z.string().max(100).optional(),
     scanType: z
       .enum(["FULL", "INCREMENTAL", "SAST_ONLY", "SCA_ONLY", "SECRETS_ONLY"])
       .default("FULL"),
@@ -15,6 +26,8 @@ const createScanSchema = z
     commitSha: z.string().optional(),
     baseSha: z.string().optional(),
     repoUrl: z.string().optional(),
+    /** Used only for clone; never stored on Scan.sourceRef. */
+    repoToken: z.string().optional(),
     svnUrl: z.string().url("Invalid SVN URL").optional(),
     svnRevision: z
       .string()
@@ -58,15 +71,71 @@ export async function POST(req: NextRequest) {
       scanParams = createScanSchema.parse(body);
     }
 
-    // Verify project exists and user has access
-    const project = await prisma.project.findUnique({
-      where: { id: scanParams.projectId },
+    const orgId = getDefaultOrgId(auth.session);
+    if (!orgId) {
+      return NextResponse.json({ error: "No organization" }, { status: 403 });
+    }
+
+    if (!fileBuffer && !scanParams.repoUrl && !scanParams.svnUrl) {
+      return NextResponse.json(
+        { error: "Provide a repository URL, SVN URL, or upload a source archive" },
+        { status: 400 },
+      );
+    }
+
+    const requestedProjectId = scanParams.projectId?.trim();
+    let effectiveProjectId = requestedProjectId;
+
+    if (!effectiveProjectId) {
+      const nameOverride = scanParams.newProjectName?.trim();
+      let name: string;
+      let repoUrl: string | null = null;
+      let defaultBranch = scanParams.branch?.trim() || "main";
+
+      if (fileBuffer) {
+        name =
+          nameOverride ||
+          projectNameFromUploadFilename(originalFileName || "source.zip");
+        defaultBranch = "main";
+      } else if (scanParams.repoUrl?.trim()) {
+        const u = scanParams.repoUrl.trim();
+        name = nameOverride || projectNameFromGitUrl(u);
+        repoUrl = u;
+      } else if (scanParams.svnUrl?.trim()) {
+        const u = scanParams.svnUrl.trim();
+        name = nameOverride || projectNameFromSvnUrl(u);
+        defaultBranch = "main";
+      } else {
+        return NextResponse.json(
+          {
+            error:
+              "Select an existing project or provide a repository URL, SVN URL, or upload",
+          },
+          { status: 400 },
+        );
+      }
+
+      const created = await createProjectWithBuildGate({
+        organizationId: orgId,
+        name,
+        repoUrl,
+        defaultBranch,
+      });
+      effectiveProjectId = created.id;
+    }
+
+    // Verify project exists in the caller's organization.
+    const project = await prisma.project.findFirst({
+      where: { id: effectiveProjectId, organizationId: orgId },
       include: { organization: true, buildGate: true },
     });
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
+
+    const { removeAllScansForProject } = await import("@/lib/remove-project-scans");
+    await removeAllScansForProject(effectiveProjectId);
 
     // Get org settings
     const orgSettings = await prisma.orgSettings.findUnique({
@@ -76,7 +145,7 @@ export async function POST(req: NextRequest) {
     // Create scan record
     const scan = await prisma.scan.create({
       data: {
-        projectId: scanParams.projectId,
+        projectId: effectiveProjectId,
         scanType: scanParams.scanType,
         branch: scanParams.branch,
         commitSha: scanParams.commitSha,
@@ -114,10 +183,23 @@ export async function POST(req: NextRequest) {
       data: { sourceRef },
     });
 
+    const orgGhToken = await getOrgGithubAccessToken(orgId);
+    const useOAuthClone = Boolean(
+      scanParams.repoUrl?.trim() &&
+        parseGithubRepo(scanParams.repoUrl) &&
+        orgGhToken &&
+        !scanParams.repoToken?.trim(),
+    );
+
     // Enqueue job
+    const cloneRepoUrl =
+      scanParams.repoUrl && scanParams.repoToken?.trim()
+        ? withGitCredentials(scanParams.repoUrl, scanParams.repoToken)
+        : scanParams.repoUrl;
+
     const jobData: ScanJobData = {
       scanId: scan.id,
-      projectId: scanParams.projectId,
+      projectId: effectiveProjectId,
       sourceType: fileBuffer
         ? "UPLOAD"
         : scanParams.repoUrl
@@ -129,12 +211,14 @@ export async function POST(req: NextRequest) {
       scanType: scanParams.scanType,
       baseSha: scanParams.baseSha,
       commitSha: scanParams.commitSha,
-      repoUrl: scanParams.repoUrl,
+      repoUrl: cloneRepoUrl,
+      repoUrlDisplay: scanParams.repoUrl,
       svnUrl: scanParams.svnUrl,
       svnRevision: scanParams.svnRevision,
       svnUsername: scanParams.svnUsername,
       svnPassword: scanParams.svnPassword,
       branch: scanParams.branch,
+      useOrgGithubToken: useOAuthClone,
       orgSettings: {
         llmProvider: orgSettings?.llmProvider || "openai",
         llmBaseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",
@@ -143,6 +227,10 @@ export async function POST(req: NextRequest) {
         enableLlmSast: orgSettings?.enableLlmSast ?? true,
         enableLlmSecrets: orgSettings?.enableLlmSecrets ?? true,
         osvApiUrl: orgSettings?.osvApiUrl || "https://api.osv.dev",
+        vulnDbMode: (orgSettings?.vulnDbMode || "online") as
+          | "online"
+          | "mirror"
+          | "offline",
         orgId: project.organizationId,
       },
       buildGate: project.buildGate
@@ -165,8 +253,22 @@ export async function POST(req: NextRequest) {
       data: { jobId: job.id },
     });
 
+    try {
+      const { createScanQueuedNotification } = await import(
+        "@/lib/scan-notifications"
+      );
+      await createScanQueuedNotification({
+        userId: auth.session.user.id,
+        organizationId: orgId,
+        scanId: scan.id,
+        projectName: project.name,
+      });
+    } catch (e) {
+      console.error("Failed to record notification:", e);
+    }
+
     return NextResponse.json(
-      { scanId: scan.id, status: "QUEUED" },
+      { scanId: scan.id, projectId: effectiveProjectId, status: "QUEUED" },
       { status: 201 },
     );
   } catch (error) {

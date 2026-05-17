@@ -169,6 +169,24 @@ sudo dnf install -y subversion
 
 Once installed, create a scan and select **SVN** as the source. Provide the full SVN URL including the path you want to scan (e.g. `https://svn.example.com/repos/myproject/trunk`), an optional revision number (leave blank for `HEAD`), and credentials if the repo is private.
 
+### GitHub repository connection (OAuth)
+
+Connect GitHub from **Repositories** in the sidebar to import repositories without pasting clone URLs or tokens.
+
+1. Create a [GitHub OAuth App](https://github.com/settings/developers) (type: OAuth App).
+2. Set **Authorization callback URL** to `{NEXTAUTH_URL}/api/integrations/github/callback` (e.g. `http://localhost:3000/api/integrations/github/callback`).
+3. Configure environment variables:
+
+| Variable | Description |
+| -------- | ----------- |
+| `GITHUB_OAUTH_CLIENT_ID` | OAuth App client ID (or reuse `GITHUB_ID`) |
+| `GITHUB_OAUTH_CLIENT_SECRET` | OAuth App client secret (or reuse `GITHUB_SECRET`) |
+| `TOKEN_ENCRYPTION_KEY` | Optional; encrypts stored tokens (defaults to `NEXTAUTH_SECRET`) |
+
+Pepper requests `read:user` and `repo` scopes (GitHub requires `repo` for private repository metadata and clone). The access token is stored **encrypted** in the database and is never exposed to the browser. After you import repositories, an initial full scan is queued automatically; private clones use the org token on the worker.
+
+Revoke access from **Settings → Integrations** or the Repositories page.
+
 ### Scan Scheduling
 
 Pepper can automatically scan your projects on a recurring schedule. Configure per-project in **Settings > Projects > [Project] > Schedule**.

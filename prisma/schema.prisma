@@ -19,8 +19,25 @@ model Organization {
   members          OrgMember[]
   projects         Project[]
   settings         OrgSettings?
+  githubConnection OrgGithubConnection?
   apiKeys          ApiKey[]
   securityPolicies SecurityPolicy[]
+  notifications    Notification[]
+}
+
+/// Org-scoped GitHub OAuth (repository import & private clone). Token stored encrypted.
+model OrgGithubConnection {
+  id               String    @id @default(cuid())
+  organizationId   String    @unique
+  githubUserId     String?
+  githubLogin      String?
+  accessTokenEnc   String    @db.Text
+  scope            String?
+  tokenExpiresAt   DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 model OrgMember {
@@ -61,6 +78,7 @@ model User {
   accounts    Account[]
   sessions    Session[]
   memberships OrgMember[]
+  notifications Notification[]
 }
 
 // NextAuth required models
@@ -110,10 +128,19 @@ model Project {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  /// Set when imported via GitHub OAuth (unique per org).
+  githubRepoId       Int?
+  githubOwner        String?
+  githubRepoName     String?
+  primaryLanguage    String?
+  connectedViaGithub Boolean @default(false)
+
   organization Organization @relation(fields: [organizationId], references: [id])
   scans        Scan[]
   buildGate    BuildGate?
   schedule     ScanSchedule?
+
+  @@unique([organizationId, githubRepoId])
 }
 
 model Scan {
@@ -126,7 +153,7 @@ model Scan {
   baseSha    String?
   sourceType SourceType @default(UPLOAD)
   sourceRef  String?
-  projectId  String
+  projectId  String     @unique
   triggeredBy String?
   jobId      String?
 
@@ -152,11 +179,33 @@ model Scan {
   project   Project        @relation(fields: [projectId], references: [id])
   findings  Finding[]
   artifacts ScanArtifact[]
+  notifications Notification[]
+}
+
+model Notification {
+  id               String   @id @default(cuid())
+  userId           String
+  organizationId String
+  type             String   @default("SCAN_QUEUED")
+  title            String
+  body             String?  @db.Text
+  read             Boolean  @default(false)
+  scanId           String?
+  createdAt        DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  scan         Scan?        @relation(fields: [scanId], references: [id], onDelete: SetNull)
+
+  @@index([userId, read, createdAt])
+  @@index([organizationId])
 }
 
 enum ScanStatus {
   QUEUED
   RUNNING
+  PAUSED
+  STOPPED
   COMPLETED
   FAILED
   CANCELLED
@@ -305,6 +354,8 @@ model OrgSettings {
   llmApiKey        String? @db.Text
   enableLlmSast    Boolean @default(true)
   enableLlmSecrets Boolean @default(true)
+  /** Fine-grained or classic PAT: contents + pull requests (repo scope for classic). Used only to open fix PRs. */
+  githubPrToken    String? @db.Text
   osvApiUrl        String  @default("https://api.osv.dev")
   vulnDbMode       String  @default("online")
 

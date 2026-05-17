@@ -30,9 +30,23 @@ export const scanQueue = new Proxy({} as Queue, {
 export interface ScanJobData {
   scanId: string;
   projectId: string;
-  sourceType: "UPLOAD" | "GIT_CLONE" | "SVN_CHECKOUT" | "WEBHOOK";
+  sourceType:
+    | "UPLOAD"
+    | "GIT_CLONE"
+    | "SVN_CHECKOUT"
+    | "WEBHOOK"
+    | "CONTAINER_IMAGE"
+    | "DAST_TARGET"
+    | "PRECOMMIT";
   sourceRef: string;
-  scanType: "FULL" | "INCREMENTAL" | "SAST_ONLY" | "SCA_ONLY" | "SECRETS_ONLY";
+  scanType:
+    | "FULL"
+    | "INCREMENTAL"
+    | "SAST_ONLY"
+    | "SCA_ONLY"
+    | "SECRETS_ONLY"
+    | "CONTAINER_ONLY"
+    | "DAST_ONLY";
   baseSha?: string;
   commitSha?: string;
   repoUrl?: string;
@@ -55,7 +69,12 @@ export interface ScanJobData {
     osvApiUrl: string;
     vulnDbMode: "online" | "mirror" | "offline";
     orgId?: string;
+    dastEnabled?: boolean;
+    dastTargetUrl?: string;
+    dastEndpoint?: string;
+    dastApiKey?: string;
   };
+  dastTargetUrl?: string;
   buildGate?: {
     maxCritical: number;
     maxHigh: number;

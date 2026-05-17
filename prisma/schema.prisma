@@ -23,6 +23,7 @@ model Organization {
   apiKeys          ApiKey[]
   securityPolicies SecurityPolicy[]
   notifications    Notification[]
+  integrations     IntegrationConfig[]
 }
 
 /// Org-scoped GitHub OAuth (repository import & private clone). Token stored encrypted.
@@ -135,6 +136,9 @@ model Project {
   primaryLanguage    String?
   connectedViaGithub Boolean @default(false)
 
+  /// Target URL for DAST (dapper) scans of this project.
+  dastTargetUrl      String?
+
   organization Organization @relation(fields: [organizationId], references: [id])
   scans        Scan[]
   buildGate    BuildGate?
@@ -217,6 +221,8 @@ enum ScanType {
   SAST_ONLY
   SCA_ONLY
   SECRETS_ONLY
+  CONTAINER_ONLY
+  DAST_ONLY
 }
 
 enum SourceType {
@@ -224,6 +230,9 @@ enum SourceType {
   GIT_CLONE
   SVN_CHECKOUT
   WEBHOOK
+  CONTAINER_IMAGE
+  DAST_TARGET
+  PRECOMMIT
 }
 
 enum GateResult {
@@ -280,6 +289,8 @@ enum Scanner {
   IAC
   MALICIOUS_PKG
   ZERO_DAY
+  CONTAINER
+  DAST
 }
 
 enum Severity {
@@ -306,7 +317,11 @@ model ScanArtifact {
 enum ArtifactType {
   SARIF
   SBOM_CYCLONEDX
+  SBOM_SPDX
   SCAN_LOG
+  CONTAINER_REPORT
+  DAST_REPORT
+  SIGNATURE
 }
 
 model BuildGate {
@@ -367,6 +382,17 @@ model OrgSettings {
   smtpFromAddress String?  @default("noreply@pepper-sast.local")
   smtpUseTls      Boolean  @default(true)
 
+  // DAST (dapper) integration
+  dastEnabled     Boolean  @default(false)
+  dastEndpoint    String?
+  dastApiKeyEnc   String?  @db.Text
+
+  // Code signing (cosign keyless or key-based)
+  codeSigningEnabled Boolean @default(false)
+  codeSigningMode    String  @default("keyless") // "keyless" | "key"
+  codeSigningKeyEnc  String? @db.Text
+  codeSigningIdentity String?
+
   organization Organization @relation(fields: [organizationId], references: [id])
 }
 
@@ -399,6 +425,31 @@ model ApiKey {
   createdAt      DateTime  @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
+}
+
+/// Outbound integrations: Jira, Slack, SIEM (HTTPS/syslog), DAST (dapper).
+model IntegrationConfig {
+  id             String          @id @default(cuid())
+  organizationId String
+  kind           IntegrationKind
+  name           String
+  enabled        Boolean         @default(true)
+  /// Encrypted JSON config (webhook URLs, API tokens, target hosts, etc.)
+  configEnc      String          @db.Text
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, kind])
+}
+
+enum IntegrationKind {
+  JIRA
+  SLACK
+  SIEM
+  DAST
+  CODE_SIGNING
 }
 
 model AuditLog {

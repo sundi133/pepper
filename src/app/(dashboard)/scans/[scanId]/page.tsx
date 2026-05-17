@@ -447,6 +447,36 @@ export default function ScanDetailPage() {
                   Compliance Report
                 </Button>
               )}
+              {scan.status === "COMPLETED" && (
+                <>
+                  <Button
+                    variant="outline"
+                    className={scanToolbarOutlineClass}
+                    onClick={() =>
+                      window.open(
+                        `/api/scans/${scanId}/artifacts/cyclonedx`,
+                        "_blank",
+                      )
+                    }
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    SBOM (CycloneDX)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className={scanToolbarOutlineClass}
+                    onClick={() =>
+                      window.open(
+                        `/api/scans/${scanId}/artifacts/spdx`,
+                        "_blank",
+                      )
+                    }
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    SBOM (SPDX)
+                  </Button>
+                </>
+              )}
             </>
           )}
         </div>

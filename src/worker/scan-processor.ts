@@ -11,6 +11,18 @@ import { createScanLogger } from "@/lib/logger";
 import { sendScanCompleteEmail } from "@/lib/email";
 import { extractArchive } from "@/lib/extract-archive";
 import { enrichFindingWithReport } from "@/lib/finding-report";
+import { uploadObject } from "@/lib/minio";
+import {
+  generateCycloneDx,
+  generateSpdx,
+} from "@/scanners/sca/sbom-generator";
+import {
+  signWithCosignKeyless,
+  signWithRsaKey,
+  digestOf,
+  type SignatureBundle,
+} from "@/lib/code-signing";
+import { decryptSecret } from "@/lib/token-encryption";
 
 // prisma is imported from @/lib/prisma
 
@@ -314,7 +326,11 @@ export async function processScanJob(job: Job<ScanJobData>) {
       workDir,
       fileList,
       scanType,
-      orgSettings,
+      scanId,
+      orgSettings: {
+        ...orgSettings,
+        dastTargetUrl: job.data.dastTargetUrl || orgSettings.dastTargetUrl,
+      },
       signal: abortController.signal,
       waitIfPaused: assertScanActive,
       onProgress: async (msg) => {
@@ -393,6 +409,134 @@ export async function processScanJob(job: Job<ScanJobData>) {
       "Scan complete",
     );
 
+    // 5. Generate SBOMs (CycloneDX + SPDX) from parsed dependencies
+    if (result.dependencies.length > 0) {
+      try {
+        const project = await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { name: true },
+        });
+        const scanMeta = await prisma.scan.findUnique({
+          where: { id: scanId },
+          select: { commitSha: true, branch: true },
+        });
+        const sbomMeta = {
+          projectName: project?.name || "unknown",
+          projectVersion: scanMeta?.commitSha || undefined,
+          scanId,
+          commitSha: scanMeta?.commitSha || undefined,
+          branch: scanMeta?.branch || undefined,
+        };
+        const cyclone = generateCycloneDx(result.dependencies, sbomMeta);
+        const spdx = generateSpdx(result.dependencies, sbomMeta);
+        const cycloneKey = `sboms/${scanId}/cyclonedx.json`;
+        const spdxKey = `sboms/${scanId}/spdx.json`;
+        await uploadObject(cycloneKey, cyclone, "application/vnd.cyclonedx+json");
+        await uploadObject(spdxKey, spdx, "application/spdx+json");
+        await prisma.scanArtifact.upsert({
+          where: { scanId_type: { scanId, type: "SBOM_CYCLONEDX" } },
+          create: {
+            scanId,
+            type: "SBOM_CYCLONEDX",
+            objectKey: cycloneKey,
+            size: Buffer.byteLength(cyclone),
+          },
+          update: {
+            objectKey: cycloneKey,
+            size: Buffer.byteLength(cyclone),
+          },
+        });
+        await prisma.scanArtifact.upsert({
+          where: { scanId_type: { scanId, type: "SBOM_SPDX" } },
+          create: {
+            scanId,
+            type: "SBOM_SPDX",
+            objectKey: spdxKey,
+            size: Buffer.byteLength(spdx),
+          },
+          update: {
+            objectKey: spdxKey,
+            size: Buffer.byteLength(spdx),
+          },
+        });
+        log.info(
+          { deps: result.dependencies.length },
+          "SBOMs generated (CycloneDX + SPDX)",
+        );
+
+        // Sign SBOMs if code signing is enabled for this org
+        try {
+          const signingSettings = await prisma.orgSettings.findUnique({
+            where: { organizationId: orgSettings.orgId || "" },
+            select: {
+              codeSigningEnabled: true,
+              codeSigningMode: true,
+              codeSigningKeyEnc: true,
+              codeSigningIdentity: true,
+            },
+          });
+          if (signingSettings?.codeSigningEnabled) {
+            const bundles: Record<string, SignatureBundle> = {};
+            for (const [label, body] of [
+              ["cyclonedx", cyclone],
+              ["spdx", spdx],
+            ] as const) {
+              let bundle: SignatureBundle | null = null;
+              if (
+                signingSettings.codeSigningMode === "keyless" ||
+                !signingSettings.codeSigningKeyEnc
+              ) {
+                bundle = await signWithCosignKeyless(
+                  digestOf(body),
+                  signingSettings.codeSigningIdentity || undefined,
+                );
+              }
+              if (!bundle && signingSettings.codeSigningKeyEnc) {
+                try {
+                  const pem = decryptSecret(signingSettings.codeSigningKeyEnc);
+                  bundle = signWithRsaKey(
+                    body,
+                    pem,
+                    undefined,
+                    signingSettings.codeSigningIdentity || undefined,
+                  );
+                } catch {
+                  /* fall through */
+                }
+              }
+              if (bundle) bundles[label] = bundle;
+            }
+            if (Object.keys(bundles).length > 0) {
+              const sigKey = `signatures/${scanId}/signatures.json`;
+              const sigJson = JSON.stringify(bundles, null, 2);
+              await uploadObject(sigKey, sigJson, "application/json");
+              await prisma.scanArtifact.upsert({
+                where: { scanId_type: { scanId, type: "SIGNATURE" } },
+                create: {
+                  scanId,
+                  type: "SIGNATURE",
+                  objectKey: sigKey,
+                  size: Buffer.byteLength(sigJson),
+                },
+                update: {
+                  objectKey: sigKey,
+                  size: Buffer.byteLength(sigJson),
+                },
+              });
+              log.info(
+                { artifacts: Object.keys(bundles) },
+                "Artifacts signed",
+              );
+            }
+          }
+        } catch (signErr) {
+          log.warn({ signErr }, "Code signing failed (non-blocking)");
+        }
+      } catch (sbomErr) {
+        log.warn({ sbomErr }, "SBOM generation failed (non-blocking)");
+      }
+    }
+
     // 6. Evaluate build gate (read current counts from DB since they were set incrementally)
     let gateResult: "PASSED" | "FAILED" = "PASSED";
     if (buildGate) {
@@ -450,6 +594,18 @@ export async function processScanJob(job: Job<ScanJobData>) {
       await notifyScanLifecycleFromWorker(scanId, "SCAN_COMPLETED");
     } catch (notifyErr) {
       log.warn({ notifyErr }, "In-app notification failed (non-blocking)");
+    }
+
+    try {
+      const { dispatchScanCompleteIntegrations } = await import(
+        "@/lib/integrations/scan-dispatcher"
+      );
+      await dispatchScanCompleteIntegrations(scanId);
+    } catch (intErr) {
+      log.warn(
+        { intErr },
+        "Integration dispatch failed (Slack/Jira/SIEM) — non-blocking",
+      );
     }
 
     // 10. Send email notification (non-blocking)

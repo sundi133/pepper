@@ -14,6 +14,11 @@ import {
   Webhook,
   ScrollText,
   BookOpen,
+  TrendingUp,
+  KeyRound,
+  History,
+  Globe,
+  FileSignature,
   type LucideIcon,
 } from "lucide-react";
 
@@ -24,14 +29,19 @@ export const mainNavigation: NavItem[] = [
   { name: "New Scan", href: "/scans/new", icon: PlusCircle },
   { name: "Projects", href: "/projects", icon: FolderOpen },
   { name: "Repositories", href: "/repositories", icon: Github },
+  { name: "Trends", href: "/trends", icon: TrendingUp },
 ];
 
 export const settingsNavigation: NavItem[] = [
   { name: "LLM Config", href: "/settings/llm", icon: Zap },
   { name: "Policies", href: "/settings/policies", icon: ScrollText },
   { name: "Build Gates", href: "/settings/build-gates", icon: ShieldCheck },
+  { name: "DAST", href: "/settings/dast", icon: Globe },
+  { name: "Code Signing", href: "/settings/signing", icon: FileSignature },
   { name: "Team", href: "/settings/team", icon: Users },
   { name: "Integrations", href: "/settings/integrations", icon: Webhook },
+  { name: "API Keys", href: "/settings/apikeys", icon: KeyRound },
+  { name: "Audit Log", href: "/settings/audit-log", icon: History },
   { name: "Documentation", href: "/settings/documentation", icon: BookOpen },
 ];
 

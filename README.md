@@ -306,3 +306,29 @@ npm run worker
 ```
 
 Login with `admin@pepper.local` / `pepper-admin-changeme` (or whatever you set in `.env`).
+
+## CI/CD security features
+
+Pepper ships with end-to-end pipeline security primitives:
+
+- **SBOM generation** — every scan emits both **CycloneDX 1.5** and **SPDX 2.3**
+  documents. Download via `/api/scans/<scanId>/artifacts/cyclonedx` (or `spdx`),
+  or from the scan detail page.
+- **Container scanning** — Dockerfiles and Compose files are parsed for image
+  references and scanned with `trivy` when available. Falls back to image
+  inventory when Trivy isn't installed.
+- **Pre-commit hook** — install with
+  `curl -fsSL $PEPPER_API_URL/api/precommit/install.sh | bash -s -- $PEPPER_API_URL <API_KEY>`.
+  Blocks commits with HIGH/CRITICAL secrets or SAST issues.
+- **Outbound integrations** — Slack, Jira (auto-tickets for severe findings),
+  SIEM (CEF / LEEF / JSON over HTTPS or syslog), and code signing
+  (cosign keyless via Fulcio + Rekor, or RSA fallback).
+- **DAST** — integrates with [dapper](https://github.com/sundi133/dapper)
+  via HTTP API or local CLI. Configure once under Settings → DAST and set a
+  `dastTargetUrl` per project.
+- **CI/CD templates** — download ready-to-use GitHub Actions, GitLab CI and
+  Jenkinsfile templates from `/api/cicd-templates/<platform>`.
+- **API keys** — manage CI/IDE/precommit credentials under Settings → API Keys.
+- **Audit log** — view security-relevant actions under Settings → Audit Log.
+- **Trends** — historical severity, gate failures, and mean-time-to-resolve
+  charts at `/trends`.

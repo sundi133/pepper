@@ -181,21 +181,57 @@ export default function IntegrationsPage() {
             <Badge variant="outline">API</Badge>
           </div>
           <CardDescription>
-            Integrate scans into any CI pipeline using the API
+            Drop-in pipeline templates with fail-build gates, SBOM upload and
+            optional cosign signing.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="text-sm space-y-2">
-            <p className="font-medium">Example: GitHub Actions</p>
-            <pre className="rounded-md bg-muted p-4 text-xs overflow-x-auto">
-              {`- name: Run Pepper Scan
-  run: |
-    curl -X POST \\
-      \${PEPPER_URL}/api/scans \\
-      -H "Authorization: Bearer \${PEPPER_API_KEY}" \\
-      -F "data={\\\"projectId\\\":\\\"...\\\",\\\"scanType\\\":\\\"FULL\\\"}" \\
-      -F "file=@source.zip"`}
-            </pre>
+        <CardContent className="space-y-4 text-sm">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <a href="/api/cicd-templates/github" download>
+                GitHub Actions
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/api/cicd-templates/gitlab" download>
+                GitLab CI
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/api/cicd-templates/jenkins" download>
+                Jenkinsfile
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/settings/apikeys">Manage API keys</Link>
+            </Button>
+          </div>
+          <p className="text-muted-foreground">
+            Each template uses <code>PEPPER_API_URL</code> +{" "}
+            <code>PEPPER_API_KEY</code>, downloads CycloneDX + SPDX SBOMs, and
+            fails the build when the project&apos;s build gate is breached.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Outbound integrations</CardTitle>
+          <CardDescription>
+            Send findings and scan summaries to ticketing, chat and SIEM tools.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/settings/integrations/outbound">Slack, Jira, SIEM, Dapper</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/settings/integrations/precommit">Pre-commit hook</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/settings/integrations/ide">IDE plugins</Link>
+            </Button>
           </div>
         </CardContent>
       </Card>

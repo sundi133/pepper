@@ -8,6 +8,8 @@ import { withGitCredentials } from "@/lib/git-repo-url";
 import { parseGithubRepo } from "@/lib/github-source-link";
 import { getOrgGithubAccessToken } from "@/lib/github-connection";
 import { createProjectWithBuildGate } from "@/lib/create-project-with-build-gate";
+import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import {
   projectNameFromGitUrl,
   projectNameFromSvnUrl,
@@ -219,20 +221,8 @@ export async function POST(req: NextRequest) {
       svnPassword: scanParams.svnPassword,
       branch: scanParams.branch,
       useOrgGithubToken: useOAuthClone,
-      orgSettings: {
-        llmProvider: orgSettings?.llmProvider || "openai",
-        llmBaseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",
-        llmModel: orgSettings?.llmModel || "gpt-4o-mini",
-        llmApiKey: orgSettings?.llmApiKey || undefined,
-        enableLlmSast: orgSettings?.enableLlmSast ?? true,
-        enableLlmSecrets: orgSettings?.enableLlmSecrets ?? true,
-        osvApiUrl: orgSettings?.osvApiUrl || "https://api.osv.dev",
-        vulnDbMode: (orgSettings?.vulnDbMode || "online") as
-          | "online"
-          | "mirror"
-          | "offline",
-        orgId: project.organizationId,
-      },
+      orgSettings: buildOrgSettingsForJob(orgSettings, project.organizationId),
+      dastTargetUrl: project.dastTargetUrl || undefined,
       buildGate: project.buildGate
         ? {
             maxCritical: project.buildGate.maxCritical,
@@ -266,6 +256,16 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       console.error("Failed to record notification:", e);
     }
+
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "scan.queued",
+      resource: "scan",
+      resourceId: scan.id,
+      details: { scanType: scanParams.scanType, sourceType: jobData.sourceType },
+      ipAddress: ipFromHeaders(req.headers),
+    });
 
     return NextResponse.json(
       { scanId: scan.id, projectId: effectiveProjectId, status: "QUEUED" },

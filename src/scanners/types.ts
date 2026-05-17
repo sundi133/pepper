@@ -7,7 +7,9 @@ export type ScannerType =
   | "SECRETS_LLM"
   | "IAC"
   | "MALICIOUS_PKG"
-  | "ZERO_DAY";
+  | "ZERO_DAY"
+  | "CONTAINER"
+  | "DAST";
 
 export interface ScanContext {
   workDir: string;
@@ -23,7 +25,12 @@ export interface ScanContext {
     osvApiUrl: string;
     vulnDbMode: "online" | "mirror" | "offline";
     orgId?: string;
+    dastEnabled?: boolean;
+    dastTargetUrl?: string;
+    dastEndpoint?: string;
+    dastApiKey?: string;
   };
+  scanId?: string;
   signal?: AbortSignal;
   waitIfPaused?: () => Promise<void>;
   onProgress?: (message: string) => void;

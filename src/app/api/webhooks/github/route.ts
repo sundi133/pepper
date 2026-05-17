@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { scanQueue, ScanJobData } from "@/lib/queue";
+import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
 import crypto from "crypto";
 
 export async function POST(req: NextRequest) {
@@ -77,19 +78,8 @@ export async function POST(req: NextRequest) {
       commitSha: headSha,
       repoUrl,
       branch,
-      orgSettings: {
-        llmProvider: settings?.llmProvider || "openai",
-        llmBaseUrl: settings?.llmBaseUrl || "https://api.openai.com/v1",
-        llmModel: settings?.llmModel || "gpt-4o-mini",
-        llmApiKey: settings?.llmApiKey || undefined,
-        enableLlmSast: settings?.enableLlmSast ?? true,
-        enableLlmSecrets: settings?.enableLlmSecrets ?? true,
-        osvApiUrl: settings?.osvApiUrl || "https://api.osv.dev",
-        vulnDbMode: (settings?.vulnDbMode || "online") as
-          | "online"
-          | "mirror"
-          | "offline",
-      },
+      orgSettings: buildOrgSettingsForJob(settings, project.organizationId),
+      dastTargetUrl: project.dastTargetUrl || undefined,
       buildGate: project.buildGate
         ? {
             maxCritical: project.buildGate.maxCritical,

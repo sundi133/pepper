@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { scanQueue, ScanJobData } from "@/lib/queue";
+import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
 import { computeNextRun } from "@/lib/schedule-utils";
 import { logger } from "@/lib/logger";
 
@@ -103,20 +104,8 @@ async function checkDueSchedules() {
         scanType: schedule.scanType as ScanJobData["scanType"],
         repoUrl: project.repoUrl,
         branch: schedule.branch || project.defaultBranch,
-        orgSettings: {
-          llmProvider: orgSettings?.llmProvider || "openai",
-          llmBaseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",
-          llmModel: orgSettings?.llmModel || "gpt-4o-mini",
-          llmApiKey: orgSettings?.llmApiKey || undefined,
-          enableLlmSast: orgSettings?.enableLlmSast ?? true,
-          enableLlmSecrets: orgSettings?.enableLlmSecrets ?? true,
-          osvApiUrl: orgSettings?.osvApiUrl || "https://api.osv.dev",
-          vulnDbMode: (orgSettings?.vulnDbMode || "online") as
-            | "online"
-            | "mirror"
-            | "offline",
-          orgId: project.organizationId,
-        },
+        orgSettings: buildOrgSettingsForJob(orgSettings, project.organizationId),
+        dastTargetUrl: project.dastTargetUrl || undefined,
         buildGate: project.buildGate
           ? {
               maxCritical: project.buildGate.maxCritical,

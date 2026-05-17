@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pepper SAST — Deployment</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo">P</div>
+        <div>
+          <h1>Pepper SAST</h1>
+          <span>Documentation</span>
+        </div>
+      </div>
+      <nav>
+        <section>
+          <h2>Guide</h2>
+          <ul>
+            <li><a href="index.html">Overview</a></li>
+            <li><a href="faq.html">Feature FAQ</a></li>
+            <li><a href="getting-started.html">Getting started</a></li>
+            <li><a href="user-guide.html">How to use</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Operate</h2>
+          <ul>
+            <li><a href="deployment.html" class="active">Deployment</a></li>
+            <li><a href="ci-cd.html">CI/CD recipes</a></li>
+            <li><a href="api.html">API reference</a></li>
+            <li><a href="configuration.html">Environment vars</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Settings</h2>
+          <ul>
+            <li><a href="settings.html">All settings</a></li>
+          </ul>
+        </section>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <h1>Deployment</h1>
+      <p class="lead">
+        Pepper ships as a Docker-Compose stack (API + worker + Postgres + Redis +
+        MinIO) plus an optional Ollama service. The database schema applies itself on
+        container startup, so day-two operations are <em>pull → up</em>.
+      </p>
+
+      <h2>System requirements</h2>
+      <table>
+        <thead><tr><th>Resource</th><th>Minimum</th><th>Recommended</th></tr></thead>
+        <tbody>
+          <tr><td>Docker</td><td>24+</td><td>Latest LTS</td></tr>
+          <tr><td>Docker Compose</td><td>v2</td><td>v2.20+</td></tr>
+          <tr><td>RAM</td><td>4 GB</td><td>8 GB (16 GB with Ollama)</td></tr>
+          <tr><td>Disk</td><td>20 GB</td><td>100 GB+ for scan artifacts</td></tr>
+          <tr><td>CPU</td><td>2 cores</td><td>4–8 cores</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Optional dependencies installed on the worker:
+        <code>trivy</code> (container scanning),
+        <code>cosign</code> (keyless signing),
+        <code>svn</code> (Subversion checkouts),
+        <code>dapper</code> CLI (when not using the HTTP DAST mode).
+      </p>
+
+      <h2>Quickstart — Docker (recommended)</h2>
+      <pre><code>mkdir pepper &amp;&amp; cd pepper
+# Copy setup.sh, docker-compose.yml, .env.example into this directory
+chmod +x setup.sh
+./setup.sh</code></pre>
+      <p>The setup script:</p>
+      <ol>
+        <li>Installs Docker if missing</li>
+        <li>Installs Ollama and pulls <code>qwen2.5-coder:7b</code></li>
+        <li>Generates random secrets into <code>.env</code></li>
+        <li>Pulls images and starts every service</li>
+        <li>Prints the admin login on stdout</li>
+      </ol>
+      <p>Skip Ollama (smaller boxes) with:</p>
+      <pre><code>./setup.sh --no-ollama
+OLLAMA_MODEL=qwen2.5-coder:3b ./setup.sh</code></pre>
+
+      <h2>Manual install</h2>
+      <pre><code># 1. Install dependencies
+npm install
+
+# 2. Configure env
+cp .env.example .env
+$EDITOR .env
+
+# 3. Start infrastructure
+docker compose up -d postgres redis minio
+
+# 4. Apply schema + seed admin
+npm run db:setup    # migrate deploy + db push + seed (all idempotent)
+
+# 5. Start the web server
+npm run dev         # http://localhost:3000
+
+# 6. In a separate terminal, start the worker
+npm run worker</code></pre>
+      <p>Login with the credentials from <code>.env</code>
+        (default: <code>admin@pepper.local</code> / <code>pepper-admin-changeme</code>).</p>
+
+      <h2 id="db">Database schema lifecycle</h2>
+      <p>
+        Pepper uses <a href="https://www.prisma.io/docs/orm/prisma-migrate">Prisma
+        Migrate</a> in production. The Docker API container's entrypoint
+        (<code>scripts/docker-entrypoint-api.sh</code>) runs both
+        <code>prisma migrate deploy</code> <strong>and</strong>
+        <code>prisma db push</code> before starting Next.js, so the schema is always in
+        sync regardless of how the DB was originally provisioned.
+      </p>
+      <h3>Available scripts</h3>
+      <table>
+        <thead><tr><th>Script</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>npm run db:setup</code></td><td>Migrate-deploy (no-op when already applied) + db push + seed. Use for first install or after upgrades.</td></tr>
+          <tr><td><code>npm run db:deploy</code></td><td>Just <code>prisma migrate deploy</code>. Use in CI.</td></tr>
+          <tr><td><code>npm run db:push</code></td><td>Sync the live schema to <code>schema.prisma</code> without producing a migration file. Dev only.</td></tr>
+          <tr><td><code>npm run db:migrate</code></td><td><code>prisma migrate dev</code> — create a new migration during development.</td></tr>
+          <tr><td><code>npm run db:seed</code></td><td>Idempotent seed (admin org + admin user).</td></tr>
+          <tr><td><code>npm run db:generate</code></td><td>Regenerate the Prisma client into <code>src/generated/prisma</code>.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Migrations folder</h3>
+      <p>
+        Tracked migrations live under <code>prisma/migrations/</code>. The included
+        migration <code>20260517_cicd_security_features</code> is idempotent (uses
+        <code>ADD VALUE IF NOT EXISTS</code> / <code>ADD COLUMN IF NOT EXISTS</code> /
+        <code>CREATE TABLE IF NOT EXISTS</code>), so it applies cleanly whether your DB
+        was previously synced via <code>db push</code> or starts fresh.
+      </p>
+
+      <h2>Upgrading</h2>
+      <pre><code>cd pepper
+docker compose pull
+docker compose up -d</code></pre>
+      <p>
+        The API container will run schema sync on boot. Worker restarts pick up the new
+        Prisma client automatically (it's baked into the image).
+      </p>
+
+      <h2>Worker scaling</h2>
+      <p>
+        BullMQ is the job queue. Scale by raising the worker replica count in
+        <code>docker-compose.yml</code>:
+      </p>
+      <pre><code>sast-worker:
+  deploy:
+    replicas: 4
+  environment:
+    WORKER_CONCURRENCY: "4"
+    MAX_LLM_CONCURRENCY: "10"</code></pre>
+      <ul>
+        <li><code>WORKER_CONCURRENCY</code> — concurrent scans per worker process.</li>
+        <li><code>MAX_LLM_CONCURRENCY</code> — concurrent LLM batches; tune to your
+          provider's rate limits.</li>
+      </ul>
+
+      <h2>Optional worker tools</h2>
+      <p>
+        Some features unlock when extra binaries are present on the worker image. Edit
+        the <code>worker</code> stage of <code>Dockerfile</code> to add them:
+      </p>
+      <pre><code>FROM base AS worker
+RUN apk add --no-cache git unzip subversion \
+ &amp;&amp; apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community trivy \
+ &amp;&amp; wget -q -O /usr/local/bin/cosign https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 \
+ &amp;&amp; chmod +x /usr/local/bin/cosign</code></pre>
+      <table>
+        <thead><tr><th>Binary</th><th>Unlocks</th></tr></thead>
+        <tbody>
+          <tr><td><code>trivy</code></td><td>Real container vulnerability scanning (otherwise inventory only).</td></tr>
+          <tr><td><code>cosign</code></td><td>Keyless SBOM signing (otherwise RSA fallback only).</td></tr>
+          <tr><td><code>svn</code></td><td>Subversion source checkouts.</td></tr>
+          <tr><td><code>dapper</code></td><td>Local-CLI DAST mode (alternative: HTTP mode).</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Observability</h2>
+      <ul>
+        <li>Worker logs are structured JSON (pino) — pipe to your log aggregator.</li>
+        <li>Scan progress is written to <code>Scan.scannerProgress</code> as JSONB and
+          surfaced live in the UI.</li>
+        <li>Audit log is queryable via <code>GET /api/audit-log</code>.</li>
+        <li>Trend metrics: <code>GET /api/dashboard/trends?days=30</code>.</li>
+      </ul>
+
+      <h2>Backup</h2>
+      <p>Two stateful services need backup:</p>
+      <ul>
+        <li><strong>Postgres</strong> — <code>pg_dump</code> the <code>pepper</code> database.</li>
+        <li><strong>MinIO</strong> — <code>mc mirror</code> the
+          <code>pepper-artifacts</code> bucket (holds scan logs, SBOMs, signatures).</li>
+      </ul>
+      <p>Redis state is transient (job queue) and can be lost without data loss.</p>
+
+      <h2>Air-gapped operation</h2>
+      <ul>
+        <li>Set <code>vulnDbMode = mirror</code> or <code>offline</code> in
+          <em>Settings → LLM Config</em> to disable OSV egress.</li>
+        <li>Point <code>osvApiUrl</code> at an internal OSV mirror if you maintain one.</li>
+        <li>Use Ollama (local LLM) instead of an external API.</li>
+        <li>The pre-commit and CI templates only need network to reach the Pepper API
+          itself; no egress to OSV / OpenAI is required from developer machines.</li>
+      </ul>
+
+      <h2>Troubleshooting</h2>
+      <h3>API can't reach the database</h3>
+      <p>
+        Check <code>DATABASE_URL</code>. The Docker stack uses
+        <code>postgresql://pepper:&lt;password&gt;@postgres:5432/pepper</code> —
+        <code>postgres</code> is the service name, not <code>localhost</code>.
+      </p>
+      <h3>Worker says "MinIO connection refused"</h3>
+      <p>
+        Set <code>MINIO_ENDPOINT=minio</code> when running under Compose, or
+        <code>localhost</code> when running outside Docker.
+      </p>
+      <h3>LLM scans never finish</h3>
+      <p>
+        Lower <code>MAX_LLM_CONCURRENCY</code> — most rate limits are per-second, not
+        per-minute. Check <em>Settings → LLM Config</em> shows the right base URL and
+        model.
+      </p>
+      <h3>Migration won't apply</h3>
+      <p>
+        The shipped migration is idempotent, but if Prisma's
+        <code>_prisma_migrations</code> table thinks something is in-flight, run
+        <code>npx prisma migrate resolve --applied 20260517_cicd_security_features</code>
+        to mark it applied, then restart the container.
+      </p>
+    </main>
+  </div>
+</body>
+</html>

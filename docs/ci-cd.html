@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pepper SAST — CI/CD recipes</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo">P</div>
+        <div>
+          <h1>Pepper SAST</h1>
+          <span>Documentation</span>
+        </div>
+      </div>
+      <nav>
+        <section>
+          <h2>Guide</h2>
+          <ul>
+            <li><a href="index.html">Overview</a></li>
+            <li><a href="faq.html">Feature FAQ</a></li>
+            <li><a href="getting-started.html">Getting started</a></li>
+            <li><a href="user-guide.html">How to use</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Operate</h2>
+          <ul>
+            <li><a href="deployment.html">Deployment</a></li>
+            <li><a href="ci-cd.html" class="active">CI/CD recipes</a></li>
+            <li><a href="api.html">API reference</a></li>
+            <li><a href="configuration.html">Environment vars</a></li>
+          </ul>
+        </section>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <h1>CI/CD recipes</h1>
+      <p class="lead">
+        Pepper exposes drop-in pipeline templates for the major CI systems. Each
+        template uploads the source, polls until the scan finishes, downloads SBOMs,
+        signs them with cosign, and fails the build when the project's build gate is
+        breached.
+      </p>
+
+      <h2>Issue an API key</h2>
+      <p>
+        Pipelines authenticate with an API key (<em>Settings → API Keys → Create</em>),
+        which produces a one-shot token like <code>ppr_xxxxxxxxxxxxxxxxxxxxxxxx</code>.
+        Store it as a CI secret:
+      </p>
+      <ul>
+        <li>GitHub: <em>Repository → Settings → Secrets and variables → Actions</em></li>
+        <li>GitLab: <em>Project → Settings → CI/CD → Variables</em> (mark "Masked" + "Protected")</li>
+        <li>Jenkins: <em>Manage Jenkins → Credentials → Secret text</em></li>
+      </ul>
+      <p>You will also need <code>PEPPER_API_URL</code> (your Pepper base URL).</p>
+
+      <h2 id="download-templates">Download a ready-to-use template</h2>
+      <p>
+        Every Pepper instance hosts the latest templates at
+        <code>/api/cicd-templates/&lt;platform&gt;</code>:
+      </p>
+      <pre><code>curl -sL https://pepper.your-org.com/api/cicd-templates/github   -o .github/workflows/pepper.yml
+curl -sL https://pepper.your-org.com/api/cicd-templates/gitlab   -o .gitlab-ci.pepper.yml
+curl -sL https://pepper.your-org.com/api/cicd-templates/jenkins  -o Jenkinsfile</code></pre>
+
+      <h2 id="github-actions">GitHub Actions</h2>
+      <p>Save as <code>.github/workflows/pepper.yml</code>:</p>
+      <pre><code>name: Pepper Security Scan
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write   # required for cosign keyless signing
+  pull-requests: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pepper scan
+        id: pepper
+        env:
+          PEPPER_API_URL: ${{ secrets.PEPPER_API_URL }}
+          PEPPER_API_KEY: ${{ secrets.PEPPER_API_KEY }}
+        run: |
+          set -euo pipefail
+          tarball=$(mktemp -u).tar.gz
+          tar --exclude-vcs --exclude=node_modules --exclude=dist -czf "$tarball" .
+          resp=$(curl -fsSL -X POST \
+            -H "Authorization: Bearer $PEPPER_API_KEY" \
+            -F "source=@$tarball" \
+            -F "scanType=FULL" \
+            -F "branch=${GITHUB_REF_NAME}" \
+            -F "commitSha=${GITHUB_SHA}" \
+            "$PEPPER_API_URL/api/scans")
+          scan_id=$(echo "$resp" | jq -r '.scanId')
+          echo "scan_id=$scan_id" >> "$GITHUB_OUTPUT"
+
+          for i in $(seq 1 180); do
+            scan=$(curl -fsSL -H "Authorization: Bearer $PEPPER_API_KEY" \
+              "$PEPPER_API_URL/api/scans/$scan_id")
+            status=$(echo "$scan" | jq -r .status)
+            [[ "$status" == "COMPLETED" || "$status" == "FAILED" ]] &amp;&amp; break
+            sleep 10
+          done
+
+          gate=$(echo "$scan" | jq -r .gateResult)
+          echo "Scan $scan_id status=$status gate=$gate"
+          if [[ "$gate" == "FAILED" ]]; then
+            echo "::error::Pepper build gate failed"
+            exit 1
+          fi
+
+      - name: Download SBOM
+        if: always()
+        env:
+          PEPPER_API_URL: ${{ secrets.PEPPER_API_URL }}
+          PEPPER_API_KEY: ${{ secrets.PEPPER_API_KEY }}
+        run: |
+          curl -fsSL -H "Authorization: Bearer $PEPPER_API_KEY" \
+            "$PEPPER_API_URL/api/scans/${{ steps.pepper.outputs.scan_id }}/artifacts/cyclonedx" \
+            -o sbom.cyclonedx.json || true
+          curl -fsSL -H "Authorization: Bearer $PEPPER_API_KEY" \
+            "$PEPPER_API_URL/api/scans/${{ steps.pepper.outputs.scan_id }}/artifacts/spdx" \
+            -o sbom.spdx.json || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pepper-sbom
+          path: |
+            sbom.cyclonedx.json
+            sbom.spdx.json
+
+      - uses: sigstore/cosign-installer@v3
+        if: success()
+
+      - name: Sign SBOM (keyless via Fulcio + Rekor)
+        if: success()
+        run: |
+          COSIGN_EXPERIMENTAL=1 cosign sign-blob --yes \
+            --output-signature sbom.cyclonedx.json.sig \
+            sbom.cyclonedx.json || true
+          COSIGN_EXPERIMENTAL=1 cosign sign-blob --yes \
+            --output-signature sbom.spdx.json.sig \
+            sbom.spdx.json || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pepper-sbom-signatures
+          path: |
+            sbom.cyclonedx.json.sig
+            sbom.spdx.json.sig</code></pre>
+
+      <h2 id="gitlab">GitLab CI</h2>
+      <p>Save as <code>.gitlab-ci.yml</code> (or merge with your existing one):</p>
+      <pre><code>pepper_security:
+  stage: test
+  image: alpine:3
+  before_script:
+    - apk add --no-cache curl jq tar
+  script:
+    - tar --exclude=node_modules --exclude=.git -czf /tmp/src.tar.gz .
+    - |
+      resp=$(curl -fsSL -X POST \
+        -H "Authorization: Bearer $PEPPER_API_KEY" \
+        -F "source=@/tmp/src.tar.gz" \
+        -F "scanType=FULL" \
+        -F "branch=$CI_COMMIT_REF_NAME" \
+        -F "commitSha=$CI_COMMIT_SHA" \
+        "$PEPPER_API_URL/api/scans")
+      scan_id=$(echo "$resp" | jq -r '.scanId')
+      for i in $(seq 1 180); do
+        scan=$(curl -fsSL -H "Authorization: Bearer $PEPPER_API_KEY" \
+          "$PEPPER_API_URL/api/scans/$scan_id")
+        status=$(echo "$scan" | jq -r .status)
+        [ "$status" = "COMPLETED" ] || [ "$status" = "FAILED" ] &amp;&amp; break
+        sleep 10
+      done
+      gate=$(echo "$scan" | jq -r .gateResult)
+      curl -fsSL -H "Authorization: Bearer $PEPPER_API_KEY" \
+        "$PEPPER_API_URL/api/scans/$scan_id/artifacts/cyclonedx" -o sbom.cyclonedx.json || true
+      if [ "$gate" = "FAILED" ]; then exit 1; fi
+  artifacts:
+    when: always
+    paths:
+      - sbom.cyclonedx.json</code></pre>
+
+      <h2 id="jenkins">Jenkins</h2>
+      <pre><code>pipeline {
+  agent any
+  environment {
+    PEPPER_API_URL = credentials('PEPPER_API_URL')
+    PEPPER_API_KEY = credentials('PEPPER_API_KEY')
+  }
+  stages {
+    stage('Pepper Scan') {
+      steps {
+        sh '''
+          set -e
+          tar --exclude=node_modules --exclude=.git -czf /tmp/src.tar.gz .
+          resp=$(curl -fsSL -X POST \\
+            -H "Authorization: Bearer $PEPPER_API_KEY" \\
+            -F "source=@/tmp/src.tar.gz" \\
+            -F "scanType=FULL" \\
+            -F "branch=${BRANCH_NAME:-main}" \\
+            "$PEPPER_API_URL/api/scans")
+          scan_id=$(echo "$resp" | jq -r '.scanId')
+          for i in $(seq 1 180); do
+            scan=$(curl -fsSL -H "Authorization: Bearer $PEPPER_API_KEY" \\
+              "$PEPPER_API_URL/api/scans/$scan_id")
+            status=$(echo "$scan" | jq -r .status)
+            [ "$status" = "COMPLETED" ] &amp;&amp; break
+            sleep 10
+          done
+          gate=$(echo "$scan" | jq -r .gateResult)
+          if [ "$gate" = "FAILED" ]; then exit 1; fi
+        '''
+      }
+    }
+  }
+}</code></pre>
+
+      <h2 id="pre-commit">Pre-commit hook</h2>
+      <p>
+        For developer-machine enforcement before code even reaches CI, install the
+        Pepper pre-commit hook:
+      </p>
+      <pre><code>curl -fsSL https://pepper.your-org.com/api/precommit/install.sh \
+  | bash -s -- https://pepper.your-org.com ppr_xxxxxxxxxxxx</code></pre>
+      <p>
+        See <a href="faq.html#precommit">Pre-commit hook</a> for what it scans and how
+        to tune <code>PEPPER_FAIL_ON</code>.
+      </p>
+
+      <h2 id="build-gate">Tune the build gate</h2>
+      <p>
+        Build gates are per-project. The default is <em>0 CRITICAL, 5 HIGH, 20 MEDIUM,
+        unlimited LOW, fail-on-new=true</em>. Adjust under
+        <em>Settings → Build Gates</em> or via the API:
+      </p>
+      <pre><code>curl -X PUT \
+  -H "Authorization: Bearer $PEPPER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"maxCritical":0,"maxHigh":0,"maxMedium":10,"maxLow":-1,"failOnNew":true}' \
+  $PEPPER_API_URL/api/settings/build-gates?projectId=&lt;PROJECT_ID&gt;</code></pre>
+      <ul>
+        <li>Set any limit to <code>-1</code> to mean "unlimited".</li>
+        <li><code>failOnNew</code> rejects any finding that wasn't in the previous
+          completed scan — useful for "no-new-issues" policies that don't require
+          fixing the existing backlog all at once.</li>
+      </ul>
+
+      <h2 id="webhooks">Branch-event webhooks (alternative to CI scripts)</h2>
+      <p>
+        If you don't want to run the scan inside CI, point your VCS at Pepper's
+        webhook and Pepper will scan PR/MR head commits on its own infrastructure.
+      </p>
+      <ul>
+        <li><strong>GitHub:</strong> <em>Repo → Settings → Webhooks</em> →
+          <code>https://pepper.your-org.com/api/webhooks/github</code>. Secret =
+          <code>GITHUB_WEBHOOK_SECRET</code> from your Pepper env. Events:
+          <em>pushes</em> + <em>pull requests</em>.</li>
+        <li><strong>GitLab:</strong> <em>Project → Settings → Webhooks</em> →
+          <code>https://pepper.your-org.com/api/webhooks/gitlab</code>. Trigger:
+          <em>merge request events</em> + <em>push events</em>.</li>
+      </ul>
+      <p>
+        Status checks: Pepper does not yet write back a check-run; consume gate status
+        by polling <code>GET /api/scans/&lt;id&gt;</code> as above.
+      </p>
+    </main>
+  </div>
+</body>
+</html>

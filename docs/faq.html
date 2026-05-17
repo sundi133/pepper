@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pepper SAST — Feature FAQ</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo">P</div>
+        <div>
+          <h1>Pepper SAST</h1>
+          <span>Documentation</span>
+        </div>
+      </div>
+      <nav>
+        <section>
+          <h2>Guide</h2>
+          <ul>
+            <li><a href="index.html">Overview</a></li>
+            <li><a href="faq.html" class="active">Feature FAQ</a></li>
+            <li><a href="getting-started.html">Getting started</a></li>
+            <li><a href="user-guide.html">How to use</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Features</h2>
+          <ul>
+            <li><a href="#sbom">SBOM (CycloneDX + SPDX)</a></li>
+            <li><a href="#sast">SAST</a></li>
+            <li><a href="#sca">SCA</a></li>
+            <li><a href="#dast">DAST (dapper)</a></li>
+            <li><a href="#container">Container scanning</a></li>
+            <li><a href="#code-signing">Code signing</a></li>
+            <li><a href="#precommit">Pre-commit hook</a></li>
+            <li><a href="#integrations">Integrations</a></li>
+            <li><a href="#ai">AI features</a></li>
+            <li><a href="#compliance">Compliance</a></li>
+            <li><a href="#audit">Audit log</a></li>
+            <li><a href="#trends">Trends</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Operate</h2>
+          <ul>
+            <li><a href="deployment.html">Deployment</a></li>
+            <li><a href="ci-cd.html">CI/CD recipes</a></li>
+            <li><a href="api.html">API reference</a></li>
+            <li><a href="configuration.html">Environment vars</a></li>
+          </ul>
+        </section>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <h1>Feature FAQ</h1>
+      <p class="lead">
+        Pepper is a complete application-security platform: it discovers, classifies and
+        helps you fix vulnerabilities across source code, dependencies, containers and
+        running applications, then signs and ships the evidence into your CI/CD pipeline.
+        This page answers the twelve most common questions about what Pepper covers and
+        where each feature lives in the product.
+      </p>
+
+      <h2>At a glance</h2>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Capability</th><th>Status</th><th>Where</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>CI/CD security with fail-build policies</td><td>✅</td><td><a href="#cicd">Build gates &amp; templates</a></td></tr>
+          <tr><td>2</td><td>Software Composition Analysis (SCA)</td><td>✅</td><td><a href="#sca">SCA</a></td></tr>
+          <tr><td>3</td><td>SBOM generation (CycloneDX &amp; SPDX)</td><td>✅</td><td><a href="#sbom">SBOM</a></td></tr>
+          <tr><td>4</td><td>Static Application Security Testing (SAST)</td><td>✅</td><td><a href="#sast">SAST</a></td></tr>
+          <tr><td>5</td><td>Dynamic Application Security Testing (DAST)</td><td>✅</td><td><a href="#dast">DAST</a></td></tr>
+          <tr><td>6</td><td>VCS pre-commit / pre-merge + secrets</td><td>✅</td><td><a href="#precommit">Pre-commit</a></td></tr>
+          <tr><td>7</td><td>Code signing (cosign / RSA)</td><td>✅</td><td><a href="#code-signing">Signing</a></td></tr>
+          <tr><td>8</td><td>Container &amp; artifact scanning</td><td>✅</td><td><a href="#container">Containers</a></td></tr>
+          <tr><td>9</td><td>AI prioritisation &amp; remediation</td><td>✅</td><td><a href="#ai">AI</a></td></tr>
+          <tr><td>10</td><td>Ticketing / SIEM / IDE integrations</td><td>✅</td><td><a href="#integrations">Integrations</a></td></tr>
+          <tr><td>11</td><td>Compliance mapping &amp; dashboards</td><td>✅</td><td><a href="#compliance">Compliance</a></td></tr>
+          <tr><td>12</td><td>Audit log &amp; trend analysis</td><td>✅</td><td><a href="#audit">Audit</a> / <a href="#trends">Trends</a></td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="cicd">1 · CI/CD security &amp; fail-build policies</h2>
+      <p>
+        Every project can have a <strong>build gate</strong> defining the maximum number of
+        findings allowed at each severity, and an optional <em>fail-on-new</em> rule that
+        rejects any finding not present in the previous scan. The worker evaluates the gate
+        at the end of every scan and stamps the result on the <code>Scan</code> record.
+      </p>
+      <ul>
+        <li><strong>Configure:</strong> <em>Settings → Build Gates</em> in the UI, or
+          <code>PATCH /api/settings/build-gates</code>.</li>
+        <li><strong>Read from CI:</strong> <code>GET /api/scans/&lt;id&gt;</code> returns
+          <code>gateResult: PASSED | FAILED</code>.</li>
+        <li><strong>Drop-in pipelines:</strong> download templates from
+          <code>/api/cicd-templates/&lt;github | gitlab | jenkins&gt;</code> — they
+          enqueue a scan, poll until completion, download both SBOMs, sign them with cosign
+          and exit non-zero when the gate fails. See <a href="ci-cd.html">CI/CD recipes</a>.</li>
+        <li><strong>Webhooks:</strong> push and pull-request events from GitHub and GitLab
+          start INCREMENTAL scans automatically.</li>
+      </ul>
+
+      <h2 id="sca">2 · Software Composition Analysis (SCA)</h2>
+      <p>
+        Pepper parses dependency manifests from 13+ ecosystems and looks every package up
+        against <a href="https://osv.dev">OSV</a> for known vulnerabilities, plus a
+        malicious-package heuristic for supply-chain attacks.
+      </p>
+      <p><strong>Supported ecosystems:</strong></p>
+      <ul>
+        <li>JavaScript / TypeScript — <code>package.json</code>, <code>package-lock.json</code></li>
+        <li>Python — <code>requirements.txt</code>, <code>Pipfile.lock</code>, <code>pyproject.toml</code></li>
+        <li>Go — <code>go.mod</code></li>
+        <li>Rust — <code>Cargo.toml</code></li>
+        <li>Java / Kotlin / Scala — <code>pom.xml</code>, <code>build.gradle</code></li>
+        <li>Ruby — <code>Gemfile.lock</code></li>
+        <li>PHP — <code>composer.json</code>, <code>composer.lock</code></li>
+        <li>.NET — <code>*.csproj</code>, <code>*.fsproj</code>, <code>packages.config</code></li>
+        <li>Dart / Flutter — <code>pubspec.yaml</code></li>
+        <li>Elixir — <code>mix.lock</code></li>
+        <li>Swift — <code>Package.resolved</code></li>
+      </ul>
+      <p>
+        OSV calls are batched and cached. In air-gapped mode set
+        <code>vulnDbMode = offline</code> to skip remote lookups.
+      </p>
+
+      <h2 id="sbom">3 · SBOM (CycloneDX &amp; SPDX)</h2>
+      <p>
+        Every scan automatically emits two software-bill-of-materials documents from the
+        dependency graph SCA produced. They are stored as scan artifacts in MinIO and
+        downloadable through the API or the scan-detail UI.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Format</th><th>Spec</th><th>Artifact type</th><th>Download</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>CycloneDX</td>
+            <td>1.5 JSON</td>
+            <td><code>SBOM_CYCLONEDX</code></td>
+            <td><code>GET /api/scans/&lt;id&gt;/artifacts/cyclonedx</code></td>
+          </tr>
+          <tr>
+            <td>SPDX</td>
+            <td>2.3 JSON</td>
+            <td><code>SBOM_SPDX</code></td>
+            <td><code>GET /api/scans/&lt;id&gt;/artifacts/spdx</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Each SBOM includes <code>purl</code> identifiers, dev vs. runtime classification,
+        a root <code>application</code> component carrying scan / commit / branch metadata,
+        and (for SPDX) <code>DEPENDS_ON</code> / <code>DEV_DEPENDENCY_OF</code> relationships.
+      </p>
+      <div class="callout">
+        SBOMs are signed automatically when <a href="#code-signing">code signing</a> is enabled.
+      </div>
+
+      <h2 id="sast">4 · Static Application Security Testing (SAST)</h2>
+      <p>
+        Pepper runs two SAST engines side by side: a deterministic pattern engine for
+        well-known vulnerability classes, and an LLM-based analyser that reads each file
+        in context. Findings from both engines are deduplicated and ranked.
+      </p>
+      <ul>
+        <li><strong>Pattern engine</strong> (<code>SAST_PATTERN</code>) — regex rules for
+          OWASP Top 10 + language-specific bug patterns. Languages: JavaScript /
+          TypeScript, Python, Go, Java / Kotlin, PHP, Ruby, C#, plus generic rules
+          (hard-coded secrets, deprecated crypto, unsafe deserialisation).</li>
+        <li><strong>LLM engine</strong> (<code>SAST_LLM</code>) — Pepper batches files
+          through the configured LLM, asks for OWASP-style findings with severity,
+          CWE, and a remediation hint, then filters by a confidence floor.</li>
+        <li><strong>Zero-day engine</strong> (<code>ZERO_DAY</code>) — a separate LLM pass
+          that scores files by their <em>likelihood</em> of containing a novel logic flaw,
+          then deeply analyses the top-ranked ones.</li>
+      </ul>
+
+      <h2 id="dast">5 · Dynamic Application Security Testing (DAST)</h2>
+      <p>
+        Pepper delegates DAST to
+        <a href="https://github.com/sundi133/dapper">dapper</a>, an AI-driven pentester
+        that exercises a running application. The DAST scanner lives at
+        <code>src/scanners/dast/</code> and can talk to dapper two ways:
+      </p>
+      <ol>
+        <li>
+          <strong>HTTP mode</strong> — recommended. Set <code>dastEndpoint</code> under
+          <em>Settings → DAST</em>. Pepper <code>POST</code>s the target URL to dapper,
+          polls <code>GET /scans/&lt;id&gt;</code> until <code>COMPLETED</code>, then
+          ingests the findings.
+        </li>
+        <li>
+          <strong>CLI fallback</strong> — when <code>dastEndpoint</code> is unset but the
+          <code>dapper</code> binary is on the worker, Pepper invokes
+          <code>dapper start URL=… OUTPUT=json</code> and parses the local JSON report.
+        </li>
+      </ol>
+      <p><strong>Configuration:</strong></p>
+      <ul>
+        <li><em>Settings → DAST</em> — enable, set the dapper endpoint and API key.</li>
+        <li>Per project — <code>dastTargetUrl</code> (set under project settings or via
+          <code>PATCH /api/projects/&lt;id&gt;</code>).</li>
+        <li>Scan types — <code>DAST_ONLY</code> runs dapper alone; <code>FULL</code> runs
+          it alongside SAST/SCA/secrets when enabled.</li>
+      </ul>
+
+      <h2 id="container">6 · Container &amp; artifact scanning</h2>
+      <p>
+        The <code>CONTAINER</code> scanner discovers image references in source — both
+        <code>FROM</code> directives in Dockerfiles and <code>image:</code> entries in
+        Compose files — then runs
+        <a href="https://aquasecurity.github.io/trivy/">Trivy</a> against each image
+        when it is installed on the worker.
+      </p>
+      <p><strong>Findings include:</strong></p>
+      <ul>
+        <li>CVE id (also stored on <code>Finding.cveId</code>)</li>
+        <li>Vulnerable package + installed version + fixed version (in description)</li>
+        <li>CWE identifier when Trivy returns one</li>
+        <li>The originating <code>Dockerfile</code> / <code>compose.yml</code> path + line</li>
+      </ul>
+      <div class="callout">
+        Without Trivy installed, the scanner emits an INFO-level <em>image inventory</em>
+        finding for each discovered image so you still know what your build pulls in.
+      </div>
+      <p>
+        Install Trivy in the worker image via
+        <code>apk add --no-cache trivy</code> (or download the binary directly) and the
+        next scan will pick it up automatically.
+      </p>
+
+      <h2 id="code-signing">7 · Code signing</h2>
+      <p>
+        Pepper signs every SBOM it produces, so downstream consumers can prove the
+        artifact came from your Pepper instance. Two modes are supported:
+      </p>
+      <ul>
+        <li>
+          <strong>Keyless (recommended)</strong> — uses
+          <a href="https://docs.sigstore.dev/cosign/overview/">cosign</a> with Fulcio
+          (short-lived certs from your OIDC identity) and Rekor (transparency log). No
+          keys to manage. Requires <code>cosign</code> on the worker and
+          <code>COSIGN_EXPERIMENTAL=1</code>.
+        </li>
+        <li>
+          <strong>RSA fallback</strong> — paste a PEM private key into
+          <em>Settings → Code Signing</em>. Pepper computes the artifact SHA-256, signs
+          with RSA-SHA256, and stores an AES-256-GCM-encrypted copy of the key.
+        </li>
+      </ul>
+      <p>
+        Signatures are uploaded as a <code>SIGNATURE</code> artifact
+        (<code>GET /api/scans/&lt;id&gt;/artifacts/signature</code>) and contain the
+        algorithm, artifact digest, signature, identity, and signing timestamp for each
+        signed file.
+      </p>
+
+      <h2 id="precommit">8 · Pre-commit hook + secret detection</h2>
+      <p>
+        Pepper blocks commits that introduce HIGH/CRITICAL secrets or SAST issues by
+        installing a git pre-commit hook that calls
+        <code>POST /api/precommit/scan</code> with the staged file contents.
+      </p>
+      <h3>Install (one-liner)</h3>
+      <pre><code>curl -fsSL https://pepper.your-org.com/api/precommit/install.sh \
+  | bash -s -- https://pepper.your-org.com ppr_xxxxxxxxxxxx</code></pre>
+      <p>The installer:</p>
+      <ul>
+        <li>Drops <code>scripts/pepper-precommit.sh</code> into
+          <code>.git/hooks/pre-commit</code> and makes it executable.</li>
+        <li>Writes <code>PEPPER_API_URL</code> + <code>PEPPER_API_KEY</code> to a local
+          <code>.pepper.env</code>.</li>
+        <li>Adds <code>.pepper.env</code> to <code>.gitignore</code> so credentials don't
+          leak.</li>
+      </ul>
+      <h3>What runs on each commit</h3>
+      <p>
+        The hook POSTs every staged file (under 2&nbsp;MB) to
+        <code>/api/precommit/scan</code>. Pepper runs the secret-pattern engine plus the
+        SAST pattern rules in memory and returns a list of findings. The commit is
+        blocked if any match the <code>PEPPER_FAIL_ON</code> set (defaults to
+        <code>CRITICAL,HIGH</code>).
+      </p>
+      <p>
+        Bypass for emergencies: <code>git commit --no-verify</code>.
+      </p>
+      <h3>Pre-merge variant (webhooks)</h3>
+      <p>
+        For pre-merge enforcement, point your GitHub / GitLab repository at the
+        respective webhook (<em>Settings → Integrations</em> shows the URLs). Pepper
+        will start an <code>INCREMENTAL</code> scan against the PR/MR head and the build
+        gate decides whether the merge can proceed.
+      </p>
+
+      <h2 id="integrations">9 · Integrations (Jira, Slack, SIEM, IDE)</h2>
+      <p>
+        Outbound integrations are stored encrypted in the
+        <code>IntegrationConfig</code> table and dispatched at scan-completion time. All
+        secrets are protected with AES-256-GCM at rest.
+      </p>
+      <table>
+        <thead><tr><th>Kind</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Slack</strong></td>
+            <td>Incoming-webhook URL. Posts a summary (severity counts, gate status) for
+              each completed scan. Filter via <code>notifyOn</code>:
+              <code>scan_complete</code>, <code>gate_failed</code>,
+              <code>critical_finding</code>.</td>
+          </tr>
+          <tr>
+            <td><strong>Jira</strong></td>
+            <td>REST API + project key. Opens an issue for every OPEN, CRITICAL / HIGH
+              finding (configurable). Includes severity, file:line, rule id, CVE/CWE,
+              and a back-link to the Pepper scan. Severity is mapped onto Jira
+              priorities.</td>
+          </tr>
+          <tr>
+            <td><strong>SIEM</strong></td>
+            <td>HTTPS POST (CEF / LEEF / JSON) or syslog (UDP/TCP). Every finding becomes
+              one event with normalised severity score, scanner, project, file, CVE and
+              CWE fields. Use for ArcSight, QRadar, Splunk, Sentinel.</td>
+          </tr>
+          <tr>
+            <td><strong>IDE plugins</strong></td>
+            <td>Authenticated REST surface at
+              <code>GET /api/ide/findings?projectId=…&amp;filePath=…&amp;minSeverity=HIGH</code>.
+              Returns the latest completed scan plus findings touching the requested
+              file. Auth: <code>Authorization: Bearer ppr_…</code>.</td>
+          </tr>
+          <tr>
+            <td><strong>GitHub</strong></td>
+            <td>OAuth for private clones + opening fix PRs. Per-finding "Open fix PR"
+              uses an LLM to generate the patch and opens a real PR against the source
+              repo.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Manage all of these under <em>Settings → Integrations → Outbound</em>, or call
+        <code>POST /api/integrations</code> directly. Test connections from the UI
+        ("Send test message" / "Send test event") or via
+        <code>POST /api/integrations/test</code>.
+      </p>
+
+      <h2 id="ai">10 · AI features</h2>
+      <p>
+        Pepper uses LLMs in five distinct places, all configured from
+        <em>Settings → LLM Config</em>:
+      </p>
+      <ul>
+        <li>
+          <strong>LLM SAST</strong> (<code>src/scanners/sast/llm-analyzer.ts</code>) —
+          reads files in batched context and reports CWE-tagged findings.
+        </li>
+        <li>
+          <strong>LLM secret classification</strong>
+          (<code>src/scanners/secrets/llm-classifier.ts</code>) — second-pass over
+          regex-matched secret candidates to drop placeholders / examples and reduce
+          false positives.
+        </li>
+        <li>
+          <strong>Zero-day prioritiser</strong>
+          (<code>src/scanners/zero-day/file-prioritizer.ts</code>) — scores files by
+          likelihood of harbouring novel logic flaws, then deeply analyses the top set.
+        </li>
+        <li>
+          <strong>Suggested fixes</strong>
+          (<code>/api/scans/&lt;id&gt;/findings/&lt;fid&gt;/suggest-fix</code>) —
+          generates a code diff that remediates a finding.
+        </li>
+        <li>
+          <strong>Open-fix PR</strong>
+          (<code>/api/scans/&lt;id&gt;/findings/&lt;fid&gt;/open-pr</code>) — pushes the
+          suggested fix to a branch on the source repo and opens a real GitHub PR.
+        </li>
+      </ul>
+      <p>
+        Pepper speaks to any OpenAI-compatible API (OpenAI, Azure, OpenRouter,
+        Anthropic via proxies) or to a local <a href="https://ollama.com">Ollama</a>
+        instance — set <code>llmProvider</code>, <code>llmBaseUrl</code>,
+        <code>llmModel</code> in <em>Settings → LLM Config</em>.
+      </p>
+
+      <h2 id="compliance">11 · Compliance mapping</h2>
+      <p>
+        Findings are mapped to OWASP Top 10, NIST SP 800-53, and ISO 27001 controls.
+        Generate a per-scan compliance report from the scan detail page or
+        <code>/scans/&lt;id&gt;/compliance</code>.
+      </p>
+      <ul>
+        <li>Framework PDFs (used as ground truth for the LLM mapper) live in
+          <code>compliance/</code>.</li>
+        <li>The mapper itself is <code>src/lib/compliance/llm-mapper.ts</code> — it
+          accepts a finding and returns the control IDs that apply.</li>
+        <li>The compliance UI shows control coverage and per-control finding counts.</li>
+      </ul>
+
+      <h2 id="audit">12 · Audit log</h2>
+      <p>
+        Every security-relevant action is appended to the immutable <code>AuditLog</code>
+        table. View it under <em>Settings → Audit Log</em> or
+        <code>GET /api/audit-log</code>.
+      </p>
+      <p><strong>Tracked actions include:</strong></p>
+      <ul>
+        <li>Scan queued, cancelled, paused, resumed, rescanned, stopped</li>
+        <li>Integration created / updated / deleted / tested</li>
+        <li>API key created / revoked</li>
+        <li>DAST and code-signing settings updated</li>
+        <li>Project / policy / build-gate changes</li>
+        <li>Finding status changes</li>
+      </ul>
+      <p>
+        Each entry stores <code>action</code>, <code>resource</code>,
+        <code>resourceId</code>, the acting <code>userId</code>, the originating IP, a
+        timestamp, and a JSON details blob.
+      </p>
+
+      <h2 id="trends">Trend analysis</h2>
+      <p>
+        The <code>/trends</code> page renders three historical charts powered by
+        <code>GET /api/dashboard/trends?days=N</code>:
+      </p>
+      <ul>
+        <li><strong>Findings by severity</strong> — stacked area, latest scan per
+          project per day.</li>
+        <li><strong>Build gate failures</strong> — daily gate-failure count vs. total
+          scans.</li>
+        <li><strong>Mean time to resolve</strong> — average hours from finding creation
+          to resolution, broken down by severity.</li>
+      </ul>
+
+      <p style="margin-top: 3rem; text-align: center;">
+        <a class="cta" href="getting-started.html">Get started →</a>
+        &nbsp;&nbsp;
+        <a class="cta" href="ci-cd.html">CI/CD recipes →</a>
+        &nbsp;&nbsp;
+        <a class="cta" href="api.html">API reference →</a>
+      </p>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pepper SAST — API reference</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo">P</div>
+        <div>
+          <h1>Pepper SAST</h1>
+          <span>Documentation</span>
+        </div>
+      </div>
+      <nav>
+        <section>
+          <h2>Guide</h2>
+          <ul>
+            <li><a href="index.html">Overview</a></li>
+            <li><a href="faq.html">Feature FAQ</a></li>
+            <li><a href="getting-started.html">Getting started</a></li>
+            <li><a href="user-guide.html">How to use</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Operate</h2>
+          <ul>
+            <li><a href="deployment.html">Deployment</a></li>
+            <li><a href="ci-cd.html">CI/CD recipes</a></li>
+            <li><a href="api.html" class="active">API reference</a></li>
+            <li><a href="configuration.html">Environment vars</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Endpoints</h2>
+          <ul>
+            <li><a href="#auth">Authentication</a></li>
+            <li><a href="#scans">Scans</a></li>
+            <li><a href="#artifacts">Artifacts &amp; SBOMs</a></li>
+            <li><a href="#findings">Findings</a></li>
+            <li><a href="#projects">Projects</a></li>
+            <li><a href="#integrations">Integrations</a></li>
+            <li><a href="#apikeys">API keys</a></li>
+            <li><a href="#audit">Audit log</a></li>
+            <li><a href="#trends">Trends</a></li>
+            <li><a href="#precommit">Pre-commit</a></li>
+            <li><a href="#ide">IDE</a></li>
+            <li><a href="#cicd-templates">CI/CD templates</a></li>
+            <li><a href="#webhooks">Webhooks</a></li>
+          </ul>
+        </section>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <h1>API reference</h1>
+      <p class="lead">
+        Pepper exposes a JSON REST API rooted at <code>/api</code>. Endpoints accept
+        two authentication mechanisms: session cookies for the web UI, and bearer
+        API keys for everything else (CI, IDE plugins, pre-commit, webhooks).
+      </p>
+
+      <h2 id="auth">Authentication</h2>
+      <p>For machine-to-machine, pass an API key in the <code>Authorization</code> header:</p>
+      <pre><code>Authorization: Bearer ppr_xxxxxxxxxxxxxxxxxxxxxxxx</code></pre>
+      <p>
+        Create keys in <em>Settings → API Keys</em> or via
+        <code>POST /api/apikeys</code>. Keys are shown once and stored hashed
+        (SHA-256). Revoke with <code>DELETE /api/apikeys/&lt;id&gt;</code>.
+      </p>
+      <p>
+        All organisation-scoped endpoints return <code>403</code> when the caller is
+        not a member of the org the resource belongs to.
+      </p>
+
+      <h2 id="scans">Scans</h2>
+      <h3>Create a scan</h3>
+      <p>
+        <code>POST /api/scans</code> — multipart or JSON. The most common form is a
+        tarball upload:
+      </p>
+      <pre><code>curl -X POST $PEPPER_API_URL/api/scans \
+  -H "Authorization: Bearer $PEPPER_API_KEY" \
+  -F "source=@source.tar.gz" \
+  -F "scanType=FULL" \
+  -F "branch=main" \
+  -F "commitSha=$(git rev-parse HEAD)"
+# → { "scanId": "cl…", "projectId": "cl…", "status": "QUEUED" }</code></pre>
+      <p><strong>Fields:</strong></p>
+      <ul>
+        <li><code>scanType</code> — <code>FULL</code>, <code>SAST_ONLY</code>,
+          <code>SCA_ONLY</code>, <code>SECRETS_ONLY</code>, <code>CONTAINER_ONLY</code>,
+          <code>DAST_ONLY</code>, <code>INCREMENTAL</code></li>
+        <li><code>repoUrl</code> — clone from a public Git HTTPS URL instead of upload</li>
+        <li><code>svnUrl</code> + <code>svnRevision</code> + <code>svnUsername</code>
+          / <code>svnPassword</code> — Subversion source</li>
+        <li><code>projectId</code> — attach to an existing project; if omitted, Pepper
+          creates a project from the repo / archive name</li>
+        <li><code>branch</code>, <code>commitSha</code>, <code>baseSha</code> — labels +
+          base for INCREMENTAL diff</li>
+      </ul>
+      <h3>Read a scan</h3>
+      <pre><code>GET /api/scans/&lt;scanId&gt;
+# → {
+#   "id": "…", "status": "RUNNING|COMPLETED|FAILED|…",
+#   "gateResult": "PASSED|FAILED|PENDING",
+#   "criticalCount": 0, "highCount": 3, ...,
+#   "scannerProgress": { "SAST_LLM": { "status": "RUNNING", "filesCompleted": 12, "filesTotal": 88 } }
+# }</code></pre>
+      <h3>List scans</h3>
+      <pre><code>GET /api/scans?projectId=&lt;id&gt;&amp;status=COMPLETED&amp;limit=20</code></pre>
+      <h3>Lifecycle</h3>
+      <table>
+        <thead><tr><th>Method &amp; path</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>POST /api/scans/&lt;id&gt;/pause</code></td><td>Pause a running scan (worker honours it at safe points).</td></tr>
+          <tr><td><code>POST /api/scans/&lt;id&gt;/resume</code></td><td>Resume a paused or stopped scan.</td></tr>
+          <tr><td><code>POST /api/scans/&lt;id&gt;/stop</code></td><td>Stop early; partial findings are kept.</td></tr>
+          <tr><td><code>POST /api/scans/&lt;id&gt;/cancel</code></td><td>Discard the scan (partial findings deleted).</td></tr>
+          <tr><td><code>POST /api/scans/&lt;id&gt;/rescan</code></td><td>Re-queue the same source.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="artifacts">Artifacts &amp; SBOMs</h2>
+      <p>
+        Every scan can produce up to seven artifact types stored in MinIO:
+        <code>SARIF</code>, <code>SBOM_CYCLONEDX</code>, <code>SBOM_SPDX</code>,
+        <code>SCAN_LOG</code>, <code>CONTAINER_REPORT</code>, <code>DAST_REPORT</code>,
+        <code>SIGNATURE</code>.
+      </p>
+      <pre><code>GET /api/scans/&lt;scanId&gt;/artifacts
+# → { "artifacts": [ { "type": "SBOM_CYCLONEDX", "size": 12453, "downloadPath": "..." }, … ] }
+
+GET /api/scans/&lt;scanId&gt;/artifacts/cyclonedx     # CycloneDX 1.5 JSON
+GET /api/scans/&lt;scanId&gt;/artifacts/spdx          # SPDX 2.3 JSON
+GET /api/scans/&lt;scanId&gt;/artifacts/sarif         # SARIF v2 (when written)
+GET /api/scans/&lt;scanId&gt;/artifacts/container     # Trivy raw report (when run)
+GET /api/scans/&lt;scanId&gt;/artifacts/dast          # dapper report (when DAST ran)
+GET /api/scans/&lt;scanId&gt;/artifacts/signature     # cosign / RSA signature bundle
+GET /api/scans/&lt;scanId&gt;/artifacts/log           # JSON log lines</code></pre>
+
+      <h2 id="findings">Findings</h2>
+      <pre><code>GET /api/scans/&lt;scanId&gt;/findings?severity=HIGH&amp;status=OPEN&amp;limit=100
+# → { "findings": [ { "id": …, "severity": "HIGH", "title": …, "filePath": …, "startLine": … }, … ] }
+
+PATCH /api/findings/&lt;findingId&gt;
+{ "status": "RESOLVED" | "FALSE_POSITIVE" | "ACCEPTED_RISK" | "IN_PROGRESS" | "OPEN",
+  "statusNote": "fixed in #1234" }
+
+POST /api/findings/bulk
+{ "ids": ["…","…"], "status": "FALSE_POSITIVE" }
+
+POST /api/scans/&lt;scanId&gt;/findings/&lt;findingId&gt;/suggest-fix
+# → { "diff": "--- a/foo.ts\n+++ b/foo.ts\n@@ …" }
+
+POST /api/scans/&lt;scanId&gt;/findings/&lt;findingId&gt;/open-pr
+{ "branch": "pepper/fix-cl123" }
+# → { "url": "https://github.com/acme/foo/pull/42" }
+
+GET /api/scans/&lt;scanId&gt;/findings/export?format=csv | html | sarif</code></pre>
+
+      <h2 id="projects">Projects</h2>
+      <pre><code>GET    /api/projects
+POST   /api/projects                              # create
+GET    /api/projects/&lt;projectId&gt;
+PATCH  /api/projects/&lt;projectId&gt;            # name, description, repoUrl,
+                                                  # defaultBranch, dastTargetUrl
+DELETE /api/projects/&lt;projectId&gt;
+POST   /api/projects/&lt;projectId&gt;/schedule   # nightly / weekly cron</code></pre>
+
+      <h2 id="integrations">Integrations</h2>
+      <pre><code>GET    /api/integrations           # list all integrations
+POST   /api/integrations           # upsert
+DELETE /api/integrations/&lt;id&gt;
+POST   /api/integrations/test      # dry-run with provided config</code></pre>
+      <h3>Body shape</h3>
+      <pre><code>// Slack
+{ "kind": "SLACK", "name": "Security channel",
+  "config": { "webhookUrl": "https://hooks.slack.com/services/…",
+              "channel": "#security",
+              "notifyOn": ["scan_complete","gate_failed"] } }
+
+// Jira
+{ "kind": "JIRA", "name": "Security (SEC)",
+  "config": { "baseUrl": "https://acme.atlassian.net",
+              "email": "bot@acme.com", "apiToken": "…",
+              "projectKey": "SEC", "issueType": "Bug",
+              "openForSeverities": ["CRITICAL","HIGH"] } }
+
+// SIEM
+{ "kind": "SIEM", "name": "Splunk HEC",
+  "config": { "endpoint": "https://splunk.example.com:8088/services/collector/raw",
+              "format": "cef" | "leef" | "json",
+              "apiKey": "Splunk &lt;token&gt;" } }
+// Syslog target also supported: "udp://siem.example.com:514"
+
+// Dapper (DAST)
+{ "kind": "DAST", "name": "Dapper",
+  "config": { "endpoint": "http://dapper:8080", "apiKey": "…" } }</code></pre>
+
+      <h2 id="apikeys">API keys</h2>
+      <pre><code>GET    /api/apikeys                # list (no plaintext)
+POST   /api/apikeys                # { "name": "github-actions-prod",
+                                     #   "expiresAt": "2027-01-01T00:00:00Z" }
+                                     # → returns "plaintext" ONCE
+DELETE /api/apikeys/&lt;id&gt;</code></pre>
+
+      <h2 id="audit">Audit log</h2>
+      <pre><code>GET /api/audit-log?action=scan.queued&amp;userId=…&amp;limit=50&amp;cursor=…
+# → { "entries": [ { "id": …, "action": "scan.queued", "resource": "scan",
+#                     "resourceId": "…", "user": { "id": …, "email": … },
+#                     "ipAddress": "…", "details": {...}, "createdAt": "…" } ],
+#     "nextCursor": "…" }</code></pre>
+
+      <h2 id="trends">Trends</h2>
+      <pre><code>GET /api/dashboard/trends?days=30
+# → {
+#     "days": 30,
+#     "series": [ { "date": "2026-05-01", "critical": 0, "high": 2,
+#                    "medium": 5, "low": 8, "scans": 3, "gateFailed": 1 }, … ],
+#     "mttr": { "CRITICAL": { "count": 4, "meanHours": 12.5 }, "HIGH": {…} }
+#   }</code></pre>
+
+      <h2 id="precommit">Pre-commit</h2>
+      <pre><code>GET  /api/precommit/install.sh           # installer script (no auth)
+POST /api/precommit/scan                 # API-key auth
+{ "files": [ { "path": "src/foo.ts", "content": "…" }, … ],
+  "failOn": ["CRITICAL","HIGH"] }
+# → { "findings": [ … ], "summary": {…}, "block": true|false }</code></pre>
+
+      <h2 id="ide">IDE plugin endpoint</h2>
+      <pre><code>GET /api/ide/findings?projectId=&lt;id&gt;&amp;filePath=src/foo.ts&amp;minSeverity=HIGH
+Authorization: Bearer ppr_xxx
+# → { "project": {…}, "scan": {…},
+#     "findings": [ { "id": …, "severity": "HIGH", "title": …,
+#                      "filePath": "src/foo.ts", "startLine": 42, … } ] }</code></pre>
+
+      <h2 id="cicd-templates">CI/CD templates</h2>
+      <pre><code>GET /api/cicd-templates/github     # GitHub Actions workflow
+GET /api/cicd-templates/gitlab     # .gitlab-ci.yml fragment
+GET /api/cicd-templates/jenkins    # Jenkinsfile</code></pre>
+
+      <h2 id="webhooks">Webhooks (inbound)</h2>
+      <pre><code>POST /api/webhooks/github
+  X-Hub-Signature-256: sha256=…    # validated against GITHUB_WEBHOOK_SECRET
+POST /api/webhooks/gitlab
+  X-Gitlab-Token: …                # validated against GITLAB_WEBHOOK_SECRET</code></pre>
+      <p>
+        Both endpoints accept push + PR/MR events and queue an
+        <code>INCREMENTAL</code> scan against the head commit.
+      </p>
+    </main>
+  </div>
+</body>
+</html>

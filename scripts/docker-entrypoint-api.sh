@@ -28,7 +28,7 @@ fi
 # `--accept-data-loss` is safe here because the migration above is additive
 # (no destructive columns/types), but we pass it explicitly so push doesn't
 # bail out if a NOT NULL column was added with a default.
-npx prisma db push --skip-generate --accept-data-loss
+npx prisma db push --accept-data-loss
 
 echo "[entrypoint] Seeding (idempotent)…"
 npx tsx prisma/seed.ts || echo "[entrypoint] seed failed; continuing"

@@ -6,3 +6,12 @@ node_modules
 .env.local
 .env.production
 .DS_Store
+.claude
+all.zip
+dist
+docs
+README.md
+ARCHITECTURE.md
+RELEASE_CHECKLIST.md
+testcode
+tsconfig.tsbuildinfo

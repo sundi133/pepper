@@ -8,7 +8,12 @@ RUN apk add --no-cache libc6-compat git unzip
 COPY package.json package-lock.json ./
 RUN npm ci --production=false
 
-COPY . .
+COPY next.config.ts tsconfig.json next-env.d.ts postcss.config.mjs components.json prisma.config.ts ./
+COPY prisma ./prisma
+COPY public ./public
+COPY src ./src
+COPY scripts ./scripts
+COPY compliance ./compliance
 
 # Generate Prisma client
 RUN npx prisma generate
@@ -45,6 +50,6 @@ FROM base AS worker
 ENV NODE_ENV=production
 
 # Worker needs git for cloning repositories, subversion for SVN repos
-RUN apk add --no-cache git unzip subversion
+RUN apk add --no-cache subversion
 
 CMD ["npx", "tsx", "src/worker/index.ts"]

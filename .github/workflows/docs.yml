@@ -1,10 +1,16 @@
 # Publishes the Pepper documentation site to GitHub Pages.
 #
-# Default URL: https://sundi133.github.io/pepper/
+# Custom domain: https://sast.votal.ai (configured via docs/CNAME)
+# Fallback URL:  https://sundi133.github.io/pepper/
 #
 # Setup checklist (one-time, in the repository settings):
-#   Settings -> Pages -> Source: "GitHub Actions"
-#   (No custom domain — the site is served from the default GitHub Pages URL.)
+#   1. Settings -> Pages -> Source: "GitHub Actions"
+#   2. Settings -> Pages -> Custom domain: enter `sast.votal.ai` and Save
+#      (GitHub auto-validates against the CNAME file on each artifact)
+#   3. DNS: add a CNAME record at your DNS provider:
+#        sast.votal.ai   CNAME   sundi133.github.io
+#      Wait for GitHub to provision the Let's Encrypt cert (~5–15 min)
+#      then enable "Enforce HTTPS".
 #
 # Triggers: every push to main that touches `docs/**`, and manual dispatch.
 

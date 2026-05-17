@@ -5,6 +5,8 @@ import { secretsLlmScanner, secretsPatternScanner } from "./secrets";
 import { iacScanner } from "./iac";
 import { maliciousPkgScanner } from "./sca/malicious-pkg";
 import { zeroDayScanner } from "./zero-day";
+import { containerScanner } from "./container";
+import { dastScanner } from "./dast";
 import { buildFindingFingerprint } from "@/lib/finding-fingerprint";
 import {
   IAC_MIN_CONFIDENCE_DEFAULT,
@@ -48,13 +50,19 @@ const LOW_SIGNAL_RULES = new Set([
 
 export function getScanners(
   scanType: string,
-  orgSettings: { enableLlmSast: boolean; enableLlmSecrets: boolean },
+  orgSettings: {
+    enableLlmSast: boolean;
+    enableLlmSecrets: boolean;
+    dastEnabled?: boolean;
+  },
 ): ScannerPlugin[] {
   const scanners: ScannerPlugin[] = [];
 
   const includeSast = ["FULL", "SAST_ONLY"].includes(scanType);
   const includeSca = ["FULL", "SCA_ONLY"].includes(scanType);
   const includeSecrets = ["FULL", "SECRETS_ONLY"].includes(scanType);
+  const includeContainer = ["FULL", "CONTAINER_ONLY"].includes(scanType);
+  const includeDast = ["FULL", "DAST_ONLY"].includes(scanType);
   const includeFull = scanType === "FULL";
 
   if (includeSast) {
@@ -83,6 +91,14 @@ export function getScanners(
 
   if (includeFull && orgSettings.enableLlmSast) {
     scanners.push(zeroDayScanner);
+  }
+
+  if (includeContainer) {
+    scanners.push(containerScanner);
+  }
+
+  if (includeDast && orgSettings.dastEnabled) {
+    scanners.push(dastScanner);
   }
 
   return scanners;

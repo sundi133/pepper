@@ -58,6 +58,7 @@ const updateProjectSchema = z.object({
   description: z.string().optional(),
   repoUrl: z.string().url().optional().or(z.literal("")),
   defaultBranch: z.string().optional(),
+  dastTargetUrl: z.string().url().optional().or(z.literal("")),
 });
 
 export async function PATCH(

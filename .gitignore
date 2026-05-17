@@ -35,9 +35,6 @@ yarn-error.log*
 .env.local
 .env.production
 
-# prisma
-/prisma/migrations
-
 # vulnerability advisory cache
 GHSA-*.json
 MAL-*.json

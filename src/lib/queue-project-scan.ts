@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { scanQueue, type ScanJobData } from "@/lib/queue";
 import { removeAllScansForProject } from "@/lib/remove-project-scans";
 import { createScanQueuedNotification } from "@/lib/scan-notifications";
+import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
 
 export async function queueProjectScan(params: {
   projectId: string;
@@ -53,20 +54,8 @@ export async function queueProjectScan(params: {
     repoUrlDisplay: project.repoUrl.trim(),
     branch,
     useOrgGithubToken: params.useOrgGithubToken ?? false,
-    orgSettings: {
-      llmProvider: orgSettings?.llmProvider || "openai",
-      llmBaseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",
-      llmModel: orgSettings?.llmModel || "gpt-4o-mini",
-      llmApiKey: orgSettings?.llmApiKey || undefined,
-      enableLlmSast: orgSettings?.enableLlmSast ?? true,
-      enableLlmSecrets: orgSettings?.enableLlmSecrets ?? true,
-      osvApiUrl: orgSettings?.osvApiUrl || "https://api.osv.dev",
-      vulnDbMode: (orgSettings?.vulnDbMode || "online") as
-        | "online"
-        | "mirror"
-        | "offline",
-      orgId: params.organizationId,
-    },
+    orgSettings: buildOrgSettingsForJob(orgSettings, params.organizationId),
+    dastTargetUrl: project.dastTargetUrl || undefined,
     buildGate: project.buildGate
       ? {
           maxCritical: project.buildGate.maxCritical,

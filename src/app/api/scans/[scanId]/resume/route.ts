@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { scanQueue, ScanJobData } from "@/lib/queue";
+import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
 
 export async function POST(
   _req: NextRequest,
@@ -57,20 +58,8 @@ export async function POST(
       repoUrl: sourceType === "GIT_CLONE" ? scan.sourceRef : undefined,
       svnUrl: sourceType === "SVN_CHECKOUT" ? scan.sourceRef : undefined,
       branch: scan.branch || undefined,
-      orgSettings: {
-        llmProvider: orgSettings?.llmProvider || "openai",
-        llmBaseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",
-        llmModel: orgSettings?.llmModel || "gpt-4o-mini",
-        llmApiKey: orgSettings?.llmApiKey || undefined,
-        enableLlmSast: orgSettings?.enableLlmSast ?? true,
-        enableLlmSecrets: orgSettings?.enableLlmSecrets ?? true,
-        osvApiUrl: orgSettings?.osvApiUrl || "https://api.osv.dev",
-        vulnDbMode: (orgSettings?.vulnDbMode || "online") as
-          | "online"
-          | "mirror"
-          | "offline",
-        orgId,
-      },
+      orgSettings: buildOrgSettingsForJob(orgSettings, orgId),
+      dastTargetUrl: scan.project.dastTargetUrl || undefined,
       buildGate: scan.project.buildGate
         ? {
             maxCritical: scan.project.buildGate.maxCritical,

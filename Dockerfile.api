@@ -6,7 +6,7 @@ RUN apk add --no-cache libc6-compat git unzip
 COPY package.json package-lock.json ./
 RUN npm ci --production=false
 
-COPY next.config.ts tsconfig.json next-env.d.ts postcss.config.mjs components.json prisma.config.ts ./
+COPY next.config.ts tsconfig.json postcss.config.mjs components.json prisma.config.ts ./
 COPY prisma ./prisma
 COPY public ./public
 COPY src ./src

@@ -29,6 +29,7 @@ export interface ScanContext {
     dastTargetUrl?: string;
     dastEndpoint?: string;
     dastApiKey?: string;
+    dastConfigYaml?: string;
   };
   scanId?: string;
   signal?: AbortSignal;

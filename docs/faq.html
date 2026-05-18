@@ -215,6 +215,9 @@
       <p><strong>Configuration:</strong></p>
       <ul>
         <li><em>Settings → DAST</em> — enable, set the dapper endpoint and API key.</li>
+        <li>Optional local orchestration YAML — paste a Dapper config into
+          <em>Settings → DAST</em> and Pepper will write it into the Dapper workspace
+          when no HTTP endpoint is configured.</li>
         <li>Per project — <code>dastTargetUrl</code> (set under project settings or via
           <code>PATCH /api/projects/&lt;id&gt;</code>).</li>
         <li>Scan types — <code>DAST_ONLY</code> runs dapper alone; <code>FULL</code> runs

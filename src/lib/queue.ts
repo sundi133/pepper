@@ -73,6 +73,7 @@ export interface ScanJobData {
     dastTargetUrl?: string;
     dastEndpoint?: string;
     dastApiKey?: string;
+    dastConfigYaml?: string;
   };
   dastTargetUrl?: string;
   buildGate?: {

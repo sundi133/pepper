@@ -13,12 +13,27 @@ export async function GET() {
   }
   const settings = await prisma.orgSettings.findUnique({
     where: { organizationId: orgId },
-    select: { dastEnabled: true, dastEndpoint: true, dastApiKeyEnc: true },
+    select: {
+      dastEnabled: true,
+      dastEndpoint: true,
+      dastApiKeyEnc: true,
+      dastConfigYamlEnc: true,
+    },
   });
+  let configYaml = "";
+  if (settings?.dastConfigYamlEnc) {
+    try {
+      configYaml = decryptSecret(settings.dastConfigYamlEnc);
+    } catch {
+      configYaml = "";
+    }
+  }
   return NextResponse.json({
     enabled: settings?.dastEnabled ?? false,
     endpoint: settings?.dastEndpoint ?? "",
     hasApiKey: !!settings?.dastApiKeyEnc,
+    configYaml,
+    hasConfigYaml: !!settings?.dastConfigYamlEnc,
   });
 }
 
@@ -34,12 +49,19 @@ export async function PUT(req: NextRequest) {
     enabled?: boolean;
     endpoint?: string;
     apiKey?: string | null;
+    configYaml?: string | null;
   };
 
   let dastApiKeyEnc: string | null | undefined;
   if (body.apiKey === null) dastApiKeyEnc = null;
   else if (typeof body.apiKey === "string" && body.apiKey.length > 0) {
     dastApiKeyEnc = encryptSecret(body.apiKey);
+  }
+  let dastConfigYamlEnc: string | null | undefined;
+  if (body.configYaml === null) dastConfigYamlEnc = null;
+  else if (typeof body.configYaml === "string") {
+    if (body.configYaml.trim().length === 0) dastConfigYamlEnc = null;
+    else dastConfigYamlEnc = encryptSecret(body.configYaml);
   }
 
   await prisma.orgSettings.upsert({
@@ -49,11 +71,13 @@ export async function PUT(req: NextRequest) {
       dastEnabled: body.enabled ?? false,
       dastEndpoint: body.endpoint || null,
       ...(dastApiKeyEnc !== undefined ? { dastApiKeyEnc } : {}),
+      ...(dastConfigYamlEnc !== undefined ? { dastConfigYamlEnc } : {}),
     },
     update: {
       dastEnabled: body.enabled ?? false,
       dastEndpoint: body.endpoint || null,
       ...(dastApiKeyEnc !== undefined ? { dastApiKeyEnc } : {}),
+      ...(dastConfigYamlEnc !== undefined ? { dastConfigYamlEnc } : {}),
     },
   });
 
@@ -63,7 +87,11 @@ export async function PUT(req: NextRequest) {
     action: "settings.dast.updated",
     resource: "settings",
     resourceId: orgId,
-    details: { enabled: body.enabled, endpointSet: !!body.endpoint },
+    details: {
+      enabled: body.enabled,
+      endpointSet: !!body.endpoint,
+      configYamlSet: typeof body.configYaml === "string" && body.configYaml.trim().length > 0,
+    },
     ipAddress: ipFromHeaders(req.headers),
   });
 
@@ -80,7 +108,11 @@ export async function POST() {
   }
   const settings = await prisma.orgSettings.findUnique({
     where: { organizationId: orgId },
-    select: { dastEndpoint: true, dastApiKeyEnc: true },
+    select: {
+      dastEndpoint: true,
+      dastApiKeyEnc: true,
+      dastConfigYamlEnc: true,
+    },
   });
   const endpoint = settings?.dastEndpoint;
   if (!endpoint) {

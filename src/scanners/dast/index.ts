@@ -196,6 +196,7 @@ export const dastScanner: ScannerPlugin = {
         target,
         ctx.workDir,
         ctx.scanId,
+        ctx.orgSettings.dastConfigYaml,
         ctx.onProgress,
       );
       if (localWorkspace) {

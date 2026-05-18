@@ -13,6 +13,7 @@ type RawOrgSettings = {
   dastEnabled?: boolean | null;
   dastEndpoint?: string | null;
   dastApiKeyEnc?: string | null;
+  dastConfigYamlEnc?: string | null;
 } | null;
 
 /**
@@ -29,6 +30,14 @@ export function buildOrgSettingsForJob(
       dastApiKey = decryptSecret(orgSettings.dastApiKeyEnc);
     } catch {
       dastApiKey = undefined;
+    }
+  }
+  let dastConfigYaml: string | undefined;
+  if (orgSettings?.dastConfigYamlEnc) {
+    try {
+      dastConfigYaml = decryptSecret(orgSettings.dastConfigYamlEnc);
+    } catch {
+      dastConfigYaml = undefined;
     }
   }
 
@@ -48,5 +57,6 @@ export function buildOrgSettingsForJob(
     dastEnabled: orgSettings?.dastEnabled ?? false,
     dastEndpoint: orgSettings?.dastEndpoint || undefined,
     dastApiKey,
+    dastConfigYaml,
   };
 }

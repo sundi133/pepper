@@ -386,6 +386,7 @@ model OrgSettings {
   dastEnabled     Boolean  @default(false)
   dastEndpoint    String?
   dastApiKeyEnc   String?  @db.Text
+  dastConfigYamlEnc String? @db.Text
 
   // Code signing (cosign keyless or key-based)
   codeSigningEnabled Boolean @default(false)

@@ -20,6 +20,8 @@ export default function DastSettingsPage() {
   const [endpoint, setEndpoint] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [hasApiKey, setHasApiKey] = useState(false);
+  const [configYaml, setConfigYaml] = useState("");
+  const [hasConfigYaml, setHasConfigYaml] = useState(false);
   const [saving, setSaving] = useState(false);
 
   async function load() {
@@ -29,10 +31,14 @@ export default function DastSettingsPage() {
       enabled: boolean;
       endpoint: string;
       hasApiKey: boolean;
+      configYaml: string;
+      hasConfigYaml: boolean;
     };
     setEnabled(j.enabled);
     setEndpoint(j.endpoint);
     setHasApiKey(j.hasApiKey);
+    setConfigYaml(j.configYaml);
+    setHasConfigYaml(j.hasConfigYaml);
   }
 
   useEffect(() => {
@@ -49,6 +55,7 @@ export default function DastSettingsPage() {
           enabled,
           endpoint,
           apiKey: apiKey || undefined,
+          configYaml,
         }),
       });
       if (!res.ok) toast.error("Save failed");
@@ -127,6 +134,22 @@ export default function DastSettingsPage() {
               onChange={(e) => setApiKey(e.target.value)}
               placeholder={hasApiKey ? "•••••• stored" : ""}
             />
+          </div>
+          <div className="space-y-1">
+            <Label>
+              Dapper config YAML{" "}
+              {hasConfigYaml && <span className="text-xs text-muted-foreground">(stored)</span>}
+            </Label>
+            <textarea
+              className="min-h-[220px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm shadow-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              placeholder={`# Paste the contents of your dapper config here.\nauthentication:\n  login_type: form\n  login_url: https://example.com/login\n  credentials:\n    username: admin\n    password: password`}
+              value={configYaml}
+              onChange={(e) => setConfigYaml(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Pepper stores this encrypted and writes it into the Dapper workspace as a config
+              file when local orchestration runs.
+            </p>
           </div>
           <div className="flex gap-2">
             <Button disabled={saving} onClick={() => void save()}>

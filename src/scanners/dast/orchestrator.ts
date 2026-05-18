@@ -283,7 +283,18 @@ async function stageTargetRepo(
 
 async function prepareConfig(
   workspaceRoot: string,
+  scanId: string,
+  configYaml?: string,
 ): Promise<string | undefined> {
+  const yaml = configYaml?.trim();
+  if (yaml) {
+    const fileName = `pepper-dapper-${scanId.replace(/[^a-zA-Z0-9_-]/g, "-")}.yaml`;
+    const targetPath = path.join(workspaceRoot, "configs", fileName);
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(targetPath, configYaml ?? "", "utf8");
+    return `./configs/${fileName}`;
+  }
+
   const configPath = process.env.DAPPER_CONFIG_PATH;
   if (!configPath || !configPath.trim()) return undefined;
 
@@ -292,7 +303,7 @@ async function prepareConfig(
     throw new Error(`Dapper config file not found: ${resolved}`);
   }
 
-  const fileName = path.basename(resolved);
+  const fileName = `pepper-dapper-${scanId.replace(/[^a-zA-Z0-9_-]/g, "-")}-${path.basename(resolved)}`;
   const targetPath = path.join(workspaceRoot, "configs", fileName);
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.copyFileSync(resolved, targetPath);
@@ -468,6 +479,7 @@ export async function runLocalDapperWorkspace(
   target: string,
   workDir: string,
   scanId: string | undefined,
+  configYaml: string | undefined,
   onProgress?: (message: string) => void,
 ): Promise<DapperWorkspaceResult | null> {
   const workspaceRoot = resolveWorkspaceRoot();
@@ -476,11 +488,15 @@ export async function runLocalDapperWorkspace(
   try {
     await ensureWorkspaceRoot(workspaceRoot, onProgress);
 
-    const repoName =
+  const repoName =
       `pepper-${(scanId || Date.now().toString()).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     await stageTargetRepo(workspaceRoot, repoName, workDir);
 
-    const configRelPath = await prepareConfig(workspaceRoot);
+    const configRelPath = await prepareConfig(
+      workspaceRoot,
+      scanId || Date.now().toString(),
+      configYaml,
+    );
     const workflowId = await startWorkflow(
       workspaceRoot,
       target,

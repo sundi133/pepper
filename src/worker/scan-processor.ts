@@ -409,6 +409,32 @@ export async function processScanJob(job: Job<ScanJobData>) {
       "Scan complete",
     );
 
+    // Persist DAST report bundle if the scanner wrote one into the workDir.
+    try {
+      const dastReportPath = path.join(workDir, "deliverables", "dast-report.json");
+      if (fs.existsSync(dastReportPath)) {
+        const dastReport = fs.readFileSync(dastReportPath, "utf8");
+        const dastKey = `dast-reports/${scanId}/dast-report.json`;
+        await uploadObject(dastKey, dastReport, "application/json");
+        await prisma.scanArtifact.upsert({
+          where: { scanId_type: { scanId, type: "DAST_REPORT" } },
+          create: {
+            scanId,
+            type: "DAST_REPORT",
+            objectKey: dastKey,
+            size: Buffer.byteLength(dastReport),
+          },
+          update: {
+            objectKey: dastKey,
+            size: Buffer.byteLength(dastReport),
+          },
+        });
+        log.info({ dastKey }, "DAST report bundle uploaded");
+      }
+    } catch (dastReportErr) {
+      log.warn({ dastReportErr }, "DAST report upload failed (non-blocking)");
+    }
+
     // 5. Generate SBOMs (CycloneDX + SPDX) from parsed dependencies
     if (result.dependencies.length > 0) {
       try {
@@ -881,4 +907,3 @@ function findingFingerprint(finding: {
 function normalizeFindingTitle(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
-

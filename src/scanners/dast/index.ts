@@ -1,4 +1,6 @@
 import { execFile } from "child_process";
+import fs from "fs";
+import path from "path";
 import { promisify } from "util";
 import {
   RawFinding,
@@ -6,6 +8,7 @@ import {
   ScannerPlugin,
   SeverityLevel,
 } from "../types";
+import { runLocalDapperWorkspace } from "./orchestrator";
 
 const execFileP = promisify(execFile);
 
@@ -189,6 +192,41 @@ export const dastScanner: ScannerPlugin = {
         ctx.onProgress,
       );
     } else {
+      const localWorkspace = await runLocalDapperWorkspace(
+        target,
+        ctx.workDir,
+        ctx.scanId,
+        ctx.onProgress,
+      );
+      if (localWorkspace) {
+        const reportBundlePath = path.join(
+          ctx.workDir,
+          "deliverables",
+          "dast-report.json",
+        );
+        fs.mkdirSync(path.dirname(reportBundlePath), { recursive: true });
+        fs.writeFileSync(
+          reportBundlePath,
+          JSON.stringify(
+            {
+              workflowId: localWorkspace.workflowId,
+              repoName: localWorkspace.repoName,
+              workspaceRoot: localWorkspace.workspaceRoot,
+              target,
+              generatedAt: new Date().toISOString(),
+              findingsCount: localWorkspace.findings.length,
+              developerReportMarkdown: localWorkspace.developerReportMarkdown,
+              executiveReportMarkdown: localWorkspace.executiveReportMarkdown,
+              exportJsonPath: localWorkspace.exportJsonPath,
+              exportCsvPath: localWorkspace.exportCsvPath,
+              artifact: localWorkspace.artifact,
+            },
+            null,
+            2,
+          ),
+        );
+        return localWorkspace.findings;
+      }
       report = await runViaCli(target, ctx.onProgress);
     }
 

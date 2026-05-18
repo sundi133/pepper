@@ -323,7 +323,8 @@ Pepper ships with end-to-end pipeline security primitives:
   SIEM (CEF / LEEF / JSON over HTTPS or syslog), and code signing
   (cosign keyless via Fulcio + Rekor, or RSA fallback).
 - **DAST** — integrates with [dapper](https://github.com/sundi133/dapper)
-  via HTTP API or local CLI. Configure once under Settings → DAST and set a
+  via HTTP API, local Dapper CLI, or an automatic local Dapper workspace
+  orchestration flow. Configure once under Settings → DAST and set a
   `dastTargetUrl` per project.
 - **CI/CD templates** — download ready-to-use GitHub Actions, GitLab CI and
   Jenkinsfile templates from `/api/cicd-templates/<platform>`.

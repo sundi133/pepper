@@ -325,7 +325,8 @@ Pepper ships with end-to-end pipeline security primitives:
 - **DAST** — integrates with [dapper](https://github.com/sundi133/dapper)
   via HTTP API, local Dapper CLI, or an automatic local Dapper workspace
   orchestration flow. Configure once under Settings → DAST, optionally paste a
-  Dapper YAML config there, and set a `dastTargetUrl` per project.
+  Dapper YAML config there, set `DAPPER_WORKSPACE_DIR=./dapper` for local runs,
+  and set a `dastTargetUrl` per project.
 - **CI/CD templates** — download ready-to-use GitHub Actions, GitLab CI and
   Jenkinsfile templates from `/api/cicd-templates/<platform>`.
 - **API keys** — manage CI/IDE/precommit credentials under Settings → API Keys.

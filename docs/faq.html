@@ -189,7 +189,7 @@
         Pepper delegates DAST to
         <a href="https://github.com/sundi133/dapper">dapper</a>, an AI-driven pentester
         that exercises a running application. The DAST scanner lives at
-        <code>src/scanners/dast/</code> and can talk to dapper two ways:
+        <code>src/scanners/dast/</code> and can talk to dapper three ways:
       </p>
       <ol>
         <li>
@@ -197,6 +197,14 @@
           <em>Settings → DAST</em>. Pepper <code>POST</code>s the target URL to dapper,
           polls <code>GET /scans/&lt;id&gt;</code> until <code>COMPLETED</code>, then
           ingests the findings.
+        </li>
+        <li>
+          <strong>Local workspace orchestration</strong> — when <code>dastEndpoint</code>
+          is unset, Pepper can bootstrap a sibling <code>../dapper</code> checkout (or a
+          path from <code>DAPPER_WORKSPACE_DIR</code>), stage the scan workspace into
+          <code>dapper/repos/&lt;repo&gt;</code>, run <code>dapper start</code>, export
+          deliverables with <code>scripts/export-findings-csv.js</code>, and ingest the
+          generated reports automatically.
         </li>
         <li>
           <strong>CLI fallback</strong> — when <code>dastEndpoint</code> is unset but the
@@ -211,6 +219,9 @@
           <code>PATCH /api/projects/&lt;id&gt;</code>).</li>
         <li>Scan types — <code>DAST_ONLY</code> runs dapper alone; <code>FULL</code> runs
           it alongside SAST/SCA/secrets when enabled.</li>
+        <li>Optional local orchestration env — <code>DAPPER_WORKSPACE_DIR</code>,
+          <code>DAPPER_REPO_URL</code>, <code>DAPPER_CONFIG_PATH</code>,
+          <code>DAPPER_EXPORT_MODEL</code>, <code>DAPPER_EXPORT_MAX_TURNS</code>.</li>
       </ul>
 
       <h2 id="container">6 · Container &amp; artifact scanning</h2>

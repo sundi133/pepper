@@ -13,7 +13,7 @@ import { SeverityBadge } from "./scan-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SCANNER_LABELS, isPatternBasedScanner } from "@/lib/constants";
-import { findingReportSummaryLead } from "@/lib/finding-report";
+import { findingReportSummaryLead, renderReportMarkdown } from "@/lib/finding-report";
 import {
   githubBlobLineUrl,
   parseGithubRepo,
@@ -25,7 +25,7 @@ import {
   resolveGithubRepoForFixPr,
 } from "@/lib/open-fix-pr-client";
 import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
-import { ExternalLink, Sparkles, GitPullRequest } from "lucide-react";
+import { ExternalLink, Sparkles, GitPullRequest, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -417,6 +417,125 @@ function readStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string");
 }
 
+function buildAiAssistPrompt(
+  tool: "claude" | "cursor",
+  finding: Finding,
+  sourceContext?: FindingScanSourceContext,
+): string {
+  const report = buildFindingReport(finding);
+  const repoUrl = sourceContext
+    ? resolveGithubRepoUrlForOpenPr({
+        projectRepoUrl: sourceContext.repoUrl,
+        scanSourceType: sourceContext.sourceType,
+        scanSourceRef: sourceContext.scanSourceRef,
+      })
+    : null;
+  const lineUrl = githubCodeUrl(sourceContext, finding);
+  const location = formatFindingLocation(finding);
+  const assistantName = tool === "claude" ? "Claude Code" : "Cursor";
+  const toolHints =
+    tool === "claude"
+      ? [
+          "You are working in Claude Code inside a local repository.",
+          "Edit files directly and keep the patch as small as possible.",
+          "If you need more context, inspect the repo first, then make the fix.",
+        ]
+      : [
+          "You are working in Cursor inside a local repository.",
+          "Edit files directly and keep the patch as small as possible.",
+          "If you need more context, inspect the repo first, then make the fix.",
+        ];
+
+  return [
+    `You are ${assistantName}. Fix the security finding below directly in code.`,
+    ...toolHints,
+    "After editing, summarize the files changed and how to validate the fix.",
+    "Do not give general advice unless it is needed to complete the patch.",
+    "",
+    "Repository context:",
+    repoUrl ? `- Repository: ${repoUrl}` : "- Repository: not available",
+    sourceContext?.branch ? `- Branch: ${sourceContext.branch}` : null,
+    sourceContext?.commitSha ? `- Commit: ${sourceContext.commitSha}` : null,
+    location ? `- Location: ${location}` : null,
+    lineUrl ? `- GitHub line: ${lineUrl}` : null,
+    finding.ruleId ? `- Rule ID: ${finding.ruleId}` : null,
+    finding.cweId ? `- CWE: ${finding.cweId}` : null,
+    `- Severity: ${finding.severity}`,
+    `- Scanner: ${finding.scanner}`,
+    "",
+    "Finding report:",
+    renderReportMarkdown(report),
+    "",
+    "Output format:",
+    "1. Brief diagnosis",
+    "2. Files changed",
+    "3. Validation",
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+}
+
+function CopyAiPromptButton({
+  finding,
+  sourceContext,
+  tool,
+}: {
+  finding: Finding;
+  sourceContext?: FindingScanSourceContext;
+  tool: "claude" | "cursor";
+}) {
+  const [busy, setBusy] = useState(false);
+  const label = tool === "claude" ? "Copy for Claude" : "Copy for Cursor";
+
+  async function copyPrompt() {
+    setBusy(true);
+    try {
+      const prompt = buildAiAssistPrompt(tool, finding, sourceContext);
+      await navigator.clipboard.writeText(prompt);
+      toast.success(`${label} copied`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : `Failed to copy ${label.toLowerCase()}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-8 gap-1.5 text-xs font-medium"
+      disabled={busy}
+      onClick={() => void copyPrompt()}
+    >
+      <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      {busy ? "Copying…" : label}
+    </Button>
+  );
+}
+
+function FindingActionButtons({
+  finding,
+  sourceContext,
+}: {
+  finding: Finding;
+  sourceContext?: FindingScanSourceContext;
+}) {
+  return (
+    <>
+      <CopyAiPromptButton finding={finding} sourceContext={sourceContext} tool="claude" />
+      <CopyAiPromptButton finding={finding} sourceContext={sourceContext} tool="cursor" />
+      {sourceContext?.scanId ? (
+        <>
+          <SuggestAiFixButton finding={finding} scanId={sourceContext.scanId} />
+          <OpenFixPrButton finding={finding} sourceContext={sourceContext} />
+        </>
+      ) : null}
+    </>
+  );
+}
+
 type SuggestFixResponse = {
   summary: string;
   developerFix: string;
@@ -684,12 +803,7 @@ export function FindingDetailPanel({
             <FindingLocationRow finding={finding} sourceContext={sourceContext} />
             {/* Status Control */}
             <div className="flex flex-wrap items-center gap-2 pt-1">
-              {sourceContext?.scanId ? (
-                <>
-                  <SuggestAiFixButton finding={finding} scanId={sourceContext.scanId} />
-                  <OpenFixPrButton finding={finding} sourceContext={sourceContext} />
-                </>
-              ) : null}
+              <FindingActionButtons finding={finding} sourceContext={sourceContext} />
               <span className="text-xs text-muted-foreground">Status:</span>
               <Select
                 value={finding.status || "OPEN"}
@@ -824,12 +938,7 @@ export function FindingDetailInline({
             <FindingLocationRow finding={finding} sourceContext={sourceContext} />
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {sourceContext?.scanId ? (
-              <>
-                <SuggestAiFixButton finding={finding} scanId={sourceContext.scanId} />
-                <OpenFixPrButton finding={finding} sourceContext={sourceContext} />
-              </>
-            ) : null}
+            <FindingActionButtons finding={finding} sourceContext={sourceContext} />
             <Select
               value={finding.status || "OPEN"}
               onValueChange={handleStatusChange}

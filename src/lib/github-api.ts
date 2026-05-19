@@ -94,6 +94,26 @@ export async function githubPost<T>(
   return { ok: res.ok, status: res.status, data, raw };
 }
 
+export async function githubPatch<T>(
+  token: string,
+  path: string,
+  body: unknown,
+): Promise<{ ok: boolean; status: number; data: T; raw: string }> {
+  const res = await fetch(`${GITHUB_API}${path}`, {
+    method: "PATCH",
+    headers: headers(token, { "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  const raw = await res.text();
+  let data: T = {} as T;
+  try {
+    if (raw) data = JSON.parse(raw) as T;
+  } catch {
+    /* empty */
+  }
+  return { ok: res.ok, status: res.status, data, raw };
+}
+
 export async function githubPut<T>(
   token: string,
   path: string,

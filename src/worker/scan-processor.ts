@@ -634,6 +634,13 @@ export async function processScanJob(job: Job<ScanJobData>) {
       );
     }
 
+    try {
+      const { postScanPrSummary } = await import("@/lib/github-pr-comment");
+      await postScanPrSummary(scanId);
+    } catch (prErr) {
+      log.warn({ prErr }, "PR summary comment failed (non-blocking)");
+    }
+
     // 10. Send email notification (non-blocking)
     try {
       if (job.data.sourceType !== "WEBHOOK") {
@@ -747,6 +754,12 @@ export async function processScanJob(job: Job<ScanJobData>) {
         "@/lib/scan-notifications"
       );
       await notifyScanLifecycleFromWorker(scanId, "SCAN_FAILED");
+    } catch {
+      /* non-blocking */
+    }
+    try {
+      const { postScanPrSummary } = await import("@/lib/github-pr-comment");
+      await postScanPrSummary(scanId);
     } catch {
       /* non-blocking */
     }

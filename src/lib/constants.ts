@@ -96,7 +96,6 @@ export const SKIP_DIRECTORIES = new Set([
   ".eggs",
   "venv",
   ".venv",
-  "env",
   ".next",
   ".nuxt",
   "coverage",

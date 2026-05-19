@@ -68,7 +68,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     description: "Possible API key detected based on variable naming pattern.",
     severity: "MEDIUM",
     pattern:
-      /(?:api[_-]?key|apikey|api[_-]?secret|api[_-]?token)\s*[:=]\s*['"][A-Za-z0-9_\-/.+=]{20,}['"]/i,
+      /(?:api[_-]?key|apikey|api[_-]?secret|api[_-]?token)\s*[:=]\s*(?:['"][A-Za-z0-9_\-/.+=]{20,}['"]|[A-Za-z0-9_\-/.+=]{20,}(?:\s|$|#))/i,
     allowlist: [
       /example/i,
       /your[_-]?api/i,
@@ -85,7 +85,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
       "Possible secret or password detected based on variable naming pattern.",
     severity: "MEDIUM",
     pattern:
-      /(?:secret|password|passwd|pwd|token|auth[_-]?key)\s*[:=]\s*['"][A-Za-z0-9_\-/.+=!@#$%^&*]{8,}['"]/i,
+      /(?:secret|password|passwd|pwd|token|auth[_-]?key)\s*[:=]\s*(?:['"][A-Za-z0-9_\-/.+=!@#$%^&*]{8,}['"]|[A-Za-z0-9_\-/.+=!@#$%^&*]{12,}(?:\s|$|#))/i,
     allowlist: [
       /example/i,
       /changeme/i,

@@ -15,9 +15,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { SCANNER_LABELS, isPatternBasedScanner } from "@/lib/constants";
 import { findingReportSummaryLead, renderReportMarkdown } from "@/lib/finding-report";
 import {
-  githubBlobLineUrl,
   parseGithubRepo,
+  repoFileLineLink,
   resolveGithubRepoUrlForOpenPr,
+  resolveScanCloneRepoUrl,
 } from "@/lib/github-source-link";
 import {
   type FixPrScanSourceContext,
@@ -139,18 +140,18 @@ function formatFindingLocation(finding: Finding): string {
   return `${finding.filePath}${linePart}`;
 }
 
-function githubCodeUrl(
+function repoFileViewLink(
   source: FindingScanSourceContext | undefined,
   finding: Finding,
-): string | null {
+) {
   if (!source || !finding.filePath) return null;
-  const repoUrl = resolveGithubRepoUrlForOpenPr({
+  const repoUrl = resolveScanCloneRepoUrl({
     projectRepoUrl: source.repoUrl,
     scanSourceType: source.sourceType,
     scanSourceRef: source.scanSourceRef,
   });
-  if (!repoUrl) return null;
-  return githubBlobLineUrl({
+  if (!repoUrl && !/^https?:\/\//i.test(finding.filePath)) return null;
+  return repoFileLineLink({
     repoUrl,
     commitSha: source.commitSha,
     branch: source.branch,
@@ -430,7 +431,7 @@ function buildAiAssistPrompt(
         scanSourceRef: sourceContext.scanSourceRef,
       })
     : null;
-  const lineUrl = githubCodeUrl(sourceContext, finding);
+  const lineUrl = repoFileViewLink(sourceContext, finding)?.url ?? null;
   const location = formatFindingLocation(finding);
   const assistantName = tool === "claude" ? "Claude Code" : "Cursor";
   const toolHints =
@@ -551,8 +552,8 @@ function FindingLocationRow({
   sourceContext?: FindingScanSourceContext;
 }) {
   const loc = formatFindingLocation(finding);
-  const gh = githubCodeUrl(sourceContext, finding);
-  if (!loc && !gh) return null;
+  const repoLink = repoFileViewLink(sourceContext, finding);
+  if (!loc && !repoLink) return null;
   return (
     <div className="flex flex-wrap items-center gap-2 pt-1">
       {loc ? (
@@ -560,10 +561,10 @@ function FindingLocationRow({
           {loc}
         </code>
       ) : null}
-      {gh ? (
+      {repoLink ? (
         <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs" asChild>
-          <a href={gh} target="_blank" rel="noopener noreferrer">
-            View on GitHub
+          <a href={repoLink.url} target="_blank" rel="noopener noreferrer">
+            {repoLink.label}
             <ExternalLink className="h-3 w-3 shrink-0" />
           </a>
         </Button>

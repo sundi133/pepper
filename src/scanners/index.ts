@@ -8,6 +8,7 @@ import { zeroDayScanner } from "./zero-day";
 import { containerScanner } from "./container";
 import { dastScanner } from "./dast";
 import { buildFindingFingerprint } from "@/lib/finding-fingerprint";
+import { isEnvFile } from "./secrets/env-files";
 import {
   IAC_MIN_CONFIDENCE_DEFAULT,
   LLM_MIN_CONFIDENCE_DEFAULT,
@@ -188,6 +189,7 @@ function filterFalsePositives(findings: RawFinding[]): RawFinding[] {
     if (
       finding.scanner.startsWith("SECRETS") &&
       finding.severity !== "CRITICAL" &&
+      !isEnvFile(filePath) &&
       PLACEHOLDER_TEXT.test(text)
     ) {
       return false;

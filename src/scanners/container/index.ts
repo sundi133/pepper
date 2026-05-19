@@ -119,7 +119,7 @@ async function scanImageWithTrivy(image: string): Promise<TrivyOutput | null> {
   }
 }
 
-function discoverImages(workDir: string, fileList: string[]): ImageRef[] {
+export function discoverImages(workDir: string, fileList: string[]): ImageRef[] {
   const refs: ImageRef[] = [];
   for (const rel of fileList) {
     const base = path.basename(rel);

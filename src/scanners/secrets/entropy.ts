@@ -36,21 +36,49 @@ export function isHighEntropy(
  * Extract candidate secret values from a line of code.
  * Looks for quoted strings and assignment values.
  */
-export function extractCandidateValues(line: string): string[] {
-  const candidates: string[] = [];
+const ENV_REFERENCE =
+  /(?:process\.env|os\.environ|getenv|ENV\[|\$\{|import\.meta\.env)/i;
 
-  // Quoted strings
+const DOTENV_LINE =
+  /^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*(.+?)\s*$/;
+
+export function extractCandidateValues(
+  line: string,
+  options?: { isEnvFile?: boolean },
+): string[] {
+  if (!options?.isEnvFile && ENV_REFERENCE.test(line)) return [];
+
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+
+  const add = (value: string) => {
+    if (value.length < 16 || seen.has(value)) return;
+    seen.add(value);
+    candidates.push(value);
+  };
+
   const quotedRegex = /['"]([^'"]{16,})['"]/g;
-  let match;
+  let match: RegExpExecArray | null;
   while ((match = quotedRegex.exec(line)) !== null) {
-    candidates.push(match[1]);
+    add(match[1]);
   }
 
-  // Assignment values (after = or :)
   const assignRegex = /[:=]\s*['"]?([A-Za-z0-9_\-/.+=!@#$%^&*]{16,})['"]?/g;
   while ((match = assignRegex.exec(line)) !== null) {
-    if (!candidates.includes(match[1])) {
-      candidates.push(match[1]);
+    add(match[1]);
+  }
+
+  if (options?.isEnvFile) {
+    const dotenv = line.trim().match(DOTENV_LINE);
+    if (dotenv) {
+      let v = dotenv[1].trim();
+      if (
+        (v.startsWith('"') && v.endsWith('"')) ||
+        (v.startsWith("'") && v.endsWith("'"))
+      ) {
+        v = v.slice(1, -1);
+      }
+      add(v);
     }
   }
 

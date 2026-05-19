@@ -7,6 +7,8 @@ import {
   findExistingCommentId,
   renderPrSummary,
 } from "./github-pr-summary";
+import { postInlineReview } from "./github-pr-inline";
+import { postCommitStatus } from "./github-pr-status";
 
 const log = logger.child({ module: "github-pr-comment" });
 
@@ -155,9 +157,11 @@ export async function postScanPrSummary(scanId: string): Promise<void> {
           select: {
             severity: true,
             title: true,
+            description: true,
             filePath: true,
             startLine: true,
             ruleId: true,
+            cweId: true,
           },
           take: 100,
         })
@@ -216,5 +220,54 @@ export async function postScanPrSummary(scanId: string): Promise<void> {
       },
       "Posted PR security review summary",
     );
+  }
+
+  const reviewUrl = buildReviewUrl(scan.id);
+
+  if (status === "COMPLETED" && scan.commitSha && topFindings.length > 0) {
+    try {
+      const inline = await postInlineReview({
+        token,
+        owner: githubOwner,
+        repo: githubRepoName,
+        prNumber: scan.prNumber,
+        headSha: scan.commitSha,
+        findings: topFindings,
+        reviewUrl,
+      });
+      log.info(
+        {
+          scanId,
+          prNumber: scan.prNumber,
+          posted: inline.posted,
+          skipped: inline.skipped,
+        },
+        "Inline review comments dispatched",
+      );
+    } catch (e) {
+      log.warn({ scanId, e }, "Inline review failed (non-blocking)");
+    }
+  }
+
+  if (scan.commitSha) {
+    try {
+      await postCommitStatus({
+        token,
+        owner: githubOwner,
+        repo: githubRepoName,
+        sha: scan.commitSha,
+        scanStatus: status,
+        gateResult: scan.gateResult as "PENDING" | "PASSED" | "FAILED",
+        counts: {
+          critical: scan.criticalCount,
+          high: scan.highCount,
+          medium: scan.mediumCount,
+          low: scan.lowCount,
+        },
+        reviewUrl,
+      });
+    } catch (e) {
+      log.warn({ scanId, e }, "Commit status post failed (non-blocking)");
+    }
   }
 }

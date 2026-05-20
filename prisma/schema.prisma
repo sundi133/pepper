@@ -21,6 +21,7 @@ model Organization {
   settings         OrgSettings?
   githubConnection    OrgGithubConnection?
   bitbucketConnection OrgBitbucketConnection?
+  azureDevOpsConnection OrgAzureDevOpsConnection?
   apiKeys          ApiKey[]
   securityPolicies SecurityPolicy[]
   notifications    Notification[]
@@ -54,6 +55,23 @@ model OrgBitbucketConnection {
   appPasswordEnc  String   @db.Text
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+/// Azure DevOps Services connection: Personal Access Token (PAT) based.
+/// PATs in Azure DevOps are scoped to a single ADO organization (the
+/// `dev.azure.com/<org>` segment), so we store the org name alongside the
+/// encrypted token. The PAT is sent as `Authorization: Basic <base64(':' + PAT)>`
+/// against the ADO REST API.
+model OrgAzureDevOpsConnection {
+  id                  String   @id @default(cuid())
+  organizationId      String   @unique
+  azureOrganization   String
+  azureUser           String?
+  patEnc              String   @db.Text
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
@@ -159,6 +177,13 @@ model Project {
   bitbucketRepoUuid     String?
   connectedViaBitbucket Boolean @default(false)
 
+  /// Set when imported via Azure DevOps Services (unique per org).
+  azureOrganization   String?
+  azureProjectName    String?
+  azureRepoId         String?
+  azureRepoName       String?
+  connectedViaAzure   Boolean @default(false)
+
   /// Target URL for DAST (dapper) scans of this project.
   dastTargetUrl      String?
 
@@ -169,6 +194,7 @@ model Project {
 
   @@unique([organizationId, githubRepoId])
   @@unique([organizationId, bitbucketRepoUuid])
+  @@unique([organizationId, azureRepoId])
 }
 
 model Scan {

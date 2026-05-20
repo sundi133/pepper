@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { logger } from "./logger";
 import { postScanPrSummary } from "./github-pr-comment";
 import { postScanBitbucketPrSummary } from "./bitbucket-pr-comment";
+import { postScanAzurePrSummary } from "./azure-devops-pr-comment";
 
 const log = logger.child({ module: "pr-bot" });
 
@@ -22,6 +23,8 @@ export async function postScanPrReview(scanId: string): Promise<void> {
           githubRepoName: true,
           bitbucketWorkspace: true,
           bitbucketRepoSlug: true,
+          azureProjectName: true,
+          azureRepoId: true,
         },
       },
     },
@@ -36,6 +39,11 @@ export async function postScanPrReview(scanId: string): Promise<void> {
 
   if (scan.project.bitbucketWorkspace && scan.project.bitbucketRepoSlug) {
     await postScanBitbucketPrSummary(scanId);
+    return;
+  }
+
+  if (scan.project.azureProjectName && scan.project.azureRepoId) {
+    await postScanAzurePrSummary(scanId);
     return;
   }
 

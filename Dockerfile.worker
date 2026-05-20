@@ -4,16 +4,19 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat git unzip
 
 COPY package.json package-lock.json ./
-RUN npm ci --production=false
+# Runtime deps only. devDependencies (vitest, typescript, eslint,
+# tailwindcss, @types/*, etc.) are not needed by the worker — they bloat
+# the image and the BuildKit layer cache. tsx and tsconfig-paths now live
+# in `dependencies` so they're still installed here.
+RUN npm ci --omit=dev
 
-COPY next.config.ts tsconfig.json postcss.config.mjs components.json prisma.config.ts ./
 COPY prisma ./prisma
-COPY public ./public
+COPY prisma.config.ts ./
+RUN npx prisma generate
+
+COPY tsconfig.json ./
 COPY src ./src
 COPY scripts ./scripts
-COPY compliance ./compliance
-
-RUN npx prisma generate
 
 FROM base AS worker
 ENV NODE_ENV=production

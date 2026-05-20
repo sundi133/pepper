@@ -1,17 +1,45 @@
 node_modules
 .next
 .git
+.github
 *.log
 .env
 .env.local
 .env.production
 .DS_Store
 .claude
-all.zip
+.cursor
+.vscode
+.idea
+
+# Build artifacts / caches
+.cache
+.turbo
+.vercel
+coverage
 dist
+tmp
+*.tmp
+tsconfig.tsbuildinfo
+
+# Archives that occasionally land in the repo root
+all.zip
+*.zip
+*.tar.gz
+*.tgz
+
+# Docs (not needed in build context)
 docs
 README.md
 ARCHITECTURE.md
 RELEASE_CHECKLIST.md
+
+# Tests (don't ship in production images)
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+vitest.config.ts
+
+# Local scratch
 testcode
-tsconfig.tsbuildinfo

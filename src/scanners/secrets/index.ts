@@ -231,13 +231,19 @@ async function analyzeSecretChunk(
             confidenceReason: f.whyReal,
           },
         };
+        const endLine = f.endLine || f.startLine;
+        const where =
+          endLine !== f.startLine
+            ? `${chunk.filePath}:${f.startLine}-${endLine}`
+            : `${chunk.filePath}:${f.startLine}`;
         return enrichFinding(base, base.metadata as Record<string, unknown>, {
-          whatIsWrong: `Exposed ${f.credentialType} in source/config`,
-          where: `${chunk.filePath}:${f.startLine}-${f.endLine || f.startLine}`,
+          whatIsWrong: `Exposed ${f.credentialType} in source code or configuration`,
+          where,
           whyExploitable: f.whyReal,
           impact: f.impact,
           fix: f.remediation,
-          validation: "Rotate credential and verify it no longer appears in repo history scans",
+          validation:
+            "Rotate or revoke the credential and verify that it no longer appears in repository history scans",
         });
       });
   } catch (err) {

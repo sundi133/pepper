@@ -1,0 +1,305 @@
+import type { SecretPattern } from "@/scanners/types";
+
+export const SECRET_PATTERNS: SecretPattern[] = [
+  {
+    id: "AWS_ACCESS_KEY",
+    title: "AWS Access Key ID",
+    description:
+      "AWS Access Key ID found in code. This can be used to access AWS services.",
+    severity: "CRITICAL",
+    pattern: /AKIA[0-9A-Z]{16}/,
+    allowlist: [/example/i, /test/i, /dummy/i, /fake/i, /placeholder/i],
+  },
+  {
+    id: "AWS_SECRET_KEY",
+    title: "AWS Secret Access Key",
+    description: "AWS Secret Access Key found in code.",
+    severity: "CRITICAL",
+    pattern:
+      /(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY|aws_secret)\s*[:=]\s*['"]?[A-Za-z0-9/+=]{40}['"]?/,
+  },
+  {
+    id: "GITHUB_TOKEN",
+    title: "GitHub Personal Access Token",
+    description:
+      "GitHub token found in code. Can be used to access GitHub APIs.",
+    severity: "HIGH",
+    pattern: /gh[ps]_[A-Za-z0-9_]{36,}/,
+  },
+  {
+    id: "GITHUB_FINE_GRAINED",
+    title: "GitHub Fine-Grained Token",
+    description: "GitHub fine-grained personal access token found in code.",
+    severity: "HIGH",
+    pattern: /github_pat_[A-Za-z0-9_]{22,}/,
+  },
+  {
+    id: "GITLAB_TOKEN",
+    title: "GitLab Token",
+    description: "GitLab personal or project access token found in code.",
+    severity: "HIGH",
+    pattern: /glpat-[A-Za-z0-9_-]{20,}/,
+  },
+  {
+    id: "SLACK_TOKEN",
+    title: "Slack Token",
+    description: "Slack bot or user token found in code.",
+    severity: "HIGH",
+    pattern: /xox[bpors]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,34}/,
+  },
+  {
+    id: "SLACK_WEBHOOK",
+    title: "Slack Webhook URL",
+    description: "Slack incoming webhook URL found in code.",
+    severity: "MEDIUM",
+    pattern:
+      /https:\/\/hooks\.slack\.com\/services\/T[A-Z0-9]+\/B[A-Z0-9]+\/[a-zA-Z0-9]+/,
+  },
+  {
+    id: "PRIVATE_KEY",
+    title: "Private Key",
+    description: "Private cryptographic key found in code.",
+    severity: "CRITICAL",
+    pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/,
+  },
+  {
+    id: "GENERIC_API_KEY",
+    title: "Generic API Key",
+    description: "Possible API key detected based on variable naming pattern.",
+    severity: "MEDIUM",
+    pattern:
+      /(?:api[_-]?key|apikey|api[_-]?secret|api[_-]?token)\s*[:=]\s*['"][A-Za-z0-9_\-/.+=]{20,}['"]/i,
+    allowlist: [
+      /example/i,
+      /your[_-]?api/i,
+      /\$\{/i,
+      /process\.env/i,
+      /os\.environ/i,
+      /ENV\[/i,
+    ],
+  },
+  {
+    id: "GENERIC_SECRET",
+    title: "Generic Secret",
+    description:
+      "Possible secret or password detected based on variable naming pattern.",
+    severity: "MEDIUM",
+    pattern:
+      /(?:secret|password|passwd|pwd|token|auth[_-]?key)\s*[:=]\s*['"][A-Za-z0-9_\-/.+=!@#$%^&*]{8,}['"]/i,
+    allowlist: [
+      /example/i,
+      /changeme/i,
+      /\$\{/i,
+      /process\.env/i,
+      /os\.environ/i,
+      /placeholder/i,
+      /your[_-]/i,
+    ],
+  },
+  {
+    id: "JWT_TOKEN",
+    title: "JWT Token",
+    description: "JSON Web Token found hardcoded in source code.",
+    severity: "HIGH",
+    pattern: /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/,
+    allowlist: [/test/i, /example/i, /mock/i],
+  },
+  {
+    id: "GOOGLE_API_KEY",
+    title: "Google API Key",
+    description: "Google API key found in code.",
+    severity: "HIGH",
+    pattern: /AIza[0-9A-Za-z_-]{35}/,
+  },
+  {
+    id: "STRIPE_SECRET_KEY",
+    title: "Stripe Secret Key",
+    description: "Stripe secret API key found in code.",
+    severity: "CRITICAL",
+    pattern: /sk_live_[0-9a-zA-Z]{24,}/,
+  },
+  {
+    id: "STRIPE_PUBLISHABLE_KEY",
+    title: "Stripe Publishable Key",
+    description:
+      "Stripe publishable key found in code. While not as sensitive as secret keys, it should not be hardcoded.",
+    severity: "LOW",
+    pattern: /pk_live_[0-9a-zA-Z]{24,}/,
+  },
+  {
+    id: "SENDGRID_API_KEY",
+    title: "SendGrid API Key",
+    description: "SendGrid API key found in code.",
+    severity: "HIGH",
+    pattern: /SG\.[A-Za-z0-9_-]{22,}\.[A-Za-z0-9_-]{22,}/,
+  },
+  {
+    id: "TWILIO_API_KEY",
+    title: "Twilio API Key",
+    description: "Twilio API key or auth token found in code.",
+    severity: "HIGH",
+    pattern: /SK[0-9a-fA-F]{32}/,
+  },
+  {
+    id: "MAILGUN_KEY",
+    title: "Mailgun API Key",
+    description: "Mailgun API key found in code.",
+    severity: "HIGH",
+    pattern: /key-[0-9a-zA-Z]{32}/,
+  },
+  {
+    id: "DATABASE_URL",
+    title: "Database Connection String",
+    description: "Database connection string with credentials found in code.",
+    severity: "HIGH",
+    pattern:
+      /(?:postgres|mysql|mongodb|redis|amqp):\/\/[^:\s]+:[^@\s]+@[^\s'"]+/,
+    allowlist: [/localhost/i, /127\.0\.0\.1/, /example\.com/i],
+  },
+  {
+    id: "HEROKU_API_KEY",
+    title: "Heroku API Key",
+    description: "Heroku API key found in code.",
+    severity: "HIGH",
+    pattern:
+      /(?:heroku_api_key|HEROKU_API_KEY)\s*[:=]\s*['"]?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}['"]?/,
+  },
+  {
+    id: "NPM_TOKEN",
+    title: "npm Auth Token",
+    description: "npm authentication token found in code.",
+    severity: "HIGH",
+    pattern: /\/\/registry\.npmjs\.org\/:_authToken=[A-Za-z0-9_-]+/,
+  },
+  {
+    id: "AZURE_CONNECTION_STRING",
+    title: "Azure Storage Connection String",
+    description: "Azure storage connection string found in code.",
+    severity: "HIGH",
+    pattern:
+      /DefaultEndpointsProtocol=https?;AccountName=[^;]+;AccountKey=[A-Za-z0-9/+=]+/,
+  },
+  {
+    id: "OPENAI_API_KEY",
+    title: "OpenAI API Key",
+    description:
+      "OpenAI API key found in code. Can be used to access GPT and other OpenAI services.",
+    severity: "HIGH",
+    pattern: /sk-[A-Za-z0-9]{20,}T3BlbkFJ[A-Za-z0-9]{20,}/,
+  },
+  {
+    id: "OPENAI_PROJECT_KEY",
+    title: "OpenAI Project API Key",
+    description: "OpenAI project-scoped API key found in code.",
+    severity: "HIGH",
+    pattern: /sk-proj-[A-Za-z0-9_-]{40,}/,
+  },
+  {
+    id: "DISCORD_BOT_TOKEN",
+    title: "Discord Bot Token",
+    description: "Discord bot token found in code. Grants full bot access.",
+    severity: "HIGH",
+    pattern: /[MN][A-Za-z\d]{23,}\.[\w-]{6}\.[\w-]{27,}/,
+    allowlist: [/example/i, /test/i],
+  },
+  {
+    id: "DISCORD_WEBHOOK",
+    title: "Discord Webhook URL",
+    description: "Discord webhook URL found in code.",
+    severity: "MEDIUM",
+    pattern:
+      /https:\/\/discord(?:app)?\.com\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+/,
+  },
+  {
+    id: "OAUTH_CLIENT_SECRET",
+    title: "OAuth Client Secret",
+    description:
+      "OAuth client_secret found in code. This enables impersonation of the application.",
+    severity: "HIGH",
+    pattern:
+      /(?:client_secret|CLIENT_SECRET|clientSecret)\s*[:=]\s*['"][A-Za-z0-9_\-]{20,}['"]/,
+    allowlist: [
+      /example/i,
+      /\$\{/i,
+      /process\.env/i,
+      /os\.environ/i,
+      /getenv/i,
+      /placeholder/i,
+    ],
+  },
+  {
+    id: "AZURE_CLIENT_SECRET",
+    title: "Azure AD Client Secret",
+    description: "Azure Active Directory client secret found in code.",
+    severity: "HIGH",
+    pattern:
+      /(?:AZURE_CLIENT_SECRET|azure_client_secret)\s*[:=]\s*['"][A-Za-z0-9_~.-]{30,}['"]/,
+  },
+  {
+    id: "GCP_SERVICE_ACCOUNT",
+    title: "GCP Service Account Key",
+    description: "Google Cloud service account private key ID found in code.",
+    severity: "CRITICAL",
+    pattern: /"private_key_id"\s*:\s*"[a-f0-9]{40}"/,
+  },
+  {
+    id: "DIGITALOCEAN_TOKEN",
+    title: "DigitalOcean Access Token",
+    description: "DigitalOcean personal access token found in code.",
+    severity: "HIGH",
+    pattern: /dop_v1_[a-f0-9]{64}/,
+  },
+  {
+    id: "SHOPIFY_TOKEN",
+    title: "Shopify Access Token",
+    description: "Shopify API access token found in code.",
+    severity: "HIGH",
+    pattern: /shpat_[a-fA-F0-9]{32}/,
+  },
+  {
+    id: "PYPI_TOKEN",
+    title: "PyPI API Token",
+    description: "PyPI upload token found in code.",
+    severity: "HIGH",
+    pattern: /pypi-[A-Za-z0-9_-]{50,}/,
+  },
+  {
+    id: "DOCKER_AUTH",
+    title: "Docker Registry Auth",
+    description: "Docker registry authentication credentials found in code.",
+    severity: "HIGH",
+    pattern: /"auth"\s*:\s*"[A-Za-z0-9+/=]{20,}"/,
+    allowlist: [/schema/i, /example/i],
+  },
+  {
+    id: "HARDCODED_PASSWORD",
+    title: "Hardcoded Password in Assignment",
+    description:
+      "A password value is hardcoded in source code. Use environment variables or a secrets vault instead.",
+    severity: "HIGH",
+    pattern: /(?:password|passwd|pwd)\s*[:=]\s*['"][^'"${\s]{4,}['"]/i,
+    allowlist: [
+      /example/i,
+      /changeme/i,
+      /placeholder/i,
+      /\$\{/i,
+      /process\.env/i,
+      /os\.environ/i,
+      /getenv/i,
+      /test/i,
+      /password_hash/i,
+      /prompt/i,
+      /input/i,
+    ],
+  },
+  {
+    id: "HARDCODED_CONN_STRING",
+    title: "Connection String with Embedded Credentials",
+    description:
+      "A connection string with embedded username and password was found. Use environment variables for credentials.",
+    severity: "HIGH",
+    pattern:
+      /['"](?:jdbc|Data Source|Server=|Host=).*(?:password|pwd)\s*=\s*[^;'"]+/i,
+    allowlist: [/localhost/i, /127\.0\.0\.1/, /example/i],
+  },
+];

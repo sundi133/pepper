@@ -1,3 +1,4 @@
+import { stripReportMarkdown } from "@/lib/finding-report";
 import type { RawFinding } from "../types";
 import type { FindingMetadata } from "./finding-metadata";
 import { mergeMetadata } from "./finding-metadata";
@@ -18,24 +19,26 @@ export function buildStructuredDescription(
   fields: StructuredFindingFields,
 ): string {
   const parts: string[] = [
-    `**What is wrong:** ${fields.whatIsWrong}`,
-    `**Where:** ${fields.where}`,
-    `**Why it is exploitable:** ${fields.whyExploitable}`,
+    `What is wrong: ${stripReportMarkdown(fields.whatIsWrong)}`,
+    `Where: ${stripReportMarkdown(fields.where)}`,
+    `Why it is exploitable: ${stripReportMarkdown(fields.whyExploitable)}`,
   ];
   if (fields.attackPath) {
-    parts.push(`**Attack path:** ${fields.attackPath}`);
+    parts.push(`Attack path: ${stripReportMarkdown(fields.attackPath)}`);
   }
   if (fields.impact) {
-    parts.push(`**Impact:** ${fields.impact}`);
+    parts.push(`Impact: ${stripReportMarkdown(fields.impact)}`);
   }
   if (fields.stepsToReproduce?.length) {
     parts.push(
-      `**Steps to reproduce safely:**\n${fields.stepsToReproduce.map((s, i) => `${i + 1}. ${s}`).join("\n")}`,
+      `Steps to reproduce safely:\n${fields.stepsToReproduce.map(stripReportMarkdown).join("\n")}`,
     );
   }
-  parts.push(`**Fix:** ${fields.fix}`);
+  parts.push(`Fix: ${stripReportMarkdown(fields.fix)}`);
   if (fields.validation) {
-    parts.push(`**How to validate the fix:** ${fields.validation}`);
+    parts.push(
+      `How to validate the fix: ${stripReportMarkdown(fields.validation)}`,
+    );
   }
   return parts.join("\n\n");
 }

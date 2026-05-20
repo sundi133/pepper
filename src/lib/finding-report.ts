@@ -24,7 +24,7 @@ export interface StoredFindingReport {
   remediation: string[];
 }
 
-const CURRENT_REPORT_VERSION = 5;
+const CURRENT_REPORT_VERSION = 7;
 
 export function enrichFindingWithReport<T extends FindingReportInput>(
   finding: T,
@@ -82,19 +82,21 @@ export function buildStoredFindingReport(
     .map(sanitizeReportText)
     .filter(Boolean);
   const recommendation = extractRecommendation(finding.description);
+  const structured = parseStructuredSummaryFields(finding.description);
 
   return {
     vulnerabilityName:
       readString(metadata.vulnerabilityName, metadata.accurateVulnerabilityName) ||
       buildVulnerabilityName(finding),
-    summary: [
-      buildSummaryLead({ finding, parameter, sink, location }),
+    summary: buildReportSummary({
+      finding,
+      location,
+      parameter,
+      sink,
       description,
-      buildConsequenceSentence(finding),
-      `This issue should be treated as **${finding.severity}**${readString(metadata.severityJustification) ? ` because ${readString(metadata.severityJustification)}.` : " based on the reachable impact and available evidence."}`,
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
+      structured,
+      metadata,
+    }),
     stepsToReproduce:
       metadataSteps.length > 0
         ? metadataSteps
@@ -107,36 +109,160 @@ export function buildStoredFindingReport(
   };
 }
 
+/** Plain-text security report (no Markdown). */
+export function renderReportPlainText(report: StoredFindingReport): string {
+  const sections: string[] = [
+    "Security Finding Report",
+    "",
+    "Bug / Vulnerability Name",
+    "",
+    stripReportMarkdown(report.vulnerabilityName),
+    "",
+    "Summary",
+    "",
+    stripReportMarkdown(report.summary),
+  ];
+
+  if (report.stepsToReproduce.length > 0) {
+    sections.push(
+      "",
+      "Steps to Reproduce",
+      ...report.stepsToReproduce.map((step) => stripReportMarkdown(step)),
+    );
+  }
+
+  sections.push(
+    "",
+    "Impact",
+    "",
+    stripReportMarkdown(report.impact),
+  );
+
+  if (report.remediation.length > 0) {
+    sections.push(
+      "",
+      "Remediation",
+      ...report.remediation.map((step) => stripReportMarkdown(step)),
+    );
+  }
+
+  return sections.join("\n").trim();
+}
+
+/** @deprecated Use renderReportPlainText — kept for stored metadata field name compatibility. */
 export function renderReportMarkdown(report: StoredFindingReport): string {
-  return [
-    "## Bug / Vulnerability Name",
-    "",
-    report.vulnerabilityName,
-    "",
-    "---",
-    "",
-    "## Summary",
-    "",
-    report.summary,
-    "",
-    "---",
-    "",
-    "## Steps to Reproduce",
-    "",
-    ...report.stepsToReproduce.map((step, index) => `${index + 1}. ${step}`),
-    "",
-    "---",
-    "",
-    "## Impact",
-    "",
-    report.impact,
-    "",
-    "---",
-    "",
-    "## Remediation",
-    "",
-    ...report.remediation.map((step, index) => `${index + 1}. ${step}`),
-  ].join("\n");
+  return renderReportPlainText(report);
+}
+
+/** Remove markdown markers (paired or stray) from report text. */
+export function stripReportMarkdown(text: string): string {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__(?!_)([^_]+)__/g, "$1")
+    .replace(/\*([^*\n]+)\*/g, "$1")
+    .replace(/_([^_\n]+)_/g, "$1")
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/```[\w-]*\n?([\s\S]*?)```/g, "$1")
+    .replace(/^\s*#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+[\.)]\s+/gm, "")
+    .trim();
+}
+
+function buildReportSummary(input: {
+  finding: FindingReportInput;
+  location: string;
+  parameter?: string;
+  sink?: string;
+  description: string;
+  structured: Record<string, string>;
+  metadata: Record<string, unknown>;
+}): string {
+  const { finding, location, parameter, sink, description, structured, metadata } =
+    input;
+  const lead = buildSummaryLead({ finding, parameter, sink, location });
+  const what =
+    structured["What is wrong"] || inferWhatIsWrong(finding, location);
+  const where = normalizeLocationDisplay(
+    structured.Where || location || "",
+  );
+  const why =
+    structured["Why it is exploitable"] ||
+    readString(metadata.evidence, metadata.confidenceReason) ||
+    description;
+  const validation =
+    structured["How to validate the fix"] || inferValidationSteps(finding);
+
+  const body: string[] = [lead];
+  if (what) body.push(`What is wrong: ${stripReportMarkdown(what)}`);
+  if (where) body.push(`Where: ${stripReportMarkdown(where)}`);
+  if (why && why !== what) {
+    body.push(`Why it is exploitable: ${stripReportMarkdown(why)}`);
+  }
+  if (validation) {
+    body.push(`How to validate the fix: ${stripReportMarkdown(validation)}`);
+  }
+
+  const consequence = buildConsequenceSentence(finding);
+  if (consequence) body.push(consequence);
+
+  const justification = readString(metadata.severityJustification);
+  body.push(
+    `This issue should be treated as ${finding.severity}${justification ? ` because ${justification}.` : " based on the reachable impact and available evidence."}`,
+  );
+
+  return body.filter(Boolean).join("\n\n");
+}
+
+function inferWhatIsWrong(
+  finding: FindingReportInput,
+  location: string,
+): string | undefined {
+  const family = scannerFamily(finding);
+  if (family === "secrets") {
+    const credential = finding.title.includes(":")
+      ? finding.title.split(":").slice(1).join(":").trim() || finding.title
+      : finding.title;
+    return `Exposed ${credential} in source code or configuration.`;
+  }
+  if (family === "sca") {
+    return finding.title;
+  }
+  if (location) return finding.title;
+  return undefined;
+}
+
+function inferValidationSteps(finding: FindingReportInput): string | undefined {
+  switch (scannerFamily(finding)) {
+    case "secrets":
+      return "Rotate or revoke the credential and verify that it no longer appears in repository history scans.";
+    case "sca":
+      return "Upgrade the dependency, regenerate the lockfile, and confirm the vulnerable version is no longer resolved.";
+    case "iac":
+      return "Re-run IaC or policy scanning on the updated configuration before deployment.";
+    default:
+      return undefined;
+  }
+}
+
+function parseStructuredSummaryFields(description: string): Record<string, string> {
+  const labels = [
+    "What is wrong",
+    "Where",
+    "Why it is exploitable",
+    "Attack path",
+    "Impact",
+    "How to validate the fix",
+    "Fix",
+  ];
+  const fields: Record<string, string> = {};
+  for (const label of labels) {
+    const value = extractLabeledSection(description, label);
+    if (value) fields[label] = value;
+  }
+  return fields;
 }
 
 function buildSummaryLead(input: {
@@ -146,17 +272,17 @@ function buildSummaryLead(input: {
   location: string;
 }): string {
   const { finding, parameter, sink, location } = input;
-  const where = location ? ` in \`${location}\`` : "";
+  const where = location ? ` in ${location}` : "";
 
   if (scannerFamily(finding) === "iac") {
     return location
-      ? `Misconfiguration in infrastructure-as-code at \`${location}\`.`
+      ? `Misconfiguration in infrastructure-as-code at ${location}.`
       : "Misconfiguration in infrastructure-as-code.";
   }
 
   if (scannerFamily(finding) === "zero-day") {
     return location
-      ? `Potential business-logic or authorization issue at \`${location}\`.`
+      ? `Potential business-logic or authorization issue at ${location}.`
       : "Potential business-logic or authorization issue in the reported code.";
   }
 
@@ -168,10 +294,10 @@ function buildSummaryLead(input: {
     default: {
       if (!parameter && !sink) {
         return location
-          ? `Security finding at \`${location}\`.`
+          ? `Security finding at ${location}.`
           : "Security finding in the reported application code.";
       }
-      return `${parameter ? `User-controlled input from \`${parameter}\`` : "A user-controlled input source"} reaches ${sink ? `\`${sink}\`` : "the vulnerable operation"}${where}.`;
+      return `${parameter ? `User-controlled input from ${parameter}` : "A user-controlled input source"} reaches ${sink || "the vulnerable operation"}${where}.`;
     }
   }
 }
@@ -203,7 +329,7 @@ function buildSteps(input: {
       "Confirm the reported package name and version are present in the dependency graph.",
       "Compare the installed version with the advisory or fixed version from the scanner output.",
       location
-        ? `Confirm the finding maps to \`${location}\`.`
+        ? `Confirm the finding maps to ${location}.`
         : "Confirm the finding maps to the reported dependency evidence.",
     ];
   }
@@ -212,9 +338,9 @@ function buildSteps(input: {
     return [
       "Inspect the reported file in a safe local or test environment.",
       "Confirm the scanner evidence contains a secret-like value or credential assignment.",
-      "Verify whether the value is active only through the owning secret management system; do not attempt to use it.",
+      "Verify whether the value is active only through the owning account, organization settings, or approved secret management system. Do not attempt to use the credential.",
       location
-        ? `Confirm the finding maps to \`${location}\`.`
+        ? `Confirm the finding maps to ${location}.`
         : "Confirm the finding maps to the reported source location.",
     ];
   }
@@ -230,7 +356,7 @@ function buildSteps(input: {
     const loc =
       location || (input.finding.startLine != null ? `${fp}:${start}` : fp);
     return [
-      `Open \`${loc}\` in your editor and read a few lines above and below the reference so you see the full directive or block (for example COPY, ENV, a Kubernetes securityContext, or an ingress rule).`,
+      `Open ${loc} in your editor and read a few lines above and below the reference so you see the full directive or block (for example COPY, ENV, a Kubernetes securityContext, or an ingress rule).`,
       `State the concrete risk in one plain sentence (what is exposed, overprivileged, or leaked if this ships as written).`,
       `From your repository root in a terminal, run sed -n '${sedRange}p' with that file path substituted (add quotes around the path if it contains spaces). This only prints lines; it does not modify files.`,
       `Change the configuration to match your security baseline, then re-run your usual IaC or pipeline check on this file to confirm the issue is gone.`,
@@ -252,7 +378,7 @@ function buildSteps(input: {
     );
     const printContext = `From the repository root in a terminal, run sed -n '${sedRange}p' with that file path substituted (add quotes around the path if it contains spaces). This only prints lines; it does not modify files.`;
     const base: string[] = [
-      `Open \`${loc}\` in your editor. Trace from the entry point (handler, resolver, job, or query) to where a trust boundary should apply (ownership, role, tenant, payment, or workflow state).`,
+      `Open ${loc} in your editor. Trace from the entry point (handler, resolver, job, or query) to where a trust boundary should apply (ownership, role, tenant, payment, or workflow state).`,
       `In one sentence, describe the gap: what check is missing or wrong compared to what the business rule should enforce?`,
       printContext,
     ];
@@ -273,10 +399,10 @@ function buildSteps(input: {
   if (route && parameter) {
     return [
       "Start the application in a safe local or test environment.",
-      `Send a \`${method}\` request to the \`${route}\` endpoint with a safe proof payload:\n\n\`\`\`bash\n${buildCurl(method, route, parameter, payload)}\n\`\`\``,
+      `Send a ${method} request to the ${route} endpoint with a safe proof payload:\n\n${buildCurl(method, route, parameter, payload)}`,
       "Observe the response or server-side behavior for the fixed test output or controlled behavior.",
       location
-        ? `Confirm that the vulnerable behavior maps to \`${location}\`.`
+        ? `Confirm that the vulnerable behavior maps to ${location}.`
         : "Confirm that the vulnerable behavior maps to the reported source location.",
     ];
   }
@@ -284,13 +410,13 @@ function buildSteps(input: {
   if (parameter) {
     return [
       "The exact route could not be confirmed from the available evidence.",
-      `Exercise the code path that reads \`${parameter}\` in a safe local or test environment.`,
-      `Provide this safe proof input: \`${payload}\`.`,
+      `Exercise the code path that reads ${parameter} in a safe local or test environment.`,
+      `Provide this safe proof input: ${payload}.`,
       sink
-        ? `Verify that \`${parameter}\` reaches \`${sink}\` without the expected security control.`
+        ? `Verify that ${parameter} reaches ${sink} without the expected security control.`
         : "Verify that the input reaches the vulnerable operation without the expected security control.",
       location
-        ? `Confirm that the vulnerable behavior maps to \`${location}\`.`
+        ? `Confirm that the vulnerable behavior maps to ${location}.`
         : "Confirm that the vulnerable behavior maps to the reported source location.",
     ];
   }
@@ -298,9 +424,9 @@ function buildSteps(input: {
   return [
     "The exact route and parameter could not be confirmed from the available evidence.",
     location
-      ? `Review \`${location}\` and execute the reachable application flow in a safe local or test environment.`
+      ? `Review ${location} and execute the reachable application flow in a safe local or test environment.`
       : "Execute the reachable application flow in a safe local or test environment.",
-    `Use this safe proof input when the relevant input source is reached: \`${payload}\`.`,
+    `Use this safe proof input when the relevant input source is reached: ${payload}.`,
     "The issue is reproduced if the input reaches the vulnerable operation without the expected security control.",
   ];
 }
@@ -367,8 +493,16 @@ function buildImpact(finding: FindingReportInput): string {
   switch (scannerFamily(finding)) {
     case "sca":
       return "A vulnerable dependency can expose the application to known attacks when the affected package and code path are reachable. Impact depends on the advisory class and how the package is used.";
-    case "secrets":
+    case "secrets": {
+      const credential = finding.title.split(":")[0]?.trim();
+      if (/github/i.test(`${finding.title} ${text}`)) {
+        return "A leaked GitHub Personal Access Token can grant an attacker access to the associated GitHub account and repositories. Depending on token permissions, this may allow the attacker to read or modify code, manage issues, access private repositories, trigger workflows, or inject malicious code.";
+      }
+      if (credential) {
+        return `An exposed ${credential} can allow unauthorized access to internal systems, cloud services, third-party APIs, or user data until the value is revoked and rotated.`;
+      }
       return "An exposed secret can allow unauthorized access to internal systems, cloud services, third-party APIs, or user data until the value is revoked and rotated.";
+    }
     case "iac":
       return "A misconfigured infrastructure, container, or CI/CD control can weaken the deployed environment and affect confidentiality, integrity, or availability.";
     case "zero-day":
@@ -380,14 +514,12 @@ function buildImpact(finding: FindingReportInput): string {
 
 Successful exploitation can allow an attacker to:
 
-\`\`\`text
 - Execute arbitrary application-language code
 - Execute operating system commands through exposed runtime APIs
 - Access application secrets or environment variables
 - Modify application state or files accessible to the process
 - Disrupt service availability
-- Pivot further within the runtime environment
-\`\`\``;
+- Pivot further within the runtime environment`;
   }
   if (/idor|access|authorization|privilege/.test(text)) {
     return "An attacker may access or modify data that belongs to another user, tenant, or role. This can cause data exposure, privilege escalation, and unauthorized business actions.";
@@ -420,7 +552,8 @@ function buildRemediation(
       return [
         "Remove the secret from source code and replace it with a secret manager or environment-specific configuration.",
         "Revoke or rotate the exposed value before considering the issue resolved.",
-        "Add secret scanning to pre-commit and CI to prevent recurrence.",
+        "Purge the value from Git history if it was committed.",
+        "Add secret scanning to pre-commit hooks and CI to prevent recurrence.",
       ];
     case "iac":
       return [
@@ -535,7 +668,19 @@ function safeMetadataPayload(metadata: Record<string, unknown>): string | undefi
 
 function formatLocation(finding: FindingReportInput): string {
   if (!finding.filePath) return "";
-  return `${finding.filePath}${finding.startLine ? `:${finding.startLine}` : ""}${finding.endLine && finding.startLine && finding.endLine !== finding.startLine ? `-${finding.endLine}` : ""}`;
+  if (!finding.startLine) return finding.filePath;
+  const end = finding.endLine ?? finding.startLine;
+  if (end !== finding.startLine) {
+    return normalizeLocationDisplay(
+      `${finding.filePath}:${finding.startLine}-${end}`,
+    );
+  }
+  return `${finding.filePath}:${finding.startLine}`;
+}
+
+/** Collapse redundant single-line ranges like path:6-6 → path:6. */
+function normalizeLocationDisplay(location: string): string {
+  return stripReportMarkdown(location).replace(/:(\d+)-\1\b/g, ":$1");
 }
 
 function extractRecommendation(description: string): string | undefined {
@@ -544,13 +689,20 @@ function extractRecommendation(description: string): string | undefined {
 
 function extractLabeledSection(
   description: string,
-  label: "Attack Vector" | "Recommendation",
+  label: string,
 ): string | undefined {
-  const nextLabels =
-    label === "Attack Vector" ? "Category|Recommendation" : "Attack Vector|Category";
-  return description
-    .match(new RegExp(`\\n${label}:\\s*([\\s\\S]*?)(?:\\n(?:${nextLabels}):|$)`, "i"))?.[1]
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const stopLabels =
+    "What is wrong|Where|Why it is exploitable|Attack path|Impact|Steps to reproduce safely|Fix|How to validate the fix|Attack Vector|Category|Recommendation|Code evidence";
+  const raw = description
+    .match(
+      new RegExp(
+        `(?:\\n|^)(?:\\*\\*)?${escaped}(?:\\*\\*)?:\\s*([\\s\\S]*?)(?=\\n(?:\\*\\*)?(?:${stopLabels}):|$)`,
+        "i",
+      ),
+    )?.[1]
     ?.trim();
+  return raw ? stripReportMarkdown(raw) : undefined;
 }
 
 function stripGeneratedSections(description: string): string {
@@ -566,13 +718,14 @@ function stripGeneratedSections(description: string): string {
 }
 
 function sanitizeReportText(text: string): string {
-  return text
-    .split(/(?<=[.!?])\s+/)
-    .filter(isSafeReportText)
-    .join(" ")
-    .replace(/\bcat\s+\/etc\/passwd\b/gi, "print a fixed test string")
-    .replace(/\brm\s+-rf\s+\/\b/gi, "print a fixed test string")
-    .trim();
+  return stripReportMarkdown(
+    text
+      .split(/(?<=[.!?])\s+/)
+      .filter(isSafeReportText)
+      .join(" ")
+      .replace(/\bcat\s+\/etc\/passwd\b/gi, "print a fixed test string")
+      .replace(/\brm\s+-rf\s+\/\b/gi, "print a fixed test string"),
+  );
 }
 
 function isSafeReportText(text: string): boolean {

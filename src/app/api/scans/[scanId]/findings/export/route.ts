@@ -215,7 +215,8 @@ function buildHtmlReport({
     .badge-status { background: #e5e7eb; color: #374151; text-transform: none; font-weight: 500; }
     .loc { color: #6b7280; font-size: 0.875rem; margin-bottom: 0.75rem; }
     .field { margin-bottom: 0.75rem; }
-    .field .label { font-weight: 600; color: #374151; display: block; margin-bottom: 0.25rem; }
+    .field .label { font-weight: 700; color: #1a1a2e; display: block; margin-bottom: 0.25rem; }
+    .field .body strong { color: #1a1a2e; }
     .field .body { color: #4b5563; font-size: 0.9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
     .repro-steps { margin-top: 0.35rem; }
     .repro-step { margin-top: 0.65rem; padding-top: 0.65rem; border-top: 1px solid #e5e7eb; }
@@ -271,6 +272,21 @@ function severityBadgeClass(sev: string): string {
   return "badge-sev-info";
 }
 
+function formatSummaryHtml(summary: string): string {
+  return summary
+    .split(/\n\n+/)
+    .map((para) => {
+      const match = para.match(
+        /^(What is wrong|Where|Why it is exploitable|How to validate the fix|Attack path|Fix):\s*([\s\S]*)$/i,
+      );
+      if (match) {
+        return `<strong>${escapeHtml(match[1])}:</strong> ${escapeHtml(match[2].trim())}`;
+      }
+      return escapeHtml(para);
+    })
+    .join("<br><br>");
+}
+
 function renderVulnCard(finding: ReportFinding): string {
   const report = readStoredReport(finding.metadata) || fallbackReport(finding);
   const location = formatLocation(finding);
@@ -286,7 +302,7 @@ function renderVulnCard(finding: ReportFinding): string {
     <p class="loc">${location ? `${escapeHtml(location)}` : "Location not recorded"} · ${escapeHtml(scanner)}</p>
     <div class="field">
       <span class="label">Summary</span>
-      <div class="body">${escapeHtml(report.summary || "N/A")}</div>
+      <div class="body">${formatSummaryHtml(report.summary || "N/A")}</div>
     </div>
     ${renderReproductionFields(report.stepsToReproduce)}
     <div class="field">

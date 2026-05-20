@@ -13,7 +13,12 @@ import { SeverityBadge } from "./scan-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SCANNER_LABELS, isPatternBasedScanner } from "@/lib/constants";
-import { findingReportSummaryLead, renderReportMarkdown } from "@/lib/finding-report";
+import {
+  buildStoredFindingReport,
+  findingReportSummaryLead,
+  renderReportPlainText,
+  stripReportMarkdown,
+} from "@/lib/finding-report";
 import {
   githubBlobLineUrl,
   parseGithubRepo,
@@ -207,9 +212,51 @@ function InlineBackticks({ text }: { text: string }) {
   );
 }
 
-/** Renders markdown-style fenced blocks and inline `code` in report strings. */
+const REPORT_SUMMARY_LABELS =
+  "What is wrong|Where|Why it is exploitable|How to validate the fix|Attack path|Fix";
+
+/** Summary with bold inline field labels (What is wrong, Where, …). */
+function ReportSummaryText({ text }: { text: string }) {
+  const clean = stripReportMarkdown(text);
+  const paragraphs = clean.split(/\n\n+/).filter(Boolean);
+
+  return (
+    <div className="space-y-3">
+      {paragraphs.map((para, i) => {
+        const labelMatch = para.match(
+          new RegExp(
+            `^(${REPORT_SUMMARY_LABELS}):\\s*([\\s\\S]*)$`,
+            "i",
+          ),
+        );
+        if (labelMatch) {
+          return (
+            <p
+              key={i}
+              className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground"
+            >
+              <span className="font-bold text-foreground">{labelMatch[1]}:</span>{" "}
+              <InlineBackticks text={labelMatch[2].trim()} />
+            </p>
+          );
+        }
+        return (
+          <p
+            key={i}
+            className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground"
+          >
+            <InlineBackticks text={para} />
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Renders report text (plain; strips stray markdown markers). */
 function ReportRichText({ text }: { text: string }) {
-  const segments = text.split(/(```[\w-]*\n[\s\S]*?```)/g);
+  const clean = stripReportMarkdown(text);
+  const segments = clean.split(/(```[\w-]*\n[\s\S]*?```)/g);
   return (
     <div className="space-y-2">
       {segments.map((seg, i) => {
@@ -240,39 +287,40 @@ function ReportRichText({ text }: { text: string }) {
   );
 }
 
+function ReportPlainList({ items }: { items: string[] }) {
+  return (
+    <div className="space-y-3">
+      {items.map((step, index) => (
+        <p key={index} className="text-sm leading-relaxed text-muted-foreground">
+          <ReportRichText text={step} />
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function FindingReportSections({ finding }: { finding: Finding }) {
   if (isPatternBasedScanner(finding.scanner)) {
     return <PatternMatchReport finding={finding} />;
   }
 
-  const report = buildFindingReport(finding);
+  const report = buildStoredFindingReport(finding);
 
   return (
     <section className="space-y-4 rounded-xl border bg-card p-4 shadow-sm">
       <ReportBlock title="Bug / Vulnerability Name">
         <p className="break-words text-base font-semibold leading-snug">
-          {report.vulnerabilityName}
+          {stripReportMarkdown(report.vulnerabilityName)}
         </p>
       </ReportBlock>
 
       <ReportBlock title="Summary">
-        <ReportRichText text={report.summary} />
+        <ReportSummaryText text={report.summary} />
       </ReportBlock>
 
       {report.stepsToReproduce.length > 0 && (
         <ReportBlock title="Steps to Reproduce">
-          <ol className="space-y-3">
-            {report.stepsToReproduce.map((step, index) => (
-              <li key={index} className="flex gap-3 text-sm text-muted-foreground">
-                <span className="mt-0.5 shrink-0 font-medium text-foreground">
-                  {index + 1}.
-                </span>
-                <div className="min-w-0 flex-1">
-                  <ReportRichText text={step} />
-                </div>
-              </li>
-            ))}
-          </ol>
+          <ReportPlainList items={report.stepsToReproduce} />
         </ReportBlock>
       )}
 
@@ -281,18 +329,7 @@ function FindingReportSections({ finding }: { finding: Finding }) {
       </ReportBlock>
 
       <ReportBlock title="Remediation">
-        <ol className="space-y-3">
-          {report.remediation.map((step, index) => (
-            <li key={index} className="flex gap-3 text-sm text-muted-foreground">
-              <span className="mt-0.5 shrink-0 font-medium text-foreground">
-                {index + 1}.
-              </span>
-              <div className="min-w-0 flex-1">
-                <ReportRichText text={step} />
-              </div>
-            </li>
-          ))}
-        </ol>
+        <ReportPlainList items={report.remediation} />
       </ReportBlock>
     </section>
   );
@@ -307,9 +344,7 @@ function ReportBlock({
 }) {
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </p>
+      <p className="text-sm font-bold text-foreground">{title}</p>
       {children}
     </div>
   );
@@ -464,7 +499,7 @@ function buildAiAssistPrompt(
     `- Scanner: ${finding.scanner}`,
     "",
     "Finding report:",
-    renderReportMarkdown(report),
+    renderReportPlainText(report),
     "",
     "Output format:",
     "1. Brief diagnosis",
@@ -473,6 +508,39 @@ function buildAiAssistPrompt(
   ]
     .filter((line): line is string => line !== null)
     .join("\n");
+}
+
+function CopyReportButton({ finding }: { finding: Finding }) {
+  const [busy, setBusy] = useState(false);
+
+  if (isPatternBasedScanner(finding.scanner)) return null;
+
+  async function copyReport() {
+    setBusy(true);
+    try {
+      const report = buildStoredFindingReport(finding);
+      await navigator.clipboard.writeText(renderReportPlainText(report));
+      toast.success("Report copied");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to copy report");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-8 gap-1.5 text-xs font-medium"
+      disabled={busy}
+      onClick={() => void copyReport()}
+    >
+      <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      {busy ? "Copying…" : "Copy report"}
+    </Button>
+  );
 }
 
 function CopyAiPromptButton({
@@ -524,6 +592,7 @@ function FindingActionButtons({
 }) {
   return (
     <>
+      <CopyReportButton finding={finding} />
       <CopyAiPromptButton finding={finding} sourceContext={sourceContext} tool="claude" />
       <CopyAiPromptButton finding={finding} sourceContext={sourceContext} tool="cursor" />
       {sourceContext?.scanId ? (

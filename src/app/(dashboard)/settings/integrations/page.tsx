@@ -44,6 +44,100 @@ export default function IntegrationsPage() {
     workspace: "",
   });
 
+  // ─── Azure DevOps Services ──────────────────────────────────────────
+  const [azureConn, setAzureConn] = useState<{
+    connected: boolean;
+    azureOrganization: string | null;
+    azureUser: string | null;
+  } | null>(null);
+  const [azureFormOpen, setAzureFormOpen] = useState(false);
+  const [azureSubmitting, setAzureSubmitting] = useState(false);
+  const [azureDisconnecting, setAzureDisconnecting] = useState(false);
+  const [azureForm, setAzureForm] = useState({
+    azureOrganization: "",
+    pat: "",
+  });
+
+  async function refreshAzure() {
+    try {
+      const res = await fetch("/api/integrations/azure-devops/connect");
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        connected?: boolean;
+        azureOrganization?: string | null;
+        azureUser?: string | null;
+      };
+      setAzureConn({
+        connected: Boolean(data.connected),
+        azureOrganization: data.azureOrganization ?? null,
+        azureUser: data.azureUser ?? null,
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function connectAzure(e: React.FormEvent) {
+    e.preventDefault();
+    const azureOrganization = azureForm.azureOrganization.trim();
+    const pat = azureForm.pat.trim();
+    if (!azureOrganization || !pat) {
+      toast.error("Organization and PAT are required");
+      return;
+    }
+    setAzureSubmitting(true);
+    try {
+      const res = await fetch("/api/integrations/azure-devops/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ azureOrganization, pat }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to connect Azure DevOps");
+      }
+      toast.success("Azure DevOps connected");
+      setAzureForm({ azureOrganization: "", pat: "" });
+      setAzureFormOpen(false);
+      await refreshAzure();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to connect Azure DevOps",
+      );
+    } finally {
+      setAzureSubmitting(false);
+    }
+  }
+
+  async function disconnectAzure() {
+    if (
+      !window.confirm(
+        "Disconnect Azure DevOps? Pepper will stop posting PR review threads and status checks to your ADO repositories.",
+      )
+    ) {
+      return;
+    }
+    setAzureDisconnecting(true);
+    try {
+      const res = await fetch("/api/integrations/azure-devops/connect", {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Failed to disconnect");
+      toast.success("Azure DevOps disconnected");
+      setAzureConn({
+        connected: false,
+        azureOrganization: null,
+        azureUser: null,
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to disconnect Azure DevOps",
+      );
+    } finally {
+      setAzureDisconnecting(false);
+    }
+  }
+
   async function refreshBitbucket() {
     try {
       const res = await fetch("/api/integrations/bitbucket/connect");
@@ -81,6 +175,7 @@ export default function IntegrationsPage() {
       }
     })();
     void refreshBitbucket();
+    void refreshAzure();
   }, []);
 
   async function connectBitbucket(e: React.FormEvent) {
@@ -465,6 +560,173 @@ export default function IntegrationsPage() {
               <code>bitbucketWorkspace</code> + <code>bitbucketRepoSlug</code>{" "}
               on the project, or include <code>workspace/repo-slug</code> in{" "}
               <code>repoUrl</code>.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <GitBranch className="h-5 w-5" />
+            <CardTitle>Azure DevOps Services</CardTitle>
+            <Badge variant="outline">PAT</Badge>
+          </div>
+          <CardDescription>
+            Post PR review summaries, inline threads and PR status checks on
+            Azure DevOps Services pull requests. Uses a Personal Access Token
+            scoped per org.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {azureConn?.connected ? (
+            <>
+              <p className="text-sm">
+                Connected as{" "}
+                <strong>{azureConn.azureUser ?? "Azure DevOps user"}</strong>
+                {azureConn.azureOrganization ? (
+                  <>
+                    {" "}
+                    on organization{" "}
+                    <code className="rounded bg-muted px-1">
+                      {azureConn.azureOrganization}
+                    </code>
+                  </>
+                ) : null}
+              </p>
+              <Button
+                variant="ghost"
+                onClick={() => void disconnectAzure()}
+                disabled={azureDisconnecting}
+              >
+                {azureDisconnecting
+                  ? "Disconnecting…"
+                  : "Disconnect Azure DevOps"}
+              </Button>
+            </>
+          ) : azureFormOpen ? (
+            <form
+              onSubmit={(e) => void connectAzure(e)}
+              className="space-y-3"
+            >
+              <div className="space-y-1">
+                <Label htmlFor="azure-org">Azure DevOps organization</Label>
+                <Input
+                  id="azure-org"
+                  value={azureForm.azureOrganization}
+                  onChange={(e) =>
+                    setAzureForm((f) => ({
+                      ...f,
+                      azureOrganization: e.target.value,
+                    }))
+                  }
+                  placeholder="your-org-name"
+                  autoComplete="off"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  The <code>dev.azure.com/&lt;org&gt;</code> segment from your
+                  ADO URL.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="azure-pat">Personal Access Token</Label>
+                <Input
+                  id="azure-pat"
+                  type="password"
+                  value={azureForm.pat}
+                  onChange={(e) =>
+                    setAzureForm((f) => ({ ...f, pat: e.target.value }))
+                  }
+                  placeholder="••••••••••••••••••••••••••"
+                  autoComplete="new-password"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Create one at User settings → Personal access tokens.
+                  Required scopes: <code>Code (read &amp; write)</code>,{" "}
+                  <code>Pull Request Threads (read &amp; write)</code>,{" "}
+                  <code>Project and Team (read)</code>.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={azureSubmitting}>
+                  {azureSubmitting ? "Connecting…" : "Connect"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setAzureFormOpen(false);
+                    setAzureForm({ azureOrganization: "", pat: "" });
+                  }}
+                  disabled={azureSubmitting}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Not connected. Pepper will skip Azure DevOps PR threads and
+                status checks until you connect.
+              </p>
+              <Button onClick={() => setAzureFormOpen(true)}>
+                Connect Azure DevOps
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <GitBranch className="h-5 w-5" />
+            <CardTitle>Azure DevOps webhooks</CardTitle>
+            <Badge variant="outline">Service hook</Badge>
+          </div>
+          <CardDescription>
+            Scan pull requests on every update. Pair with the Azure DevOps
+            connection above so Pepper can post the review back.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Webhook URL</Label>
+            <div className="flex gap-2">
+              <Input value={`${webhookUrl}/azure-devops`} readOnly />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => copyUrl(`${webhookUrl}/azure-devops`)}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="text-sm text-muted-foreground space-y-1">
+            <p>
+              1. In your ADO project: Project settings → Service hooks → Create
+              subscription → Web Hooks
+            </p>
+            <p>
+              2. Trigger:{" "}
+              <strong>Pull request created</strong> and{" "}
+              <strong>Pull request updated</strong> (two subscriptions, or one
+              of each)
+            </p>
+            <p>3. Action URL: paste the URL above</p>
+            <p>
+              4. Set <strong>Basic authentication password</strong> to match{" "}
+              <code>AZURE_DEVOPS_WEBHOOK_SECRET</code> on your Pepper instance
+              (leave username blank — the secret is in the password field)
+            </p>
+            <p>
+              5. Link the project in Pepper by setting{" "}
+              <code>azureProjectName</code> + <code>azureRepoId</code> on the
+              Project row (the repo UUID, not the name).
             </p>
           </div>
         </CardContent>

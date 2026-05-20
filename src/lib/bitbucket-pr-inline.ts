@@ -1,5 +1,5 @@
 import { bitbucketGet, bitbucketGetText, bitbucketPost } from "./bitbucket-api";
-import type { BitbucketAuth } from "./bitbucket-api";
+import type { BitbucketAuth, BitbucketResponse } from "./bitbucket-api";
 import { logger } from "./logger";
 import {
   buildInlineCommentBody,
@@ -54,7 +54,8 @@ async function fetchExistingReviewMarkers(
   let path: string | null = `/repositories/${encodeURIComponent(workspace)}/${encodeURIComponent(repoSlug)}/pullrequests/${prId}/comments?pagelen=100`;
   let pages = 0;
   while (path && pages < 10) {
-    const r = await bitbucketGet<BitbucketCommentList>(auth, path);
+    const r: BitbucketResponse<BitbucketCommentList> =
+      await bitbucketGet<BitbucketCommentList>(auth, path);
     if (!r.ok || !r.data?.values) break;
     for (const c of r.data.values) {
       for (const m of extractFindingMarkers(c.content?.raw ?? null)) {

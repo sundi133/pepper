@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import { getOrgBitbucketAuth } from "./bitbucket-connection";
 import { bitbucketGet, bitbucketPost, bitbucketPut } from "./bitbucket-api";
-import type { BitbucketAuth } from "./bitbucket-api";
+import type { BitbucketAuth, BitbucketResponse } from "./bitbucket-api";
 import { logger } from "./logger";
 import {
   buildPrMarker,
@@ -56,7 +56,8 @@ async function listGeneralComments(
   let path: string | null = `/repositories/${encodeURIComponent(workspace)}/${encodeURIComponent(repoSlug)}/pullrequests/${prId}/comments?pagelen=100`;
   let pages = 0;
   while (path && pages < 10) {
-    const r = await bitbucketGet<BitbucketCommentList>(auth, path);
+    const r: BitbucketResponse<BitbucketCommentList> =
+      await bitbucketGet<BitbucketCommentList>(auth, path);
     if (!r.ok || !r.data?.values) break;
     for (const c of r.data.values) {
       if (c.inline) continue; // skip inline; we only look for the summary

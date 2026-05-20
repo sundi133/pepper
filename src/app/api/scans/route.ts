@@ -15,15 +15,14 @@ import {
   projectNameFromSvnUrl,
   projectNameFromUploadFilename,
 } from "@/lib/project-name-from-source";
+import { API_CREATE_SCAN_TYPES } from "@/lib/scan-types";
 
 const createScanSchema = z
   .object({
     projectId: z.string().optional(),
     /** When `projectId` is omitted, overrides inferred name from URL or file. */
     newProjectName: z.string().max(100).optional(),
-    scanType: z
-      .enum(["FULL", "INCREMENTAL", "SAST_ONLY", "SCA_ONLY", "SECRETS_ONLY"])
-      .default("FULL"),
+    scanType: z.enum(API_CREATE_SCAN_TYPES).default("FULL"),
     branch: z.string().optional(),
     commitSha: z.string().optional(),
     baseSha: z.string().optional(),

@@ -5,39 +5,34 @@ import {
   analyzeWithLlm,
   parseLlmJsonResponse,
 } from "@/lib/llm-gateway";
-import { RawFinding, ScanContext, ScannerPlugin, Chunk } from "../types";
-import { chunkFile } from "../sast/chunker";
-import { ZERO_DAY_SYSTEM_PROMPT } from "./prompts";
+import { RawFinding, ScanContext, ScannerPlugin } from "../types";
+import { buildDeepRepoContext } from "../shared/repo-context";
+import { enrichFinding } from "../shared/finding-normalize";
+import { ZERO_DAY_VALIDATION_PROMPT } from "../shared/prompts";
 import { selectZeroDayFiles } from "./file-prioritizer";
 import {
   FILE_EXTENSIONS,
   SKIP_DIRECTORIES,
   BINARY_EXTENSIONS,
-  MAX_CHUNK_TOKENS,
-  CHUNK_OVERLAP_TOKENS,
-  OLLAMA_MAX_CHUNK_TOKENS,
-  OLLAMA_CHUNK_OVERLAP_TOKENS,
+  LLM_MAX_FILE_SIZE_BYTES,
   LLM_MAX_RESPONSE_TOKENS,
   OLLAMA_MAX_RESPONSE_TOKENS,
-  MAX_LLM_CONCURRENCY,
   ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
-import { buildRepoContextSummary } from "@/lib/llm-repo-context";
 
 interface ZeroDayLlmFinding {
   title: string;
   severity: string;
   category?: string;
   description: string;
+  filePath: string;
   startLine: number;
   endLine: number;
   cweId?: string;
   confidence?: number;
-  attackVector?: string;
-  stepsToReproduce?: string[];
-  recommendation?: string;
   metadata?: Record<string, unknown>;
+  recommendation?: string;
 }
 
 export const zeroDayScanner: ScannerPlugin = {
@@ -53,189 +48,107 @@ export const zeroDayScanner: ScannerPlugin = {
     });
 
     const isOllama = ctx.orgSettings.llmProvider.toLowerCase() === "ollama";
-    const chunkTokens = isOllama ? OLLAMA_MAX_CHUNK_TOKENS : MAX_CHUNK_TOKENS;
-    const overlapTokens = isOllama
-      ? OLLAMA_CHUNK_OVERLAP_TOKENS
-      : CHUNK_OVERLAP_TOKENS;
     const maxResponseTokens = isOllama
       ? OLLAMA_MAX_RESPONSE_TOKENS
       : LLM_MAX_RESPONSE_TOKENS;
 
-    // Only analyze high-priority files
+    const repoContext = buildDeepRepoContext(ctx.workDir, ctx.fileList);
     const targetFiles = selectZeroDayFiles(ctx.fileList);
     if (targetFiles.length === 0) return [];
 
-    logger.info(
-      { fileCount: targetFiles.length },
-      "Zero-day scanner: analyzing priority files",
-    );
-    ctx.onProgress?.(
-      `Zero-Day: analyzing ${targetFiles.length} priority files...`,
-    );
-
-    const findings: RawFinding[] = [];
-    const maxConcurrency = MAX_LLM_CONCURRENCY;
-    const chunks: Chunk[] = [];
-    const repoContextBlock = buildRepoContextSummary(ctx.fileList);
-
-    for (const filePath of targetFiles) {
+    const fileBundles: string[] = [];
+    for (const filePath of targetFiles.slice(0, 48)) {
       await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
 
       const ext = path.extname(filePath).toLowerCase();
-      if (BINARY_EXTENSIONS.has(ext)) continue;
-      if (!FILE_EXTENSIONS[ext]) continue;
+      if (BINARY_EXTENSIONS.has(ext) || !FILE_EXTENSIONS[ext]) continue;
+      if (filePath.split(path.sep).some((p) => SKIP_DIRECTORIES.has(p))) continue;
 
-      const parts = filePath.split(path.sep);
-      if (parts.some((p) => SKIP_DIRECTORIES.has(p))) continue;
-
-      const fullPath = path.join(ctx.workDir, filePath);
       try {
-        const content = fs.readFileSync(fullPath, "utf-8");
-        if (content.trim().length === 0) continue;
-        chunks.push(
-          ...chunkFile(content, filePath, chunkTokens, overlapTokens),
+        const content = fs.readFileSync(
+          path.join(ctx.workDir, filePath),
+          "utf-8",
         );
+        if (!content.trim()) continue;
+        fileBundles.push(`### ${filePath}\n\`\`\`\n${content.slice(0, 12000)}\n\`\`\``);
       } catch {
         continue;
       }
     }
 
-    // Process chunks with concurrency limit
-    for (let i = 0; i < chunks.length; i += maxConcurrency) {
-      await ctx.waitIfPaused?.();
-      if (ctx.signal?.aborted) break;
-
-      const batch = chunks.slice(i, i + maxConcurrency);
-      const results = await Promise.allSettled(
-        batch.map((chunk) =>
-          analyzeChunk(
-            client,
-            ctx.orgSettings.llmModel,
-            chunk,
-            maxResponseTokens,
-            repoContextBlock,
-          ),
-        ),
-      );
-
-      const batchFindings: RawFinding[] = [];
-      for (const result of results) {
-        if (result.status === "fulfilled") {
-          batchFindings.push(...result.value);
-          findings.push(...result.value);
-        }
-      }
-
-      if (batchFindings.length > 0 && ctx.onBatchFindings) {
-        await ctx.onBatchFindings("ZERO_DAY", batchFindings);
-      }
-    }
+    if (fileBundles.length === 0) return [];
 
     ctx.onProgress?.(
-      `Zero-Day: ${findings.length} potential novel vulnerabilities found`,
+      `Zero-Day: cross-file exploit-chain analysis on ${fileBundles.length} files...`,
     );
-    return findings;
+
+    const userContent = `${repoContext.summary}\n\nHIGH-RISK FILES:\n${fileBundles.join("\n\n")}`;
+
+    try {
+      const raw = await analyzeWithLlm(
+        client,
+        ctx.orgSettings.llmModel,
+        ZERO_DAY_VALIDATION_PROMPT,
+        userContent,
+        { maxTokens: maxResponseTokens },
+      );
+
+      const parsed = parseLlmJsonResponse<{ findings: ZeroDayLlmFinding[] }>(
+        raw,
+        { findings: [] },
+      );
+
+      const findings = (parsed.findings || [])
+        .filter(
+          (f) =>
+            f.title &&
+            f.severity &&
+            f.filePath &&
+            (f.confidence ?? 0) >= ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
+        )
+        .map((f) => {
+          const base: RawFinding = {
+            scanner: "ZERO_DAY",
+            severity: normalizeSeverity(f.severity),
+            title: `[Zero-Day] ${f.title}`,
+            description: f.description,
+            filePath: f.filePath,
+            startLine: f.startLine,
+            endLine: f.endLine,
+            cweId: f.cweId,
+            confidence: f.confidence,
+            ruleId: `ZD-${f.cweId || "CHAIN"}`,
+            metadata: {
+              ...(f.metadata || {}),
+              category: f.category || "Novel",
+              weaknessClass: f.category,
+            },
+          };
+          return enrichFinding(base, base.metadata as Record<string, unknown>, {
+            whatIsWrong: f.title,
+            where: `${f.filePath}:${f.startLine}`,
+            whyExploitable: f.description,
+            attackPath: f.metadata?.attackPath as string,
+            fix:
+              f.recommendation ||
+              (f.metadata?.remediation as string) ||
+              "Close the exploit chain per recommendation.",
+          });
+        });
+
+      if (findings.length > 0 && ctx.onBatchFindings) {
+        await ctx.onBatchFindings("ZERO_DAY", findings);
+      }
+
+      ctx.onProgress?.(`Zero-Day: ${findings.length} validated chain finding(s)`);
+      return findings;
+    } catch (err) {
+      logger.error({ err }, "Zero-day cross-file analysis failed");
+      return [];
+    }
   },
 };
-
-async function analyzeChunk(
-  client: ReturnType<typeof createLlmClient>,
-  model: string,
-  chunk: Chunk,
-  maxResponseTokens: number,
-  repoContextBlock: string,
-): Promise<RawFinding[]> {
-  const userContent = `${repoContextBlock}\n--- CURRENT FILE CHUNK ---\nFile: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n\n\`\`\`\n${chunk.content}\n\`\`\``;
-
-  try {
-    const raw = await analyzeWithLlm(
-      client,
-      model,
-      ZERO_DAY_SYSTEM_PROMPT,
-      userContent,
-      { maxTokens: maxResponseTokens },
-    );
-
-    const parsed = parseLlmJsonResponse<{ findings: ZeroDayLlmFinding[] }>(
-      raw,
-      { findings: [] },
-    );
-
-    return (parsed.findings || [])
-      .filter(
-        (f) =>
-          f.title &&
-          f.severity &&
-          (f.confidence ?? 0) >= ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
-      )
-      .map((f) => ({
-        scanner: "ZERO_DAY" as const,
-        severity: normalizeSeverity(f.severity),
-        title: `[Zero-Day] ${f.title}`,
-        description: [
-          f.description,
-          f.attackVector ? `\nAttack Vector: ${f.attackVector}` : "",
-          f.category ? `\nCategory: ${f.category}` : "",
-          f.recommendation ? `\nRecommendation: ${f.recommendation}` : "",
-        ].join(""),
-        filePath: chunk.filePath,
-        startLine: f.startLine,
-        endLine: f.endLine,
-        snippet: buildSnippet(chunk, f.startLine, f.endLine),
-        cweId: f.cweId,
-        confidence: f.confidence ?? ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
-        ruleId: `ZD-${f.cweId || "NOVEL"}`,
-        metadata: {
-          ...(f.metadata || {}),
-          category: f.category,
-          attackVector: f.attackVector,
-          recommendation: f.recommendation,
-          stepsToReproduce: normalizeStepsToReproduce(
-            f.stepsToReproduce,
-            f.attackVector,
-          ),
-        },
-      }));
-  } catch (err) {
-    logger.error(
-      { err, filePath: chunk.filePath },
-      "Zero-day chunk analysis failed",
-    );
-    return [];
-  }
-}
-
-function normalizeStepsToReproduce(
-  steps: string[] | undefined,
-  attackVector: string | undefined,
-): string[] {
-  const cleanSteps = (steps || [])
-    .filter((step): step is string => typeof step === "string")
-    .map((step) => step.trim())
-    .filter(Boolean);
-  if (cleanSteps.length > 0) return cleanSteps;
-  return attackVector?.trim() ? [attackVector.trim()] : [];
-}
-
-function buildSnippet(
-  chunk: Chunk,
-  startLine?: number,
-  endLine?: number,
-): string | undefined {
-  if (!startLine || startLine < 1) return undefined;
-  const lines = chunk.content.split("\n");
-  const relativeStart = Math.max(0, startLine - chunk.startLine - 2);
-  const relativeEnd = Math.min(
-    lines.length,
-    (endLine || startLine) - chunk.startLine + 3,
-  );
-  if (relativeEnd <= relativeStart) return undefined;
-  return lines
-    .slice(relativeStart, relativeEnd)
-    .map((line, index) => `${chunk.startLine + relativeStart + index}: ${line}`)
-    .join("\n");
-}
 
 function normalizeSeverity(s: string): RawFinding["severity"] {
   const upper = s.toUpperCase();

@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyApiKey } from "@/lib/api-key";
-import { SECRET_PATTERNS } from "@/scanners/secrets/patterns";
-import { ALL_PATTERN_RULES as PATTERN_RULES } from "@/scanners/sast/pattern-rules";
-import { isHighEntropy, extractCandidateValues } from "@/scanners/secrets/entropy";
-import { maskSnippet } from "@/scanners/secrets/masker";
 
 interface PrecommitFile {
   path: string;
@@ -22,79 +18,9 @@ interface PrecommitFinding {
   cweId?: string;
 }
 
-function detectInFile(file: PrecommitFile): PrecommitFinding[] {
-  const findings: PrecommitFinding[] = [];
-  const lines = file.content.split(/\r?\n/);
-  // Secret patterns
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    for (const p of SECRET_PATTERNS) {
-      if (p.pattern.test(line)) {
-        if (p.allowlist?.some((al) => al.test(line))) {
-          p.pattern.lastIndex = 0;
-          continue;
-        }
-        findings.push({
-          ruleId: p.id,
-          title: p.title,
-          description: p.description,
-          severity: p.severity,
-          filePath: file.path,
-          line: i + 1,
-          snippet: maskSnippet(`${i + 1}: ${line}`, [p.pattern]),
-          category: "secret",
-          cweId: "CWE-798",
-        });
-        p.pattern.lastIndex = 0;
-      }
-      p.pattern.lastIndex = 0;
-    }
-    const candidates = extractCandidateValues(line);
-    for (const c of candidates) {
-      if (
-        isHighEntropy(c) &&
-        /(?:key|secret|token|password|credential|auth|api)/i.test(line)
-      ) {
-        findings.push({
-          ruleId: "ENTROPY_SECRET",
-          title: "High-Entropy String in Secret Context",
-          description:
-            "A high-entropy string in a secret-like context. Move to env vars or a secret manager.",
-          severity: "MEDIUM",
-          filePath: file.path,
-          line: i + 1,
-          snippet: `${i + 1}: [MASKED HIGH-ENTROPY VALUE]`,
-          category: "secret",
-          cweId: "CWE-798",
-        });
-      }
-    }
-  }
-  // SAST pattern rules (lightweight pass)
-  for (const rule of PATTERN_RULES) {
-    rule.pattern.lastIndex = 0;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (!rule.pattern.test(line)) {
-        rule.pattern.lastIndex = 0;
-        continue;
-      }
-      rule.pattern.lastIndex = 0;
-      if (rule.negative && rule.negative.test(line)) continue;
-      findings.push({
-        ruleId: rule.id,
-        title: rule.title,
-        description: rule.description,
-        severity: rule.severity,
-        filePath: file.path,
-        line: i + 1,
-        snippet: `${i + 1}: ${line.trim().slice(0, 240)}`,
-        category: "sast",
-        cweId: rule.cweId,
-      });
-    }
-  }
-  return findings;
+/** Pattern-based pre-commit detection removed; use full Pepper scan (LLM + OSV). */
+function detectInFile(_file: PrecommitFile): PrecommitFinding[] {
+  return [];
 }
 
 export async function POST(req: NextRequest) {
@@ -134,6 +60,7 @@ export async function POST(req: NextRequest) {
     summary: {
       total: allFindings.length,
       bySeverity: countBySeverity(allFindings),
+      note: "Pattern-based pre-commit scanning is disabled. Run a full Pepper scan for AI-driven findings.",
     },
     block: shouldFail,
     organizationId: auth.organizationId,

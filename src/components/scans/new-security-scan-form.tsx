@@ -25,6 +25,7 @@ import {
 } from "@/lib/create-scan-validation";
 import type { ScanProject } from "./types";
 import { cn } from "@/lib/utils";
+import { MANUAL_SCAN_TYPE_OPTIONS } from "@/lib/scan-types";
 
 type SourceTab = "repository" | "upload" | "svn";
 
@@ -34,14 +35,6 @@ interface NewSecurityScanFormProps {
   onCreated?: () => void;
   embedded?: boolean;
 }
-
-const SCAN_TYPE_OPTIONS = [
-  { value: "FULL", label: "Full" },
-  { value: "SAST_ONLY", label: "SAST" },
-  { value: "SCA_ONLY", label: "SCA" },
-  { value: "SECRETS_ONLY", label: "Secrets" },
-  { value: "INCREMENTAL", label: "Incremental" },
-] as const;
 
 export function NewSecurityScanForm({
   projects = [],
@@ -54,7 +47,10 @@ export function NewSecurityScanForm({
   const [tab, setTab] = useState<SourceTab>("repository");
   const [projectId, setProjectId] = useState(CREATE_PROJECT_ON_SCAN_VALUE);
   const [newProjectName, setNewProjectName] = useState("");
-  const [scanType, setScanType] = useState("FULL");
+  const [scanType, setScanType] = useState<string>("FULL");
+  const scanTypeHelp =
+    MANUAL_SCAN_TYPE_OPTIONS.find((o) => o.value === scanType)?.description ??
+    "";
   const [repoUrl, setRepoUrl] = useState("");
   const [branch, setBranch] = useState("");
   const [repoToken, setRepoToken] = useState("");
@@ -467,16 +463,19 @@ export function NewSecurityScanForm({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {SCAN_TYPE_OPTIONS.map((o) => (
+                    {MANUAL_SCAN_TYPE_OPTIONS.map((o) => (
                       <SelectItem key={o.value} value={o.value}>
                         {o.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {scanTypeHelp ? (
+                  <p className="text-xs text-muted-foreground">{scanTypeHelp}</p>
+                ) : null}
               </div>
 
-              <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+              <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground space-y-2">
                 {tab === "repository" && (
                   <p>Clones a Git repository and runs the selected scanners on the checkout.</p>
                 )}
@@ -486,6 +485,11 @@ export function NewSecurityScanForm({
                 {tab === "upload" && (
                   <p>Upload a zip or tarball of your source tree. Good for air-gapped or ad-hoc drops.</p>
                 )}
+                <p>
+                  <strong>Full</strong> includes IaC and zero-day. IaC / zero-day also
+                  have dedicated scan types. Enable LLM SAST under LLM Config for those
+                  AI scanners.
+                </p>
               </div>
             </div>
 

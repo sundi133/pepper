@@ -17,6 +17,10 @@ RUN npx prisma generate
 
 FROM base AS api-build
 RUN npm run build
+# next build needs devDependencies; strip them from node_modules before
+# the runtime stage copies it. Drops vitest, typescript, eslint,
+# tailwindcss, @types/*, etc. — none of which are used at runtime.
+RUN npm prune --omit=dev
 
 FROM node:20-alpine AS api
 WORKDIR /app

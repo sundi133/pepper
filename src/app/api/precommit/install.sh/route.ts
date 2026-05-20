@@ -20,7 +20,10 @@ export async function GET() {
     hookBody = fs.readFileSync(hookPath, "utf-8");
   } catch {
     return NextResponse.json(
-      { error: "Pre-commit hook script is unavailable on this server" },
+      {
+        error: "Pre-commit hook script is unavailable on this server",
+        detail: `Missing ${hookPath}. Ensure scripts/pepper-precommit.sh is deployed (see Dockerfile api stage).`,
+      },
       { status: 500 },
     );
   }

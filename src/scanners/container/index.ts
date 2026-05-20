@@ -3,11 +3,24 @@ import * as path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import {
+  createLlmClient,
+  analyzeWithLlm,
+  parseLlmJsonResponse,
+} from "@/lib/llm-gateway";
+import {
   RawFinding,
   ScanContext,
   ScannerPlugin,
   SeverityLevel,
 } from "../types";
+import { enrichFinding } from "../shared/finding-normalize";
+import { CONTAINER_CONFIG_PROMPT } from "../shared/prompts";
+import {
+  LLM_MAX_RESPONSE_TOKENS,
+  OLLAMA_MAX_RESPONSE_TOKENS,
+  LLM_MIN_CONFIDENCE_DEFAULT,
+} from "@/lib/constants";
+import { logger } from "@/lib/logger";
 
 const execFileP = promisify(execFile);
 
@@ -82,7 +95,7 @@ function mapSeverity(sev?: string): SeverityLevel {
     case "LOW":
       return "LOW";
     default:
-      return "INFO";
+      return "MEDIUM";
   }
 }
 
@@ -135,7 +148,6 @@ function discoverImages(workDir: string, fileList: string[]): ImageRef[] {
       continue;
     }
   }
-  // dedupe by image
   const seen = new Set<string>();
   return refs.filter((r) => {
     if (seen.has(r.image)) return false;
@@ -144,78 +156,152 @@ function discoverImages(workDir: string, fileList: string[]): ImageRef[] {
   });
 }
 
+interface ConfigLlmFinding {
+  title: string;
+  severity: string;
+  description: string;
+  startLine: number;
+  endLine?: number;
+  cweId?: string;
+  confidence: number;
+  remediation: string;
+  validationSteps?: string[];
+}
+
+async function scanContainerConfig(
+  ctx: ScanContext,
+): Promise<RawFinding[]> {
+  if (!ctx.orgSettings.enableLlmSast) return [];
+
+  const configFiles: { path: string; content: string }[] = [];
+  for (const rel of ctx.fileList) {
+    const base = path.basename(rel);
+    if (
+      !DOCKERFILE_NAMES.has(base) &&
+      !/\.dockerfile$/i.test(base) &&
+      !COMPOSE_NAMES.has(base)
+    ) {
+      continue;
+    }
+    try {
+      configFiles.push({
+        path: rel,
+        content: fs.readFileSync(path.join(ctx.workDir, rel), "utf-8"),
+      });
+    } catch {
+      continue;
+    }
+  }
+  if (configFiles.length === 0) return [];
+
+  const client = createLlmClient({
+    provider: ctx.orgSettings.llmProvider,
+    baseUrl: ctx.orgSettings.llmBaseUrl,
+    apiKey: ctx.orgSettings.llmApiKey,
+    model: ctx.orgSettings.llmModel,
+  });
+  const isOllama = ctx.orgSettings.llmProvider.toLowerCase() === "ollama";
+  const maxTokens = isOllama
+    ? OLLAMA_MAX_RESPONSE_TOKENS
+    : LLM_MAX_RESPONSE_TOKENS;
+
+  const findings: RawFinding[] = [];
+  for (const file of configFiles) {
+    try {
+      const raw = await analyzeWithLlm(
+        client,
+        ctx.orgSettings.llmModel,
+        CONTAINER_CONFIG_PROMPT,
+        `File: ${file.path}\n\`\`\`\n${file.content}\n\`\`\``,
+        { maxTokens },
+      );
+      const parsed = parseLlmJsonResponse<{ findings: ConfigLlmFinding[] }>(
+        raw,
+        { findings: [] },
+      );
+      for (const f of parsed.findings || []) {
+        if ((f.confidence ?? 0) < LLM_MIN_CONFIDENCE_DEFAULT) continue;
+        findings.push(
+          enrichFinding(
+            {
+              scanner: "CONTAINER",
+              severity: mapSeverity(f.severity),
+              title: f.title,
+              description: f.description,
+              filePath: file.path,
+              startLine: f.startLine,
+              endLine: f.endLine || f.startLine,
+              cweId: f.cweId,
+              confidence: f.confidence,
+              ruleId: `CONTAINER-CONFIG-${f.cweId || "MISC"}`,
+              metadata: {
+                category: "CONTAINER_CONFIG",
+                remediation: f.remediation,
+                validationSteps: f.validationSteps,
+              },
+            },
+            { category: "CONTAINER_CONFIG", remediation: f.remediation },
+            {
+              whatIsWrong: f.title,
+              where: `${file.path}:${f.startLine}`,
+              whyExploitable: f.description,
+              fix: f.remediation,
+              validation: f.validationSteps?.join("; "),
+            },
+          ),
+        );
+      }
+    } catch (err) {
+      logger.warn({ err, file: file.path }, "Container config AI review failed");
+    }
+  }
+  return findings;
+}
+
 export const containerScanner: ScannerPlugin = {
   name: "CONTAINER",
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
     await ctx.waitIfPaused?.();
     const images = discoverImages(ctx.workDir, ctx.fileList);
+    const configFindings = await scanContainerConfig(ctx);
+
     if (images.length === 0) {
-      ctx.onProgress?.("CONTAINER: no container image references found");
-      return [];
+      ctx.onProgress?.("CONTAINER: no image references; config review only");
+      return configFindings;
     }
 
     ctx.onProgress?.(
-      `CONTAINER: scanning ${images.length} image reference(s): ${images
-        .map((i) => i.image)
-        .slice(0, 5)
-        .join(", ")}`,
+      `CONTAINER: scanning ${images.length} image(s) with Trivy when available`,
     );
 
     const hasTrivy = await trivyAvailable();
-    const findings: RawFinding[] = [];
-
     if (!hasTrivy) {
       ctx.onProgress?.(
-        "CONTAINER: trivy CLI not installed; emitting image inventory only",
+        "CONTAINER: Trivy not installed — skipping CVE scan (no findings emitted)",
       );
-      for (const ref of images) {
-        findings.push({
-          scanner: "CONTAINER",
-          severity: "INFO",
-          title: `Container image referenced: ${ref.image}`,
-          description: `Image \`${ref.image}\` referenced in ${ref.filePath}:${ref.line}. Install Trivy on the worker to enable vulnerability scanning of container images.`,
-          filePath: ref.filePath,
-          startLine: ref.line,
-          endLine: ref.line,
-          ruleId: "CONTAINER-INVENTORY",
-          confidence: 1,
-          metadata: { image: ref.image, trivyAvailable: false },
-        });
-      }
-      return findings;
+      return configFindings;
     }
+
+    const findings: RawFinding[] = [...configFindings];
 
     for (const ref of images) {
       await ctx.waitIfPaused?.();
-      ctx.onProgress?.(`CONTAINER: scanning ${ref.image}`);
+      ctx.onProgress?.(`CONTAINER: Trivy scanning ${ref.image}`);
       const trivyOutput = await scanImageWithTrivy(ref.image);
-      if (!trivyOutput || !trivyOutput.Results) {
-        findings.push({
-          scanner: "CONTAINER",
-          severity: "INFO",
-          title: `Could not scan container image ${ref.image}`,
-          description: `Trivy failed to scan \`${ref.image}\`. The image may be private or unreachable.`,
-          filePath: ref.filePath,
-          startLine: ref.line,
-          ruleId: "CONTAINER-SCAN-FAILED",
-          confidence: 1,
-          metadata: { image: ref.image },
-        });
+      if (!trivyOutput?.Results) {
+        ctx.onProgress?.(
+          `CONTAINER: could not scan ${ref.image} (private/unreachable) — logged only`,
+        );
         continue;
       }
+
       for (const result of trivyOutput.Results) {
         for (const vuln of result.Vulnerabilities || []) {
-          findings.push({
+          const base: RawFinding = {
             scanner: "CONTAINER",
             severity: mapSeverity(vuln.Severity),
             title: `${vuln.VulnerabilityID}: ${vuln.PkgName || "package"} in ${ref.image}`,
-            description:
-              (vuln.Title ? `${vuln.Title}\n\n` : "") +
-              (vuln.Description ||
-                `Vulnerable package \`${vuln.PkgName}@${vuln.InstalledVersion}\` in container image \`${ref.image}\`.`) +
-              (vuln.FixedVersion
-                ? `\n\n**Fix:** upgrade to \`${vuln.FixedVersion}\`.`
-                : ""),
+            description: "",
             filePath: ref.filePath,
             startLine: ref.line,
             ruleId: vuln.VulnerabilityID,
@@ -230,13 +316,27 @@ export const containerScanner: ScannerPlugin = {
               packageVersion: vuln.InstalledVersion,
               fixedVersion: vuln.FixedVersion,
               target: result.Target,
+              category: "CONTAINER_CVE",
             },
-          });
+          };
+          findings.push(
+            enrichFinding(base, base.metadata as Record<string, unknown>, {
+              whatIsWrong: vuln.Title || vuln.VulnerabilityID,
+              where: `${ref.filePath}:${ref.line} (image ${ref.image})`,
+              whyExploitable:
+                vuln.Description ||
+                `Vulnerable package ${vuln.PkgName}@${vuln.InstalledVersion} in runtime image.`,
+              fix: vuln.FixedVersion
+                ? `Upgrade ${vuln.PkgName} to ${vuln.FixedVersion} or rebuild base image.`
+                : "Rebuild image with patched base/packages per vendor advisory.",
+              validation: `trivy image ${ref.image} — confirm ${vuln.VulnerabilityID} absent`,
+            }),
+          );
         }
       }
     }
 
-    ctx.onProgress?.(`CONTAINER: found ${findings.length} issues`);
+    ctx.onProgress?.(`CONTAINER: ${findings.length} findings`);
     return findings;
   },
 };

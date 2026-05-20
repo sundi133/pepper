@@ -9,7 +9,16 @@ const scheduleSchema = z.object({
   frequency: z.enum(["DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY", "CUSTOM"]),
   cronExpr: z.string().optional(),
   scanType: z
-    .enum(["FULL", "SAST_ONLY", "SCA_ONLY", "SECRETS_ONLY"])
+    .enum([
+      "FULL",
+      "SAST_ONLY",
+      "SCA_ONLY",
+      "SECRETS_ONLY",
+      "IAC_ONLY",
+      "ZERO_DAY_ONLY",
+      "CONTAINER_ONLY",
+      "DAST_ONLY",
+    ])
     .default("FULL"),
   branch: z.string().optional(),
 });

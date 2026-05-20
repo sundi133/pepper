@@ -6,8 +6,10 @@ import {
   parseLlmJsonResponse,
 } from "@/lib/llm-gateway";
 import { RawFinding, ScanContext, ScannerPlugin } from "../types";
+import { groupIacStacks } from "./stacks";
+import { enrichFinding } from "../shared/finding-normalize";
+import { buildDeepRepoContext } from "../shared/repo-context";
 import {
-  detectIacFileType,
   SKIP_DIRECTORIES,
   LLM_MAX_FILE_SIZE_BYTES,
   LLM_MAX_RESPONSE_TOKENS,
@@ -16,105 +18,33 @@ import {
   IAC_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
-import { buildRepoContextSummary } from "@/lib/llm-repo-context";
 
-const IAC_SYSTEM_PROMPT = `You are an expert Infrastructure as Code (IaC) security auditor. Analyze the provided configuration file for security misconfigurations, hardcoded secrets, and compliance violations.
+const IAC_STACK_PROMPT = `You are an expert IaC security auditor performing STACK-LEVEL analysis.
+Analyze ALL files in the stack together (Dockerfile+compose, Terraform module+vars, K8s+Helm, CI+deploy configs).
+Do NOT report hardcoded secrets that are only credential material — those belong to the secrets scanner.
+For each finding include: exact misconfiguration, exposed asset, attack path, environment if visible, concrete fix, validation command/step.
+Confidence >= 0.80 only.
 
-STRICT RULES:
-1. Only report REAL, EXPLOITABLE misconfigurations — not style issues or best practices.
-2. Confidence MUST be 0.65-1.0. Below 0.65: do NOT report.
-3. Provide concrete impact and specific fix for each finding.
-
-CHECK FOR THESE CATEGORIES:
-
-**OWASP / CLOUD-NATIVE HIGH IMPACT RISKS:**
-- Security misconfiguration that exposes management planes, metadata services, databases, queues, buckets, dashboards, or internal services
-- Software/data integrity risks in CI/CD such as unpinned actions, mutable images, unsafe pull_request_target, unsigned artifacts, or deployment from untrusted branches
-- Broken access control in IAM, RBAC, Kubernetes roles, service accounts, organization/project policies, and cross-account trust
-- Sensitive data exposure through environment variables, build logs, artifacts, cache keys, state files, or IaC outputs
-- AI/agent and automation risks: overprivileged CI tokens, MCP/tool credentials in jobs, LLM/API keys exposed to untrusted pull requests, autonomous deploy jobs without approval
-
-**SECRETS & CREDENTIALS:**
-- Hardcoded API keys, passwords, tokens, access keys in config
-- Secrets not using secure secret management (Vault, SSM, K8s Secrets)
-- Credentials visible in environment variables or logs
-- Terraform state, pipeline artifacts, Docker build args, Helm values, or Kubernetes manifests leaking credentials
-
-**ACCESS CONTROL & IAM:**
-- Overly permissive IAM policies (*, admin, full access)
-- Public access to private resources (S3, databases, ports)
-- Missing authentication/authorization on endpoints
-- Kubernetes ClusterRole/RoleBinding granting cluster-admin or wildcard verbs/resources to broad subjects
-- Cloud role trust policies allowing external accounts, public principals, or broad service principals without conditions
-- CI/CD service accounts with deploy/admin permissions available to pull requests or non-protected branches
-
-**ENCRYPTION & TRANSPORT:**
-- Missing encryption at rest or in transit
-- Disabled TLS verification
-- Weak or deprecated cipher suites
-- Public load balancers, ingress, or service mesh routes lacking TLS or strict redirect
-- Cloud storage, queues, disks, databases, backups, and logs without customer-managed or provider-managed encryption
-
-**CONTAINER SECURITY:**
-- Running as root (no USER directive in Dockerfile)
-- Privileged containers or dangerous capabilities
-- Docker socket mounted into containers
-- Missing resource limits (memory, CPU)
-- Using :latest tags (supply chain risk)
-- Writable root filesystem, hostPath mounts, hostNetwork/hostPID/hostIPC, disabled seccomp/AppArmor/SELinux, or missing readOnlyRootFilesystem
-- Images without digests, SBOM/provenance, or vulnerability gates in deployment workflows
-
-**NETWORK SECURITY:**
-- Open ingress rules (0.0.0.0/0) on sensitive ports
-- Missing network segmentation/policies
-- Exposed management ports
-- Cloud metadata service exposure, missing IMDSv2, overly broad egress, unrestricted pod-to-pod traffic, or public database endpoints
-
-**CI/CD PIPELINE SECURITY:**
-- pull_request_target with checkout of untrusted PR code
-- Third-party actions/orbs not pinned to SHA
-- Secrets exposed in pipeline logs
-- Missing branch protection for deployments
-- Package install scripts running before trust is established
-- Deployments triggered by untrusted tags, forks, comments, workflow_dispatch inputs, or mutable artifacts
-- OIDC federation trust without repository, branch, environment, or audience restrictions
-
-**M2M / WEBHOOK SECURITY:**
-- Webhook endpoints without HMAC/signature verification
-- Service account tokens without rotation or expiration
-- Overprivileged OAuth scopes for integrations
-- Replayable webhook/event workflows without timestamp, nonce, idempotency, or deduplication controls
-
-For each finding respond with:
+Return JSON:
 {
-  "findings": [
-    {
-      "title": "Brief misconfiguration title",
-      "severity": "CRITICAL|HIGH|MEDIUM|LOW",
-      "description": "Plain-language explanation: what is wrong, why it is risky in deployment, and who/what is affected. Do NOT paste Dockerfile/YAML/JSON blocks here, do NOT use a heading or label 'Code evidence', and do NOT repeat the same lines that are already in the file (the UI shows the file path and line numbers separately).",
-      "startLine": <line number>,
-      "endLine": <line number>,
-      "cweId": "CWE-XXX",
-      "confidence": <0.65 to 1.0>,
-      "recommendation": "Concrete fix: short numbered or bulleted steps, optional one-line example directive only if it clarifies the fix (not a full file dump)"
-    }
-  ]
-}
-
-If no misconfigurations found, return: {"findings": []}
-Do NOT report theoretical issues. Only report concrete misconfigurations.
-
-The user message includes a REPOSITORY CONTEXT (paths only) from the full scan. Use it to notice multiple Dockerfiles, duplicate compose stacks, or sibling IaC roots — still cite only lines present in the provided file content.`;
+  "findings": [{
+    "title", "severity", "description", "filePath", "startLine", "endLine",
+    "cweId", "confidence", "recommendation",
+    "metadata": { "exposedAsset", "attackPath", "environment", "validationSteps": [], "remediation": "..." }
+  }]
+}`;
 
 interface IacLlmFinding {
   title: string;
   severity: string;
   description: string;
+  filePath: string;
   startLine: number;
   endLine: number;
   cweId?: string;
   confidence?: number;
   recommendation?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export const iacScanner: ScannerPlugin = {
@@ -134,88 +64,33 @@ export const iacScanner: ScannerPlugin = {
       ? OLLAMA_MAX_RESPONSE_TOKENS
       : LLM_MAX_RESPONSE_TOKENS;
 
-    // Collect IaC files
-    const iacFiles: { filePath: string; iacType: string }[] = [];
-    for (const filePath of ctx.fileList) {
-      await ctx.waitIfPaused?.();
-      const parts = filePath.split(path.sep);
-      if (parts.some((p) => SKIP_DIRECTORIES.has(p))) continue;
-
-      const iacType = detectIacFileType(filePath);
-      if (iacType) {
-        iacFiles.push({ filePath, iacType });
-      }
-    }
-
-    if (iacFiles.length === 0) return [];
-
-    logger.info({ fileCount: iacFiles.length }, "IaC scanner: analyzing files");
-    ctx.onProgress?.(
-      `IaC Security: analyzing ${iacFiles.length} configuration files...`,
+    const filteredList = ctx.fileList.filter(
+      (fp) => !fp.split(path.sep).some((p) => SKIP_DIRECTORIES.has(p)),
     );
+    const stacks = groupIacStacks(filteredList);
+    if (stacks.length === 0) return [];
 
-    const repoContextBlock = buildRepoContextSummary(ctx.fileList);
+    const repoContext = buildDeepRepoContext(ctx.workDir, ctx.fileList);
+    ctx.onProgress?.(`IaC: analyzing ${stacks.length} configuration stack(s)...`);
+
     const findings: RawFinding[] = [];
     const maxConcurrency = MAX_LLM_CONCURRENCY;
 
-    for (let i = 0; i < iacFiles.length; i += maxConcurrency) {
+    for (let i = 0; i < stacks.length; i += maxConcurrency) {
       await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
 
-      const batch = iacFiles.slice(i, i + maxConcurrency);
+      const batch = stacks.slice(i, i + maxConcurrency);
       const results = await Promise.allSettled(
-        batch.map(async ({ filePath, iacType }) => {
-          const fullPath = path.join(ctx.workDir, filePath);
-          try {
-            const stat = fs.statSync(fullPath);
-            if (stat.size > LLM_MAX_FILE_SIZE_BYTES) return [];
-
-            const content = fs.readFileSync(fullPath, "utf-8");
-            if (content.trim().length === 0) return [];
-            const lines = content.split("\n");
-
-            const userContent = `${repoContextBlock}\n--- CURRENT FILE ---\nFile: ${filePath}\nType: ${iacType}\n\n\`\`\`\n${content}\n\`\`\``;
-
-            const raw = await analyzeWithLlm(
-              client,
-              ctx.orgSettings.llmModel,
-              IAC_SYSTEM_PROMPT,
-              userContent,
-              { maxTokens: maxResponseTokens },
-            );
-
-            const parsed = parseLlmJsonResponse<{ findings: IacLlmFinding[] }>(
-              raw,
-              { findings: [] },
-            );
-
-            return (parsed.findings || [])
-              .filter(
-                (f) =>
-                  f.title &&
-                  f.severity &&
-                  (f.confidence ?? 0) >= IAC_MIN_CONFIDENCE_DEFAULT,
-              )
-              .map((f) => ({
-                scanner: "IAC" as const,
-                severity: normalizeSeverity(f.severity),
-                title: f.title,
-                description: f.recommendation
-                  ? `${f.description}\n\nRecommendation: ${f.recommendation}`
-                  : f.description,
-                filePath,
-                startLine: f.startLine,
-                endLine: f.endLine,
-                snippet: buildSnippet(lines, f.startLine, f.endLine),
-                cweId: f.cweId,
-                confidence: f.confidence ?? IAC_MIN_CONFIDENCE_DEFAULT,
-                ruleId: `IAC-${f.cweId || "MISC"}`,
-              }));
-          } catch (err) {
-            logger.error({ err, filePath }, "IaC analysis failed for file");
-            return [];
-          }
-        }),
+        batch.map((stack) =>
+          analyzeStack(
+            client,
+            ctx,
+            stack,
+            repoContext.summary,
+            maxResponseTokens,
+          ),
+        ),
       );
 
       const batchFindings: RawFinding[] = [];
@@ -225,18 +100,112 @@ export const iacScanner: ScannerPlugin = {
           findings.push(...result.value);
         }
       }
-
       if (batchFindings.length > 0 && ctx.onBatchFindings) {
         await ctx.onBatchFindings("IAC", batchFindings);
       }
     }
 
-    ctx.onProgress?.(
-      `IaC Security: found ${findings.length} misconfigurations`,
-    );
+    ctx.onProgress?.(`IaC: ${findings.length} stack-level misconfigurations`);
     return findings;
   },
 };
+
+async function analyzeStack(
+  client: ReturnType<typeof createLlmClient>,
+  ctx: ScanContext,
+  stack: ReturnType<typeof groupIacStacks>[0],
+  repoContextBlock: string,
+  maxResponseTokens: number,
+): Promise<RawFinding[]> {
+  const parts: string[] = [];
+  const lineMaps = new Map<string, string[]>();
+
+  for (const { filePath, iacType } of stack.files) {
+    try {
+      const fullPath = path.join(ctx.workDir, filePath);
+      const stat = fs.statSync(fullPath);
+      if (stat.size > LLM_MAX_FILE_SIZE_BYTES) continue;
+      const content = fs.readFileSync(fullPath, "utf-8");
+      if (!content.trim()) continue;
+      lineMaps.set(filePath, content.split("\n"));
+      parts.push(
+        `### ${filePath} (${iacType})\n\`\`\`\n${content}\n\`\`\``,
+      );
+    } catch {
+      continue;
+    }
+  }
+
+  if (parts.length === 0) return [];
+
+  const userContent = `${repoContextBlock}\n\nSTACK: ${stack.id} (${stack.kind})\n${parts.join("\n\n")}`;
+
+  try {
+    const raw = await analyzeWithLlm(
+      client,
+      ctx.orgSettings.llmModel,
+      IAC_STACK_PROMPT,
+      userContent,
+      { maxTokens: maxResponseTokens },
+    );
+    const parsed = parseLlmJsonResponse<{ findings: IacLlmFinding[] }>(raw, {
+      findings: [],
+    });
+
+    return (parsed.findings || [])
+      .filter(
+        (f) =>
+          f.title &&
+          f.severity &&
+          f.filePath &&
+          (f.confidence ?? 0) >= IAC_MIN_CONFIDENCE_DEFAULT,
+      )
+      .map((f) => {
+        const lines = lineMaps.get(f.filePath) || [];
+        const base: RawFinding = {
+          scanner: "IAC",
+          severity: normalizeSeverity(f.severity),
+          title: f.title,
+          description: f.description,
+          filePath: f.filePath,
+          startLine: f.startLine,
+          endLine: f.endLine,
+          snippet: buildSnippet(lines, f.startLine, f.endLine),
+          cweId: f.cweId,
+          confidence: f.confidence ?? IAC_MIN_CONFIDENCE_DEFAULT,
+          ruleId: `IAC-${f.cweId || "STACK"}`,
+          metadata: {
+            ...(f.metadata || {}),
+            stackId: stack.id,
+            remediation:
+              f.recommendation ||
+              (typeof f.metadata?.remediation === "string"
+                ? f.metadata.remediation
+                : undefined),
+            category: "IaC",
+          },
+        };
+        return enrichFinding(base, base.metadata as Record<string, unknown>, {
+          whatIsWrong: f.title,
+          where: `${f.filePath}:${f.startLine}`,
+          whyExploitable:
+            (f.metadata?.attackPath as string) || f.description,
+          attackPath: f.metadata?.attackPath as string,
+          impact: (f.metadata?.exposedAsset as string) || f.description,
+          fix:
+            (f.metadata?.remediation as string) ||
+            f.recommendation ||
+            "Apply IaC fix per recommendation.",
+          validation: (
+            f.metadata?.validationSteps as string[] | undefined
+          )?.join("; "),
+        });
+      });
+  } catch (err) {
+    logger.error({ err, stack: stack.id }, "IaC stack analysis failed");
+    return [];
+  }
+}
 
 function normalizeSeverity(s: string): RawFinding["severity"] {
   const upper = s.toUpperCase();
@@ -251,7 +220,7 @@ function buildSnippet(
   startLine?: number,
   endLine?: number,
 ): string | undefined {
-  if (!startLine || startLine < 1) return undefined;
+  if (!startLine || startLine < 1 || lines.length === 0) return undefined;
   const start = Math.max(0, startLine - 3);
   const end = Math.min(lines.length, (endLine || startLine) + 2);
   return lines

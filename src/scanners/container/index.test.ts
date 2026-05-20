@@ -58,15 +58,14 @@ describe("container scanner", () => {
           vulnDbMode: "offline",
         },
       });
-      // When trivy isn't installed (default in CI/tests), we emit INFO inventory
-      // entries for each discovered image.
-      const images = findings.map((f) => f.metadata?.image as string);
-      expect(images).toContain("node:20-alpine");
-      expect(images).toContain("nginx:1.25");
-      expect(images).toContain("ghcr.io/acme/api:1.0.0");
-      for (const f of findings) {
-        expect(f.scanner).toBe("CONTAINER");
-      }
+      // Without Trivy, no CVE inventory or failure findings are emitted.
+      expect(
+        findings.filter(
+          (f) =>
+            f.ruleId === "CONTAINER-INVENTORY" ||
+            f.ruleId === "CONTAINER-SCAN-FAILED",
+        ),
+      ).toHaveLength(0);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

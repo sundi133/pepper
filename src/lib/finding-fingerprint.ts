@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { RawFinding } from "@/scanners/types";
+import { buildRootCauseKey } from "@/scanners/shared/dedupe";
 
 function normalize(value?: string): string {
   return (value || "").trim().toLowerCase();
@@ -22,7 +23,9 @@ function stableMetadata(metadata?: Record<string, unknown>): string {
  * The fields selected prioritize semantic identity over exact wording.
  */
 export function buildFindingFingerprint(finding: RawFinding): string {
+  const rootKey = buildRootCauseKey(finding);
   const payload = [
+    rootKey,
     finding.scanner,
     normalize(finding.filePath),
     finding.startLine || 0,
@@ -30,8 +33,6 @@ export function buildFindingFingerprint(finding: RawFinding): string {
     normalize(finding.ruleId),
     normalize(finding.cweId),
     normalize(finding.cveId),
-    normalize(finding.title),
-    normalize(finding.description).slice(0, 300),
     normalizeSnippet(finding.snippet),
     stableMetadata(finding.metadata),
   ].join("|");

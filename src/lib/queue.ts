@@ -45,6 +45,8 @@ export interface ScanJobData {
     | "SAST_ONLY"
     | "SCA_ONLY"
     | "SECRETS_ONLY"
+    | "IAC_ONLY"
+    | "ZERO_DAY_ONLY"
     | "CONTAINER_ONLY"
     | "DAST_ONLY";
   baseSha?: string;

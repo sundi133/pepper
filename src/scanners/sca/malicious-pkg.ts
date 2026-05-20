@@ -13,6 +13,8 @@ import {
   MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import { enrichFinding } from "../shared/finding-normalize";
+import { MALICIOUS_VALIDATION_PROMPT } from "../shared/prompts";
 
 // ─── OSV Malware Advisory Query (Batch) ───────────────────────────────
 // OSV tracks malicious packages (MAL-*) reported by OpenSSF and others.
@@ -449,6 +451,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
     if (dependencies.length === 0) return [];
 
     const findings: RawFinding[] = [];
+    const supplyChainEvidence: Array<Record<string, unknown>> = [];
     const osvApiUrl = ctx.orgSettings.osvApiUrl || "https://api.osv.dev";
     const useVulnerabilityDb = ctx.orgSettings.vulnDbMode !== "offline";
 
@@ -520,48 +523,16 @@ export const maliciousPkgScanner: ScannerPlugin = {
         if (!meta) continue;
         const dep = batch[j];
 
-        // Flag very new packages (< 7 days old) — high risk across ALL ecosystems
-        if (meta.ageInDays !== undefined && meta.ageInDays < 7) {
-          const hasScripts = meta.hasInstallScripts;
-          findings.push({
-            scanner: "MALICIOUS_PKG",
-            severity: hasScripts ? "HIGH" : "MEDIUM",
-            title: `Very new package: ${dep.name}@${dep.version} (${meta.ageInDays} days old, ${dep.ecosystem})`,
-            description: `Package "${dep.name}" (${dep.ecosystem}) was published only ${meta.ageInDays} days ago.${hasScripts ? " It also contains install scripts, which is a common supply chain attack vector." : ""} New packages have significantly higher risk of being malicious.\n\nRecommendation: Verify this package is legitimate. Check its source repository, maintainer history, and download count before using it.`,
-            ruleId: "MAL-NEW-PKG",
-            cweId: "CWE-829",
-            confidence: hasScripts ? 0.8 : 0.65,
-            metadata: {
-              ecosystem: dep.ecosystem,
-              version: dep.version,
-              ageInDays: meta.ageInDays,
-              hasInstallScripts: meta.hasInstallScripts,
-              source: "registry-metadata",
-            },
-          });
-        }
-
-        // Flag packages with no source repository (> 30 days old to avoid flagging new legitimate packages)
-        if (
-          !meta.hasRepository &&
-          meta.ageInDays !== undefined &&
-          meta.ageInDays > 30
-        ) {
-          findings.push({
-            scanner: "MALICIOUS_PKG",
-            severity: "LOW",
-            title: `No source repository: ${dep.name}@${dep.version} (${dep.ecosystem})`,
-            description: `Package "${dep.name}" has no linked source code repository. This makes it impossible to verify the code matches what's published. Packages without source repos have higher risk of containing hidden malicious code.`,
-            ruleId: "MAL-NO-REPO",
-            cweId: "CWE-829",
-            confidence: 0.5,
-            metadata: {
-              ecosystem: dep.ecosystem,
-              version: dep.version,
-              source: "registry-metadata",
-            },
-          });
-        }
+        // Collect evidence for LLM validation (no direct heuristic findings)
+        supplyChainEvidence.push({
+          packageName: dep.name,
+          version: dep.version,
+          ecosystem: dep.ecosystem,
+          ageInDays: meta.ageInDays,
+          hasRepository: meta.hasRepository,
+          hasInstallScripts: meta.hasInstallScripts,
+          installScripts: meta.installScripts,
+        });
 
         // Collect npm deps with install scripts for LLM analysis in Phase 3
         if (meta.hasInstallScripts) {
@@ -787,8 +758,89 @@ export const maliciousPkgScanner: ScannerPlugin = {
       }
     }
 
+    // Phase 4: LLM validation of registry metadata evidence (no heuristic-only findings)
+    if (supplyChainEvidence.length > 0 && ctx.orgSettings.enableLlmSast) {
+      ctx.onProgress?.(
+        `Supply Chain: LLM validating ${supplyChainEvidence.length} metadata evidence items...`,
+      );
+      const EVIDENCE_BATCH = 30;
+      for (let i = 0; i < supplyChainEvidence.length; i += EVIDENCE_BATCH) {
+        const batch = supplyChainEvidence.slice(i, i + EVIDENCE_BATCH);
+        try {
+          const raw = await analyzeWithLlm(
+            client,
+            ctx.orgSettings.llmModel,
+            MALICIOUS_VALIDATION_PROMPT,
+            JSON.stringify({ evidence: batch }, null, 2),
+            { maxTokens: maxResponseTokens },
+          );
+          const parsed = parseLlmJsonResponse<{
+            findings: Array<{
+              packageName: string;
+              version: string;
+              title: string;
+              severity: string;
+              suspiciousBehavior: string;
+              evidence: string;
+              whyNotBenign: string;
+              installImpact: string;
+              remediation: string;
+              confidence: number;
+            }>;
+          }>(raw, { findings: [] });
+
+          for (const f of parsed.findings || []) {
+            if (
+              !f.packageName ||
+              (f.confidence ?? 0) < MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT
+            ) {
+              continue;
+            }
+            const dep = dependencies.find(
+              (d) => d.name === f.packageName && d.version === f.version,
+            );
+            findings.push(
+              enrichFinding(
+                {
+                  scanner: "MALICIOUS_PKG",
+                  severity: normalizeSeverity(f.severity),
+                  title: f.title,
+                  description: "",
+                  ruleId: "MAL-LLM-VALIDATED",
+                  cweId: "CWE-506",
+                  confidence: f.confidence,
+                  metadata: {
+                    packageName: f.packageName,
+                    packageVersion: f.version,
+                    ecosystem: dep?.ecosystem,
+                    suspiciousBehavior: f.suspiciousBehavior,
+                    evidence: f.evidence,
+                    source: "llm-validation",
+                  },
+                },
+                {
+                  remediation: f.remediation,
+                  impact: f.installImpact,
+                  confidenceReason: f.whyNotBenign,
+                },
+                {
+                  whatIsWrong: f.suspiciousBehavior,
+                  where: `${f.packageName}@${f.version}`,
+                  whyExploitable: f.whyNotBenign,
+                  impact: f.installImpact,
+                  fix: f.remediation,
+                },
+              ),
+            );
+          }
+        } catch (err) {
+          logger.warn({ err }, "Supply chain LLM validation batch failed");
+        }
+      }
+    }
+
     ctx.onProgress?.(
-      `Supply Chain: ${findings.length} issues (${phase1Count} from OSV, ${findings.length - phase1Count} from deep analysis)`,
+      `Supply Chain: ${findings.length} validated issues (${phase1Count} from OSV malware DB)`,
     );
     return findings;
   },

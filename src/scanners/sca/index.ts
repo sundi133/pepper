@@ -26,6 +26,7 @@ import { pubspecYamlParser } from "./parsers/pubspec-yaml";
 import { mixLockParser } from "./parsers/mix-lock";
 import { swiftPackageResolvedParser } from "./parsers/swift-package";
 import { queryOsvBatch } from "./osv-client";
+import { triageScaFindings } from "./triage";
 
 const ALL_PARSERS: DependencyParser[] = [
   // JavaScript/TypeScript
@@ -144,12 +145,22 @@ export const scaScanner: ScannerPlugin = {
     ctx.onProgress?.(
       `SCA: querying OSV for ${dependencies.length} dependencies...`,
     );
-    const findings = await queryOsvBatch(
+    let findings = await queryOsvBatch(
       dependencies,
       ctx.orgSettings.osvApiUrl,
     );
 
-    ctx.onProgress?.(`SCA: found ${findings.length} vulnerabilities`);
+    if (findings.length > 0 && ctx.orgSettings.enableLlmSast) {
+      ctx.onProgress?.(`SCA: AI triaging ${findings.length} CVE findings...`);
+      findings = await triageScaFindings(findings, {
+        provider: ctx.orgSettings.llmProvider,
+        baseUrl: ctx.orgSettings.llmBaseUrl,
+        apiKey: ctx.orgSettings.llmApiKey,
+        model: ctx.orgSettings.llmModel,
+      });
+    }
+
+    ctx.onProgress?.(`SCA: ${findings.length} actionable vulnerabilities`);
     return findings;
   },
 };

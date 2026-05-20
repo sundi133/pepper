@@ -23,7 +23,9 @@ import {
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { buildRepoContextSummary } from "@/lib/llm-repo-context";
+import { buildDeepRepoContext } from "../shared/repo-context";
+import { enrichFinding } from "../shared/finding-normalize";
+import { SAST_PASS2_PROMPT } from "../shared/prompts";
 
 // ─── Custom Policy Integration ────────────────────────────────────────
 
@@ -262,7 +264,8 @@ export async function runLlmSastScanner(
     ? SYSTEM_PROMPT + policyPromptSection
     : SYSTEM_PROMPT;
 
-  const repoContextBlock = buildRepoContextSummary(ctx.fileList);
+  const repoAnalysis = buildDeepRepoContext(ctx.workDir, ctx.fileList);
+  const repoContextBlock = repoAnalysis.summary;
 
   logger.info(
     {
@@ -460,19 +463,122 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
     }
   }
 
+  // Pass 2: cross-file validation of pass-1 candidates
+  const pass1Candidates = findings.filter((f) => f.metadata?.passPhase === 1);
+  const pass1Confirmed = findings.filter((f) => f.metadata?.passPhase === 2);
+
+  let validated: RawFinding[] = [...pass1Confirmed];
+  if (pass1Candidates.length > 0) {
+    ctx.onProgress?.(
+      `LLM SAST: validating ${pass1Candidates.length} candidates with cross-file context...`,
+    );
+    const pass2 = await validateCandidatesPass2(
+      client,
+      ctx.orgSettings.llmModel,
+      pass1Candidates,
+      repoContextBlock,
+      maxResponseTokens,
+    );
+    validated = [...validated, ...pass2];
+    if (pass2.length > 0 && ctx.onBatchFindings) {
+      await ctx.onBatchFindings("SAST_LLM", pass2);
+    }
+  }
+
   logger.info(
     {
       total: chunks.length,
       succeeded,
       failed,
-      findings: findings.length,
+      pass1: findings.length,
+      pass2: validated.length,
       additionalPolicyPasses: Math.ceil(
         additionalPolicies.length / ADDITIONAL_POLICY_BATCH_SIZE,
       ),
     },
     "LLM SAST analysis complete",
   );
-  return findings;
+  return validated;
+}
+
+async function validateCandidatesPass2(
+  client: ReturnType<typeof createLlmClient>,
+  model: string,
+  candidates: RawFinding[],
+  repoContextBlock: string,
+  maxResponseTokens: number,
+): Promise<RawFinding[]> {
+  const BATCH = 12;
+  const validated: RawFinding[] = [];
+
+  for (let i = 0; i < candidates.length; i += BATCH) {
+    const batch = candidates.slice(i, i + BATCH);
+    const payload = batch.map((c, idx) => ({
+      index: idx,
+      title: c.title,
+      filePath: c.filePath,
+      startLine: c.startLine,
+      endLine: c.endLine,
+      cweId: c.cweId,
+      confidence: c.confidence,
+      description: c.description?.slice(0, 600),
+      metadata: c.metadata,
+    }));
+
+    try {
+      const raw = await analyzeWithLlm(
+        client,
+        model,
+        `${SYSTEM_PROMPT}\n\n${SAST_PASS2_PROMPT}`,
+        `${repoContextBlock}\n\nCANDIDATES TO VALIDATE:\n${JSON.stringify(payload, null, 2)}`,
+        { maxTokens: maxResponseTokens },
+      );
+      const parsed = parseLlmJsonResponse<{ findings: LlmFinding[] }>(raw, {
+        findings: [],
+      });
+
+      for (let fi = 0; fi < (parsed.findings || []).length; fi++) {
+        const f = parsed.findings![fi];
+        if (!f.title || (f.confidence ?? 0) < LLM_MIN_CONFIDENCE_DEFAULT) continue;
+        const src = batch[fi] || batch[0];
+
+        const base: RawFinding = {
+          scanner: "SAST_LLM",
+          severity: normalizeSeverity(f.severity),
+          title: f.title,
+          description: f.description,
+          filePath: src?.filePath,
+          startLine: f.startLine,
+          endLine: f.endLine,
+          cweId: f.cweId,
+          confidence: f.confidence,
+          ruleId: `LLM-${f.cweId || "VALIDATED"}`,
+          metadata: {
+            ...(f.metadata || {}),
+            passPhase: 2,
+            weaknessClass:
+              (f.metadata?.weaknessClass as string) || f.cweId,
+          },
+        };
+        validated.push(
+          enrichFinding(base, base.metadata as Record<string, unknown>, {
+            whatIsWrong: f.title,
+            where: `${src?.filePath}:${f.startLine}`,
+            whyExploitable:
+              (f.metadata?.attackPath as string) || f.description,
+            fix:
+              (f.metadata?.remediation as string) ||
+              f.recommendation ||
+              "Apply secure coding fix for this sink/path.",
+          }),
+        );
+      }
+    } catch (err) {
+      logger.error({ err }, "SAST pass-2 validation batch failed");
+    }
+  }
+
+  return validated;
 }
 
 async function analyzeChunk(
@@ -507,26 +613,14 @@ async function analyzeChunk(
       findings: [],
     });
 
-    const minConfidence = LLM_MIN_CONFIDENCE_DEFAULT;
+    const pass1Floor = 0.65;
 
     const allFindings = (parsed.findings || []).filter(
       (f) => f.title && f.severity,
     );
     const filtered = allFindings.filter(
-      (f) => (f.confidence ?? 0) >= minConfidence,
+      (f) => (f.confidence ?? 0) >= pass1Floor,
     );
-
-    if (allFindings.length > filtered.length) {
-      logger.info(
-        {
-          filePath: chunk.filePath,
-          total: allFindings.length,
-          kept: filtered.length,
-          minConfidence,
-        },
-        "Filtered low-confidence LLM findings",
-      );
-    }
 
     return filtered.map((f) => {
       // Detect if this is a policy violation and tag it
@@ -537,7 +631,9 @@ async function analyzeChunk(
         titleLower.includes(name.toLowerCase()),
       );
 
-      return {
+      const passPhase =
+        (f.confidence ?? 0) >= LLM_MIN_CONFIDENCE_DEFAULT ? 2 : 1;
+      const base: RawFinding = {
         scanner: "SAST_LLM" as const,
         severity: normalizeSeverity(f.severity),
         title: f.title,
@@ -548,17 +644,37 @@ async function analyzeChunk(
         startLine: f.startLine,
         endLine: f.endLine,
         cweId: f.cweId,
-        confidence: f.confidence ?? 0.65,
+        confidence: f.confidence ?? pass1Floor,
         ruleId: isPolicy
           ? `POLICY-${matchedPolicy || "CUSTOM"}`
           : `LLM-${f.cweId || "GENERIC"}`,
         metadata: {
           ...(f.metadata || {}),
+          passPhase,
+          weaknessClass:
+            (f.metadata?.weaknessClass as string) || f.cweId,
+          remediation:
+            f.recommendation ||
+            (f.metadata?.remediation as string | undefined),
           ...(matchedPolicy
             ? { policyName: matchedPolicy, type: "policy-violation" }
             : {}),
         },
       };
+      if (passPhase === 2) {
+        return enrichFinding(base, base.metadata as Record<string, unknown>, {
+          whatIsWrong: f.title,
+          where: `${chunk.filePath}:${f.startLine}-${f.endLine}`,
+          whyExploitable:
+            (f.metadata?.attackPath as string) ||
+            f.description.split("\n")[0],
+          fix:
+            f.recommendation ||
+            (f.metadata?.remediation as string) ||
+            "Remediate per recommendation.",
+        });
+      }
+      return base;
     });
   } catch (err) {
     logger.error(

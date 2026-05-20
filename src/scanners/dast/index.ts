@@ -9,6 +9,8 @@ import {
   SeverityLevel,
 } from "../types";
 import { runLocalDapperWorkspace } from "./orchestrator";
+import { redactSensitiveText } from "../shared/evidence-redaction";
+import { enrichFinding } from "../shared/finding-normalize";
 
 const execFileP = promisify(execFile);
 
@@ -151,22 +153,40 @@ async function runViaCli(
 }
 
 function reportToFindings(report: DapperReport): RawFinding[] {
-  return report.findings.map((f) => ({
-    scanner: "DAST" as const,
-    severity: mapSeverity(f.severity),
-    title: f.title,
-    description:
-      (f.description || "") +
-      (f.url ? `\n\n**Affected URL:** ${f.url}` : "") +
-      (f.evidence ? `\n\n**Evidence:**\n\`\`\`\n${f.evidence}\n\`\`\`` : "") +
-      (f.request ? `\n\n**Request:**\n\`\`\`\n${f.request}\n\`\`\`` : "") +
-      (f.response ? `\n\n**Response:**\n\`\`\`\n${f.response}\n\`\`\`` : ""),
-    filePath: f.url || undefined,
-    ruleId: f.id || `DAPPER-${f.title.replace(/\s+/g, "-").slice(0, 48)}`,
-    cweId: f.cwe,
-    confidence: f.confidence ?? 0.9,
-    metadata: { dapperScan: report.scanId, target: report.target, url: f.url },
-  }));
+  return report.findings.map((f) => {
+    const evidence = redactSensitiveText(f.evidence || "");
+    const request = redactSensitiveText(f.request || "");
+    const response = redactSensitiveText(f.response || "");
+    const base: RawFinding = {
+      scanner: "DAST" as const,
+      severity: mapSeverity(f.severity),
+      title: f.title,
+      description: f.description || "",
+      filePath: f.url || undefined,
+      ruleId: f.id || `DAPPER-${f.title.replace(/\s+/g, "-").slice(0, 48)}`,
+      cweId: f.cwe,
+      confidence: f.confidence ?? 0.9,
+      metadata: {
+        dapperScan: report.scanId,
+        target: report.target,
+        url: f.url,
+        evidence,
+        category: "DAST",
+        weaknessClass: f.cwe,
+      },
+    };
+    return enrichFinding(base, base.metadata as Record<string, unknown>, {
+      whatIsWrong: f.title,
+      where: f.url || report.target || "target URL",
+      whyExploitable: f.description || "Dynamic testing identified exploitable behavior.",
+      impact: "See evidence and expected vulnerable behavior in metadata.",
+      stepsToReproduce: evidence
+        ? [`Review redacted evidence for ${f.url || report.target}`]
+        : undefined,
+      fix: "Remediate server-side validation, authz, and configuration per finding class.",
+      validation: `Re-run DAST against ${f.url || report.target} and confirm issue no longer reproduces`,
+    });
+  });
 }
 
 export const dastScanner: ScannerPlugin = {
@@ -185,12 +205,19 @@ export const dastScanner: ScannerPlugin = {
 
     let report: DapperReport | null = null;
     if (endpoint) {
-      report = await runViaHttp(
-        endpoint,
-        ctx.orgSettings.dastApiKey,
-        target,
-        ctx.onProgress,
-      );
+      try {
+        report = await runViaHttp(
+          endpoint,
+          ctx.orgSettings.dastApiKey,
+          target,
+          ctx.onProgress,
+        );
+      } catch (err) {
+        ctx.onProgress?.(
+          `DAST: HTTP scan failed (${err instanceof Error ? err.message : String(err)})`,
+        );
+        report = null;
+      }
     } else {
       const localWorkspace = await runLocalDapperWorkspace(
         target,
@@ -232,18 +259,10 @@ export const dastScanner: ScannerPlugin = {
     }
 
     if (!report) {
-      return [
-        {
-          scanner: "DAST",
-          severity: "INFO",
-          title: `DAST scan could not complete for ${target}`,
-          description:
-            "Pepper attempted to run a dapper (DAST) scan but could not reach the dapper instance. Configure a `dastEndpoint` in Settings → Integrations → Dapper, or install the `dapper` CLI on the worker.",
-          ruleId: "DAST-UNAVAILABLE",
-          confidence: 1,
-          metadata: { target, mode: endpoint ? "http" : "cli" },
-        },
-      ];
+      ctx.onProgress?.(
+        `DAST: scan could not complete for ${target} — no findings emitted (configure dastEndpoint or dapper CLI)`,
+      );
+      return [];
     }
 
     const findings = reportToFindings(report);

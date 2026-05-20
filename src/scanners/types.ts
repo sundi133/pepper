@@ -46,6 +46,9 @@ export interface ScanContext {
   ) => Promise<void>;
 }
 
+/** @see scanners/shared/finding-metadata.ts */
+export type FindingMetadata = import("./shared/finding-metadata").FindingMetadata;
+
 export interface RawFinding {
   scanner: ScannerType;
   severity: SeverityLevel;
@@ -59,7 +62,7 @@ export interface RawFinding {
   cweId?: string;
   cveId?: string;
   confidence?: number;
-  metadata?: Record<string, unknown>;
+  metadata?: FindingMetadata & Record<string, unknown>;
   masked?: boolean;
 }
 

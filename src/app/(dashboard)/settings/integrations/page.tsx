@@ -144,6 +144,58 @@ export default function IntegrationsPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
+            <Github className="h-5 w-5" />
+            <CardTitle>GitHub webhooks</CardTitle>
+            <Badge variant="outline">Webhook</Badge>
+          </div>
+          <CardDescription>
+            Scan pull requests on every update and re-run SAST when code is merged
+            or pushed to your default branch (e.g. main).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Webhook URL</Label>
+            <div className="flex gap-2">
+              <Input value={`${webhookUrl}/github`} readOnly />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => copyUrl(`${webhookUrl}/github`)}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="text-sm text-muted-foreground space-y-1">
+            <p>
+              1. In your GitHub repo: Settings → Webhooks → Add webhook
+            </p>
+            <p>2. Paste the URL above and set Content type to JSON</p>
+            <p>
+              3. Enable <strong>Pull request</strong> and <strong>Push</strong>{" "}
+              events
+            </p>
+            <p>
+              4. Set the secret to match{" "}
+              <code>GITHUB_WEBHOOK_SECRET</code> on your Pepper instance
+            </p>
+            <p>
+              5. Link the repo in Pepper (Repositories or a GitHub URL project)
+              so <code>repoUrl</code> matches <code>owner/repo</code>
+            </p>
+            <p>
+              Merges and pushes to the project default branch queue a{" "}
+              <code>SAST_ONLY</code> scan (override with{" "}
+              <code>GITHUB_WEBHOOK_MAIN_SCAN_TYPE=FULL</code> if needed).
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
             <CardTitle>GitLab</CardTitle>
             <Badge variant="outline">Webhook</Badge>
           </div>

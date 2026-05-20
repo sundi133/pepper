@@ -19,7 +19,8 @@ model Organization {
   members          OrgMember[]
   projects         Project[]
   settings         OrgSettings?
-  githubConnection OrgGithubConnection?
+  githubConnection    OrgGithubConnection?
+  bitbucketConnection OrgBitbucketConnection?
   apiKeys          ApiKey[]
   securityPolicies SecurityPolicy[]
   notifications    Notification[]
@@ -37,6 +38,22 @@ model OrgGithubConnection {
   tokenExpiresAt   DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+/// Bitbucket Cloud connection: app-password based.
+/// Customer creates an app password under their Bitbucket account settings,
+/// pastes username + app password into Pepper. We store the app password
+/// encrypted using the same scheme as GitHub tokens.
+model OrgBitbucketConnection {
+  id              String   @id @default(cuid())
+  organizationId  String   @unique
+  workspace       String?
+  username        String
+  appPasswordEnc  String   @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
@@ -136,6 +153,12 @@ model Project {
   primaryLanguage    String?
   connectedViaGithub Boolean @default(false)
 
+  /// Set when imported via Bitbucket Cloud (unique per org).
+  bitbucketWorkspace    String?
+  bitbucketRepoSlug     String?
+  bitbucketRepoUuid     String?
+  connectedViaBitbucket Boolean @default(false)
+
   /// Target URL for DAST (dapper) scans of this project.
   dastTargetUrl      String?
 
@@ -145,6 +168,7 @@ model Project {
   schedule     ScanSchedule?
 
   @@unique([organizationId, githubRepoId])
+  @@unique([organizationId, bitbucketRepoUuid])
 }
 
 model Scan {

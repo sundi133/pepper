@@ -635,8 +635,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
     }
 
     try {
-      const { postScanPrSummary } = await import("@/lib/github-pr-comment");
-      await postScanPrSummary(scanId);
+      const { postScanPrReview } = await import("@/lib/pr-bot");
+      await postScanPrReview(scanId);
     } catch (prErr) {
       log.warn({ prErr }, "PR summary comment failed (non-blocking)");
     }
@@ -758,8 +758,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
       /* non-blocking */
     }
     try {
-      const { postScanPrSummary } = await import("@/lib/github-pr-comment");
-      await postScanPrSummary(scanId);
+      const { postScanPrReview } = await import("@/lib/pr-bot");
+      await postScanPrReview(scanId);
     } catch {
       /* non-blocking */
     }

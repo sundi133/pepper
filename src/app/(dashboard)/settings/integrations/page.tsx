@@ -11,7 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Github, ExternalLink } from "lucide-react";
+import { Copy, Github, ExternalLink, GitBranch } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -28,6 +28,40 @@ export default function IntegrationsPage() {
     githubLogin: string | null;
   } | null>(null);
   const [githubDisconnecting, setGithubDisconnecting] = useState(false);
+
+  // ─── Bitbucket Cloud ────────────────────────────────────────────────
+  const [bitbucketConn, setBitbucketConn] = useState<{
+    connected: boolean;
+    username: string | null;
+    workspace: string | null;
+  } | null>(null);
+  const [bitbucketFormOpen, setBitbucketFormOpen] = useState(false);
+  const [bitbucketSubmitting, setBitbucketSubmitting] = useState(false);
+  const [bitbucketDisconnecting, setBitbucketDisconnecting] = useState(false);
+  const [bitbucketForm, setBitbucketForm] = useState({
+    username: "",
+    appPassword: "",
+    workspace: "",
+  });
+
+  async function refreshBitbucket() {
+    try {
+      const res = await fetch("/api/integrations/bitbucket/connect");
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        connected?: boolean;
+        username?: string | null;
+        workspace?: string | null;
+      };
+      setBitbucketConn({
+        connected: Boolean(data.connected),
+        username: data.username ?? null,
+        workspace: data.workspace ?? null,
+      });
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -46,7 +80,70 @@ export default function IntegrationsPage() {
         /* ignore */
       }
     })();
+    void refreshBitbucket();
   }, []);
+
+  async function connectBitbucket(e: React.FormEvent) {
+    e.preventDefault();
+    const username = bitbucketForm.username.trim();
+    const appPassword = bitbucketForm.appPassword.trim();
+    const workspace = bitbucketForm.workspace.trim();
+    if (!username || !appPassword) {
+      toast.error("Username and app password are required");
+      return;
+    }
+    setBitbucketSubmitting(true);
+    try {
+      const res = await fetch("/api/integrations/bitbucket/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          appPassword,
+          workspace: workspace || undefined,
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to connect Bitbucket");
+      }
+      toast.success("Bitbucket connected");
+      setBitbucketForm({ username: "", appPassword: "", workspace: "" });
+      setBitbucketFormOpen(false);
+      await refreshBitbucket();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to connect Bitbucket",
+      );
+    } finally {
+      setBitbucketSubmitting(false);
+    }
+  }
+
+  async function disconnectBitbucket() {
+    if (
+      !window.confirm(
+        "Disconnect Bitbucket? Pepper will stop posting PR review comments and build statuses to your Bitbucket repositories.",
+      )
+    ) {
+      return;
+    }
+    setBitbucketDisconnecting(true);
+    try {
+      const res = await fetch("/api/integrations/bitbucket/connect", {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Failed to disconnect");
+      toast.success("Bitbucket disconnected");
+      setBitbucketConn({ connected: false, username: null, workspace: null });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to disconnect Bitbucket",
+      );
+    } finally {
+      setBitbucketDisconnecting(false);
+    }
+  }
 
   async function disconnectGithubOAuth() {
     if (
@@ -188,6 +285,186 @@ export default function IntegrationsPage() {
               Merges and pushes to the project default branch queue a{" "}
               <code>SAST_ONLY</code> scan (override with{" "}
               <code>GITHUB_WEBHOOK_MAIN_SCAN_TYPE=FULL</code> if needed).
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <GitBranch className="h-5 w-5" />
+            <CardTitle>Bitbucket Cloud</CardTitle>
+            <Badge variant="outline">App password</Badge>
+          </div>
+          <CardDescription>
+            Post PR security review summaries, inline comments and build
+            statuses on Bitbucket Cloud pull requests. Uses an app password
+            scoped per org — not your account password.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {bitbucketConn?.connected ? (
+            <>
+              <p className="text-sm">
+                Connected as <strong>{bitbucketConn.username}</strong>
+                {bitbucketConn.workspace ? (
+                  <>
+                    {" "}
+                    on workspace{" "}
+                    <code className="rounded bg-muted px-1">
+                      {bitbucketConn.workspace}
+                    </code>
+                  </>
+                ) : null}
+              </p>
+              <Button
+                variant="ghost"
+                onClick={() => void disconnectBitbucket()}
+                disabled={bitbucketDisconnecting}
+              >
+                {bitbucketDisconnecting
+                  ? "Disconnecting…"
+                  : "Disconnect Bitbucket"}
+              </Button>
+            </>
+          ) : bitbucketFormOpen ? (
+            <form
+              onSubmit={(e) => void connectBitbucket(e)}
+              className="space-y-3"
+            >
+              <div className="space-y-1">
+                <Label htmlFor="bb-username">Bitbucket username</Label>
+                <Input
+                  id="bb-username"
+                  value={bitbucketForm.username}
+                  onChange={(e) =>
+                    setBitbucketForm((f) => ({
+                      ...f,
+                      username: e.target.value,
+                    }))
+                  }
+                  placeholder="your-bitbucket-username"
+                  autoComplete="off"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="bb-apppassword">App password</Label>
+                <Input
+                  id="bb-apppassword"
+                  type="password"
+                  value={bitbucketForm.appPassword}
+                  onChange={(e) =>
+                    setBitbucketForm((f) => ({
+                      ...f,
+                      appPassword: e.target.value,
+                    }))
+                  }
+                  placeholder="ATBB••••••••"
+                  autoComplete="new-password"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Create one at Bitbucket → Personal settings → App passwords.
+                  Required scopes: <code>account:read</code>,{" "}
+                  <code>repository:read</code>, <code>repository:write</code>,{" "}
+                  <code>pullrequest:write</code>.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="bb-workspace">Workspace (optional)</Label>
+                <Input
+                  id="bb-workspace"
+                  value={bitbucketForm.workspace}
+                  onChange={(e) =>
+                    setBitbucketForm((f) => ({
+                      ...f,
+                      workspace: e.target.value,
+                    }))
+                  }
+                  placeholder="my-workspace-slug"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={bitbucketSubmitting}>
+                  {bitbucketSubmitting ? "Connecting…" : "Connect"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setBitbucketFormOpen(false);
+                    setBitbucketForm({
+                      username: "",
+                      appPassword: "",
+                      workspace: "",
+                    });
+                  }}
+                  disabled={bitbucketSubmitting}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Not connected. Pepper will skip Bitbucket PR comments and build
+                statuses until you connect.
+              </p>
+              <Button onClick={() => setBitbucketFormOpen(true)}>
+                Connect Bitbucket
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <GitBranch className="h-5 w-5" />
+            <CardTitle>Bitbucket webhooks</CardTitle>
+            <Badge variant="outline">Webhook</Badge>
+          </div>
+          <CardDescription>
+            Scan pull requests on every update. Pair with the Bitbucket Cloud
+            connection above so Pepper can post the review back.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Webhook URL</Label>
+            <div className="flex gap-2">
+              <Input value={`${webhookUrl}/bitbucket`} readOnly />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => copyUrl(`${webhookUrl}/bitbucket`)}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="text-sm text-muted-foreground space-y-1">
+            <p>1. In your Bitbucket repo: Settings → Webhooks → Add webhook</p>
+            <p>2. Paste the URL above</p>
+            <p>
+              3. Enable <strong>Pull request → Created</strong> and{" "}
+              <strong>Pull request → Updated</strong>
+            </p>
+            <p>
+              4. Set the secret to match{" "}
+              <code>BITBUCKET_WEBHOOK_SECRET</code> on your Pepper instance
+              (optional — signature is only verified when the env var is set)
+            </p>
+            <p>
+              5. Link the repo in Pepper by setting{" "}
+              <code>bitbucketWorkspace</code> + <code>bitbucketRepoSlug</code>{" "}
+              on the project, or include <code>workspace/repo-slug</code> in{" "}
+              <code>repoUrl</code>.
             </p>
           </div>
         </CardContent>

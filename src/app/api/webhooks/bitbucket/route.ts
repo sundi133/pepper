@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
+import { requireBitbucketWebhookAuth } from "@/lib/webhook-secrets";
 import {
   findProjectForBitbucketWebhook,
   isBitbucketPushToDefaultBranch,
@@ -22,15 +22,9 @@ export async function POST(req: NextRequest) {
   const eventKey = req.headers.get("x-event-key");
   const body = await req.text();
 
-  const webhookSecret = process.env.BITBUCKET_WEBHOOK_SECRET;
-  if (webhookSecret && signature) {
-    const expected = `sha256=${crypto
-      .createHmac("sha256", webhookSecret)
-      .update(body)
-      .digest("hex")}`;
-    if (signature !== expected) {
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-    }
+  const authResult = await requireBitbucketWebhookAuth(body, signature);
+  if (!authResult.ok) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
   let payload: Record<string, unknown>;

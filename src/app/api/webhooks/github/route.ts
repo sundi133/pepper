@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
+import { requireGithubWebhookAuth } from "@/lib/webhook-secrets";
 import {
   findProjectForGithubWebhook,
   isMergedPullRequestToDefaultBranch,
@@ -13,15 +13,9 @@ export async function POST(req: NextRequest) {
   const event = req.headers.get("x-github-event");
   const body = await req.text();
 
-  const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
-  if (webhookSecret && signature) {
-    const expected = `sha256=${crypto
-      .createHmac("sha256", webhookSecret)
-      .update(body)
-      .digest("hex")}`;
-    if (signature !== expected) {
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-    }
+  const authResult = await requireGithubWebhookAuth(body, signature);
+  if (!authResult.ok) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
   const payload = JSON.parse(body) as Record<string, unknown>;

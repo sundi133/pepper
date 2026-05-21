@@ -16,6 +16,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
+import { WebhookSecretsCard } from "@/components/settings/webhook-secrets-card";
 
 export default function IntegrationsPage() {
   const webhookUrl =
@@ -333,6 +334,8 @@ export default function IntegrationsPage() {
         </CardContent>
       </Card>
 
+      <WebhookSecretsCard />
+
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -369,8 +372,8 @@ export default function IntegrationsPage() {
               events
             </p>
             <p>
-              4. Set the secret to match{" "}
-              <code>GITHUB_WEBHOOK_SECRET</code> on your Pepper instance
+              4. Set the secret to the same value as <strong>GitHub webhook secret</strong>{" "}
+              in the Webhook secrets card above
             </p>
             <p>
               5. Link the repo in Pepper (Repositories or a GitHub URL project)
@@ -557,9 +560,8 @@ export default function IntegrationsPage() {
               <strong>Pull request → Updated</strong>
             </p>
             <p>
-              4. Set the secret to match{" "}
-              <code>BITBUCKET_WEBHOOK_SECRET</code> on your Pepper instance
-              (optional — signature is only verified when the env var is set)
+              4. Set the secret to the same value as <strong>Bitbucket webhook secret</strong>{" "}
+              in the Webhook secrets card above (optional if verification is disabled)
             </p>
             <p>
               5. Import the repo on the{" "}
@@ -728,9 +730,9 @@ export default function IntegrationsPage() {
             </p>
             <p>3. Action URL: paste the URL above</p>
             <p>
-              4. Set <strong>Basic authentication password</strong> to match{" "}
-              <code>AZURE_DEVOPS_WEBHOOK_SECRET</code> on your Pepper instance
-              (leave username blank — the secret is in the password field)
+              4. Set <strong>Basic authentication password</strong> to the same value as{" "}
+              <strong>Azure DevOps basic auth password</strong> in the Webhook secrets card
+              above (leave username blank)
             </p>
             <p>
               5. Import the repo on the{" "}
@@ -771,7 +773,8 @@ export default function IntegrationsPage() {
             <p>2. Add webhook with the URL above</p>
             <p>3. Select &quot;Merge request events&quot;</p>
             <p>
-              4. Set the GITLAB_WEBHOOK_SECRET env var on your Pepper instance
+              4. Set the secret token to the same value as <strong>GitLab webhook secret token</strong>{" "}
+              in the Webhook secrets card above
             </p>
           </div>
         </CardContent>

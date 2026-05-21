@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireGitlabWebhookAuth } from "@/lib/webhook-secrets";
 import { prisma } from "@/lib/prisma";
 import { scanQueue, ScanJobData } from "@/lib/queue";
 import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
 
 export async function POST(req: NextRequest) {
   const token = req.headers.get("x-gitlab-token");
-  const webhookSecret = process.env.GITLAB_WEBHOOK_SECRET;
-
-  if (webhookSecret && token !== webhookSecret) {
+  const authResult = await requireGitlabWebhookAuth(token);
+  if (!authResult.ok) {
     return NextResponse.json({ error: "Invalid token" }, { status: 401 });
   }
 

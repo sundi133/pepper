@@ -42,7 +42,8 @@ export const MANUAL_SCAN_TYPE_OPTIONS: ReadonlyArray<{
   {
     value: "CONTAINER_ONLY",
     label: "Container",
-    description: "Dockerfile and image vulnerability review (Trivy when available).",
+    description:
+      "Container, serverless, and VM image artifact review (Trivy when available).",
   },
   {
     value: "DAST_ONLY",

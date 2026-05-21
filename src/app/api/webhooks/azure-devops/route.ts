@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAzureDevOpsWebhookAuth } from "@/lib/webhook-secrets";
 import {
   findProjectForAzureDevOpsWebhook,
   isAzureDevOpsPushToDefaultBranch,
@@ -17,12 +18,11 @@ import {
 export async function POST(req: NextRequest) {
   const body = await req.text();
 
-  const expected = process.env.AZURE_DEVOPS_WEBHOOK_SECRET;
-  if (expected) {
-    const got = parseBasicAuthSecret(req.headers.get("authorization"));
-    if (got !== expected) {
-      return NextResponse.json({ error: "Invalid auth" }, { status: 401 });
-    }
+  const authResult = await requireAzureDevOpsWebhookAuth(
+    req.headers.get("authorization"),
+  );
+  if (!authResult.ok) {
+    return NextResponse.json({ error: "Invalid auth" }, { status: 401 });
   }
 
   let payload: AzureWebhookPayload;
@@ -134,16 +134,3 @@ interface AzureWebhookPayload {
   };
 }
 
-function parseBasicAuthSecret(header: string | null): string | null {
-  if (!header) return null;
-  if (!header.toLowerCase().startsWith("basic ")) return null;
-  try {
-    const decoded = Buffer.from(header.slice(6).trim(), "base64").toString(
-      "utf8",
-    );
-    const idx = decoded.indexOf(":");
-    return idx >= 0 ? decoded.slice(idx + 1) : decoded;
-  } catch {
-    return null;
-  }
-}

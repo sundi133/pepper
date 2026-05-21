@@ -8,9 +8,9 @@ export const MANUAL_SCAN_TYPE_OPTIONS: ReadonlyArray<{
 }> = [
   {
     value: "FULL",
-    label: "Full",
+    label: "All",
     description:
-      "SAST, SCA, secrets, IaC, zero-day, and container/DAST when enabled in org settings.",
+      "Runs every enabled scanner: SAST, SCA, secrets, IaC, zero-day, container, and DAST.",
   },
   {
     value: "SAST_ONLY",

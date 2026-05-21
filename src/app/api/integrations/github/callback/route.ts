@@ -12,7 +12,7 @@ import {
 
 function redirectWithError(message: string, returnTo?: string): NextResponse {
   const base = process.env.NEXTAUTH_URL?.replace(/\/$/, "") || "";
-  const path = returnTo ?? "/repositories";
+  const path = returnTo ?? "/scans/new";
   const url = new URL(path, base);
   url.searchParams.set("github", "error");
   url.searchParams.set("message", message.slice(0, 200));
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
   const state = searchParams.get("state");
   const payload = verifyGithubOAuthState(state || "", cookieState);
-  const returnTo = sanitizeOAuthReturnTo(payload?.returnTo) ?? "/repositories";
+  const returnTo = sanitizeOAuthReturnTo(payload?.returnTo) ?? "/scans/new";
 
   cookieStore.set(GITHUB_OAUTH_STATE_COOKIE, "", {
     ...oauthStateCookieOptions(),
@@ -80,7 +80,12 @@ export async function GET(req: NextRequest) {
     const base = process.env.NEXTAUTH_URL?.replace(/\/$/, "") || "";
     const url = new URL(returnTo, base);
     url.searchParams.set("github", "connected");
-    if (returnTo === "/repositories" || returnTo.startsWith("/repositories?")) {
+    if (
+      returnTo === "/scans/new" ||
+      returnTo.startsWith("/scans/new?") ||
+      returnTo === "/repositories" ||
+      returnTo.startsWith("/repositories?")
+    ) {
       url.searchParams.set("pick", "1");
     }
     return NextResponse.redirect(url);

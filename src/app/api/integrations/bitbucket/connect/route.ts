@@ -59,6 +59,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (!workspace) {
+    return NextResponse.json(
+      {
+        error:
+          "workspace is required (your Bitbucket workspace slug) to import repositories.",
+      },
+      { status: 400 },
+    );
+  }
+
   // Verify the credentials before persisting — Bitbucket returns 401 for
   // bad app passwords. /user requires the `account:read` scope on the app
   // password.

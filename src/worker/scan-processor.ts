@@ -127,6 +127,35 @@ export async function processScanJob(job: Job<ScanJobData>) {
         if (ghToken) {
           repoUrl = withGitCredentials(repoLog, ghToken);
         }
+      } else if (job.data.useOrgBitbucketToken && job.data.orgSettings.orgId) {
+        const { withBitbucketCredentials } = await import("@/lib/git-repo-url");
+        const { getOrgBitbucketAuth } = await import(
+          "@/lib/bitbucket-connection"
+        );
+        const bbAuth = await getOrgBitbucketAuth(job.data.orgSettings.orgId);
+        if (bbAuth) {
+          repoUrl = withBitbucketCredentials(
+            repoLog,
+            bbAuth.username,
+            bbAuth.appPassword,
+          );
+        }
+      } else if (
+        job.data.useOrgAzureDevOpsToken &&
+        job.data.orgSettings.orgId
+      ) {
+        const { withAzureDevOpsCredentials } = await import(
+          "@/lib/git-repo-url"
+        );
+        const { getOrgAzureDevOpsAuth } = await import(
+          "@/lib/azure-devops-connection"
+        );
+        const adoAuth = await getOrgAzureDevOpsAuth(
+          job.data.orgSettings.orgId,
+        );
+        if (adoAuth) {
+          repoUrl = withAzureDevOpsCredentials(repoLog, adoAuth.pat);
+        }
       }
       const branch = job.data.branch?.trim();
       const cloneArgs = ["clone", "--depth", "1"];

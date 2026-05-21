@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   const returnTo =
     sanitizeOAuthReturnTo(req.nextUrl.searchParams.get("returnTo")) ??
-    "/repositories";
+    "/scans/new";
 
   const { state, cookieValue } = createGithubOAuthState(
     orgId,

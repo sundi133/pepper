@@ -1,22 +1,22 @@
 "use client";
 
-import { NewSecurityScanForm } from "@/components/scans/new-security-scan-form";
-import { useProjects } from "@/hooks/use-scan-polling";
+import { Suspense } from "react";
+import { ScanHub } from "@/components/scan-hub/scan-hub";
+import { Loader2 } from "lucide-react";
+
+function ScanHubFallback() {
+  return (
+    <div className="flex items-center justify-center gap-2 py-24 text-muted-foreground">
+      <Loader2 className="h-5 w-5 animate-spin" />
+      Loading scan hub…
+    </div>
+  );
+}
 
 export default function NewScanPage() {
-  const { projects } = useProjects();
-
   return (
-    <div className="w-full py-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          New scan
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Git repository, SVN checkout, or file upload.
-        </p>
-      </header>
-      <NewSecurityScanForm projects={projects} />
-    </div>
+    <Suspense fallback={<ScanHubFallback />}>
+      <ScanHub />
+    </Suspense>
   );
 }

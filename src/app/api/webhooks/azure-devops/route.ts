@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { scanQueue, ScanJobData } from "@/lib/queue";
-import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
-
+import {
+  findProjectForAzureDevOpsWebhook,
+  isAzureDevOpsPushToDefaultBranch,
+  mainBranchWebhookScanType,
+  queueAzureDevOpsWebhookScan,
+} from "@/lib/azure-devops-webhook-scan";
 /**
- * Azure DevOps Services PR webhook.
+ * Azure DevOps Services webhooks (Service Hooks).
  *
- * Configure as an ADO **Service Hook** with event type
- * `git.pullrequest.created` and/or `git.pullrequest.updated`. ADO
- * service hooks support **Basic authentication** but no HMAC signing —
- * the standard practice is to use a shared secret as the Basic-auth
- * password and verify it matches `AZURE_DEVOPS_WEBHOOK_SECRET` here. If
- * the env var is unset we skip verification (useful for local dev only).
+ * - `git.push` — scan on push to the default branch
+ * - `git.pullrequest.created` / `git.pullrequest.updated` — incremental PR scans
+ *
+ * ADO service hooks use Basic auth; verify the password against
+ * `AZURE_DEVOPS_WEBHOOK_SECRET` when set.
  */
 export async function POST(req: NextRequest) {
   const body = await req.text();
@@ -24,14 +25,65 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  let payload: AzurePrWebhookPayload;
+  let payload: AzureWebhookPayload;
   try {
-    payload = JSON.parse(body) as AzurePrWebhookPayload;
+    payload = JSON.parse(body) as AzureWebhookPayload;
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const eventType = payload.eventType;
+  const resource = payload.resource;
+  const repository = resource?.repository;
+  const repoId = repository?.id;
+
+  if (!repoId) {
+    return NextResponse.json({ message: "Missing repository id" });
+  }
+
+  const project = await findProjectForAzureDevOpsWebhook(repoId);
+  if (!project) {
+    return NextResponse.json({ message: "No matching project found" });
+  }
+
+  const repoUrl =
+    repository?.remoteUrl ||
+    repository?.webUrl ||
+    project.repoUrl ||
+    repoId;
+
+  if (eventType === "git.push") {
+    for (const update of resource?.refUpdates ?? []) {
+      const refName = update.name;
+      const commitSha = update.newObjectId;
+      if (!refName || !commitSha || /^0+$/.test(commitSha)) {
+        continue;
+      }
+      if (
+        !isAzureDevOpsPushToDefaultBranch({
+          refName,
+          defaultBranch: project.defaultBranch,
+        })
+      ) {
+        continue;
+      }
+
+      const result = await queueAzureDevOpsWebhookScan({
+        project,
+        scanType: mainBranchWebhookScanType(),
+        repoUrl,
+        branch: project.defaultBranch,
+        commitSha,
+      });
+      return NextResponse.json({
+        scanId: result.scanId,
+        status: result.status,
+        trigger: "push_default_branch",
+      });
+    }
+    return NextResponse.json({ message: "Event ignored" });
+  }
+
   if (
     eventType !== "git.pullrequest.created" &&
     eventType !== "git.pullrequest.updated"
@@ -39,109 +91,45 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Event ignored" });
   }
 
-  const resource = payload.resource;
-  if (!resource?.pullRequestId || !resource.repository) {
-    return NextResponse.json({ message: "Missing PR or repository" });
+  if (!resource?.pullRequestId) {
+    return NextResponse.json({ message: "Missing pull request" });
   }
 
-  const repoId = resource.repository.id;
-  const repoName = resource.repository.name;
-  const projectName = resource.repository.project?.name;
-  const adoOrgUrl = resource.repository.project?.url;
-  // ADO sometimes returns the org name inside `webUrl`; fall back to
-  // matching the project just by repoId.
-  const branch = resource.sourceRefName?.replace(/^refs\/heads\//, "") ?? null;
+  const branch =
+    resource.sourceRefName?.replace(/^refs\/heads\//, "") ??
+    project.defaultBranch;
   const headSha = resource.lastMergeSourceCommit?.commitId ?? null;
   const baseSha = resource.lastMergeTargetCommit?.commitId ?? null;
-  const prId = resource.pullRequestId;
-  const repoUrl =
-    resource.repository.webUrl ||
-    (adoOrgUrl && projectName && repoName
-      ? `${adoOrgUrl.replace(/\/_apis\/projects\/.*$/, "")}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}`
-      : null);
 
-  if (!repoId) {
-    return NextResponse.json({ message: "Missing repository id" });
-  }
-
-  const project = await prisma.project.findFirst({
-    where: { azureRepoId: repoId },
-    include: {
-      buildGate: true,
-      organization: { include: { settings: true } },
-    },
-  });
-
-  if (!project) {
-    return NextResponse.json({ message: "No matching project found" });
-  }
-
-  const { removeAllScansForProject } = await import(
-    "@/lib/remove-project-scans"
-  );
-  await removeAllScansForProject(project.id);
-
-  const settings = project.organization.settings;
-
-  const scan = await prisma.scan.create({
-    data: {
-      projectId: project.id,
-      scanType: "INCREMENTAL",
-      sourceType: "WEBHOOK",
-      sourceRef: repoUrl ?? repoId,
-      branch,
-      commitSha: headSha,
-      baseSha,
-      prNumber: prId,
-      status: "QUEUED",
-    },
-  });
-
-  const jobData: ScanJobData = {
-    scanId: scan.id,
-    projectId: project.id,
-    sourceType: "GIT_CLONE",
-    sourceRef: repoUrl ?? repoId,
+  const result = await queueAzureDevOpsWebhookScan({
+    project,
     scanType: "INCREMENTAL",
-    baseSha: baseSha ?? undefined,
+    repoUrl,
+    branch,
     commitSha: headSha ?? undefined,
-    repoUrl: repoUrl ?? undefined,
-    branch: branch ?? undefined,
-    orgSettings: buildOrgSettingsForJob(settings, project.organizationId),
-    dastTargetUrl: project.dastTargetUrl || undefined,
-    buildGate: project.buildGate
-      ? {
-          maxCritical: project.buildGate.maxCritical,
-          maxHigh: project.buildGate.maxHigh,
-          maxMedium: project.buildGate.maxMedium,
-          maxLow: project.buildGate.maxLow,
-          failOnNew: project.buildGate.failOnNew,
-        }
-      : undefined,
-  };
-
-  const job = await scanQueue.add("scan", jobData, { jobId: scan.id });
-
-  await prisma.scan.update({
-    where: { id: scan.id },
-    data: { jobId: job.id },
+    baseSha: baseSha ?? undefined,
+    prNumber: resource.pullRequestId,
   });
 
-  return NextResponse.json({ scanId: scan.id, status: "QUEUED" });
+  return NextResponse.json({
+    scanId: result.scanId,
+    status: result.status,
+  });
 }
 
-interface AzurePrWebhookPayload {
+interface AzureWebhookPayload {
   eventType?: string;
   resource?: {
     pullRequestId?: number;
     sourceRefName?: string;
     lastMergeSourceCommit?: { commitId?: string };
     lastMergeTargetCommit?: { commitId?: string };
+    refUpdates?: Array<{ name?: string; newObjectId?: string }>;
     repository?: {
       id?: string;
       name?: string;
+      remoteUrl?: string;
       webUrl?: string;
-      project?: { id?: string; name?: string; url?: string };
     };
   };
 }
@@ -153,8 +141,6 @@ function parseBasicAuthSecret(header: string | null): string | null {
     const decoded = Buffer.from(header.slice(6).trim(), "base64").toString(
       "utf8",
     );
-    // Either "user:secret" or just ":secret" — the secret is the part
-    // after the first colon.
     const idx = decoded.indexOf(":");
     return idx >= 0 ? decoded.slice(idx + 1) : decoded;
   } catch {

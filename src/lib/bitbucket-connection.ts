@@ -1,6 +1,14 @@
 import { prisma } from "./prisma";
 import { decryptSecret, encryptSecret } from "./token-encryption";
+import { bitbucketGet } from "./bitbucket-api";
 import type { BitbucketAuth } from "./bitbucket-api";
+
+export class BitbucketCredentialsInvalidError extends Error {
+  constructor(message = "Bitbucket credentials are invalid or revoked") {
+    super(message);
+    this.name = "BitbucketCredentialsInvalidError";
+  }
+}
 
 export interface BitbucketConnectionStatus {
   connected: boolean;
@@ -75,4 +83,26 @@ export async function deleteOrgBitbucketConnection(
   await prisma.orgBitbucketConnection.deleteMany({
     where: { organizationId },
   });
+}
+
+export async function verifyBitbucketAuth(auth: BitbucketAuth): Promise<boolean> {
+  const res = await bitbucketGet<{ username?: string }>(auth, "/user");
+  return res.ok;
+}
+
+export async function getOrgBitbucketAuthOrThrow(
+  organizationId: string,
+): Promise<BitbucketAuth> {
+  const auth = await getOrgBitbucketAuth(organizationId);
+  if (!auth) {
+    throw new BitbucketCredentialsInvalidError(
+      "Bitbucket is not connected for this organization",
+    );
+  }
+  const ok = await verifyBitbucketAuth(auth);
+  if (!ok) {
+    await deleteOrgBitbucketConnection(organizationId);
+    throw new BitbucketCredentialsInvalidError();
+  }
+  return auth;
 }

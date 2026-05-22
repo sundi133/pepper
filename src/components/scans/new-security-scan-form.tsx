@@ -25,6 +25,7 @@ import {
 } from "@/lib/create-scan-validation";
 import type { ScanProject } from "./types";
 import { cn } from "@/lib/utils";
+import type { ScanJobData } from "@/lib/queue";
 import { MANUAL_SCAN_TYPE_OPTIONS } from "@/lib/scan-types";
 
 type SourceTab = "repository" | "upload" | "svn";
@@ -34,6 +35,16 @@ interface NewSecurityScanFormProps {
   onCancel?: () => void;
   onCreated?: () => void;
   embedded?: boolean;
+  /** Limit visible source tabs (default: all). */
+  allowedTabs?: SourceTab[];
+  defaultTab?: SourceTab;
+  /** When false, omit outer card chrome (parent provides layout). */
+  showOuterCard?: boolean;
+  /** Controlled scan type (e.g. from Scan hub Add Source). */
+  scanType?: ScanJobData["scanType"];
+  onScanTypeChange?: (value: ScanJobData["scanType"]) => void;
+  /** Hide built-in scan type UI when parent renders ScanTypeSelector. */
+  hideScanTypeSelector?: boolean;
 }
 
 export function NewSecurityScanForm({
@@ -41,13 +52,24 @@ export function NewSecurityScanForm({
   onCancel,
   onCreated,
   embedded = false,
+  allowedTabs,
+  defaultTab,
+  showOuterCard = true,
+  scanType: controlledScanType,
+  onScanTypeChange,
+  hideScanTypeSelector = false,
 }: NewSecurityScanFormProps) {
   const router = useRouter();
+  const tabs = allowedTabs ?? (["repository", "svn", "upload"] as SourceTab[]);
+  const initialTab = defaultTab && tabs.includes(defaultTab) ? defaultTab : tabs[0];
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<SourceTab>("repository");
+  const [tab, setTab] = useState<SourceTab>(initialTab);
   const [projectId, setProjectId] = useState(CREATE_PROJECT_ON_SCAN_VALUE);
   const [newProjectName, setNewProjectName] = useState("");
-  const [scanType, setScanType] = useState<string>("FULL");
+  const [internalScanType, setInternalScanType] =
+    useState<ScanJobData["scanType"]>("FULL");
+  const scanType = controlledScanType ?? internalScanType;
+  const setScanType = onScanTypeChange ?? setInternalScanType;
   const scanTypeHelp =
     MANUAL_SCAN_TYPE_OPTIONS.find((o) => o.value === scanType)?.description ??
     "";
@@ -180,9 +202,9 @@ export function NewSecurityScanForm({
         : "text-muted-foreground hover:text-foreground",
     );
 
-  return (
-    <div className={cn("w-full", embedded && "max-w-lg")}>
-      <div className="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6">
+  const inner = (
+    <>
+        {showOuterCard && (
         <div
           className="mb-5 flex gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:border-amber-500/50 dark:bg-amber-950/40 dark:text-amber-50"
           role="note"
@@ -195,23 +217,43 @@ export function NewSecurityScanForm({
             Only scan code you own or may test. Confirm below before starting.
           </p>
         </div>
+        )}
 
-        <div className="mb-5 grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/50 p-1">
+        {tabs.length > 1 && (
+        <div
+          className={cn(
+            "mb-5 grid gap-1 rounded-lg border border-border bg-muted/50 p-1",
+            tabs.length === 2 && "grid-cols-2",
+            tabs.length >= 3 && "grid-cols-3",
+          )}
+        >
+          {tabs.includes("repository") && (
           <button type="button" onClick={() => switchTab("repository")} className={tabBtn(tab === "repository")}>
             <Github className="h-4 w-4 shrink-0" />
             Git
           </button>
+          )}
+          {tabs.includes("svn") && (
           <button type="button" onClick={() => switchTab("svn")} className={tabBtn(tab === "svn")}>
             <FolderArchive className="h-4 w-4 shrink-0" />
             SVN
           </button>
+          )}
+          {tabs.includes("upload") && (
           <button type="button" onClick={() => switchTab("upload")} className={tabBtn(tab === "upload")}>
             <Upload className="h-4 w-4 shrink-0" />
             Upload
           </button>
+          )}
         </div>
+        )}
 
-        <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
+        <div
+          className={cn(
+            "grid gap-6",
+            !hideScanTypeSelector && "lg:grid-cols-2 lg:gap-8",
+          )}
+        >
           {/* Left column: project + source */}
           <div className="space-y-4">
             <div className="space-y-1.5">
@@ -327,8 +369,8 @@ export function NewSecurityScanForm({
                 ) : (
                   <p className="text-xs text-muted-foreground">
                     GitHub connected — private repos use OAuth.{" "}
-                    <Link href="/repositories" className="text-primary hover:underline">
-                      Repositories
+                    <Link href="/scans/new" className="text-primary hover:underline">
+                      Scan hub
                     </Link>
                   </p>
                 )}
@@ -454,11 +496,22 @@ export function NewSecurityScanForm({
           </div>
 
           {/* Right column: scan type + confirm + action */}
-          <div className="flex flex-col justify-between gap-6 lg:border-l lg:border-border lg:pl-8">
+          <div
+            className={cn(
+              "flex flex-col justify-between gap-6",
+              !hideScanTypeSelector && "lg:border-l lg:border-border lg:pl-8",
+            )}
+          >
+            {!hideScanTypeSelector && (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-sm text-foreground">Scan type</Label>
-                <Select value={scanType} onValueChange={setScanType}>
+                <Label className="text-sm text-foreground">Scanners</Label>
+                <Select
+                  value={scanType}
+                  onValueChange={(v) =>
+                    setScanType(v as ScanJobData["scanType"])
+                  }
+                >
                   <SelectTrigger className="h-9 bg-card">
                     <SelectValue />
                   </SelectTrigger>
@@ -485,13 +538,9 @@ export function NewSecurityScanForm({
                 {tab === "upload" && (
                   <p>Upload a zip or tarball of your source tree. Good for air-gapped or ad-hoc drops.</p>
                 )}
-                <p>
-                  <strong>Full</strong> includes IaC and zero-day. IaC / zero-day also
-                  have dedicated scan types. Enable LLM SAST under LLM Config for those
-                  AI scanners.
-                </p>
               </div>
             </div>
+            )}
 
             <div className="space-y-4">
               <div className="flex items-start gap-2">
@@ -540,7 +589,18 @@ export function NewSecurityScanForm({
             </div>
           </div>
         </div>
-      </div>
+    </>
+  );
+
+  return (
+    <div className={cn("w-full", embedded && "max-w-lg")}>
+      {showOuterCard ? (
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6">
+          {inner}
+        </div>
+      ) : (
+        inner
+      )}
     </div>
   );
 }

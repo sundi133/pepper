@@ -11,6 +11,8 @@ export async function queueProjectScan(params: {
   scanType?: ScanJobData["scanType"];
   branch?: string;
   useOrgGithubToken?: boolean;
+  useOrgBitbucketToken?: boolean;
+  useOrgAzureDevOpsToken?: boolean;
 }): Promise<{ scanId: string }> {
   const project = await prisma.project.findFirst({
     where: { id: params.projectId, organizationId: params.organizationId },
@@ -54,6 +56,8 @@ export async function queueProjectScan(params: {
     repoUrlDisplay: project.repoUrl.trim(),
     branch,
     useOrgGithubToken: params.useOrgGithubToken ?? false,
+    useOrgBitbucketToken: params.useOrgBitbucketToken ?? false,
+    useOrgAzureDevOpsToken: params.useOrgAzureDevOpsToken ?? false,
     orgSettings: buildOrgSettingsForJob(orgSettings, params.organizationId),
     dastTargetUrl: project.dastTargetUrl || undefined,
     buildGate: project.buildGate

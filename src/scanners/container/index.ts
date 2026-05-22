@@ -21,6 +21,11 @@ import {
   LLM_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import {
+  discoverArtifactImages,
+  isVmAmiRef,
+  type ImageRef,
+} from "./discover";
 
 const execFileP = promisify(execFile);
 
@@ -31,38 +36,6 @@ const COMPOSE_NAMES = new Set([
   "compose.yml",
   "compose.yaml",
 ]);
-
-interface ImageRef {
-  image: string;
-  filePath: string;
-  line: number;
-}
-
-function parseDockerfile(content: string, filePath: string): ImageRef[] {
-  const refs: ImageRef[] = [];
-  const lines = content.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const m = line.match(/^\s*FROM\s+(?:--platform=\S+\s+)?([^\s]+)/i);
-    if (m) {
-      const image = m[1];
-      if (image.toLowerCase() === "scratch") continue;
-      if (image.startsWith("$")) continue;
-      refs.push({ image, filePath, line: i + 1 });
-    }
-  }
-  return refs;
-}
-
-function parseCompose(content: string, filePath: string): ImageRef[] {
-  const refs: ImageRef[] = [];
-  const lines = content.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^\s*image:\s*["']?([^"'\s#]+)/);
-    if (m) refs.push({ image: m[1], filePath, line: i + 1 });
-  }
-  return refs;
-}
 
 interface TrivyVuln {
   VulnerabilityID: string;
@@ -132,28 +105,14 @@ async function scanImageWithTrivy(image: string): Promise<TrivyOutput | null> {
   }
 }
 
-function discoverImages(workDir: string, fileList: string[]): ImageRef[] {
-  const refs: ImageRef[] = [];
-  for (const rel of fileList) {
-    const base = path.basename(rel);
-    const isDockerfile =
-      DOCKERFILE_NAMES.has(base) || /\.dockerfile$/i.test(base);
-    const isCompose = COMPOSE_NAMES.has(base);
-    if (!isDockerfile && !isCompose) continue;
-    try {
-      const content = fs.readFileSync(path.join(workDir, rel), "utf-8");
-      if (isDockerfile) refs.push(...parseDockerfile(content, rel));
-      else refs.push(...parseCompose(content, rel));
-    } catch {
-      continue;
-    }
-  }
-  const seen = new Set<string>();
-  return refs.filter((r) => {
-    if (seen.has(r.image)) return false;
-    seen.add(r.image);
-    return true;
-  });
+function artifactSummary(refs: ImageRef[]): string {
+  const counts = { container: 0, serverless: 0, vm: 0 };
+  for (const r of refs) counts[r.kind]++;
+  const parts: string[] = [];
+  if (counts.container) parts.push(`${counts.container} container`);
+  if (counts.serverless) parts.push(`${counts.serverless} serverless`);
+  if (counts.vm) parts.push(`${counts.vm} VM`);
+  return parts.join(", ") || "0";
 }
 
 interface ConfigLlmFinding {
@@ -262,16 +221,16 @@ export const containerScanner: ScannerPlugin = {
   name: "CONTAINER",
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
     await ctx.waitIfPaused?.();
-    const images = discoverImages(ctx.workDir, ctx.fileList);
+    const images = discoverArtifactImages(ctx.workDir, ctx.fileList);
     const configFindings = await scanContainerConfig(ctx);
 
     if (images.length === 0) {
-      ctx.onProgress?.("CONTAINER: no image references; config review only");
+      ctx.onProgress?.("CONTAINER: no artifact image references; config review only");
       return configFindings;
     }
 
     ctx.onProgress?.(
-      `CONTAINER: scanning ${images.length} image(s) with Trivy when available`,
+      `CONTAINER: ${artifactSummary(images)} artifact image(s); Trivy when available`,
     );
 
     const hasTrivy = await trivyAvailable();
@@ -286,7 +245,48 @@ export const containerScanner: ScannerPlugin = {
 
     for (const ref of images) {
       await ctx.waitIfPaused?.();
-      ctx.onProgress?.(`CONTAINER: Trivy scanning ${ref.image}`);
+      if (isVmAmiRef(ref)) {
+        ctx.onProgress?.(
+          `CONTAINER: VM AMI ${ref.image} (${ref.filePath}:${ref.line}) — inventory only`,
+        );
+        findings.push(
+          enrichFinding(
+            {
+              scanner: "CONTAINER",
+              severity: "INFO",
+              title: `VM image reference ${ref.image}`,
+              description: `AMI referenced in ${ref.filePath}. Pepper records the reference; scan the built AMI or exported image with Trivy separately when available.`,
+              filePath: ref.filePath,
+              startLine: ref.line,
+              ruleId: "ARTIFACT-VM-REFERENCE",
+              confidence: 1,
+              metadata: {
+                image: ref.image,
+                artifactKind: ref.kind,
+                category: "ARTIFACT_INVENTORY",
+              },
+            },
+            {
+              image: ref.image,
+              artifactKind: ref.kind,
+              category: "ARTIFACT_INVENTORY",
+            },
+            {
+              whatIsWrong: "VM base AMI referenced in infrastructure code",
+              where: `${ref.filePath}:${ref.line}`,
+              whyExploitable:
+                "Outdated or compromised AMIs can introduce vulnerabilities in deployed VMs.",
+              fix: "Use a hardened, patched AMI and verify with image vulnerability scanning in your pipeline.",
+              validation: `Confirm ${ref.image} is approved and patched in your cloud account`,
+            },
+          ),
+        );
+        continue;
+      }
+
+      ctx.onProgress?.(
+        `CONTAINER: Trivy scanning ${ref.kind} artifact ${ref.image}`,
+      );
       const trivyOutput = await scanImageWithTrivy(ref.image);
       if (!trivyOutput?.Results) {
         ctx.onProgress?.(
@@ -312,6 +312,7 @@ export const containerScanner: ScannerPlugin = {
             confidence: 0.95,
             metadata: {
               image: ref.image,
+              artifactKind: ref.kind,
               packageName: vuln.PkgName,
               packageVersion: vuln.InstalledVersion,
               fixedVersion: vuln.FixedVersion,

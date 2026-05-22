@@ -33,7 +33,8 @@ export type AuditAction =
   | "settings.updated"
   | "settings.llm.updated"
   | "settings.dast.updated"
-  | "settings.signing.updated";
+  | "settings.signing.updated"
+  | "settings.webhooks.updated";
 
 export type AuditResource =
   | "user"

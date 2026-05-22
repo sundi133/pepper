@@ -8,9 +8,9 @@ export const MANUAL_SCAN_TYPE_OPTIONS: ReadonlyArray<{
 }> = [
   {
     value: "FULL",
-    label: "Full",
+    label: "All",
     description:
-      "SAST, SCA, secrets, IaC, zero-day, and container/DAST when enabled in org settings.",
+      "Runs every enabled scanner: SAST, SCA, secrets, IaC, zero-day, container, and DAST.",
   },
   {
     value: "SAST_ONLY",
@@ -42,7 +42,8 @@ export const MANUAL_SCAN_TYPE_OPTIONS: ReadonlyArray<{
   {
     value: "CONTAINER_ONLY",
     label: "Container",
-    description: "Dockerfile and image vulnerability review (Trivy when available).",
+    description:
+      "Container, serverless, and VM image artifact review (Trivy when available).",
   },
   {
     value: "DAST_ONLY",

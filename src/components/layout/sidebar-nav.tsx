@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   FolderOpen,
-  Github,
   PlusCircle,
   Users,
   Zap,
@@ -26,9 +25,8 @@ type NavItem = { name: string; href: string; icon: LucideIcon };
 
 export const mainNavigation: NavItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "New Scan", href: "/scans/new", icon: PlusCircle },
+  { name: "Scan", href: "/scans/new", icon: PlusCircle },
   { name: "Projects", href: "/projects", icon: FolderOpen },
-  { name: "Repositories", href: "/repositories", icon: Github },
   { name: "Trends", href: "/trends", icon: TrendingUp },
 ];
 

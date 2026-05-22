@@ -70,4 +70,32 @@ describe("container scanner", () => {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
   });
+
+  it("records VM AMI references as inventory findings", async () => {
+    const workDir = makeWorkdir({
+      "infra/main.tf": `resource "aws_instance" "web" {\n  ami = "ami-0abcdef1234567890"\n}\n`,
+    });
+    try {
+      const findings = await containerScanner.scan({
+        workDir,
+        fileList: ["infra/main.tf"],
+        scanType: "CONTAINER_ONLY",
+        orgSettings: {
+          llmProvider: "openai",
+          llmBaseUrl: "",
+          llmModel: "",
+          enableLlmSast: false,
+          enableLlmSecrets: false,
+          osvApiUrl: "",
+          vulnDbMode: "offline",
+        },
+      });
+      const vm = findings.filter((f) => f.ruleId === "ARTIFACT-VM-REFERENCE");
+      expect(vm).toHaveLength(1);
+      expect(vm[0].metadata?.artifactKind).toBe("vm");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
 });

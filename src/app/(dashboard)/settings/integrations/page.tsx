@@ -16,6 +16,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
+import { WebhookSecretsCard } from "@/components/settings/webhook-secrets-card";
 
 export default function IntegrationsPage() {
   const webhookUrl =
@@ -309,7 +310,7 @@ export default function IntegrationsPage() {
           )}
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" asChild>
-              <Link href="/repositories">
+              <Link href="/scans/new">
                 <ExternalLink className="mr-2 h-4 w-4" />
                 Manage repositories
               </Link>
@@ -332,6 +333,8 @@ export default function IntegrationsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <WebhookSecretsCard />
 
       <Card>
         <CardHeader>
@@ -369,8 +372,8 @@ export default function IntegrationsPage() {
               events
             </p>
             <p>
-              4. Set the secret to match{" "}
-              <code>GITHUB_WEBHOOK_SECRET</code> on your Pepper instance
+              4. Set the secret to the same value as <strong>GitHub webhook secret</strong>{" "}
+              in the Webhook secrets card above
             </p>
             <p>
               5. Link the repo in Pepper (Repositories or a GitHub URL project)
@@ -468,7 +471,7 @@ export default function IntegrationsPage() {
                 </p>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="bb-workspace">Workspace (optional)</Label>
+                <Label htmlFor="bb-workspace">Workspace slug</Label>
                 <Input
                   id="bb-workspace"
                   value={bitbucketForm.workspace}
@@ -480,7 +483,11 @@ export default function IntegrationsPage() {
                   }
                   placeholder="my-workspace-slug"
                   autoComplete="off"
+                  required
                 />
+                <p className="text-xs text-muted-foreground">
+                  Required to browse and import repos on the Repositories page.
+                </p>
               </div>
               <div className="flex gap-2">
                 <Button type="submit" disabled={bitbucketSubmitting}>
@@ -525,8 +532,9 @@ export default function IntegrationsPage() {
             <Badge variant="outline">Webhook</Badge>
           </div>
           <CardDescription>
-            Scan pull requests on every update. Pair with the Bitbucket Cloud
-            connection above so Pepper can post the review back.
+            Scan on push to the default branch and on pull request updates.
+            Pair with the Bitbucket Cloud connection above so Pepper can post
+            the review back.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -547,19 +555,21 @@ export default function IntegrationsPage() {
             <p>1. In your Bitbucket repo: Settings → Webhooks → Add webhook</p>
             <p>2. Paste the URL above</p>
             <p>
-              3. Enable <strong>Pull request → Created</strong> and{" "}
+              3. Enable <strong>Repository → Push</strong>,{" "}
+              <strong>Pull request → Created</strong>, and{" "}
               <strong>Pull request → Updated</strong>
             </p>
             <p>
-              4. Set the secret to match{" "}
-              <code>BITBUCKET_WEBHOOK_SECRET</code> on your Pepper instance
-              (optional — signature is only verified when the env var is set)
+              4. Set the secret to the same value as <strong>Bitbucket webhook secret</strong>{" "}
+              in the Webhook secrets card above (optional if verification is disabled)
             </p>
             <p>
-              5. Link the repo in Pepper by setting{" "}
-              <code>bitbucketWorkspace</code> + <code>bitbucketRepoSlug</code>{" "}
-              on the project, or include <code>workspace/repo-slug</code> in{" "}
-              <code>repoUrl</code>.
+              5. Import the repo on the{" "}
+              <a href="/scans/new" className="text-primary hover:underline">
+                Repositories
+              </a>{" "}
+              page (Bitbucket tab) so Pepper can match webhook events and post PR
+              reviews.
             </p>
           </div>
         </CardContent>
@@ -688,8 +698,9 @@ export default function IntegrationsPage() {
             <Badge variant="outline">Service hook</Badge>
           </div>
           <CardDescription>
-            Scan pull requests on every update. Pair with the Azure DevOps
-            connection above so Pepper can post the review back.
+            Scan on push to the default branch and on pull request updates.
+            Pair with the Azure DevOps connection above so Pepper can post the
+            review back.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -712,21 +723,24 @@ export default function IntegrationsPage() {
               subscription → Web Hooks
             </p>
             <p>
-              2. Trigger:{" "}
-              <strong>Pull request created</strong> and{" "}
-              <strong>Pull request updated</strong> (two subscriptions, or one
-              of each)
+              2. Trigger: <strong>Code pushed</strong>,{" "}
+              <strong>Pull request created</strong>, and{" "}
+              <strong>Pull request updated</strong> (separate subscriptions or
+              combined where your ADO UI allows)
             </p>
             <p>3. Action URL: paste the URL above</p>
             <p>
-              4. Set <strong>Basic authentication password</strong> to match{" "}
-              <code>AZURE_DEVOPS_WEBHOOK_SECRET</code> on your Pepper instance
-              (leave username blank — the secret is in the password field)
+              4. Set <strong>Basic authentication password</strong> to the same value as{" "}
+              <strong>Azure DevOps basic auth password</strong> in the Webhook secrets card
+              above (leave username blank)
             </p>
             <p>
-              5. Link the project in Pepper by setting{" "}
-              <code>azureProjectName</code> + <code>azureRepoId</code> on the
-              Project row (the repo UUID, not the name).
+              5. Import the repo on the{" "}
+              <a href="/scans/new" className="text-primary hover:underline">
+                Repositories
+              </a>{" "}
+              page (Azure DevOps tab) so Pepper can match webhook events and post
+              PR reviews.
             </p>
           </div>
         </CardContent>
@@ -759,7 +773,8 @@ export default function IntegrationsPage() {
             <p>2. Add webhook with the URL above</p>
             <p>3. Select &quot;Merge request events&quot;</p>
             <p>
-              4. Set the GITLAB_WEBHOOK_SECRET env var on your Pepper instance
+              4. Set the secret token to the same value as <strong>GitLab webhook secret token</strong>{" "}
+              in the Webhook secrets card above
             </p>
           </div>
         </CardContent>

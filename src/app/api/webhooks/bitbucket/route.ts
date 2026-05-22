@@ -1,32 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { scanQueue, ScanJobData } from "@/lib/queue";
-import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
-import crypto from "crypto";
+import { requireBitbucketWebhookAuth } from "@/lib/webhook-secrets";
+import {
+  findProjectForBitbucketWebhook,
+  isBitbucketPushToDefaultBranch,
+  mainBranchWebhookScanType,
+  queueBitbucketWebhookScan,
+} from "@/lib/bitbucket-webhook-scan";
 
 /**
- * Bitbucket Cloud PR webhook.
+ * Bitbucket Cloud webhooks.
  *
- * Trigger this for the `pullrequest:created` and `pullrequest:updated`
- * events. Bitbucket signs the body with the webhook secret using HMAC
- * SHA-256 and puts the digest in `X-Hub-Signature` (format
- * `sha256=<hex>`), matching GitHub's format. If `BITBUCKET_WEBHOOK_SECRET`
- * is unset we skip verification (useful for local dev).
+ * - `repo:push` — scan on push to the default branch (code changes)
+ * - `pullrequest:created` / `pullrequest:updated` — incremental PR scans
+ *
+ * Bitbucket signs the body with the webhook secret using HMAC SHA-256 and
+ * puts the digest in `X-Hub-Signature` (format `sha256=<hex>`). If
+ * `BITBUCKET_WEBHOOK_SECRET` is unset we skip verification (local dev).
  */
 export async function POST(req: NextRequest) {
   const signature = req.headers.get("x-hub-signature");
   const eventKey = req.headers.get("x-event-key");
   const body = await req.text();
 
-  const webhookSecret = process.env.BITBUCKET_WEBHOOK_SECRET;
-  if (webhookSecret && signature) {
-    const expected = `sha256=${crypto
-      .createHmac("sha256", webhookSecret)
-      .update(body)
-      .digest("hex")}`;
-    if (signature !== expected) {
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-    }
+  const authResult = await requireBitbucketWebhookAuth(body, signature);
+  if (!authResult.ok) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
   let payload: Record<string, unknown>;
@@ -36,6 +34,69 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  const repository = payload.repository as
+    | { full_name?: string; uuid?: string }
+    | undefined;
+  if (!repository?.full_name) {
+    return NextResponse.json({ message: "Missing repository" });
+  }
+
+  const fullName = repository.full_name;
+  const repoUrl = `https://bitbucket.org/${fullName}.git`;
+
+  const project = await findProjectForBitbucketWebhook({
+    fullName,
+    repoUuid: repository.uuid,
+  });
+  if (!project) {
+    return NextResponse.json({ message: "No matching project found" });
+  }
+
+  if (eventKey === "repo:push") {
+    const push = payload.push as
+      | {
+          changes?: Array<{
+            new?: {
+              type?: string;
+              name?: string;
+              target?: { hash?: string };
+            };
+          }>;
+        }
+      | undefined;
+
+    for (const change of push?.changes ?? []) {
+      const branchName = change.new?.name;
+      const commitSha = change.new?.target?.hash;
+      if (change.new?.type !== "branch" || !branchName || !commitSha) {
+        continue;
+      }
+      if (
+        !isBitbucketPushToDefaultBranch({
+          branchName,
+          defaultBranch: project.defaultBranch,
+        })
+      ) {
+        continue;
+      }
+
+      const result = await queueBitbucketWebhookScan({
+        project,
+        scanType: mainBranchWebhookScanType(),
+        repoUrl,
+        branch: project.defaultBranch,
+        commitSha,
+      });
+      return NextResponse.json({
+        scanId: result.scanId,
+        status: result.status,
+        trigger: "push_default_branch",
+      });
+    }
+
+    return NextResponse.json({ message: "Event ignored" });
+  }
+
   if (
     eventKey !== "pullrequest:created" &&
     eventKey !== "pullrequest:updated"
@@ -43,104 +104,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Event ignored" });
   }
 
-  const repository = payload.repository as
-    | { full_name?: string; uuid?: string }
-    | undefined;
   const pullRequest = payload.pullrequest as
     | {
         id?: number;
         source?: {
           branch?: { name?: string };
           commit?: { hash?: string };
-          repository?: { full_name?: string };
         };
         destination?: {
-          branch?: { name?: string };
           commit?: { hash?: string };
         };
       }
     | undefined;
 
-  if (!repository?.full_name || !pullRequest?.id) {
-    return NextResponse.json({ message: "Missing repository or PR" });
+  if (!pullRequest?.id) {
+    return NextResponse.json({ message: "Missing pull request" });
   }
 
-  const fullName = repository.full_name; // "workspace/repo-slug"
   const branch = pullRequest.source?.branch?.name ?? null;
   const headSha = pullRequest.source?.commit?.hash ?? null;
   const baseSha = pullRequest.destination?.commit?.hash ?? null;
   const prId = pullRequest.id;
 
-  // Repos cloned over HTTPS use this URL shape on Bitbucket Cloud.
-  const repoUrl = `https://bitbucket.org/${fullName}.git`;
-
-  const project = await prisma.project.findFirst({
-    where: {
-      OR: [
-        { repoUrl: { contains: fullName } },
-        repository.uuid ? { bitbucketRepoUuid: repository.uuid } : { id: "_never_" },
-      ],
-    },
-    include: {
-      buildGate: true,
-      organization: { include: { settings: true } },
-    },
-  });
-
-  if (!project) {
-    return NextResponse.json({ message: "No matching project found" });
-  }
-
-  const { removeAllScansForProject } = await import(
-    "@/lib/remove-project-scans"
-  );
-  await removeAllScansForProject(project.id);
-
-  const settings = project.organization.settings;
-
-  const scan = await prisma.scan.create({
-    data: {
-      projectId: project.id,
-      scanType: "INCREMENTAL",
-      sourceType: "WEBHOOK",
-      sourceRef: repoUrl,
-      branch,
-      commitSha: headSha,
-      baseSha,
-      prNumber: prId,
-      status: "QUEUED",
-    },
-  });
-
-  const jobData: ScanJobData = {
-    scanId: scan.id,
-    projectId: project.id,
-    sourceType: "GIT_CLONE",
-    sourceRef: repoUrl,
+  const result = await queueBitbucketWebhookScan({
+    project,
     scanType: "INCREMENTAL",
-    baseSha: baseSha ?? undefined,
-    commitSha: headSha ?? undefined,
     repoUrl,
-    branch: branch ?? undefined,
-    orgSettings: buildOrgSettingsForJob(settings, project.organizationId),
-    dastTargetUrl: project.dastTargetUrl || undefined,
-    buildGate: project.buildGate
-      ? {
-          maxCritical: project.buildGate.maxCritical,
-          maxHigh: project.buildGate.maxHigh,
-          maxMedium: project.buildGate.maxMedium,
-          maxLow: project.buildGate.maxLow,
-          failOnNew: project.buildGate.failOnNew,
-        }
-      : undefined,
-  };
-
-  const job = await scanQueue.add("scan", jobData, { jobId: scan.id });
-
-  await prisma.scan.update({
-    where: { id: scan.id },
-    data: { jobId: job.id },
+    branch: branch ?? project.defaultBranch,
+    commitSha: headSha ?? undefined,
+    baseSha: baseSha ?? undefined,
+    prNumber: prId,
   });
 
-  return NextResponse.json({ scanId: scan.id, status: "QUEUED" });
+  return NextResponse.json({
+    scanId: result.scanId,
+    status: result.status,
+  });
 }

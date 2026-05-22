@@ -446,6 +446,12 @@ model OrgSettings {
   codeSigningKeyEnc  String? @db.Text
   codeSigningIdentity String?
 
+  // Inbound VCS webhook secrets (encrypted); configure in Settings → Integrations
+  githubWebhookSecretEnc     String? @db.Text
+  gitlabWebhookSecretEnc     String? @db.Text
+  bitbucketWebhookSecretEnc  String? @db.Text
+  azureDevOpsWebhookSecretEnc String? @db.Text
+
   organization Organization @relation(fields: [organizationId], references: [id])
 }
 

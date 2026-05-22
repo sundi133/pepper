@@ -61,6 +61,9 @@ export interface ScanJobData {
   branch?: string;
   /** Resolve org GitHub OAuth token at worker runtime (never sent from browser). */
   useOrgGithubToken?: boolean;
+  /** Resolve org Bitbucket app password at worker runtime (never sent from browser). */
+  useOrgBitbucketToken?: boolean;
+  useOrgAzureDevOpsToken?: boolean;
   orgSettings: {
     llmProvider: string;
     llmBaseUrl: string;

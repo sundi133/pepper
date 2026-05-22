@@ -14,6 +14,8 @@ export type ScannerType =
 export interface ScanContext {
   workDir: string;
   fileList: string[];
+  /** When set (incremental PR scans), SCA / malicious-pkg use this instead of fileList. */
+  scaFileList?: string[];
   scanType: string;
   orgSettings: {
     llmProvider: string;

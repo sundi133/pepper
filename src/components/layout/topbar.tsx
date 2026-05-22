@@ -51,7 +51,7 @@ export function Topbar() {
     : session?.user?.email?.[0]?.toUpperCase() || "U";
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 w-full shrink-0 items-center gap-3 border-b border-border bg-background/95 px-3 backdrop-blur-md supports-[backdrop-filter]:bg-background/90 sm:px-6 lg:h-16 lg:px-8">
+    <header className="sticky top-0 z-40 flex h-14 w-full shrink-0 items-center gap-3 border-b border-border/80 bg-background/90 px-3 shadow-sm shadow-primary/5 backdrop-blur-lg supports-[backdrop-filter]:bg-background/85 sm:px-6 lg:h-16 lg:px-8">
       <MobileNav />
 
       <div className="relative min-w-0 flex-1 max-w-md lg:max-w-lg">
@@ -62,7 +62,7 @@ export function Topbar() {
         <Input
           type="search"
           placeholder="Search projects, vulnerabilities…"
-          className="h-9 w-full border-border bg-muted/40 pl-9 shadow-none lg:h-10 dark:bg-background/80"
+          className="h-9 w-full border-border/80 bg-muted/50 pl-9 shadow-none transition-all duration-200 hover:border-primary/30 hover:bg-card lg:h-10 dark:bg-background/60"
           aria-label="Search"
         />
       </div>
@@ -73,7 +73,7 @@ export function Topbar() {
           type="button"
           variant="ghost"
           size="icon"
-          className="relative h-9 w-9 text-muted-foreground hover:text-foreground"
+          className="icon-btn-hover relative h-9 w-9 text-muted-foreground"
           asChild
         >
           <Link href="/notifications" aria-label="Notifications">

@@ -55,9 +55,13 @@ export async function POST(
       scanType: scan.scanType as ScanJobData["scanType"],
       baseSha: scan.baseSha || undefined,
       commitSha: scan.commitSha || undefined,
+      prNumber: scan.prNumber ?? undefined,
       repoUrl: sourceType === "GIT_CLONE" ? scan.sourceRef : undefined,
       svnUrl: sourceType === "SVN_CHECKOUT" ? scan.sourceRef : undefined,
       branch: scan.branch || undefined,
+      useOrgGithubToken: scan.project.connectedViaGithub,
+      useOrgBitbucketToken: scan.project.connectedViaBitbucket,
+      useOrgAzureDevOpsToken: scan.project.connectedViaAzure,
       orgSettings: buildOrgSettingsForJob(orgSettings, orgId),
       dastTargetUrl: scan.project.dastTargetUrl || undefined,
       buildGate: scan.project.buildGate

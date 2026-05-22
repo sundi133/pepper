@@ -25,7 +25,14 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { buildDeepRepoContext } from "../shared/repo-context";
 import { enrichFinding } from "../shared/finding-normalize";
-import { SAST_PASS2_PROMPT } from "../shared/prompts";
+import {
+  SAST_PASS2_PROMPT,
+  SEVERITY_CALIBRATION_PROMPT,
+} from "../shared/prompts";
+import {
+  applySeverityCalibration,
+  parseSeverity,
+} from "@/lib/severity-calibration";
 
 // ─── Custom Policy Integration ────────────────────────────────────────
 
@@ -200,7 +207,7 @@ REPOSITORY-AWARE REVIEW (Pepper also runs SCA, secrets, IaC, and zero-day passes
 - Each user message starts with a REPOSITORY CONTEXT block (paths only), similar to an unzip + find inventory. Use it to spot nested app copies, sibling Dockerfiles, or multiple manifest trees that may drift.
 - When the chunk is a manifest, Dockerfile/compose, CI workflow, Terraform, or HTML/Jinja template, prioritize concrete line-level issues visible there. For dependency hygiene, cite only versions and constraints shown in the chunk — do not invent CVE IDs. You may describe clear EOL / ancient stack risk with honest confidence (typically ≤0.85) without naming a CVE.
 - You may reference duplicate paths from the context only when the chunk provides evidence (e.g. conflicting pins visible in this file while the context lists sibling requirements files).
-- In metadata when it is obvious from the chunk, set "findingLayer" to one of: "application-code" | "web-template" | "manifest-dependencies" | "container-build" | "ci-or-deploy-config".`;
+- In metadata when it is obvious from the chunk, set "findingLayer" to one of: "application-code" | "web-template" | "manifest-dependencies" | "container-build" | "ci-or-deploy-config".${SEVERITY_CALIBRATION_PROMPT}`;
 
 interface LlmFinding {
   title: string;
@@ -542,9 +549,9 @@ async function validateCandidatesPass2(
         if (!f.title || (f.confidence ?? 0) < LLM_MIN_CONFIDENCE_DEFAULT) continue;
         const src = batch[fi] || batch[0];
 
-        const base: RawFinding = {
+        const base: RawFinding = applySeverityCalibration({
           scanner: "SAST_LLM",
-          severity: normalizeSeverity(f.severity),
+          severity: parseSeverity(f.severity),
           title: f.title,
           description: f.description,
           filePath: src?.filePath,
@@ -556,10 +563,8 @@ async function validateCandidatesPass2(
           metadata: {
             ...(f.metadata || {}),
             passPhase: 2,
-            weaknessClass:
-              (f.metadata?.weaknessClass as string) || f.cweId,
           },
-        };
+        });
         validated.push(
           enrichFinding(base, base.metadata as Record<string, unknown>, {
             whatIsWrong: f.title,
@@ -623,19 +628,42 @@ async function analyzeChunk(
     );
 
     return filtered.map((f) => {
-      // Detect if this is a policy violation and tag it
       const titleLower = f.title.toLowerCase();
       const isPolicy =
         titleLower.includes("policy") || titleLower.includes("policy:");
       const matchedPolicy = policyNames.find((name) =>
         titleLower.includes(name.toLowerCase()),
       );
+      const isCredential =
+        f.cweId === "CWE-798" ||
+        /hardcoded|embedded secret|plaintext (?:password|secret|token)/i.test(
+          f.title,
+        ) ||
+        (f.metadata?.weaknessClass as string | undefined)
+          ?.toLowerCase()
+          .includes("credential");
 
       const passPhase =
         (f.confidence ?? 0) >= LLM_MIN_CONFIDENCE_DEFAULT ? 2 : 1;
-      const base: RawFinding = {
+      const meta: Record<string, unknown> = {
+        ...(f.metadata || {}),
+        passPhase,
+        remediation:
+          f.recommendation ||
+          (f.metadata?.remediation as string | undefined),
+        ...(matchedPolicy
+          ? { policyName: matchedPolicy, type: "policy-violation" }
+          : {}),
+      };
+      if (isCredential) {
+        meta.weaknessClass = "Hardcoded Credential";
+        meta.parameter = null;
+        meta.sink = null;
+      }
+
+      let base: RawFinding = applySeverityCalibration({
         scanner: "SAST_LLM" as const,
-        severity: normalizeSeverity(f.severity),
+        severity: parseSeverity(f.severity),
         title: f.title,
         description: f.recommendation
           ? `${f.description}\n\nRecommendation: ${f.recommendation}`
@@ -648,30 +676,37 @@ async function analyzeChunk(
         ruleId: isPolicy
           ? `POLICY-${matchedPolicy || "CUSTOM"}`
           : `LLM-${f.cweId || "GENERIC"}`,
-        metadata: {
-          ...(f.metadata || {}),
-          passPhase,
-          weaknessClass:
-            (f.metadata?.weaknessClass as string) || f.cweId,
-          remediation:
-            f.recommendation ||
-            (f.metadata?.remediation as string | undefined),
-          ...(matchedPolicy
-            ? { policyName: matchedPolicy, type: "policy-violation" }
-            : {}),
-        },
-      };
+        metadata: meta,
+      });
+
       if (passPhase === 2) {
+        const exposedRaw = f.metadata?.exposedValue;
+        const exposed =
+          typeof exposedRaw === "string" && exposedRaw.trim()
+            ? exposedRaw.trim()
+            : undefined;
         return enrichFinding(base, base.metadata as Record<string, unknown>, {
-          whatIsWrong: f.title,
+          whatIsWrong: isCredential
+            ? exposed
+              ? `Hardcoded credential in source: ${exposed}`
+              : `Hardcoded credential: ${f.title}`
+            : f.title,
           where: `${chunk.filePath}:${f.startLine}-${f.endLine}`,
-          whyExploitable:
-            (f.metadata?.attackPath as string) ||
-            f.description.split("\n")[0],
+          whyExploitable: isCredential
+            ? (f.metadata?.impact as string) ||
+              f.description.split("\n")[0] ||
+              "The literal secret in source can be reused by anyone with repository access until rotated."
+            : (f.metadata?.attackPath as string) ||
+              f.description.split("\n")[0],
+          impact: isCredential
+            ? (f.metadata?.impact as string | undefined)
+            : undefined,
           fix:
             f.recommendation ||
             (f.metadata?.remediation as string) ||
-            "Remediate per recommendation.",
+            (isCredential
+              ? "Move the secret to a secret manager, rotate it, and remove it from git history."
+              : "Remediate per recommendation."),
         });
       }
       return base;
@@ -690,10 +725,3 @@ async function analyzeChunk(
   }
 }
 
-function normalizeSeverity(s: string): RawFinding["severity"] {
-  const upper = s.toUpperCase();
-  if (["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].includes(upper)) {
-    return upper as RawFinding["severity"];
-  }
-  return "MEDIUM";
-}

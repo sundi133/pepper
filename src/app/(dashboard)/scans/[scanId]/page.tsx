@@ -333,7 +333,7 @@ export default function ScanDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 max-w-full space-y-6 overflow-hidden">
       <PageBreadcrumb items={breadcrumbItems} />
 
       {/* Header */}
@@ -635,7 +635,7 @@ export default function ScanDetailPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-w-0 overflow-hidden">
             {findingSections.length === 0 ? (
               <FindingsTable
                 findings={visibleFindings}

@@ -246,12 +246,24 @@ GET /api/cicd-templates/jenkins    # Jenkinsfile</code></pre>
 
       <h2 id="webhooks">Webhooks (inbound)</h2>
       <pre><code>POST /api/webhooks/github
-  X-Hub-Signature-256: sha256=…    # validated against GITHUB_WEBHOOK_SECRET
+  X-GitHub-Event: pull_request | push
+  X-Hub-Signature-256: sha256=…
+
+POST /api/webhooks/bitbucket
+  X-Event-Key: pullrequest:created | pullrequest:updated | repo:push
+  X-Hub-Signature: sha256=…
+
+POST /api/webhooks/azure-devops
+  eventType: git.pullrequest.created | git.pullrequest.updated | git.push
+  Authorization: Basic base64(:password)
+
 POST /api/webhooks/gitlab
-  X-Gitlab-Token: …                # validated against GITLAB_WEBHOOK_SECRET</code></pre>
+  X-Gitlab-Token: …</code></pre>
       <p>
-        Both endpoints accept push + PR/MR events and queue an
-        <code>INCREMENTAL</code> scan against the head commit.
+        PR/MR events queue <code>INCREMENTAL</code> scans (git diff — changed files
+        only for SAST/secrets; SCA when manifests change). Push to the project
+        default branch queues <code>SAST_ONLY</code> unless
+        <code>GITHUB_WEBHOOK_MAIN_SCAN_TYPE=FULL</code>.
       </p>
     </main>
   </div>

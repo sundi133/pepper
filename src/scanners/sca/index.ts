@@ -125,7 +125,7 @@ export const scaScanner: ScannerPlugin = {
     await ctx.waitIfPaused?.();
     const { dependencies, parsedFiles } = parseDependencies(
       ctx.workDir,
-      ctx.fileList,
+      ctx.scaFileList ?? ctx.fileList,
     );
 
     ctx.onProgress?.(

@@ -71,6 +71,7 @@
           <tr><td><code>GITHUB_OAUTH_CLIENT_SECRET</code></td><td>OAuth secret (falls back to <code>GITHUB_SECRET</code>)</td></tr>
           <tr><td><code>TOKEN_ENCRYPTION_KEY</code></td><td>Encrypts stored GitHub tokens (defaults to <code>NEXTAUTH_SECRET</code>)</td></tr>
           <tr><td><code>GITHUB_WEBHOOK_SECRET</code></td><td>HMAC secret for <code>/api/webhooks/github</code></td></tr>
+          <tr><td><code>GITHUB_WEBHOOK_MAIN_SCAN_TYPE</code></td><td>Default-branch push scan: <code>SAST_ONLY</code> or <code>FULL</code></td></tr>
           <tr><td><code>GITHUB_PR_TOKEN</code> / <code>GITHUB_TOKEN</code></td><td>Legacy PAT — not used when OAuth is connected</td></tr>
         </tbody>
       </table>
@@ -78,6 +79,34 @@
 {NEXTAUTH_URL}/api/integrations/github/callback
 
 OAuth scopes requested: read:user repo</pre>
+
+      <h2 id="bitbucket">Bitbucket Cloud</h2>
+      <p>App password and workspace are configured in <strong>Settings → Integrations</strong> (encrypted in DB). Webhook secret optional in UI or env.</p>
+      <table>
+        <thead><tr><th>Variable</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>BITBUCKET_WEBHOOK_SECRET</code></td><td>HMAC secret for <code>/api/webhooks/bitbucket</code> (<code>X-Hub-Signature</code>)</td></tr>
+        </tbody>
+      </table>
+      <p>Webhook triggers: repository push, pull request created, pull request updated → PR events queue <code>INCREMENTAL</code> scans.</p>
+
+      <h2 id="azure-devops">Azure DevOps</h2>
+      <p>Organization name and PAT are configured in <strong>Settings → Integrations</strong>. Service hooks use Basic auth (password only).</p>
+      <table>
+        <thead><tr><th>Variable</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>AZURE_DEVOPS_WEBHOOK_SECRET</code></td><td>Basic auth password for <code>/api/webhooks/azure-devops</code></td></tr>
+        </tbody>
+      </table>
+      <p>Service hook events: <code>git.push</code>, <code>git.pullrequest.created</code>, <code>git.pullrequest.updated</code>.</p>
+
+      <h2 id="webhook-main-scan">Default-branch webhook scans</h2>
+      <table>
+        <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>GITHUB_WEBHOOK_MAIN_SCAN_TYPE</code></td><td><code>SAST_ONLY</code></td><td>Scan type after push/merge to default branch (GitHub, Bitbucket, Azure)</td></tr>
+        </tbody>
+      </table>
 
       <h2 id="gitlab">GitLab</h2>
       <table>

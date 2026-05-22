@@ -94,6 +94,8 @@ export async function POST(
     sourceRef: originalScan.sourceRef,
     scanType: originalScan.scanType as ScanJobData["scanType"],
     baseSha: originalScan.baseSha || undefined,
+    commitSha: originalScan.commitSha || undefined,
+    prNumber: originalScan.prNumber ?? undefined,
     repoUrl: sourceType === "GIT_CLONE" ? originalScan.sourceRef : undefined,
     repoUrlDisplay:
       sourceType === "GIT_CLONE" ? originalScan.sourceRef : undefined,

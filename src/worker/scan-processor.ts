@@ -98,6 +98,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
   }
 
   const workDir = path.join(os.tmpdir(), `pepper-${scanId}`);
+  let incrementalChangedPaths: string[] | null = null;
 
   try {
     // 1. Download and extract source
@@ -158,9 +159,10 @@ export async function processScanJob(job: Job<ScanJobData>) {
         }
       }
       const branch = job.data.branch?.trim();
+      const repoDir = path.join(workDir, "repo");
       const cloneArgs = ["clone", "--depth", "1"];
       if (branch) cloneArgs.push("--branch", branch);
-      cloneArgs.push(repoUrl, path.join(workDir, "repo"));
+      cloneArgs.push(repoUrl, repoDir);
       try {
         execFileSync("git", cloneArgs, {
           timeout: 120000,
@@ -181,15 +183,44 @@ export async function processScanJob(job: Job<ScanJobData>) {
         );
         execFileSync(
           "git",
-          ["clone", "--depth", "1", repoUrl, path.join(workDir, "repo")],
+          ["clone", "--depth", "1", repoUrl, repoDir],
           {
             timeout: 120000,
             windowsHide: process.platform === "win32",
           },
         );
       }
+
+      if (scanType === "INCREMENTAL") {
+        const { resolveIncrementalPathsForScanJob } = await import(
+          "@/lib/incremental-scan-files"
+        );
+        const diffResult = await resolveIncrementalPathsForScanJob({
+          repoDir,
+          baseSha: job.data.baseSha,
+          commitSha: job.data.commitSha,
+          prNumber: job.data.prNumber,
+          projectId,
+          useOrgGithubToken: job.data.useOrgGithubToken,
+          orgId: job.data.orgSettings.orgId,
+        });
+        incrementalChangedPaths = diffResult.paths;
+        if (diffResult.paths !== null) {
+          log.info(
+            {
+              method: diffResult.method,
+              changedFileCount: diffResult.paths.length,
+            },
+            "Incremental PR diff resolved",
+          );
+        } else {
+          log.warn(
+            "Incremental PR diff resolution failed; scanning full PR branch (fallback)",
+          );
+        }
+      }
+
       // Move contents up
-      const repoDir = path.join(workDir, "repo");
       if (fs.existsSync(repoDir)) {
         for (const item of fs.readdirSync(repoDir)) {
           if (item === ".git") continue;
@@ -304,9 +335,35 @@ export async function processScanJob(job: Job<ScanJobData>) {
     }
     await assertScanActive();
 
-    // 2. Enumerate files
-    const fileList = enumerateFiles(workDir);
-    log.info({ fileCount: fileList.length }, "Files enumerated");
+    // 2. Enumerate files (INCREMENTAL PR scans limit scanners to changed paths)
+    const allFiles = enumerateFiles(workDir);
+    let fileList = allFiles;
+    let scaFileList: string[] | undefined;
+
+    if (scanType === "INCREMENTAL") {
+      const { applyIncrementalFileFilter } = await import(
+        "@/lib/incremental-scan-files"
+      );
+      const filtered = applyIncrementalFileFilter(
+        allFiles,
+        incrementalChangedPaths,
+      );
+      fileList = filtered.sastAndSecretsFiles;
+      scaFileList = filtered.scaFiles;
+      log.info(
+        {
+          repositoryFileCount: allFiles.length,
+          changedPathCount: filtered.changedPathCount,
+          sastAndSecretsFileCount: fileList.length,
+          scaFileCount: scaFileList.length,
+          usedDiff: filtered.usedDiff,
+          diffMethod: filtered.method,
+        },
+        "Incremental file filter applied",
+      );
+    } else {
+      log.info({ fileCount: allFiles.length }, "Files enumerated");
+    }
 
     // Helper: insert findings into DB and increment severity counts
     async function insertFindings(findings: RawFinding[]) {
@@ -354,6 +411,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
     const ctx: ScanContext = {
       workDir,
       fileList,
+      scaFileList,
       scanType,
       scanId,
       orgSettings: {

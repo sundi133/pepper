@@ -51,6 +51,7 @@ export interface ScanJobData {
     | "DAST_ONLY";
   baseSha?: string;
   commitSha?: string;
+  prNumber?: number;
   repoUrl?: string;
   /** Original repo URL without credentials (for logs / parity). */
   repoUrlDisplay?: string;

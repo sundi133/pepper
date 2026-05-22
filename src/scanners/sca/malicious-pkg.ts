@@ -447,7 +447,10 @@ export const maliciousPkgScanner: ScannerPlugin = {
   name: "MALICIOUS_PKG",
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
     await ctx.waitIfPaused?.();
-    const { dependencies } = parseDependencies(ctx.workDir, ctx.fileList);
+    const { dependencies } = parseDependencies(
+      ctx.workDir,
+      ctx.scaFileList ?? ctx.fileList,
+    );
     if (dependencies.length === 0) return [];
 
     const findings: RawFinding[] = [];

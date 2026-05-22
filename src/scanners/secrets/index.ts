@@ -10,6 +10,7 @@ import { chunkFile } from "../sast/chunker";
 import { maskSecretValue } from "../shared/evidence-redaction";
 import { enrichFinding } from "../shared/finding-normalize";
 import { SECRETS_AI_PROMPT } from "../shared/prompts";
+import { applySeverityCalibration } from "@/lib/severity-calibration";
 import { buildDeepRepoContext } from "../shared/repo-context";
 import { buildRepoContextSummary } from "@/lib/llm-repo-context";
 import {
@@ -206,7 +207,7 @@ async function analyzeSecretChunk(
       )
       .map((f) => {
         const masked = maskSecretValue(f.maskedValue || "****");
-        const base: RawFinding = {
+        const base: RawFinding = applySeverityCalibration({
           scanner: "SECRETS_LLM",
           severity: f.severity?.toUpperCase() === "HIGH" ? "HIGH" : "CRITICAL",
           title: `${f.credentialType}: ${f.title}`,
@@ -230,7 +231,7 @@ async function analyzeSecretChunk(
             remediation: f.remediation,
             confidenceReason: f.whyReal,
           },
-        };
+        });
         const endLine = f.endLine || f.startLine;
         const where =
           endLine !== f.startLine

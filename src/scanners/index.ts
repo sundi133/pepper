@@ -24,7 +24,7 @@ export function getScanners(
 ): ScannerPlugin[] {
   const scanners: ScannerPlugin[] = [];
 
-  // INCREMENTAL: PR/MR webhooks only — no diff engine yet; run fast PR checks.
+  // INCREMENTAL: PR/MR webhooks — SAST/SCA/secrets on changed files only (see incremental-scan-files).
   const includeSast = ["FULL", "SAST_ONLY", "INCREMENTAL"].includes(scanType);
   const includeSca = ["FULL", "SCA_ONLY", "INCREMENTAL"].includes(scanType);
   const includeSecrets = ["FULL", "SECRETS_ONLY", "INCREMENTAL"].includes(
@@ -142,12 +142,18 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
   );
 
   await ctx.waitIfPaused?.();
-  const { dependencies } = parseDependencies(ctx.workDir, ctx.fileList);
+  const scaFiles = ctx.scaFileList ?? ctx.fileList;
+  const { dependencies } = parseDependencies(ctx.workDir, scaFiles);
+
+  const filesScanned = new Set([
+    ...ctx.fileList,
+    ...(ctx.scaFileList ?? []),
+  ]).size;
 
   return {
     findings: deduplicator.allFindings(),
     dependencies,
-    filesScanned: ctx.fileList.length,
+    filesScanned,
     depsScanned: dependencies.length,
   };
 }

@@ -70,20 +70,27 @@ export function GateResultBadge({ result }: { result: string }) {
   );
 }
 
+const SEVERITY_STYLES: Record<string, string> = {
+  CRITICAL:
+    "border-red-600/40 bg-red-600 text-white shadow-sm hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-500",
+  HIGH:
+    "border-orange-500/40 bg-orange-500 text-white shadow-sm hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-500",
+  MEDIUM:
+    "border-amber-500/40 bg-amber-500/90 text-amber-950 shadow-sm hover:bg-amber-500 dark:bg-amber-600 dark:text-amber-950 dark:hover:bg-amber-500",
+  LOW:
+    "border-sky-500/40 bg-sky-500/15 text-sky-800 hover:bg-sky-500/25 dark:bg-sky-500/20 dark:text-sky-300 dark:hover:bg-sky-500/30",
+  INFO:
+    "border-border bg-muted text-muted-foreground hover:bg-muted/80",
+};
+
 export function SeverityBadge({ severity }: { severity: string }) {
-  const variants: Record<
-    string,
-    "destructive" | "default" | "secondary" | "outline"
-  > = {
-    CRITICAL: "destructive",
-    HIGH: "destructive",
-    MEDIUM: "default",
-    LOW: "secondary",
-    INFO: "outline",
-  };
+  const style = SEVERITY_STYLES[severity] || SEVERITY_STYLES.INFO;
 
   return (
-    <Badge variant={variants[severity] || "outline"} className="text-xs">
+    <Badge
+      variant="outline"
+      className={`text-xs font-semibold transition-colors duration-200 ${style}`}
+    >
       {severity}
     </Badge>
   );

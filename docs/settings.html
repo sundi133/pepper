@@ -149,9 +149,33 @@
       </ul>
 
       <h3>GitHub webhook</h3>
-      <p>
-        <code>POST /api/webhooks/github</code> — set <code>GITHUB_WEBHOOK_SECRET</code> in env and configure the secret in your GitHub repo/org webhook.
-      </p>
+      <ul>
+        <li>URL: <code>{your-app}/api/webhooks/github</code></li>
+        <li>Secret: <strong>GitHub webhook secret</strong> in UI or <code>GITHUB_WEBHOOK_SECRET</code></li>
+        <li>Events: <strong>Pull requests</strong> (opened, synchronize) + <strong>Pushes</strong></li>
+        <li>PR events → <code>INCREMENTAL</code> scan (changed files only). Default-branch push → <code>SAST_ONLY</code> (env <code>GITHUB_WEBHOOK_MAIN_SCAN_TYPE</code>)</li>
+        <li>Match project <code>repoUrl</code> to <code>owner/repo</code></li>
+      </ul>
+
+      <h3>Bitbucket Cloud</h3>
+      <ul>
+        <li>Connect with app password (scopes: account, repository, pullrequest read/write).</li>
+        <li>URL: <code>{your-app}/api/webhooks/bitbucket</code></li>
+        <li>Secret: <strong>Bitbucket webhook secret</strong> or <code>BITBUCKET_WEBHOOK_SECRET</code> — HMAC <code>X-Hub-Signature</code></li>
+        <li>Triggers: <strong>Repository push</strong>, <strong>Pull request created</strong>, <strong>Pull request updated</strong></li>
+        <li>PR events → <code>INCREMENTAL</code>. Default-branch push → <code>SAST_ONLY</code></li>
+        <li>Match <code>workspace/repo-slug</code> in <code>repoUrl</code> or import via Repositories tab</li>
+      </ul>
+
+      <h3>Azure DevOps Services</h3>
+      <ul>
+        <li>Connect with PAT (Code, Pull Request Threads, Project/Team read).</li>
+        <li>URL: <code>{your-app}/api/webhooks/azure-devops</code></li>
+        <li>Service hook: Web Hooks — <strong>Code pushed</strong>, <strong>PR created</strong>, <strong>PR updated</strong></li>
+        <li>Basic auth: blank username, password = <strong>Azure DevOps basic auth password</strong> or <code>AZURE_DEVOPS_WEBHOOK_SECRET</code></li>
+        <li>PR events → <code>INCREMENTAL</code>. Default-branch push → <code>SAST_ONLY</code></li>
+        <li>Import repo on Repositories tab so <code>azureRepoId</code> is stored</li>
+      </ul>
 
       <h3>CI / API key</h3>
       <p>

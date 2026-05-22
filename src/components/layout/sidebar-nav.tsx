@@ -68,16 +68,16 @@ export function SidebarNav({
                 href={item.href}
                 onClick={onNavigate}
                 className={cn(
-                  "group flex gap-x-3 rounded-lg py-2.5 pl-3 pr-2 text-sm font-medium transition-colors",
-                  active
-                    ? "border-l-2 border-primary bg-primary/10 text-primary"
-                    : "border-l-2 border-transparent text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+                  "nav-link group",
+                  active ? "nav-link-active" : "nav-link-inactive",
                 )}
               >
                 <item.icon
                   className={cn(
                     "h-5 w-5 shrink-0",
-                    active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                    active
+                      ? "text-primary"
+                      : "text-muted-foreground transition-colors group-hover:text-primary",
                   )}
                   aria-hidden
                 />
@@ -101,10 +101,8 @@ export function SidebarNav({
                   href={item.href}
                   onClick={onNavigate}
                   className={cn(
-                    "group flex gap-x-3 rounded-lg py-2.5 pl-3 pr-2 text-sm font-medium transition-colors",
-                    active
-                      ? "border-l-2 border-primary bg-primary/10 text-primary"
-                      : "border-l-2 border-transparent text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+                    "nav-link group",
+                    active ? "nav-link-active" : "nav-link-inactive",
                   )}
                 >
                   <item.icon
@@ -112,7 +110,7 @@ export function SidebarNav({
                       "h-5 w-5 shrink-0",
                       active
                         ? "text-primary"
-                        : "text-muted-foreground group-hover:text-foreground",
+                        : "text-muted-foreground transition-colors group-hover:text-primary",
                     )}
                     aria-hidden
                   />

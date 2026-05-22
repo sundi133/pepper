@@ -1,5 +1,9 @@
 /** Centralized LLM prompt fragments — avoid duplicating long policy blocks. */
 
+import { SEVERITY_CALIBRATION_PROMPT } from "@/lib/severity-calibration";
+
+export { SEVERITY_CALIBRATION_PROMPT };
+
 export const SAST_PASS1_PROMPT = `You are performing PASS 1 (candidate discovery) of a deep security code audit.
 Report only credible vulnerability CANDIDATES with concrete evidence from the chunk.
 Confidence 0.65-0.79 = candidate for pass-2 validation; 0.80+ only if exploit path is fully visible in chunk.
@@ -36,6 +40,7 @@ export const SAST_PASS2_PROMPT = `You are performing PASS 2 (cross-file validati
 Given repository context (routes, auth boundaries, sinks) and candidate findings, validate each candidate.
 Only confirm findings where the exploit path holds with available context. Reject duplicates of generic lint noise.
 Confirmed findings need confidence >= 0.80 and full remediation.
+${SEVERITY_CALIBRATION_PROMPT}
 
 Return JSON:
 {
@@ -60,20 +65,24 @@ Return JSON:
 
 export const SECRETS_AI_PROMPT = `You are a secrets auditor reviewing source/config for REAL leaked credentials.
 NEVER report: placeholders, env var names only, examples, test fixtures, redacted values, checksums, public IDs, localhost demos.
+${SEVERITY_CALIBRATION_PROMPT}
+Live API keys, PATs, JWT signing secrets, DB passwords → CRITICAL. Scoped or low-privilege test tokens → HIGH.
+
 For each TRUE secret (confidence >= 0.80) return:
 {
   "findings": [{
     "title": "...",
     "severity": "CRITICAL|HIGH",
-    "credentialType": "AWS|GitHub|...",
-    "maskedValue": "first4…last4 only",
+    "credentialType": "AWS|GitHub|JWT signing key|...",
+    "exposedValue": "<full literal from source>",
     "startLine": <int>,
     "endLine": <int>,
     "whyReal": "...",
     "provider": "...",
     "impact": "...",
-    "remediation": "1.revoke 2.remove 3.purge git 4.secret manager 5.pre-commit",
-    "confidence": <0.80-1.0>
+    "remediation": "revoke, remove, purge git history, secret manager",
+    "confidence": <0.80-1.0>,
+    "metadata": { "weaknessClass": "Hardcoded Credential", "severityJustification": "..." }
   }]
 }
 If none: {"findings": []}`;

@@ -8,6 +8,7 @@ import {
 import { RawFinding, ScanContext, ScannerPlugin } from "../types";
 import { buildDeepRepoContext } from "../shared/repo-context";
 import { enrichFinding } from "../shared/finding-normalize";
+import { applySeverityCalibration } from "@/lib/severity-calibration";
 import { ZERO_DAY_VALIDATION_PROMPT } from "../shared/prompts";
 import { selectZeroDayFiles } from "./file-prioritizer";
 import {
@@ -108,7 +109,7 @@ export const zeroDayScanner: ScannerPlugin = {
             (f.confidence ?? 0) >= ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
         )
         .map((f) => {
-          const base: RawFinding = {
+          const base: RawFinding = applySeverityCalibration({
             scanner: "ZERO_DAY",
             severity: normalizeSeverity(f.severity),
             title: `[Zero-Day] ${f.title}`,
@@ -122,9 +123,9 @@ export const zeroDayScanner: ScannerPlugin = {
             metadata: {
               ...(f.metadata || {}),
               category: f.category || "Novel",
-              weaknessClass: f.category,
+              weaknessClass: f.category || "Business Logic",
             },
-          };
+          });
           return enrichFinding(base, base.metadata as Record<string, unknown>, {
             whatIsWrong: f.title,
             where: `${f.filePath}:${f.startLine}`,

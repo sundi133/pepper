@@ -195,22 +195,25 @@ export default function TeamPage() {
           Manage team members and their roles
         </p>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          There is no public sign-up page. New users are created here: fill{" "}
-          <strong>Invite Member</strong> with their email, role, and an initial
-          password (at least 8 characters). They sign in at{" "}
+          New organizations can register at{" "}
+          <Link
+            href="/register"
+            className="font-medium text-foreground underline"
+          >
+            /register
+          </Link>{" "}
+          (first user becomes admin). To add people to <strong>this</strong>{" "}
+          organization, an admin uses <strong>Invite Member</strong> below.
+          Invited users sign in at{" "}
           <Link href="/login" className="font-medium text-foreground underline">
             /login
           </Link>{" "}
-          with that email and password. When SMTP is configured (see{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">.env</code>
-          ), <strong>new</strong> accounts receive an invitation email with
-          sign-in link, email address, and initial password. Email is not a
-          secure channel—use Mailpit, internal relay, or trusted mail only.
-          Existing users added to the org get an email without a new password
-          (their password is unchanged).
+          with the email and initial password you set. Only admins can invite,
+          change roles, or remove members.
         </p>
       </div>
 
+      {isOrgAdmin ? (
       <Card>
         <CardHeader>
           <CardTitle>Invite Member</CardTitle>
@@ -276,6 +279,14 @@ export default function TeamPage() {
           </form>
         </CardContent>
       </Card>
+      ) : (
+        <Card>
+          <CardContent className="py-6 text-sm text-muted-foreground">
+            Only organization admins can invite new members. Ask an admin to add
+            you or change your role.
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

@@ -162,7 +162,7 @@ export function FindingsTable({
   }
 
   return (
-    <div>
+    <div className="min-w-0 w-full max-w-full overflow-hidden">
       {/* Bulk Action Bar */}
       {selected.size > 0 && (
         <div className="flex items-center gap-3 mb-3 rounded-lg border bg-muted/50 px-4 py-2">
@@ -198,7 +198,7 @@ export function FindingsTable({
         </div>
       )}
 
-      <Table>
+      <Table className="table-fixed w-full">
         <TableHeader>
           <TableRow>
             <TableHead className="w-10">
@@ -214,10 +214,10 @@ export function FindingsTable({
               />
             </TableHead>
             <TableHead className="w-24">Severity</TableHead>
-            <TableHead>Bug / Vulnerability</TableHead>
+            <TableHead className="w-[28%] min-w-0">Bug / Vulnerability</TableHead>
             <TableHead className="w-24">Status</TableHead>
             <TableHead className="w-32">Scanner</TableHead>
-            <TableHead className="w-48">File</TableHead>
+            <TableHead className="w-[18%] min-w-0">File</TableHead>
             {fixPrSource ? (
               <TableHead className="w-11 text-center" title="Open GitHub fix PR">
                 <span className="sr-only">Open fix PR</span>
@@ -245,9 +245,14 @@ export function FindingsTable({
                 <TableCell onClick={() => onSelect?.(finding)}>
                   <SeverityBadge severity={finding.severity} />
                 </TableCell>
-                <TableCell onClick={() => onSelect?.(finding)}>
-                  <div>
-                    <p className="font-medium text-sm">{finding.title}</p>
+                <TableCell
+                  className="min-w-0 whitespace-normal"
+                  onClick={() => onSelect?.(finding)}
+                >
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-medium leading-snug">
+                      {finding.title}
+                    </p>
                     {finding.cweId && (
                       <span className="text-xs text-muted-foreground">
                         {finding.cweId}
@@ -271,9 +276,12 @@ export function FindingsTable({
                     ] || finding.scanner}
                   </Badge>
                 </TableCell>
-                <TableCell onClick={() => onSelect?.(finding)}>
+                <TableCell
+                  className="min-w-0 whitespace-normal"
+                  onClick={() => onSelect?.(finding)}
+                >
                   {finding.filePath && (
-                    <span className="text-xs text-muted-foreground font-mono">
+                    <span className="block break-all font-mono text-xs text-muted-foreground">
                       {finding.filePath}
                       {finding.startLine ? `:${finding.startLine}` : ""}
                     </span>
@@ -299,9 +307,9 @@ export function FindingsTable({
                 <TableRow>
                   <TableCell
                     colSpan={fixPrSource ? 8 : 7}
-                    className="bg-muted/30 p-4 align-top text-foreground"
+                    className="!whitespace-normal bg-muted/30 p-0 align-top text-foreground"
                   >
-                    <div className="w-full max-w-full min-w-0 overflow-x-auto">
+                    <div className="min-w-0 w-full max-w-full overflow-hidden px-4 py-4">
                       {renderExpanded(finding)}
                     </div>
                   </TableCell>

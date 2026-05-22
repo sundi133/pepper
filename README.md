@@ -187,6 +187,22 @@ Pepper requests `read:user` and `repo` scopes (GitHub requires `repo` for privat
 
 Revoke access from **Settings → Integrations** or the Repositories page.
 
+### VCS webhooks (incremental PR scans)
+
+Configure inbound webhooks in **Settings → Integrations** (webhook URL, secret, and provider connection). Pepper must be reachable from your git host over HTTPS (worker running for scans to execute).
+
+| Provider | Webhook URL | Official setup |
+| -------- | ----------- | -------------- |
+| GitHub | `{NEXTAUTH_URL}/api/webhooks/github` | [Creating webhooks](https://docs.github.com/en/webhooks/using-webhooks/creating-webhooks) — enable **Pull requests** + **Pushes** |
+| Bitbucket Cloud | `{NEXTAUTH_URL}/api/webhooks/bitbucket` | [Manage webhooks](https://support.atlassian.com/bitbucket-cloud/docs/manage-webhooks/) — **Repository push**, **PR created**, **PR updated** |
+| Azure DevOps | `{NEXTAUTH_URL}/api/webhooks/azure-devops` | [Web Hooks service](https://learn.microsoft.com/en-us/azure/devops/service-hooks/services/webhook) — **Code pushed**, **PR created**, **PR updated**; Basic auth password = Pepper secret |
+
+**Pull request / MR events** queue an **INCREMENTAL** scan (only changed files vs base). **Push to the default branch** queues `SAST_ONLY` by default (`GITHUB_WEBHOOK_MAIN_SCAN_TYPE` can set `FULL`).
+
+1. Set the matching secret in **Webhook secrets** on the integrations page (or env: `GITHUB_WEBHOOK_SECRET`, `BITBUCKET_WEBHOOK_SECRET`, `AZURE_DEVOPS_WEBHOOK_SECRET`).
+2. Connect the provider (GitHub OAuth, Bitbucket app password, or Azure PAT) for private clone and PR feedback.
+3. Import/link the repo in Pepper so webhook payloads match your project.
+
 ### Scan Scheduling
 
 Pepper can automatically scan your projects on a recurring schedule. Configure per-project in **Settings > Projects > [Project] > Schedule**.

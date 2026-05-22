@@ -24,7 +24,7 @@ export interface StoredFindingReport {
   remediation: string[];
 }
 
-const CURRENT_REPORT_VERSION = 7;
+const CURRENT_REPORT_VERSION = 9;
 
 export function enrichFindingWithReport<T extends FindingReportInput>(
   finding: T,
@@ -209,8 +209,13 @@ function buildReportSummary(input: {
   if (consequence) body.push(consequence);
 
   const justification = readString(metadata.severityJustification);
+  const llmLabel = readString(metadata.llmSeverity);
+  const calibratedNote =
+    metadata.severityCalibrated && llmLabel && llmLabel !== finding.severity
+      ? ` (calibrated from ${llmLabel} using weakness class and CWE matrix)`
+      : "";
   body.push(
-    `This issue should be treated as ${finding.severity}${justification ? ` because ${justification}.` : " based on the reachable impact and available evidence."}`,
+    `Severity ${finding.severity}${calibratedNote}${justification ? `: ${justification}` : " based on the reachable impact and available evidence."}`,
   );
 
   return body.filter(Boolean).join("\n\n");

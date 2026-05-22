@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { scanQueue, type ScanJobData } from "@/lib/queue";
 import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
+import { ensureWebhookScanSlot } from "@/lib/webhook-scan-slot";
 import { normalizeBitbucketUuid } from "@/lib/parse-bitbucket-repo-input";
 import { mainBranchWebhookScanType } from "@/lib/github-webhook-scan";
 
@@ -54,19 +55,13 @@ export async function queueBitbucketWebhookScan(params: {
   prNumber?: number;
 }): Promise<{ scanId: string; status: "QUEUED" | "ALREADY_QUEUED" }> {
   const commitSha = params.commitSha?.trim();
-  if (commitSha) {
-    const existing = await prisma.scan.findFirst({
-      where: {
-        projectId: params.project.id,
-        commitSha,
-        scanType: params.scanType,
-        status: { in: ["QUEUED", "RUNNING"] },
-      },
-      select: { id: true },
-    });
-    if (existing) {
-      return { scanId: existing.id, status: "ALREADY_QUEUED" };
-    }
+  const slot = await ensureWebhookScanSlot({
+    projectId: params.project.id,
+    commitSha,
+    scanType: params.scanType,
+  });
+  if (slot.status === "ALREADY_QUEUED") {
+    return { scanId: slot.scanId, status: "ALREADY_QUEUED" };
   }
 
   const settings = params.project.organization.settings;
@@ -93,6 +88,7 @@ export async function queueBitbucketWebhookScan(params: {
     scanType: params.scanType,
     baseSha: params.baseSha,
     commitSha: commitSha || undefined,
+    prNumber: params.prNumber,
     repoUrl: params.repoUrl,
     branch: params.branch,
     useOrgBitbucketToken: params.project.connectedViaBitbucket,

@@ -344,8 +344,9 @@ export default function IntegrationsPage() {
             <Badge variant="outline">Webhook</Badge>
           </div>
           <CardDescription>
-            Scan pull requests on every update and re-run SAST when code is merged
-            or pushed to your default branch (e.g. main).
+            Scan only changed files on pull request open and update (incremental),
+            and re-run SAST when code is merged or pushed to your default branch
+            (e.g. main).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -364,25 +365,35 @@ export default function IntegrationsPage() {
           </div>
           <div className="text-sm text-muted-foreground space-y-1">
             <p>
-              1. In your GitHub repo: Settings → Webhooks → Add webhook
+              1. In GitHub: repo → <strong>Settings</strong> → <strong>Webhooks</strong>{" "}
+              → <strong>Add webhook</strong>{" "}
+              (<a
+                href="https://docs.github.com/en/webhooks/using-webhooks/creating-webhooks"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                GitHub docs
+              </a>
+              )
             </p>
-            <p>2. Paste the URL above and set Content type to JSON</p>
+            <p>2. Paste the URL above; <strong>Content type</strong>: JSON</p>
             <p>
-              3. Enable <strong>Pull request</strong> and <strong>Push</strong>{" "}
-              events
+              3. Enable <strong>Pull requests</strong> and <strong>Pushes</strong>
             </p>
             <p>
-              4. Set the secret to the same value as <strong>GitHub webhook secret</strong>{" "}
-              in the Webhook secrets card above
+              4. Set <strong>Secret</strong> to the same value as{" "}
+              <strong>GitHub webhook secret</strong> in the Webhook secrets card
             </p>
             <p>
-              5. Link the repo in Pepper (Repositories or a GitHub URL project)
-              so <code>repoUrl</code> matches <code>owner/repo</code>
+              5. Link the repo in Pepper so <code>repoUrl</code> contains{" "}
+              <code>owner/repo</code>
             </p>
             <p>
-              Merges and pushes to the project default branch queue a{" "}
-              <code>SAST_ONLY</code> scan (override with{" "}
-              <code>GITHUB_WEBHOOK_MAIN_SCAN_TYPE=FULL</code> if needed).
+              6. PR <strong>opened</strong> / <strong>synchronize</strong> queue{" "}
+              <code>INCREMENTAL</code> scans (changed files only). Merge or push
+              to the default branch queues <code>SAST_ONLY</code> (override with{" "}
+              <code>GITHUB_WEBHOOK_MAIN_SCAN_TYPE=FULL</code> on the server).
             </p>
           </div>
         </CardContent>
@@ -396,9 +407,9 @@ export default function IntegrationsPage() {
             <Badge variant="outline">App password</Badge>
           </div>
           <CardDescription>
-            Post PR security review summaries, inline comments and build
-            statuses on Bitbucket Cloud pull requests. Uses an app password
-            scoped per org — not your account password.
+            Import repos, clone private code on the worker, and post PR review
+            comments and build statuses. Uses a Bitbucket app password (not your
+            login password).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -532,9 +543,9 @@ export default function IntegrationsPage() {
             <Badge variant="outline">Webhook</Badge>
           </div>
           <CardDescription>
-            Scan on push to the default branch and on pull request updates.
-            Pair with the Bitbucket Cloud connection above so Pepper can post
-            the review back.
+            Scan only changed files on pull request created and updated
+            (incremental), and re-run SAST when code is pushed to the default
+            branch. Pair with Bitbucket Cloud above for clone and PR feedback.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -552,24 +563,44 @@ export default function IntegrationsPage() {
             </div>
           </div>
           <div className="text-sm text-muted-foreground space-y-1">
-            <p>1. In your Bitbucket repo: Settings → Webhooks → Add webhook</p>
+            <p>
+              1. In Bitbucket: open the repo → <strong>Repository settings</strong>{" "}
+              → <strong>Webhooks</strong> → <strong>Add webhook</strong>{" "}
+              (<a
+                href="https://support.atlassian.com/bitbucket-cloud/docs/manage-webhooks/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Atlassian docs
+              </a>
+              )
+            </p>
             <p>2. Paste the URL above</p>
             <p>
-              3. Enable <strong>Repository → Push</strong>,{" "}
-              <strong>Pull request → Created</strong>, and{" "}
-              <strong>Pull request → Updated</strong>
+              3. Under <strong>Triggers</strong>, enable{" "}
+              <strong>Repository push</strong>,{" "}
+              <strong>Pull request created</strong>, and{" "}
+              <strong>Pull request updated</strong>
             </p>
             <p>
-              4. Set the secret to the same value as <strong>Bitbucket webhook secret</strong>{" "}
-              in the Webhook secrets card above (optional if verification is disabled)
+              4. Set <strong>Secret</strong> to the same value as{" "}
+              <strong>Bitbucket webhook secret</strong> in the Webhook secrets card
+              (Pepper verifies <code>X-Hub-Signature: sha256=…</code>)
             </p>
             <p>
-              5. Import the repo on the{" "}
+              5. Import the repo on{" "}
               <a href="/scans/new" className="text-primary hover:underline">
                 Repositories
               </a>{" "}
-              page (Bitbucket tab) so Pepper can match webhook events and post PR
-              reviews.
+              (Bitbucket tab) so <code>repoUrl</code> matches{" "}
+              <code>workspace/repo-slug</code>
+            </p>
+            <p>
+              6. Connect Bitbucket above for private clone and PR comments.
+              PR events queue <code>INCREMENTAL</code> scans (changed files only).
+              Default-branch push queues <code>SAST_ONLY</code> (override with{" "}
+              <code>GITHUB_WEBHOOK_MAIN_SCAN_TYPE=FULL</code> on the server).
             </p>
           </div>
         </CardContent>
@@ -583,9 +614,8 @@ export default function IntegrationsPage() {
             <Badge variant="outline">PAT</Badge>
           </div>
           <CardDescription>
-            Post PR review summaries, inline threads and PR status checks on
-            Azure DevOps Services pull requests. Uses a Personal Access Token
-            scoped per org.
+            Import repos, clone with a PAT on the worker, and post PR review
+            threads and status checks on Azure DevOps pull requests.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -698,9 +728,9 @@ export default function IntegrationsPage() {
             <Badge variant="outline">Service hook</Badge>
           </div>
           <CardDescription>
-            Scan on push to the default branch and on pull request updates.
-            Pair with the Azure DevOps connection above so Pepper can post the
-            review back.
+            Scan only changed files on pull request created and updated
+            (incremental), and re-run SAST when code is pushed to the default
+            branch. Pair with Azure DevOps above for clone and PR feedback.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -719,28 +749,45 @@ export default function IntegrationsPage() {
           </div>
           <div className="text-sm text-muted-foreground space-y-1">
             <p>
-              1. In your ADO project: Project settings → Service hooks → Create
-              subscription → Web Hooks
+              1. In Azure DevOps: <strong>Project settings</strong> →{" "}
+              <strong>Service hooks</strong> → <strong>Create subscription</strong> →{" "}
+              <strong>Web Hooks</strong>{" "}
+              (<a
+                href="https://learn.microsoft.com/en-us/azure/devops/service-hooks/services/webhook"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Microsoft docs
+              </a>
+              )
             </p>
             <p>
-              2. Trigger: <strong>Code pushed</strong>,{" "}
-              <strong>Pull request created</strong>, and{" "}
-              <strong>Pull request updated</strong> (separate subscriptions or
-              combined where your ADO UI allows)
+              2. Create subscriptions for{" "}
+              <strong>Code pushed</strong>, <strong>Pull request created</strong>,
+              and <strong>Pull request updated</strong> (one subscription per
+              event type if your UI requires it)
             </p>
-            <p>3. Action URL: paste the URL above</p>
+            <p>3. <strong>Action URL</strong>: paste the URL above</p>
             <p>
-              4. Set <strong>Basic authentication password</strong> to the same value as{" "}
-              <strong>Azure DevOps basic auth password</strong> in the Webhook secrets card
-              above (leave username blank)
+              4. Under <strong>Basic authentication</strong>, leave username blank
+              and set <strong>Password</strong> to the same value as{" "}
+              <strong>Azure DevOps basic auth password</strong> in the Webhook
+              secrets card
             </p>
             <p>
-              5. Import the repo on the{" "}
+              5. Import the repo on{" "}
               <a href="/scans/new" className="text-primary hover:underline">
                 Repositories
               </a>{" "}
-              page (Azure DevOps tab) so Pepper can match webhook events and post
-              PR reviews.
+              (Azure DevOps tab) so Pepper stores <code>azureRepoId</code> for
+              webhook matching
+            </p>
+            <p>
+              6. Connect Azure DevOps above for private clone and PR feedback.
+              PR events queue <code>INCREMENTAL</code> scans (changed files only).
+              Default-branch push queues <code>SAST_ONLY</code> (override with{" "}
+              <code>GITHUB_WEBHOOK_MAIN_SCAN_TYPE=FULL</code> on the server).
             </p>
           </div>
         </CardContent>

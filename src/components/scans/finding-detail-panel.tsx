@@ -168,7 +168,7 @@ function githubCodeUrl(
 function PatternMatchReport({ finding }: { finding: Finding }) {
   const body = stripGeneratedSections(finding.description);
   return (
-    <section className="space-y-4 rounded-xl border border-border/60 bg-muted/20 p-4 shadow-sm">
+    <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-4 overflow-hidden border-border/60 bg-muted/30 p-4">
       <p className="text-sm leading-relaxed text-muted-foreground">
         This match comes from a <strong className="text-foreground">pattern-based</strong>{" "}
         rule. Treat it as a quick signal: confirm in code, then use an{" "}
@@ -267,7 +267,7 @@ function ReportRichText({ text }: { text: string }) {
           return (
             <pre
               key={i}
-              className="overflow-x-auto rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono leading-relaxed text-foreground"
+              className="max-w-full overflow-x-auto rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono leading-relaxed text-foreground"
             >
               {cleaned}
             </pre>
@@ -307,7 +307,7 @@ function FindingReportSections({ finding }: { finding: Finding }) {
   const report = buildStoredFindingReport(finding);
 
   return (
-    <section className="space-y-4 rounded-xl border bg-card p-4 shadow-sm">
+    <section className="finding-detail-report interactive-card min-w-0 max-w-full space-y-4 overflow-hidden p-4">
       <ReportBlock title="Bug / Vulnerability Name">
         <p className="break-words text-base font-semibold leading-snug">
           {stripReportMarkdown(report.vulnerabilityName)}
@@ -591,7 +591,7 @@ function FindingActionButtons({
   sourceContext?: FindingScanSourceContext;
 }) {
   return (
-    <>
+    <div className="flex min-w-0 max-w-full flex-wrap gap-2">
       <CopyReportButton finding={finding} />
       <CopyAiPromptButton finding={finding} sourceContext={sourceContext} tool="claude" />
       <CopyAiPromptButton finding={finding} sourceContext={sourceContext} tool="cursor" />
@@ -601,7 +601,7 @@ function FindingActionButtons({
           <OpenFixPrButton finding={finding} sourceContext={sourceContext} />
         </>
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -854,7 +854,7 @@ export function FindingDetailPanel({
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full sm:max-w-2xl p-0">
+      <SheetContent className="w-full max-w-[100vw] overflow-x-hidden p-0 sm:max-w-2xl">
         {/* Header */}
         <div className="sticky top-0 z-10 bg-background border-b px-6 py-4">
           <SheetHeader className="space-y-3">
@@ -926,8 +926,8 @@ export function FindingDetailPanel({
           </SheetHeader>
         </div>
 
-        <ScrollArea className="h-[calc(100vh-10rem)]">
-          <div className="space-y-5 px-6 py-5">
+        <ScrollArea className="h-[calc(100vh-10rem)] w-full">
+          <div className="min-w-0 space-y-5 overflow-hidden px-6 py-5">
             <FindingReportSections finding={finding} />
 
           </div>
@@ -962,10 +962,10 @@ export function FindingDetailInline({
   };
 
   return (
-    <div className="w-full max-w-full overflow-hidden rounded-xl border bg-card shadow-sm">
-      <div className="border-b px-5 py-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0 space-y-2">
+    <div className="finding-detail-inline min-w-0 w-full max-w-full overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="min-w-0 border-b px-4 py-4 sm:px-5">
+        <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <SeverityBadge severity={finding.severity} />
               <Badge variant="outline" className="text-xs">
@@ -1006,7 +1006,7 @@ export function FindingDetailInline({
             </h3>
             <FindingLocationRow finding={finding} sourceContext={sourceContext} />
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2">
             <FindingActionButtons finding={finding} sourceContext={sourceContext} />
             <Select
               value={finding.status || "OPEN"}
@@ -1031,7 +1031,7 @@ export function FindingDetailInline({
         </div>
       </div>
 
-      <div className="w-full max-w-full space-y-5 overflow-hidden p-5">
+      <div className="min-w-0 w-full max-w-full space-y-5 overflow-hidden p-4 sm:p-5">
         <FindingReportSections finding={finding} />
       </div>
     </div>

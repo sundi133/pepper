@@ -271,9 +271,15 @@ jobs:
       </p>
       <ul>
         <li><strong>GitHub:</strong> <em>Repo → Settings → Webhooks</em> →
-          <code>https://pepper.your-org.com/api/webhooks/github</code>. Secret =
-          <code>GITHUB_WEBHOOK_SECRET</code> from your Pepper env. Events:
-          <em>pushes</em> + <em>pull requests</em>.</li>
+          <code>https://pepper.your-org.com/api/webhooks/github</code>.
+          Secret = GitHub webhook secret in Pepper. Events: <em>Pull requests</em>
+          + <em>Pushes</em>. PR open/update → <code>INCREMENTAL</code> (changed files only).</li>
+        <li><strong>Bitbucket Cloud:</strong> <em>Repository settings → Webhooks</em> →
+          <code>https://pepper.your-org.com/api/webhooks/bitbucket</code>.
+          Triggers: repository push, PR created, PR updated. Same incremental behavior.</li>
+        <li><strong>Azure DevOps:</strong> <em>Project settings → Service hooks → Web Hooks</em> →
+          <code>https://pepper.your-org.com/api/webhooks/azure-devops</code>.
+          Events: code pushed, PR created, PR updated. Basic auth password = Pepper secret.</li>
         <li><strong>GitLab:</strong> <em>Project → Settings → Webhooks</em> →
           <code>https://pepper.your-org.com/api/webhooks/gitlab</code>. Trigger:
           <em>merge request events</em> + <em>push events</em>.</li>

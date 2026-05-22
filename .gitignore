@@ -48,3 +48,5 @@ PYSEC-*.json
 *.tsbuildinfo
 
 /src/generated/prisma
+
+.pepper.env

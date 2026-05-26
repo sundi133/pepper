@@ -6,9 +6,19 @@ import type { Prisma } from "@/generated/prisma/client";
 import { letterGradeFromCounts, projectSourceLabel } from "@/lib/security-grade";
 import { createProjectWithBuildGate } from "@/lib/create-project-with-build-gate";
 
+/** Strip HTML tags and trim whitespace to prevent stored XSS. */
+function sanitizeText(value: string): string {
+  return value.replace(/<[^>]*>/g, "").trim();
+}
+
 const createProjectSchema = z.object({
-  name: z.string().min(1).max(100),
-  description: z.string().optional(),
+  name: z
+    .string()
+    .min(1)
+    .max(100)
+    .transform(sanitizeText)
+    .refine((v) => v.length > 0, "Name must not be empty after sanitization"),
+  description: z.string().transform(sanitizeText).optional(),
   repoUrl: z.string().url().optional().or(z.literal("")),
   defaultBranch: z.string().default("main"),
 });

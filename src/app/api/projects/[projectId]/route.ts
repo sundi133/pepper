@@ -53,9 +53,20 @@ export async function GET(
   return NextResponse.json(project);
 }
 
+/** Strip HTML tags and trim whitespace to prevent stored XSS. */
+function sanitizeText(value: string): string {
+  return value.replace(/<[^>]*>/g, "").trim();
+}
+
 const updateProjectSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  description: z.string().optional(),
+  name: z
+    .string()
+    .min(1)
+    .max(100)
+    .transform(sanitizeText)
+    .refine((v) => v.length > 0, "Name must not be empty after sanitization")
+    .optional(),
+  description: z.string().transform(sanitizeText).optional(),
   repoUrl: z.string().url().optional().or(z.literal("")),
   defaultBranch: z.string().optional(),
   dastTargetUrl: z.string().url().optional().or(z.literal("")),

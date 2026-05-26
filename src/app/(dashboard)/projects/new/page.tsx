@@ -24,16 +24,23 @@ export default function NewProjectPage() {
   const [nameTouched, setNameTouched] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
+  const HTML_TAG_REGEX = /<[^>]*>/;
   const nameError =
     !name.trim() && (nameTouched || submitAttempted)
       ? "Project name is required."
-      : null;
+      : HTML_TAG_REGEX.test(name)
+        ? "Project name must not contain HTML tags."
+        : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitAttempted(true);
     if (!name.trim()) {
       toast.error("Project name is required");
+      return;
+    }
+    if (HTML_TAG_REGEX.test(name)) {
+      toast.error("Project name must not contain HTML tags");
       return;
     }
 

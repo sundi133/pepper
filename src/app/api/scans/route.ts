@@ -17,11 +17,28 @@ import {
 } from "@/lib/project-name-from-source";
 import { API_CREATE_SCAN_TYPES } from "@/lib/scan-types";
 
+/** Strip HTML tags and trim whitespace to prevent stored XSS. */
+function sanitizeText(value: string): string {
+  return value.replace(/<[^>]*>/g, "").trim();
+}
+
+const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100 MB
+
+const ALLOWED_EXTENSIONS = [".zip", ".tar.gz", ".tgz", ".tar"] as const;
+const ALLOWED_MIME_TYPES = new Set([
+  "application/zip",
+  "application/x-zip-compressed",
+  "application/x-tar",
+  "application/gzip",
+  "application/x-gzip",
+  "application/x-compressed-tar",
+]);
+
 const createScanSchema = z
   .object({
     projectId: z.string().optional(),
     /** When `projectId` is omitted, overrides inferred name from URL or file. */
-    newProjectName: z.string().max(100).optional(),
+    newProjectName: z.string().max(100).transform(sanitizeText).optional(),
     scanType: z.enum(API_CREATE_SCAN_TYPES).default("FULL"),
     branch: z.string().optional(),
     commitSha: z.string().optional(),
@@ -63,6 +80,41 @@ export async function POST(req: NextRequest) {
       scanParams = createScanSchema.parse(JSON.parse(data || "{}"));
 
       if (file) {
+        // Validate file size
+        if (file.size > MAX_UPLOAD_SIZE) {
+          return NextResponse.json(
+            {
+              error: `File too large. Maximum allowed size is ${MAX_UPLOAD_SIZE / (1024 * 1024)} MB`,
+            },
+            { status: 400 },
+          );
+        }
+
+        // Validate file extension
+        const fileName = file.name.toLowerCase();
+        const hasAllowedExt = ALLOWED_EXTENSIONS.some((ext) =>
+          fileName.endsWith(ext),
+        );
+        if (!hasAllowedExt) {
+          return NextResponse.json(
+            {
+              error: `Invalid file type. Allowed extensions: ${ALLOWED_EXTENSIONS.join(", ")}`,
+            },
+            { status: 400 },
+          );
+        }
+
+        // Validate MIME type
+        if (file.type && !ALLOWED_MIME_TYPES.has(file.type)) {
+          return NextResponse.json(
+            {
+              error:
+                "Invalid file MIME type. Only archive files (zip, tar, tar.gz) are accepted",
+            },
+            { status: 400 },
+          );
+        }
+
         const arrayBuffer = await file.arrayBuffer();
         fileBuffer = Buffer.from(arrayBuffer);
         originalFileName = file.name;

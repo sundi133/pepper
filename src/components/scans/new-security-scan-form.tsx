@@ -476,7 +476,29 @@ export function NewSecurityScanForm({
                     );
                   }}
                   onChange={(e) => {
-                    setFile(e.target.files?.[0] || null);
+                    const selected = e.target.files?.[0] || null;
+                    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+                    if (selected && selected.size > MAX_FILE_SIZE) {
+                      toast.error("File too large. Maximum allowed size is 100 MB.");
+                      e.target.value = "";
+                      setFile(null);
+                      return;
+                    }
+                    const ALLOWED_EXTS = [".zip", ".tar", ".tar.gz", ".tgz"];
+                    if (
+                      selected &&
+                      !ALLOWED_EXTS.some((ext) =>
+                        selected.name.toLowerCase().endsWith(ext),
+                      )
+                    ) {
+                      toast.error(
+                        `Invalid file type. Allowed: ${ALLOWED_EXTS.join(", ")}`,
+                      );
+                      e.target.value = "";
+                      setFile(null);
+                      return;
+                    }
+                    setFile(selected);
                     setFieldErrors((err) => ({ ...err, source: undefined }));
                   }}
                 />

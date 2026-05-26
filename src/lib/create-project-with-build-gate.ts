@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/prisma";
 
+/** Strip HTML tags to prevent stored XSS. */
+function sanitizeText(value: string): string {
+  return value.replace(/<[^>]*>/g, "").trim();
+}
+
 export async function createProjectWithBuildGate(params: {
   organizationId: string;
   name: string;
@@ -9,7 +14,7 @@ export async function createProjectWithBuildGate(params: {
 }) {
   const project = await prisma.project.create({
     data: {
-      name: params.name,
+      name: sanitizeText(params.name),
       description: params.description ?? undefined,
       repoUrl: params.repoUrl ?? null,
       defaultBranch: params.defaultBranch ?? "main",

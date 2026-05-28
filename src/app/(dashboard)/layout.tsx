@@ -1,11 +1,20 @@
+import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { getSession } from "@/lib/auth-guard";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Server-side gate: unauthenticated requests are redirected before any
+  // dashboard page (and its data-bearing bundle) is rendered (VA-05).
+  const session = await getSession();
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Sidebar />

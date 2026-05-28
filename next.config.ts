@@ -1,5 +1,9 @@
 import type { NextConfig } from "next";
 
+// Static security headers applied to every response. The Content-Security-Policy
+// is intentionally NOT set here: it is generated per-request in middleware.ts so
+// that a fresh nonce can be injected, which lets us drop 'unsafe-inline' /
+// 'unsafe-eval' from script-src (see VA-02).
 const securityHeaders = [
   {
     key: "X-Content-Type-Options",
@@ -10,6 +14,9 @@ const securityHeaders = [
     value: "DENY",
   },
   {
+    // Intentionally disabled: the legacy XSS auditor can introduce its own
+    // vulnerabilities and is superseded by the nonce-based CSP. Per OWASP
+    // guidance, "0" is the correct value for modern apps (VA-08).
     key: "X-XSS-Protection",
     value: "0",
   },
@@ -20,22 +27,6 @@ const securityHeaders = [
   {
     key: "Referrer-Policy",
     value: "strict-origin-when-cross-origin",
-  },
-  {
-    key: "Content-Security-Policy",
-    value: [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://hcaptcha.com https://*.hcaptcha.com",
-      "style-src 'self' 'unsafe-inline' https://hcaptcha.com https://*.hcaptcha.com",
-      "img-src 'self' data: blob:",
-      "font-src 'self' data:",
-      "connect-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
-      "frame-src https://hcaptcha.com https://*.hcaptcha.com",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-      "object-src 'none'",
-    ].join("; "),
   },
   {
     key: "Permissions-Policy",

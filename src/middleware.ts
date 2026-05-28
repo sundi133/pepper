@@ -63,12 +63,85 @@ function hasSessionCookie(req: NextRequest): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// 4. Content-Security-Policy (per-request nonce)
+//    A fresh nonce per request lets us drop 'unsafe-inline' from script-src so
+//    injected inline scripts cannot execute (VA-02). Next.js automatically
+//    propagates the nonce to its own framework scripts when it finds it in the
+//    Content-Security-Policy *request* header.
+// ---------------------------------------------------------------------------
+const IS_DEV = process.env.NODE_ENV !== "production";
+
+function buildCsp(nonce: string): string {
+  return [
+    "default-src 'self'",
+    // 'unsafe-eval' is only required by the React Refresh runtime in dev; it is
+    // never emitted in production builds.
+    `script-src 'self' 'nonce-${nonce}'${
+      IS_DEV ? " 'unsafe-eval'" : ""
+    } https://hcaptcha.com https://*.hcaptcha.com`,
+    // Styles still allow 'unsafe-inline': Next.js and several UI libs inject
+    // inline <style> tags, and style injection is not a script-execution vector.
+    "style-src 'self' 'unsafe-inline' https://hcaptcha.com https://*.hcaptcha.com",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
+    "frame-src https://hcaptcha.com https://*.hcaptcha.com",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+    "upgrade-insecure-requests",
+  ].join("; ");
+}
+
+// ---------------------------------------------------------------------------
+// 5. Authenticated / dynamic page routes that must never be edge-cached (VA-07)
+// ---------------------------------------------------------------------------
+const NO_STORE_PREFIXES = [
+  "/dashboard",
+  "/projects",
+  "/repositories",
+  "/scans",
+  "/trends",
+  "/notifications",
+  "/settings",
+];
+
+function isNoStorePath(pathname: string): boolean {
+  return NO_STORE_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
+
+/** Apply hardening headers that must be present on every response (VA-06/VA-07). */
+function applyResponseHardening(
+  response: NextResponse,
+  pathname: string,
+  csp: string,
+): NextResponse {
+  response.headers.set("Content-Security-Policy", csp);
+  // Defense in depth: guarantee nosniff regardless of route (VA-06).
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  // Authenticated/dynamic content and all API responses must not be cached by
+  // shared/CDN caches (VA-07).
+  if (pathname.startsWith("/api/") || isNoStorePath(pathname)) {
+    response.headers.set("Cache-Control", "no-store, private");
+  }
+  return response;
+}
+
+// ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const method = req.method;
   const origin = req.headers.get("origin");
+
+  // Generate a per-request nonce and the CSP up front so it can be attached to
+  // every response (including the early error returns below).
+  const nonce = crypto.randomUUID().replace(/-/g, "");
+  const csp = buildCsp(nonce);
 
   if (pathname.startsWith("/api/")) {
     // --- CORS preflight ---
@@ -139,8 +212,14 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // --- Forward the nonce to the app so Next.js can stamp its inline scripts. ---
+  // Next.js reads the nonce from the Content-Security-Policy *request* header.
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+
   // --- Apply CORS headers on API responses (allowlisted origins only) ---
-  const response = NextResponse.next();
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
 
   if (pathname.startsWith("/api/") && origin && isAllowedOrigin(origin)) {
     response.headers.set("Access-Control-Allow-Origin", origin);
@@ -155,7 +234,7 @@ export async function middleware(req: NextRequest) {
     );
   }
 
-  return response;
+  return applyResponseHardening(response, pathname, csp);
 }
 
 export const config = {

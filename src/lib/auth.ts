@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GitHubProvider from "next-auth/providers/github";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
+import { isHcaptchaEnabled, verifyHcaptchaToken } from "./hcaptcha";
 
 export const authOptions: NextAuthOptions = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -15,9 +16,22 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        captchaToken: { label: "Captcha", type: "text" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) return null;
+
+        if (isHcaptchaEnabled()) {
+          const forwarded = (req?.headers?.["x-forwarded-for"] as
+            | string
+            | undefined)?.split(",")[0]?.trim();
+          const ok = await verifyHcaptchaToken(
+            credentials.captchaToken,
+            forwarded,
+          );
+          if (!ok) return null;
+        }
+
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });

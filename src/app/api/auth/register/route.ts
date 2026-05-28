@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
+import { ipFromHeaders } from "@/lib/audit-log";
+import { isHcaptchaEnabled, verifyHcaptchaToken } from "@/lib/hcaptcha";
 import {
   isPublicRegistrationEnabled,
   registerNewUser,
@@ -16,6 +18,7 @@ const registerSchema = z.object({
     .trim()
     .min(2, "Organization name must be at least 2 characters")
     .max(100),
+  captchaToken: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -32,6 +35,20 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const data = registerSchema.parse(body);
+
+    if (isHcaptchaEnabled()) {
+      const ok = await verifyHcaptchaToken(
+        data.captchaToken,
+        ipFromHeaders(req.headers),
+      );
+      if (!ok) {
+        return NextResponse.json(
+          { error: "Captcha verification failed. Please try again." },
+          { status: 400 },
+        );
+      }
+    }
+
     const { user, organization } = await registerNewUser(data);
 
     return NextResponse.json(

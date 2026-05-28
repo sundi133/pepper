@@ -2,8 +2,13 @@
 
 import { signIn } from "next-auth/react";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  HcaptchaField,
+  type HcaptchaFieldHandle,
+} from "@/components/hcaptcha-field";
+import { getHcaptchaSiteKey } from "@/lib/hcaptcha";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,16 +40,26 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const captchaRef = useRef<HcaptchaFieldHandle>(null);
   const sourceUrl = getSourceCodeUrl();
+  const captchaSiteKey = getHcaptchaSiteKey();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMessage("");
+
+    if (captchaSiteKey && !captchaToken) {
+      setMessage("Please complete the captcha.");
+      return;
+    }
+
     setLoading(true);
 
     const result = await signIn("credentials", {
       email,
       password,
+      captchaToken,
       redirect: false,
     });
 
@@ -52,6 +67,8 @@ export default function LoginPage() {
 
     if (result?.error) {
       setMessage("Invalid email or password");
+      setCaptchaToken("");
+      captchaRef.current?.reset();
     } else {
       router.push("/dashboard");
       router.refresh();
@@ -133,6 +150,14 @@ export default function LoginPage() {
                     className="h-11"
                   />
                 </div>
+                {captchaSiteKey ? (
+                  <HcaptchaField
+                    ref={captchaRef}
+                    siteKey={captchaSiteKey}
+                    onVerify={setCaptchaToken}
+                    onExpire={() => setCaptchaToken("")}
+                  />
+                ) : null}
                 {message ? (
                   <p className="text-sm text-muted-foreground" role="status">
                     {message}

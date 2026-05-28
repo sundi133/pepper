@@ -3,7 +3,12 @@
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import {
+  HcaptchaField,
+  type HcaptchaFieldHandle,
+} from "@/components/hcaptcha-field";
+import { getHcaptchaSiteKey } from "@/lib/hcaptcha";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,11 +31,20 @@ export default function RegisterPage() {
   const [organizationName, setOrganizationName] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const captchaRef = useRef<HcaptchaFieldHandle>(null);
   const sourceUrl = getSourceCodeUrl();
+  const captchaSiteKey = getHcaptchaSiteKey();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMessage("");
+
+    if (captchaSiteKey && !captchaToken) {
+      setMessage("Please complete the captcha.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -42,6 +56,7 @@ export default function RegisterPage() {
           password,
           name: name.trim() || undefined,
           organizationName,
+          captchaToken,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -52,6 +67,8 @@ export default function RegisterPage() {
             ? data.error
             : "Registration failed. Please try again.",
         );
+        setCaptchaToken("");
+        captchaRef.current?.reset();
         setLoading(false);
         return;
       }
@@ -178,6 +195,14 @@ export default function RegisterPage() {
                     Minimum 8 characters.
                   </p>
                 </div>
+                {captchaSiteKey ? (
+                  <HcaptchaField
+                    ref={captchaRef}
+                    siteKey={captchaSiteKey}
+                    onVerify={setCaptchaToken}
+                    onExpire={() => setCaptchaToken("")}
+                  />
+                ) : null}
                 {message ? (
                   <p className="text-sm text-muted-foreground" role="status">
                     {message}

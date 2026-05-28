@@ -18,6 +18,18 @@ function isAllowedOrigin(origin: string | null): boolean {
   return ALLOWED_ORIGINS.has(origin);
 }
 
+/**
+ * Strict check used for deciding whether to *emit* CORS headers. Unlike
+ * isAllowedOrigin (which treats a missing Origin as same-origin for CSRF
+ * purposes), this requires a present, exact-allowlisted origin and explicitly
+ * rejects the literal "null" origin (sent by sandboxed iframes / data: URIs).
+ * We never reflect an origin we cannot verify alongside credentials.
+ */
+function isTrustedCorsOrigin(origin: string | null): origin is string {
+  if (!origin || origin === "null") return false;
+  return ALLOWED_ORIGINS.has(origin);
+}
+
 /** Parse the origin (scheme://host:port) out of a full URL, or null. */
 function originOf(url: string | null): string | null {
   if (!url) return null;
@@ -146,14 +158,19 @@ export async function middleware(req: NextRequest) {
   if (pathname.startsWith("/api/")) {
     // --- CORS preflight ---
     if (method === "OPTIONS") {
-      if (!isAllowedOrigin(origin)) {
-        return new NextResponse(null, { status: 403 });
+      // A genuine browser preflight always carries an Origin header; require a
+      // present, exact-allowlisted origin and never fall back to a static one.
+      if (!isTrustedCorsOrigin(origin)) {
+        return new NextResponse(null, {
+          status: 403,
+          headers: { Vary: "Origin" },
+        });
       }
       const preflightHeaders = new Headers();
-      preflightHeaders.set(
-        "Access-Control-Allow-Origin",
-        origin || (ALLOWED_ORIGINS.values().next().value as string),
-      );
+      preflightHeaders.set("Access-Control-Allow-Origin", origin);
+      // Responses vary by Origin, so caches must key on it (prevents a cached
+      // CORS response for one origin being served to another).
+      preflightHeaders.set("Vary", "Origin");
       preflightHeaders.set(
         "Access-Control-Allow-Methods",
         "GET, POST, PUT, PATCH, DELETE",
@@ -221,17 +238,22 @@ export async function middleware(req: NextRequest) {
   // --- Apply CORS headers on API responses (allowlisted origins only) ---
   const response = NextResponse.next({ request: { headers: requestHeaders } });
 
-  if (pathname.startsWith("/api/") && origin && isAllowedOrigin(origin)) {
-    response.headers.set("Access-Control-Allow-Origin", origin);
-    response.headers.set("Access-Control-Allow-Credentials", "true");
-    response.headers.set(
-      "Access-Control-Allow-Methods",
-      "GET, POST, PUT, PATCH, DELETE",
-    );
-    response.headers.set(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization",
-    );
+  if (pathname.startsWith("/api/")) {
+    // Always vary on Origin for API responses so shared caches never replay a
+    // CORS-bearing response across origins, even when we decline to reflect one.
+    response.headers.append("Vary", "Origin");
+    if (isTrustedCorsOrigin(origin)) {
+      response.headers.set("Access-Control-Allow-Origin", origin);
+      response.headers.set("Access-Control-Allow-Credentials", "true");
+      response.headers.set(
+        "Access-Control-Allow-Methods",
+        "GET, POST, PUT, PATCH, DELETE",
+      );
+      response.headers.set(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization",
+      );
+    }
   }
 
   return applyResponseHardening(response, pathname, csp);

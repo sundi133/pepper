@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -19,17 +20,21 @@ export const metadata: Metadata = {
   description: "On-Prem LLM-Assisted Static Code Analysis Platform",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Nonce minted by middleware; forwarded to next-themes so its pre-hydration
+  // inline script is allowed by the nonce-based CSP (VA-02).
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Providers>
+        <Providers nonce={nonce}>
           {children}
           <Toaster />
         </Providers>

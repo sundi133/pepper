@@ -305,32 +305,203 @@ function FindingReportSections({ finding }: { finding: Finding }) {
   }
 
   const report = buildStoredFindingReport(finding);
+  const location = formatFindingLocation(finding) || "Not specified";
+  const riskScore =
+    finding.severity === "CRITICAL"
+      ? "9.0"
+      : finding.severity === "HIGH"
+        ? "7.5"
+        : finding.severity === "MEDIUM"
+          ? "5.0"
+          : "3.0";
+
+  const affectedFile = finding.filePath || "Not specified";
+  const affectedLine = finding.startLine != null ? String(finding.startLine) : "Not specified";
+  const source = typeof finding.metadata?.source === "string" ? finding.metadata.source : "scanner evidence";
+  const sink = typeof finding.metadata?.sink === "string" ? finding.metadata.sink : "affected code path";
+  const confidence =
+    typeof finding.confidence === "number"
+      ? `${Math.round(finding.confidence * 100)}%`
+      : "High";
+
+  const snippet =
+    finding.snippet ||
+    `${location}\n// Review the affected line in the reported file.`;
+
+  const issueBullets = [
+    "The scanner identified a security-relevant pattern in this finding.",
+    "The issue is tied to the reported file and affected code path.",
+    "If left unresolved, this may increase application security risk.",
+  ];
+
+  const fixBullets = report.remediation.length
+    ? report.remediation.slice(0, 3)
+    : [
+        "Update the affected code to remove the unsafe behavior.",
+        "Use safer framework or language-supported controls.",
+        "Re-run the scan after applying the fix.",
+      ];
+
+  const validationSteps = [
+    "Review the reported file and affected line.",
+    "Confirm whether the issue is present in the current code.",
+    "Apply the fix and verify the risky behavior is removed.",
+    "Re-run the scan to confirm the finding is resolved.",
+  ];
+
+  const reproduceSteps = report.stepsToReproduce.length
+    ? report.stepsToReproduce.slice(0, 4)
+    : [
+        `Open the reported file: ${affectedFile}.`,
+        `Navigate to the affected line: ${affectedLine}.`,
+        "Inspect the code path or value highlighted by the scanner.",
+        "Confirm whether the behavior can be triggered in a safe test environment.",
+      ];
+
+  const recommendedFix =
+    report.remediation[0] ||
+    "Fix the affected code path and re-run the scan to verify the finding is resolved.";
+
+  const checklist = [
+    "Apply the recommended code change",
+    "Validate the affected file and line",
+    "Check for similar issues elsewhere",
+    "Re-run the scan",
+  ];
 
   return (
-    <section className="finding-detail-report interactive-card min-w-0 max-w-full space-y-4 overflow-hidden p-4">
-      <ReportBlock title="Bug / Vulnerability Name">
-        <p className="break-words text-base font-semibold leading-snug">
-          {stripReportMarkdown(report.vulnerabilityName)}
+    <section className="finding-detail-report interactive-card min-w-0 max-w-full space-y-3 overflow-hidden p-4">
+      <div className="grid gap-3 lg:grid-cols-[240px_1fr]">
+        <div className="rounded-xl border border-border/70 bg-background p-4 shadow-sm">
+  <p className="text-sm font-bold text-foreground">Risk Score</p>
+
+  <div className="mt-3 flex items-end gap-2">
+    <span className="text-4xl font-extrabold leading-none text-red-600">
+      {riskScore}
+    </span>
+    <span className="pb-1 text-xl font-semibold text-muted-foreground">/ 10</span>
+  </div>
+
+  <Badge variant="destructive" className="mt-3 uppercase">
+    {finding.severity}
+  </Badge>
+
+  <div className="mt-5 border-t border-border/70 pt-4">
+    <p className="text-sm font-bold text-foreground">Affected Details</p>
+
+    <div className="mt-3 space-y-2 text-xs leading-5 text-muted-foreground">
+      <p>
+        <span className="font-semibold text-foreground">File:</span>{" "}
+        <code className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-foreground">
+          {affectedFile}
+        </code>
+      </p>
+
+      <p>
+        <span className="font-semibold text-foreground">Line:</span>{" "}
+        {affectedLine}
+      </p>
+
+      <p>
+        <span className="font-semibold text-foreground">Source:</span>{" "}
+        {source}
+      </p>
+
+      <p>
+        <span className="font-semibold text-foreground">Sink:</span>{" "}
+        {sink}
+      </p>
+
+      <p>
+        <span className="font-semibold text-foreground">Confidence:</span>{" "}
+        {confidence}
+      </p>
+    </div>
+  </div>
+</div>
+
+        <div className="rounded-xl border border-border/70 bg-background p-4 shadow-sm">
+          <p className="text-sm font-bold text-foreground">Summary of the Problem</p>
+          <div className="mt-3 space-y-2 text-sm leading-6 text-muted-foreground">
+            <ReportSummaryText text={report.summary} />
+          </div>
+        </div>
+      </div>
+
+      
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="rounded-xl border border-border/70 bg-background p-4 shadow-sm">
+          <p className="text-sm font-bold text-foreground">Issue</p>
+          <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+            {issueBullets.map((item, index) => (
+              <li key={index} className="flex gap-2">
+                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+
+          <pre className="mt-4 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/50 p-3 text-xs leading-5 text-foreground">
+            <code>{snippet}</code>
+          </pre>
+        </div>
+
+        <div className="rounded-xl border border-border/70 bg-background p-4 shadow-sm">
+          <p className="text-sm font-bold text-foreground">Fix</p>
+          <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+            {fixBullets.map((item, index) => (
+              <li key={index} className="flex gap-2">
+                <span className="mt-0.5 text-green-600">✓</span>
+                <span><ReportRichText text={item} /></span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="rounded-xl border border-border/70 bg-background p-4 shadow-sm">
+          <p className="text-sm font-bold text-foreground">How to Validate</p>
+          <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+            {validationSteps.map((item, index) => (
+              <li key={index} className="flex gap-2">
+                <span className="mt-0.5 text-green-600">✓</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="rounded-xl border border-border/70 bg-background p-4 shadow-sm">
+          <p className="text-sm font-bold text-foreground">Steps to Reproduce</p>
+          <ol className="mt-3 space-y-2 text-sm text-muted-foreground">
+            {reproduceSteps.map((item, index) => (
+              <li key={index} className="flex gap-2">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-red-500 text-[10px] font-bold text-red-600">
+                  {index + 1}
+                </span>
+                <span><ReportRichText text={item} /></span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border/70 bg-background p-4 shadow-sm">
+        <p className="text-sm font-bold text-foreground">Recommended Fix</p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          <ReportRichText text={recommendedFix} />
         </p>
-      </ReportBlock>
-
-      <ReportBlock title="Summary">
-        <ReportSummaryText text={report.summary} />
-      </ReportBlock>
-
-      {report.stepsToReproduce.length > 0 && (
-        <ReportBlock title="Steps to Reproduce">
-          <ReportPlainList items={report.stepsToReproduce} />
-        </ReportBlock>
-      )}
-
-      <ReportBlock title="Impact">
-        <ReportRichText text={report.impact} />
-      </ReportBlock>
-
-      <ReportBlock title="Remediation">
-        <ReportPlainList items={report.remediation} />
-      </ReportBlock>
+        <div className="mt-4 grid gap-2 md:grid-cols-2">
+          {checklist.map((item, index) => (
+            <div key={index} className="flex items-start gap-2 text-sm text-muted-foreground">
+              <span className="mt-0.5 text-green-600">✓</span>
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }

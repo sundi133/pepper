@@ -230,16 +230,20 @@ function ReportSummaryText({ text }: { text: string }) {
           ),
         );
         if (labelMatch) {
-          return (
-            <p
-              key={i}
-              className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground"
-            >
-              <span className="font-bold text-foreground">{labelMatch[1]}:</span>{" "}
-              <InlineBackticks text={labelMatch[2].trim()} />
-            </p>
-          );
-        }
+  return (
+    <div
+      key={i}
+      className="space-y-1 break-words text-sm leading-6"
+    >
+      <p className="font-bold text-foreground">
+        {labelMatch[1]}:
+      </p>
+      <p className="whitespace-pre-wrap text-muted-foreground">
+        <InlineBackticks text={labelMatch[2].trim()} />
+      </p>
+    </div>
+  );
+}
         return (
           <p
             key={i}
@@ -1135,72 +1139,80 @@ export function FindingDetailInline({
   return (
     <div className="finding-detail-inline min-w-0 w-full max-w-full overflow-hidden rounded-xl border bg-card shadow-sm">
       <div className="min-w-0 border-b px-4 py-4 sm:px-5">
-        <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <SeverityBadge severity={finding.severity} />
-              <Badge variant="outline" className="text-xs">
-                {SCANNER_LABELS[
-                  finding.scanner as keyof typeof SCANNER_LABELS
-                ] || finding.scanner}
-              </Badge>
-              {finding.ruleId && (
-                <code className="max-w-full break-all rounded bg-muted px-1.5 py-0.5 text-xs">
-                  {finding.ruleId}
-                </code>
-              )}
-              {finding.cweId && (
-                <a
-                  href={getCweUrl(finding.cweId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                >
-                  {finding.cweId}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
-              {finding.cveId && (
-                <a
-                  href={getCveUrl(finding.cveId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                >
-                  {finding.cveId}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
-            </div>
-            <h3 className="break-words text-lg font-semibold leading-tight">
-              {finding.title}
-            </h3>
-            <FindingLocationRow finding={finding} sourceContext={sourceContext} />
-          </div>
-          <div className="flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2">
-            <FindingActionButtons finding={finding} sourceContext={sourceContext} />
-            <Select
-              value={finding.status || "OPEN"}
-              onValueChange={handleStatusChange}
-            >
-              <SelectTrigger className="h-8 w-[160px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {FINDING_STATUSES.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    <span
-                      className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${s.color}`}
-                    >
-                      {s.label}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+  <div className="min-w-0 space-y-3">
+    <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <SeverityBadge severity={finding.severity} />
+
+        <Badge variant="outline" className="text-xs">
+          {SCANNER_LABELS[
+            finding.scanner as keyof typeof SCANNER_LABELS
+          ] || finding.scanner}
+        </Badge>
+
+        {finding.ruleId && (
+          <code className="max-w-full break-all rounded bg-muted px-1.5 py-0.5 text-xs">
+            {finding.ruleId}
+          </code>
+        )}
+
+        {finding.cweId && (
+          <a
+            href={getCweUrl(finding.cweId)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+          >
+            {finding.cweId}
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+
+        {finding.cveId && (
+          <a
+            href={getCveUrl(finding.cveId)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+          >
+            {finding.cveId}
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
       </div>
+
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <FindingActionButtons finding={finding} sourceContext={sourceContext} />
+
+        <Select
+          value={finding.status || "OPEN"}
+          onValueChange={handleStatusChange}
+        >
+          <SelectTrigger className="h-8 w-[160px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FINDING_STATUSES.map((s) => (
+              <SelectItem key={s.value} value={s.value}>
+                <span
+                  className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${s.color}`}
+                >
+                  {s.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+
+    <h3 className="max-w-[75%] break-words text-lg font-semibold leading-tight">
+      {finding.title}
+    </h3>
+
+    <FindingLocationRow finding={finding} sourceContext={sourceContext} />
+  </div>
+</div>
 
       <div className="min-w-0 w-full max-w-full space-y-5 overflow-hidden p-4 sm:p-5">
         <FindingReportSections finding={finding} />

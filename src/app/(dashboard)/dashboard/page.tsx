@@ -244,10 +244,10 @@ export default function DashboardPage() {
                 className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-2 border-primary/40 bg-primary/10 shadow-inner shadow-primary/10 sm:h-24 sm:w-24"
                 aria-hidden
               >
-                <Shield className="absolute h-8 w-8 text-primary/90 sm:h-10 sm:w-10" />
-                <span className="relative z-[1] pt-2 text-xl font-bold tabular-nums text-foreground sm:pt-3 sm:text-2xl">
-                  {score}
-                </span>
+                <Shield className="absolute inset-0 m-auto h-9 w-9 text-primary/90 sm:h-11 sm:w-11" />
+              <span className="absolute inset-0 z-[1] flex items-center justify-center text-lg font-bold tabular-nums text-foreground sm:text-xl">
+                {score}
+                  </span>
               </div>
               <div className="text-center sm:min-w-0 sm:text-left">
                 <p

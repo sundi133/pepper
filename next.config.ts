@@ -45,6 +45,9 @@ const nextConfig: NextConfig = {
     ];
   },
   poweredByHeader: false,
+  experimental: {
+    middlewareClientMaxBodySize: "150mb",
+  },
 };
 
 export default nextConfig;

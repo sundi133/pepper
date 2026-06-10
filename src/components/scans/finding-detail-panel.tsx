@@ -30,7 +30,7 @@ import {
   resolveGithubRepoForFixPr,
 } from "@/lib/open-fix-pr-client";
 import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
-import { ExternalLink, Sparkles, GitPullRequest, Copy } from "lucide-react";
+import { ExternalLink, Sparkles, GitPullRequest, Copy, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -598,10 +598,161 @@ function FindingActionButtons({
       {sourceContext?.scanId ? (
         <>
           <SuggestAiFixButton finding={finding} scanId={sourceContext.scanId} />
+          <VerifyFpButton finding={finding} onStatusChange={undefined} />
           <OpenFixPrButton finding={finding} sourceContext={sourceContext} />
         </>
       ) : null}
     </div>
+  );
+}
+
+type VerifyFpResponse = {
+  isFalsePositive: boolean;
+  confidence: number;
+  reasoning: string;
+  recommendation: "MARK_FP" | "KEEP_OPEN" | "NEEDS_REVIEW";
+  applied: boolean;
+};
+
+function VerifyFpButton({
+  finding,
+  onStatusChange,
+}: {
+  finding: Finding;
+  onStatusChange: (() => void) | undefined;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [marking, setMarking] = useState(false);
+  const [data, setData] = useState<VerifyFpResponse | null>(null);
+
+  const alreadyFp = finding.status === "FALSE_POSITIVE";
+
+  async function run() {
+    setOpen(true);
+    setLoading(true);
+    setData(null);
+    try {
+      const res = await fetch(`/api/findings/${finding.id}/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoApply: false }),
+      });
+      const j = (await res.json()) as VerifyFpResponse & { error?: string };
+      if (!res.ok) throw new Error(j.error || "Failed to verify finding");
+      setData(j);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Verification failed");
+      setOpen(false);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function markAsFp() {
+    setMarking(true);
+    try {
+      const res = await fetch(`/api/findings/${finding.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "FALSE_POSITIVE",
+          statusNote: `AI verification (${Math.round((data?.confidence ?? 0) * 100)}% confidence): ${data?.reasoning ?? ""}`,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to update status");
+      toast.success("Marked as false positive");
+      setOpen(false);
+      onStatusChange?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to mark as FP");
+    } finally {
+      setMarking(false);
+    }
+  }
+
+  const verdictColor = data
+    ? data.isFalsePositive
+      ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+      : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+    : "";
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="h-8 gap-1.5 text-xs font-medium"
+        disabled={loading || alreadyFp}
+        onClick={() => void run()}
+      >
+        <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        {loading ? "Verifying..." : alreadyFp ? "Already FP" : "Verify FP"}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[85vh] max-w-lg gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <DialogHeader className="border-b border-border/60 px-6 py-4">
+            <DialogTitle className="text-left text-base">
+              False Positive Verification
+            </DialogTitle>
+            <p className="text-left text-xs text-muted-foreground">
+              AI-powered analysis of whether this finding is a true or false
+              positive.
+            </p>
+          </DialogHeader>
+          <div className="max-h-[calc(85vh-8rem)] overflow-y-auto px-6 py-4 space-y-4">
+            {loading ? (
+              <p className="text-sm text-muted-foreground">
+                Analyzing finding with AI...
+              </p>
+            ) : data ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <Badge className={verdictColor}>
+                    {data.isFalsePositive ? "Likely False Positive" : "Likely True Positive"}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {Math.round(data.confidence * 100)}% confidence
+                  </span>
+                </div>
+
+                <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+                  <p className="text-sm leading-relaxed text-foreground">
+                    {data.reasoning}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>Recommendation:</span>
+                  <Badge variant="outline" className="text-xs">
+                    {data.recommendation === "MARK_FP"
+                      ? "Mark as False Positive"
+                      : data.recommendation === "KEEP_OPEN"
+                        ? "Keep Open"
+                        : "Needs Manual Review"}
+                  </Badge>
+                </div>
+
+                {data.isFalsePositive && data.confidence >= 0.8 && (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="w-full"
+                    disabled={marking}
+                    onClick={() => void markAsFp()}
+                  >
+                    {marking
+                      ? "Marking..."
+                      : "Mark as False Positive"}
+                  </Button>
+                )}
+              </>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

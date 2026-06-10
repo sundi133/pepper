@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { useScanPolling, useFindings } from "@/hooks/use-scan-polling";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +32,8 @@ import {
   Pause,
   Play,
   Check,
+  Clock,
+  Timer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { mutate } from "swr";
@@ -203,6 +205,21 @@ export default function ScanDetailPage() {
   const isStopped = scan.status === "STOPPED";
   const isActive =
     scan.status === "QUEUED" || scan.status === "RUNNING" || isPaused;
+
+  // Live elapsed time + ETA ticker (updates every second while active)
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!isActive) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isActive]);
+
+  const etaInfo = useMemo(
+    () =>
+      computeEta(scan.startedAt, scan.scannerProgress, scan.status, now),
+    [scan.startedAt, scan.scannerProgress, scan.status, now],
+  );
+
   const hasReportableFindings =
     scan.status === "COMPLETED" || scan.status === "STOPPED";
   const totalFindings =
@@ -489,14 +506,30 @@ export default function ScanDetailPage() {
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span>{isPaused ? "Scan paused" : "Scanning..."}</span>
-                <span className="text-muted-foreground">{scan.status}</span>
+                <span className="text-muted-foreground font-medium">
+                  {etaInfo.etaText}
+                </span>
               </div>
               <Progress
                 value={computeScanProgress(scan.scannerProgress, scan.status)}
               />
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                {etaInfo.elapsedText && (
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="h-3 w-3" aria-hidden />
+                    {etaInfo.elapsedText}
+                  </span>
+                )}
+                {etaInfo.fileProgressText && (
+                  <span className="inline-flex items-center gap-1">
+                    <Timer className="h-3 w-3" aria-hidden />
+                    {etaInfo.fileProgressText}
+                  </span>
+                )}
+              </div>
               {scan.scannerProgress &&
                 Object.keys(scan.scannerProgress).length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
+                  <div className="flex flex-wrap gap-2 mt-1">
                     {Object.entries(
                       scan.scannerProgress as Record<
                         string,
@@ -525,7 +558,12 @@ export default function ScanDetailPage() {
                             <span className="opacity-90">Done</span>
                           </>
                         ) : (
-                          <span>{name}: Running</span>
+                          <span>
+                            {name}: Running
+                            {info.filesTotal
+                              ? ` (${info.filesCompleted ?? 0}/${info.filesTotal})`
+                              : ""}
+                          </span>
                         )}
                       </Badge>
                     ))}
@@ -779,6 +817,84 @@ function computeScanProgress(
 
   // Fallback: count done scanners
   return Math.min(95, Math.round(10 + (done / total) * 85));
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m < 60) return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
+}
+
+function computeEta(
+  startedAt: string | null | undefined,
+  scannerProgress:
+    | Record<
+        string,
+        {
+          status: string;
+          filesCompleted?: number;
+          filesTotal?: number;
+        }
+      >
+    | null
+    | undefined,
+  status: string,
+  nowMs: number,
+): {
+  elapsedText: string | null;
+  etaText: string;
+  fileProgressText: string | null;
+} {
+  // Elapsed time
+  const started = startedAt ? new Date(startedAt).getTime() : 0;
+  const elapsedSec = started > 0 ? Math.max(0, Math.floor((nowMs - started) / 1000)) : 0;
+  const elapsedText = elapsedSec > 0 ? `Elapsed: ${formatDuration(elapsedSec)}` : null;
+
+  // Aggregate file progress across all scanners
+  let totalFiles = 0;
+  let completedFiles = 0;
+  if (scannerProgress) {
+    for (const s of Object.values(scannerProgress)) {
+      if (s.filesTotal && s.filesTotal > 0) {
+        totalFiles += s.filesTotal;
+        completedFiles += s.status === "DONE" ? s.filesTotal : (s.filesCompleted ?? 0);
+      }
+    }
+  }
+  const fileProgressText =
+    totalFiles > 0 ? `${completedFiles} / ${totalFiles} files scanned` : null;
+
+  // ETA calculation
+  if (status === "QUEUED") {
+    return { elapsedText, etaText: "Waiting in queue...", fileProgressText };
+  }
+  if (status === "PAUSED") {
+    return { elapsedText, etaText: "PAUSED", fileProgressText };
+  }
+
+  const progress = computeScanProgress(scannerProgress, status);
+
+  // Don't show ETA until we have enough data (>10% progress and >15s elapsed)
+  if (progress <= 10 || elapsedSec < 15) {
+    return { elapsedText, etaText: "Estimating...", fileProgressText };
+  }
+
+  const fraction = progress / 100;
+  const remainingSec = Math.round((elapsedSec / fraction) * (1 - fraction));
+
+  if (remainingSec < 60) {
+    return { elapsedText, etaText: "< 1 min remaining", fileProgressText };
+  }
+
+  return {
+    elapsedText,
+    etaText: `~${formatDuration(remainingSec)} remaining`,
+    fileProgressText,
+  };
 }
 
 function formatScanMetadataLine(scan: {

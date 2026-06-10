@@ -27,8 +27,14 @@ import {
   resolveGithubRepoForFixPr,
 } from "@/lib/open-fix-pr-client";
 import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
-import { FileCode, ChevronDown, ChevronRight, GitPullRequest } from "lucide-react";
+import { FileCode, ChevronDown, ChevronRight, GitPullRequest, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -101,6 +107,23 @@ export function FindingsTable({
   const [bulkStatus, setBulkStatus] = useState<string>("");
   const [bulkLoading, setBulkLoading] = useState(false);
 
+  // Batch FP verification state
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
+  const [verifyResults, setVerifyResults] = useState<{
+    total: number;
+    falsePositives: number;
+    truePositives: number;
+    appliedCount: number;
+    results: Array<{
+      findingId: string;
+      isFalsePositive: boolean;
+      confidence: number;
+      reasoning: string;
+      recommendation: string;
+    }>;
+  } | null>(null);
+
   const allSelected = findings.length > 0 && selected.size === findings.length;
   const someSelected = selected.size > 0 && selected.size < findings.length;
 
@@ -151,6 +174,61 @@ export function FindingsTable({
     }
   }
 
+  async function handleBatchVerify() {
+    if (selected.size === 0) return;
+    setVerifyLoading(true);
+    setVerifyDialogOpen(true);
+    setVerifyResults(null);
+    try {
+      const res = await fetch("/api/findings/verify-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          findingIds: Array.from(selected).slice(0, 50),
+          autoApply: false,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json();
+        throw new Error(j.error || "Verification failed");
+      }
+      setVerifyResults(await res.json());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Batch verification failed");
+      setVerifyDialogOpen(false);
+    } finally {
+      setVerifyLoading(false);
+    }
+  }
+
+  async function handleApplyVerifiedFps() {
+    if (!verifyResults) return;
+    const fpIds = verifyResults.results
+      .filter((r) => r.isFalsePositive && r.confidence >= 0.85)
+      .map((r) => r.findingId);
+    if (fpIds.length === 0) return;
+
+    try {
+      const res = await fetch("/api/findings/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          findingIds: fpIds,
+          status: "FALSE_POSITIVE",
+          statusNote: "AI batch verification — marked as false positive",
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to apply");
+      const result = await res.json();
+      toast.success(`Marked ${result.updated} findings as false positive`);
+      setVerifyDialogOpen(false);
+      setSelected(new Set());
+      onBulkStatusChange?.();
+    } catch {
+      toast.error("Failed to apply false positive status");
+    }
+  }
+
   if (findings.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -187,6 +265,17 @@ export function FindingsTable({
           >
             {bulkLoading ? "Updating..." : "Apply"}
           </Button>
+          <div className="mx-1 h-5 w-px bg-border" />
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-8 gap-1.5 text-xs"
+            onClick={handleBatchVerify}
+            disabled={verifyLoading}
+          >
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {verifyLoading ? "Verifying..." : "Verify FP"}
+          </Button>
           <Button
             size="sm"
             variant="ghost"
@@ -197,6 +286,92 @@ export function FindingsTable({
           </Button>
         </div>
       )}
+
+      {/* Batch FP Verification Results Dialog */}
+      <Dialog open={verifyDialogOpen} onOpenChange={setVerifyDialogOpen}>
+        <DialogContent className="max-h-[85vh] max-w-lg gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <DialogHeader className="border-b border-border/60 px-6 py-4">
+            <DialogTitle className="text-left text-base">
+              Batch FP Verification Results
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[calc(85vh-8rem)] overflow-y-auto px-6 py-4 space-y-4">
+            {verifyLoading ? (
+              <p className="text-sm text-muted-foreground">
+                Analyzing {selected.size} findings with AI...
+              </p>
+            ) : verifyResults ? (
+              <>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-2xl font-bold">{verifyResults.total}</p>
+                    <p className="text-xs text-muted-foreground">Analyzed</p>
+                  </div>
+                  <div className="rounded-lg border bg-green-50 dark:bg-green-900/20 p-3">
+                    <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                      {verifyResults.falsePositives}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Likely FP</p>
+                  </div>
+                  <div className="rounded-lg border bg-red-50 dark:bg-red-900/20 p-3">
+                    <p className="text-2xl font-bold text-red-700 dark:text-red-400">
+                      {verifyResults.truePositives}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Likely TP</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {verifyResults.results.map((r) => {
+                    const f = findings.find((ff) => ff.id === r.findingId);
+                    return (
+                      <div
+                        key={r.findingId}
+                        className="flex items-start gap-2 rounded border p-2 text-xs"
+                      >
+                        <Badge
+                          className={
+                            r.isFalsePositive
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 shrink-0"
+                              : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 shrink-0"
+                          }
+                        >
+                          {r.isFalsePositive ? "FP" : "TP"}
+                        </Badge>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate">
+                            {f?.title ?? r.findingId}
+                          </p>
+                          <p className="text-muted-foreground line-clamp-2">
+                            {r.reasoning}
+                          </p>
+                        </div>
+                        <span className="text-muted-foreground shrink-0">
+                          {Math.round(r.confidence * 100)}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {verifyResults.falsePositives > 0 && (
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={handleApplyVerifiedFps}
+                  >
+                    Mark {
+                      verifyResults.results.filter(
+                        (r) => r.isFalsePositive && r.confidence >= 0.85,
+                      ).length
+                    } high-confidence findings as False Positive
+                  </Button>
+                )}
+              </>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Table className="table-fixed w-full">
         <TableHeader>

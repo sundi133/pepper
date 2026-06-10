@@ -285,9 +285,22 @@ export async function POST(req: NextRequest) {
         : undefined,
     };
 
-    const job = await scanQueue.add("scan", jobData, {
-      jobId: scan.id,
-    });
+    let job;
+    try {
+      job = await scanQueue.add("scan", jobData, {
+        jobId: scan.id,
+      });
+    } catch (queueErr) {
+      console.error("Failed to enqueue scan job:", queueErr);
+      await prisma.scan.update({
+        where: { id: scan.id },
+        data: { status: "FAILED" },
+      });
+      return NextResponse.json(
+        { error: "Failed to enqueue scan — queue unavailable" },
+        { status: 503 },
+      );
+    }
 
     await prisma.scan.update({
       where: { id: scan.id },

@@ -5,10 +5,18 @@ const globalForRedis = globalThis as unknown as {
 };
 
 function createRedis(): IORedis {
-  return new IORedis(process.env.REDIS_URL || "redis://localhost:6379", {
+  const client = new IORedis(process.env.REDIS_URL || "redis://localhost:6379", {
     maxRetriesPerRequest: null,
     lazyConnect: true,
+    connectTimeout: 15000,
+    retryStrategy(times) {
+      return Math.min(times * 500, 5000);
+    },
   });
+  client.on("error", (err) => {
+    console.error("[redis] connection error:", err.message);
+  });
+  return client;
 }
 
 function parseRedisConnection(urlString: string) {
@@ -19,8 +27,12 @@ function parseRedisConnection(urlString: string) {
     port: parseInt(url.port || "6379", 10),
     username: decodeURIComponent(url.username || "default"),
     password: url.password ? decodeURIComponent(url.password) : undefined,
-    tls: isTls ? {} : undefined,
+    tls: isTls ? { rejectUnauthorized: false } : undefined,
     maxRetriesPerRequest: null as null,
+    connectTimeout: 15000,
+    retryStrategy(times: number) {
+      return Math.min(times * 500, 5000);
+    },
   };
 }
 

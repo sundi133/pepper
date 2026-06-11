@@ -700,6 +700,22 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
     log.info({ gateResult }, "Scan completed successfully");
 
+    // 9b. Auto FP verification — re-check findings with LLM to flag likely false positives
+    try {
+      const { autoVerifyFalsePositives } = await import(
+        "@/lib/auto-fp-verify"
+      );
+      const fpResult = await autoVerifyFalsePositives(scanId, orgSettings, log);
+      if (fpResult.marked > 0) {
+        log.info(
+          { marked: fpResult.marked, total: fpResult.analyzed },
+          "Auto FP verification marked findings as false positives",
+        );
+      }
+    } catch (fpErr) {
+      log.warn({ fpErr }, "Auto FP verification failed (non-blocking)");
+    }
+
     try {
       const { notifyScanLifecycleFromWorker } = await import(
         "@/lib/scan-notifications"

@@ -454,6 +454,19 @@ export default function ScanDetailPage() {
                 <FileText className="mr-2 h-4 w-4" />
                 HTML Report
               </Button>
+              <Button
+                variant="outline"
+                className={scanToolbarOutlineClass}
+                onClick={() =>
+                  window.open(
+                    `/api/scans/${scanId}/findings/export?format=pdf`,
+                    "_blank",
+                  )
+                }
+              >
+                <Download className="mr-2 h-4 w-4" />
+                PDF Report
+              </Button>
               {scan.status === "COMPLETED" && (
                 <Button
                   variant="default"

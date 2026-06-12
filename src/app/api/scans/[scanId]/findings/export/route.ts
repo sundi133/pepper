@@ -6,6 +6,7 @@ import {
   findingHasStoredReport,
 } from "@/lib/finding-report";
 import { SCANNER_LABELS } from "@/lib/constants";
+import { buildPdfReport } from "@/lib/pdf-report";
 
 type ReportFinding = {
   id: string;
@@ -69,6 +70,13 @@ export async function GET(
       gateResult: true,
       createdAt: true,
       completedAt: true,
+      filesScanned: true,
+      depsScanned: true,
+      criticalCount: true,
+      highCount: true,
+      mediumCount: true,
+      lowCount: true,
+      infoCount: true,
       project: { select: { name: true, repoUrl: true } },
     },
   });
@@ -107,6 +115,25 @@ export async function GET(
         "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
       },
     });
+  }
+
+  if (format === "pdf") {
+    try {
+      const pdfBuffer = await buildPdfReport(scan, findings);
+      return new NextResponse(new Uint8Array(pdfBuffer), {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `inline; filename="${projectSlug}-report-${timestamp}.pdf"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    } catch (e) {
+      console.error("PDF report generation failed:", e);
+      return NextResponse.json(
+        { error: "Failed to generate PDF report" },
+        { status: 500 },
+      );
+    }
   }
 
   const csvHeader = [

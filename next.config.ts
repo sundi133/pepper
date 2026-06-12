@@ -45,6 +45,7 @@ const nextConfig: NextConfig = {
     ];
   },
   poweredByHeader: false,
+  serverExternalPackages: ["pdfkit", "fontkit", "linebreak", "png-js"],
   experimental: {
     middlewareClientMaxBodySize: "150mb",
   },

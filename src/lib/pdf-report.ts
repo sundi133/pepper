@@ -1,4 +1,3 @@
-import PDFDocument from "pdfkit";
 import { SCANNER_LABELS } from "./constants";
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -229,6 +228,10 @@ function riskLevel(criticalCount: number, highCount: number): { label: string; c
 
 export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise<Buffer> {
   return new Promise((resolve, reject) => {
+    try {
+    // Dynamic require to avoid webpack bundling pdfkit's fs-dependent font loading
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const PDFDocument: new (options?: PDFKit.PDFDocumentOptions) => PDFKit.PDFDocument = require("pdfkit");
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({
       size: "A4",
@@ -245,7 +248,8 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    const pageW = doc.page.width;
+    // A4 = 595.28 x 841.89
+    const pageW = 595.28;
     const marginL = 50;
     const marginR = 50;
     const contentW = pageW - marginL - marginR;
@@ -568,6 +572,9 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
       );
 
     doc.end();
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 

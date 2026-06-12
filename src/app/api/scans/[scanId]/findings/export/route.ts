@@ -128,9 +128,11 @@ export async function GET(
         },
       });
     } catch (e) {
-      console.error("PDF report generation failed:", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      const stack = e instanceof Error ? e.stack : "";
+      console.error("PDF report generation failed:", msg, stack);
       return NextResponse.json(
-        { error: "Failed to generate PDF report" },
+        { error: "Failed to generate PDF report", detail: msg },
         { status: 500 },
       );
     }

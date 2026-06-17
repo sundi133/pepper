@@ -46,7 +46,9 @@ const nextConfig: NextConfig = {
   },
   poweredByHeader: false,
   serverExternalPackages: ["pdfkit", "fontkit", "linebreak", "png-js"],
-  proxyClientMaxBodySize: "150mb",
+  experimental: {
+    proxyClientMaxBodySize: "150mb",
+  },
 };
 
 export default nextConfig;

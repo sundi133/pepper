@@ -353,23 +353,26 @@ export default function ScanDetailPage() {
     <div className="min-w-0 max-w-full space-y-6 overflow-hidden">
       <PageBreadcrumb items={breadcrumbItems} />
 
-      {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="space-y-1 min-w-0">
-          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-            <h1 className="text-xl font-bold break-words sm:text-2xl">
-              {scan.project?.name || "Scan"} - {scan.scanType}
-            </h1>
-            <ScanStatusBadge status={scan.status} />
-            {scan.status === "COMPLETED" && (
-              <GateResultBadge result={scan.gateResult} />
-            )}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {formatScanMetadataLine(scan)}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2 shrink-0">
+     {/* Header */}
+<div className="space-y-3">
+  <div className="space-y-2 min-w-0">
+    <h1 className="max-w-[75%] break-words text-xl font-bold leading-tight sm:text-2xl">
+      {scan.project?.name || "Scan"} - {scan.scanType}
+    </h1>
+
+    <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+      <ScanStatusBadge status={scan.status} />
+      {scan.status === "COMPLETED" && (
+        <GateResultBadge result={scan.gateResult} />
+      )}
+    </div>
+
+    <p className="text-sm text-muted-foreground">
+      {formatScanMetadataLine(scan)}
+    </p>
+  </div>
+
+  <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="destructive"
             className="font-semibold shadow-sm"

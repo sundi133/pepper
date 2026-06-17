@@ -232,9 +232,22 @@ function buildHtmlReport({
     h2 { color: #374151; margin: 1.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb; font-size: 1.25rem; }
     .meta { color: #6b7280; font-size: 0.875rem; margin-bottom: 0.35rem; }
     .meta a { color: #4f46e5; word-break: break-all; }
-    .vuln-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem; margin: 0.75rem 0; }
-    .vuln-header { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
-    .vuln-header strong { flex: 1 1 200px; min-width: 0; }
+    
+    /* Checkbox styling */
+    .vuln-checkbox { width: 18px; height: 18px; accent-color: #6366f1; cursor: pointer; }
+    
+    /* Collapsible row styling */
+    .vuln-row { border: 1px solid #e5e7eb; border-radius: 0; margin: 0; border-bottom: none; }
+    .vuln-row:first-of-type { border-radius: 8px 8px 0 0; }
+    .vuln-row:last-of-type { border-radius: 0 0 8px 8px; border-bottom: 1px solid #e5e7eb; }
+    .vuln-header-row { display: flex; align-items: center; gap: 0.75rem; padding: 1rem; cursor: pointer; background: #f9fafb; transition: background 0.15s; }
+    .vuln-header-row:hover { background: #f3f4f6; }
+    .vuln-header-content { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; flex: 1; min-width: 0; }
+    .vuln-header-content strong { flex: 1 1 200px; min-width: 0; font-size: 0.95rem; }
+    
+    .vuln-content { display: none; padding: 1rem; border-top: 1px solid #e5e7eb; background: #fafbfc; }
+    .vuln-row.expanded .vuln-content { display: block; }
+    
     .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
     .badge-sev-critical { background: #fee2e2; color: #dc2626; }
     .badge-sev-high { background: #ffedd5; color: #ea580c; }
@@ -242,6 +255,7 @@ function buildHtmlReport({
     .badge-sev-low { background: #d1fae5; color: #059669; }
     .badge-sev-info { background: #dbeafe; color: #2563eb; }
     .badge-status { background: #e5e7eb; color: #374151; text-transform: none; font-weight: 500; }
+    
     .loc { color: #6b7280; font-size: 0.875rem; margin-bottom: 0.75rem; }
     .field { margin-bottom: 0.75rem; }
     .field .label { font-weight: 700; color: #1a1a2e; display: block; margin-bottom: 0.25rem; }
@@ -255,7 +269,7 @@ function buildHtmlReport({
     ol.remed li { margin-top: 0.35rem; }
     .empty { text-align: center; color: #6b7280; padding: 2rem; }
     .footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 0.875rem; }
-    @media print { body { background: #fff; padding: 0; } .container { box-shadow: none; } }
+    @media print { body { background: #fff; padding: 0; } .container { box-shadow: none; } .vuln-content { display: block; } }
   </style>
 </head>
 <body>
@@ -281,6 +295,15 @@ function buildHtmlReport({
 
     <div class="footer">Generated ${escapeHtml(formatDate(generatedAt))} · Pepper SAST — reproduce only in authorized environments.</div>
   </div>
+  
+  <script>
+    document.querySelectorAll('.vuln-row').forEach(row => {
+      row.querySelector('.vuln-header-row').addEventListener('click', function(e) {
+        if (e.target.closest('.vuln-checkbox')) return;
+        row.classList.toggle('expanded');
+      });
+    });
+  </script>
 </body>
 </html>`;
 }
@@ -322,23 +345,28 @@ function renderVulnCard(finding: ReportFinding): string {
   const statusLabel = (finding.status || "OPEN").replace(/_/g, " ").toLowerCase();
   const scanner = scannerLabel(finding.scanner);
 
-  return `<div class="vuln-card">
-    <div class="vuln-header">
-      <span class="badge ${severityBadgeClass(finding.severity)}">${escapeHtml(finding.severity)}</span>
-      <strong>${escapeHtml(report.vulnerabilityName || finding.title)}</strong>
-      <span class="badge badge-status">${escapeHtml(statusLabel)}</span>
+  return `<div class="vuln-row">
+    <div class="vuln-header-row">
+      <input type="checkbox" class="vuln-checkbox" />
+      <div class="vuln-header-content">
+        <span class="badge ${severityBadgeClass(finding.severity)}">${escapeHtml(finding.severity)}</span>
+        <strong>${escapeHtml(report.vulnerabilityName || finding.title)}</strong>
+        <span class="badge badge-status">${escapeHtml(statusLabel)}</span>
+      </div>
     </div>
-    <p class="loc">${location ? `${escapeHtml(location)}` : "Location not recorded"} · ${escapeHtml(scanner)}</p>
-    <div class="field">
-      <span class="label">Summary</span>
-      <div class="body">${formatSummaryHtml(report.summary || "N/A")}</div>
+    <div class="vuln-content">
+      <p class="loc">${location ? `${escapeHtml(location)}` : "Location not recorded"} · ${escapeHtml(scanner)}</p>
+      <div class="field">
+        <span class="label">Summary</span>
+        <div class="body">${formatSummaryHtml(report.summary || "N/A")}</div>
+      </div>
+      ${renderReproductionFields(report.stepsToReproduce)}
+      <div class="field">
+        <span class="label">Impact</span>
+        <div class="body">${escapeHtml(report.impact || "N/A")}</div>
+      </div>
+      ${renderRemediationFields(report.remediation)}
     </div>
-    ${renderReproductionFields(report.stepsToReproduce)}
-    <div class="field">
-      <span class="label">Impact</span>
-      <div class="body">${escapeHtml(report.impact || "N/A")}</div>
-    </div>
-    ${renderRemediationFields(report.remediation)}
   </div>`;
 }
 

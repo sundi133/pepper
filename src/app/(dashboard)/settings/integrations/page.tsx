@@ -27,6 +27,7 @@ export default function IntegrationsPage() {
   const [githubConn, setGithubConn] = useState<{
     connected: boolean;
     githubLogin: string | null;
+    oauthConfigured: boolean;
   } | null>(null);
   const [githubDisconnecting, setGithubDisconnecting] = useState(false);
 
@@ -166,10 +167,12 @@ export default function IntegrationsPage() {
         const data = (await res.json()) as {
           connected?: boolean;
           githubLogin?: string | null;
+          oauthConfigured?: boolean;
         };
         setGithubConn({
           connected: Boolean(data.connected),
           githubLogin: data.githubLogin ?? null,
+          oauthConfigured: Boolean(data.oauthConfigured),
         });
       } catch {
         /* ignore */
@@ -255,7 +258,11 @@ export default function IntegrationsPage() {
       const j = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(j.error || "Failed to disconnect");
       toast.success("GitHub disconnected");
-      setGithubConn({ connected: false, githubLogin: null });
+      setGithubConn((prev) => ({
+        connected: false,
+        githubLogin: null,
+        oauthConfigured: prev?.oauthConfigured ?? false,
+      }));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to disconnect GitHub");
     } finally {
@@ -297,7 +304,12 @@ export default function IntegrationsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {githubConn?.connected ? (
+          {githubConn && !githubConn.oauthConfigured ? (
+            <p className="text-sm text-destructive">
+              GitHub OAuth is not configured. Set GITHUB_OAUTH_CLIENT_ID and
+              GITHUB_OAUTH_CLIENT_SECRET, or GITHUB_ID and GITHUB_SECRET.
+            </p>
+          ) : githubConn?.connected ? (
             <p className="text-sm">
               Connected as{" "}
               <strong>{githubConn.githubLogin ?? "GitHub user"}</strong>
@@ -323,11 +335,16 @@ export default function IntegrationsPage() {
               >
                 {githubDisconnecting ? "Disconnecting…" : "Disconnect GitHub"}
               </Button>
+            ) : githubConn && !githubConn.oauthConfigured ? (
+              <Button disabled>Connect GitHub</Button>
             ) : (
               <Button asChild>
-                <a href="/api/integrations/github/connect?returnTo=%2Frepositories">
+                <Link
+                  href="/api/integrations/github/connect?returnTo=%2Frepositories"
+                  prefetch={false}
+                >
                   Connect GitHub
-                </a>
+                </Link>
               </Button>
             )}
           </div>
@@ -590,9 +607,9 @@ export default function IntegrationsPage() {
             </p>
             <p>
               5. Import the repo on{" "}
-              <a href="/scans/new" className="text-primary hover:underline">
+              <Link href="/scans/new" className="text-primary hover:underline">
                 Repositories
-              </a>{" "}
+              </Link>{" "}
               (Bitbucket tab) so <code>repoUrl</code> matches{" "}
               <code>workspace/repo-slug</code>
             </p>
@@ -777,9 +794,9 @@ export default function IntegrationsPage() {
             </p>
             <p>
               5. Import the repo on{" "}
-              <a href="/scans/new" className="text-primary hover:underline">
+              <Link href="/scans/new" className="text-primary hover:underline">
                 Repositories
-              </a>{" "}
+              </Link>{" "}
               (Azure DevOps tab) so Pepper stores <code>azureRepoId</code> for
               webhook matching
             </p>

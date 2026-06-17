@@ -4,6 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -18,6 +25,8 @@ type ImportItem = {
   key: string;
   fullName: string;
   defaultBranch: string;
+  branches?: string[];
+  selectedBranch?: string;
   language?: string | null;
   private?: boolean;
   alreadyConnected?: boolean;
@@ -36,6 +45,7 @@ type ImportRepoDialogProps = {
   items: ImportItem[];
   selectedKeys: Set<string>;
   onToggle: (key: string, checked: boolean, disabled?: boolean) => void;
+  onBranchChange?: (key: string, branch: string) => void;
   onConnect: () => void;
   onRefresh: () => void;
   emptyMessage: string;
@@ -55,6 +65,7 @@ export function ImportRepoDialog({
   items,
   selectedKeys,
   onToggle,
+  onBranchChange,
   onConnect,
   onRefresh,
   emptyMessage,
@@ -129,6 +140,30 @@ export function ImportRepoDialog({
                       {repo.private ? " · private" : ""}
                       {repo.subtitle ? ` · ${repo.subtitle}` : ""}
                     </p>
+                    {repo.branches && repo.branches.length > 0 && !repo.alreadyConnected ? (
+                      <div className="mt-3 flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          Branch
+                        </span>
+                        <Select
+                          value={repo.selectedBranch || repo.defaultBranch}
+                          onValueChange={(branch) =>
+                            onBranchChange?.(repo.key, branch)
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-full max-w-[260px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {repo.branches.map((branch) => (
+                              <SelectItem key={branch} value={branch}>
+                                {branch}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : null}
                   </div>
                 </li>
               ))}

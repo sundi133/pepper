@@ -114,6 +114,7 @@ export default function ScanDetailPage() {
   const [pausing, setPausing] = useState(false);
   const [resuming, setResuming] = useState(false);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
+  const [now, setNow] = useState(Date.now());
 
   const filters: Record<string, string> = {};
   if (severityFilter !== "all") filters.severity = severityFilter;
@@ -166,8 +167,28 @@ export default function ScanDetailPage() {
       toast.success("Pull request opened");
       window.open(outcome.pullRequestUrl, "_blank", "noopener,noreferrer");
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once after OAuth return
   }, [scanId, isLoading, scan, router]);
+
+  const isRunning = scan?.status === "RUNNING";
+  const isPaused = scan?.status === "PAUSED";
+  const isStopped = scan?.status === "STOPPED";
+  const isActive =
+    scan?.status === "QUEUED" || scan?.status === "RUNNING" || isPaused;
+
+  // Live elapsed time + ETA ticker (updates every second while active)
+  useEffect(() => {
+    if (!isActive) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isActive]);
+
+  const etaInfo = useMemo(
+    () =>
+      scan
+        ? computeEta(scan.startedAt, scan.scannerProgress, scan.status, now)
+        : null,
+    [scan, now],
+  );
 
   if (isLoading) {
     return (
@@ -199,26 +220,6 @@ export default function ScanDetailPage() {
       </div>
     );
   }
-
-  const isRunning = scan.status === "RUNNING";
-  const isPaused = scan.status === "PAUSED";
-  const isStopped = scan.status === "STOPPED";
-  const isActive =
-    scan.status === "QUEUED" || scan.status === "RUNNING" || isPaused;
-
-  // Live elapsed time + ETA ticker (updates every second while active)
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    if (!isActive) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [isActive]);
-
-  const etaInfo = useMemo(
-    () =>
-      computeEta(scan.startedAt, scan.scannerProgress, scan.status, now),
-    [scan.startedAt, scan.scannerProgress, scan.status, now],
-  );
 
   const hasReportableFindings =
     scan.status === "COMPLETED" || scan.status === "STOPPED";

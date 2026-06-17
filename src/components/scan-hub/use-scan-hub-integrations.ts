@@ -20,6 +20,7 @@ type GithubAvailableRepo = {
   id: number;
   fullName: string;
   defaultBranch: string;
+  branches: string[];
   language: string | null;
   private: boolean;
   alreadyConnected: boolean;
@@ -56,6 +57,9 @@ export function useScanHubIntegrations() {
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selectedBranches, setSelectedBranches] = useState<Record<number, string>>(
+    {},
+  );
   const [available, setAvailable] = useState<GithubAvailableRepo[]>([]);
   const [manualRepoUrl, setManualRepoUrl] = useState("");
   const [manualBranch, setManualBranch] = useState("");
@@ -157,13 +161,18 @@ export function useScanHubIntegrations() {
         }
         throw new Error(json.error || "Failed to list GitHub repositories");
       }
-      setAvailable(json.repositories ?? []);
+      const repos = json.repositories ?? [];
+      setAvailable(repos);
+      setSelectedBranches(
+        Object.fromEntries(repos.map((repo) => [repo.id, repo.defaultBranch])),
+      );
       setPickLoaded(true);
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : "Failed to list repositories",
       );
       setAvailable([]);
+      setSelectedBranches({});
       setPickLoaded(true);
     } finally {
       setPickLoading(false);
@@ -453,7 +462,14 @@ export function useScanHubIntegrations() {
       const res = await fetch("/api/integrations/github/repositories/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repoIds: Array.from(selected) }),
+        body: JSON.stringify({
+          repositories: Array.from(selected).map((repoId) => ({
+            repoId,
+            branch:
+              selectedBranches[repoId] ||
+              available.find((repo) => repo.id === repoId)?.defaultBranch,
+          })),
+        }),
       });
       const json = (await res.json()) as {
         connected?: { fullName: string }[];
@@ -469,6 +485,7 @@ export function useScanHubIntegrations() {
           : "No new repositories were connected",
       );
       setSelected(new Set());
+      setSelectedBranches({});
       setPickOpen(false);
       await loadDashboard();
     } catch (e) {
@@ -483,6 +500,7 @@ export function useScanHubIntegrations() {
   function openGithubPicker() {
     setPickOpen(true);
     setSelected(new Set());
+    setSelectedBranches({});
     setPickLoaded(false);
     setAvailable([]);
     void loadAvailable();
@@ -495,6 +513,7 @@ export function useScanHubIntegrations() {
       setPickRefreshing(false);
       setAvailable([]);
       setSelected(new Set());
+      setSelectedBranches({});
     }
   }
 
@@ -966,6 +985,8 @@ export function useScanHubIntegrations() {
     disconnecting,
     selected,
     setSelected,
+    selectedBranches,
+    setSelectedBranches,
     available,
     importable,
     manualRepoUrl,

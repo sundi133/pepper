@@ -5,7 +5,19 @@ import { connectGithubRepositories } from "@/lib/connect-github-repositories";
 import { GithubTokenInvalidError } from "@/lib/github-connection";
 
 const bodySchema = z.object({
-  repoIds: z.array(z.number().int().positive()).min(1).max(50),
+  repoIds: z.array(z.number().int().positive()).min(1).max(50).optional(),
+  repositories: z
+    .array(
+      z.object({
+        repoId: z.number().int().positive(),
+        branch: z.string().trim().min(1).max(200).optional(),
+      }),
+    )
+    .min(1)
+    .max(50)
+    .optional(),
+}).refine((body) => body.repoIds?.length || body.repositories?.length, {
+  message: "Select at least one repository",
 });
 
 export async function POST(req: NextRequest) {
@@ -19,10 +31,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = bodySchema.parse(await req.json());
+    const repoIds =
+      body.repositories?.map((repo) => repo.repoId) ?? body.repoIds ?? [];
+    const branchesByRepoId = new Map(
+      body.repositories
+        ?.filter((repo) => repo.branch)
+        .map((repo) => [repo.repoId, repo.branch as string]) ?? [],
+    );
     const result = await connectGithubRepositories({
       organizationId: orgId,
       userId: auth.session.user.id,
-      repoIds: body.repoIds,
+      repoIds,
+      branchesByRepoId,
     });
     return NextResponse.json(result, { status: 201 });
   } catch (e) {

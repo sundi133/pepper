@@ -6,6 +6,7 @@ export type GithubRepoListItem = {
   owner: string;
   name: string;
   defaultBranch: string;
+  branches: string[];
   language: string | null;
   private: boolean;
   htmlUrl: string;
@@ -26,6 +27,40 @@ type GithubApiRepo = {
   clone_url: string;
   updated_at: string | null;
 };
+
+type GithubApiBranch = {
+  name: string;
+};
+
+async function listGithubBranches(
+  token: string,
+  owner: string,
+  repo: string,
+): Promise<string[]> {
+  const branches: string[] = [];
+  let page = 1;
+  const perPage = 100;
+
+  while (page <= 5) {
+    const res = await githubGet<GithubApiBranch[]>(
+      token,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=${perPage}&page=${page}`,
+    );
+    if (!res.ok) return branches;
+
+    const batch = Array.isArray(res.data) ? res.data : [];
+    if (batch.length === 0) break;
+
+    for (const branch of batch) {
+      if (branch.name?.trim()) branches.push(branch.name.trim());
+    }
+
+    if (batch.length < perPage) break;
+    page += 1;
+  }
+
+  return Array.from(new Set(branches));
+}
 
 export async function listGithubRepositoriesForUser(
   token: string,
@@ -51,12 +86,17 @@ export async function listGithubRepositoriesForUser(
 
     for (const r of batch) {
       if (r.owner?.login && r.name) {
+        const defaultBranch = r.default_branch || "main";
+        const branches = await listGithubBranches(token, r.owner.login, r.name);
         items.push({
           id: r.id,
           fullName: r.full_name,
           owner: r.owner.login,
           name: r.name,
-          defaultBranch: r.default_branch || "main",
+          defaultBranch,
+          branches: branches.includes(defaultBranch)
+            ? branches
+            : [defaultBranch, ...branches],
           language: r.language ?? null,
           private: Boolean(r.private),
           htmlUrl: r.html_url,

@@ -56,6 +56,8 @@ export function ScanHub() {
           key: String(r.id),
           fullName: r.fullName,
           defaultBranch: r.defaultBranch,
+          branches: r.branches?.length ? r.branches : [r.defaultBranch],
+          selectedBranch: hub.selectedBranches[r.id] || r.defaultBranch,
           language: r.language,
           private: r.private,
         }))}
@@ -66,6 +68,13 @@ export function ScanHub() {
           if (checked) next.add(id);
           else next.delete(id);
           hub.setSelected(next);
+        }}
+        onBranchChange={(key, branch) => {
+          const id = Number(key);
+          hub.setSelectedBranches({
+            ...hub.selectedBranches,
+            [id]: branch,
+          });
         }}
         onConnect={() => void hub.importSelected()}
         onRefresh={() => void hub.loadAvailable({ quiet: true })}

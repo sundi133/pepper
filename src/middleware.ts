@@ -97,7 +97,7 @@ function buildCsp(nonce: string): string {
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "connect-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
-    "frame-src https://hcaptcha.com https://*.hcaptcha.com",
+    "frame-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -131,7 +131,13 @@ function applyResponseHardening(
   pathname: string,
   csp: string,
 ): NextResponse {
-  response.headers.set("Content-Security-Policy", csp);
+  const responseCsp = pathname.startsWith("/docs/")
+    ? csp.replace("frame-ancestors 'none'", "frame-ancestors 'self'")
+    : csp;
+  response.headers.set("Content-Security-Policy", responseCsp);
+  if (pathname.startsWith("/docs/")) {
+    response.headers.set("X-Frame-Options", "SAMEORIGIN");
+  }
   // Defense in depth: guarantee nosniff regardless of route (VA-06).
   response.headers.set("X-Content-Type-Options", "nosniff");
   // Authenticated/dynamic content and all API responses must not be cached by

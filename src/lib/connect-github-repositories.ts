@@ -15,6 +15,7 @@ export async function connectGithubRepositories(params: {
   organizationId: string;
   userId: string;
   repoIds: number[];
+  branchesByRepoId?: Map<number, string>;
 }): Promise<ConnectGithubRepoResult> {
   const token = await getOrgGithubAccessTokenOrThrow(params.organizationId);
 
@@ -45,12 +46,17 @@ export async function connectGithubRepositories(params: {
 
   for (const repoId of params.repoIds) {
     const repo = byId.get(repoId);
+    const selectedBranch = params.branchesByRepoId?.get(repoId)?.trim();
     if (!repo) {
       skipped.push({ repoId, reason: "Repository not found or not accessible" });
       continue;
     }
     if (repo.alreadyConnected) {
       skipped.push({ repoId, reason: "Already connected" });
+      continue;
+    }
+    if (selectedBranch && !repo.branches.includes(selectedBranch)) {
+      skipped.push({ repoId, reason: `Branch "${selectedBranch}" not found` });
       continue;
     }
 
@@ -64,6 +70,7 @@ export async function connectGithubRepositories(params: {
       defaultBranch: repo.defaultBranch,
       language: repo.language,
       connectedViaGithub: true,
+      branch: selectedBranch || repo.defaultBranch,
     });
 
     connected.push({

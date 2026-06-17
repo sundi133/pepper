@@ -19,8 +19,11 @@ const SCAN_HUB_PATH = "/scans/new";
 type GithubAvailableRepo = {
   id: number;
   fullName: string;
+  owner: string;
+  name: string;
   defaultBranch: string;
   branches: string[];
+  branchesLoaded?: boolean;
   language: string | null;
   private: boolean;
   alreadyConnected: boolean;
@@ -967,6 +970,40 @@ export function useScanHubIntegrations() {
     return result.scanId;
   }
 
+  // Lazily fetch branches for a specific repo when toggled
+  const loadBranchesForRepo = useCallback(
+    async (repoId: number) => {
+      const repo = available.find((r) => r.id === repoId);
+      if (!repo || repo.branchesLoaded) return;
+      try {
+        const [owner, name] = repo.fullName.split("/");
+        if (!owner || !name) return;
+        const res = await fetch(
+          `/api/integrations/github/branches?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(name)}`,
+        );
+        if (!res.ok) return;
+        const json = (await res.json()) as { branches?: string[] };
+        const branches = json.branches ?? [repo.defaultBranch];
+        setAvailable((prev) =>
+          prev.map((r) =>
+            r.id === repoId
+              ? {
+                  ...r,
+                  branches: branches.includes(r.defaultBranch)
+                    ? branches
+                    : [r.defaultBranch, ...branches],
+                  branchesLoaded: true,
+                }
+              : r,
+          ),
+        );
+      } catch {
+        // silently fail — keep default branch
+      }
+    },
+    [available],
+  );
+
   return {
     provider,
     setProvider,
@@ -989,6 +1026,7 @@ export function useScanHubIntegrations() {
     setSelectedBranches,
     available,
     importable,
+    loadBranchesForRepo,
     manualRepoUrl,
     setManualRepoUrl,
     manualBranch,

@@ -32,7 +32,7 @@ type GithubApiBranch = {
   name: string;
 };
 
-async function listGithubBranches(
+export async function listGithubBranches(
   token: string,
   owner: string,
   repo: string,

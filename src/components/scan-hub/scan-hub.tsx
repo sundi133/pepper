@@ -65,8 +65,12 @@ export function ScanHub() {
         onToggle={(key, checked) => {
           const id = Number(key);
           const next = new Set(hub.selected);
-          if (checked) next.add(id);
-          else next.delete(id);
+          if (checked) {
+            next.add(id);
+            void hub.loadBranchesForRepo(id);
+          } else {
+            next.delete(id);
+          }
           hub.setSelected(next);
         }}
         onBranchChange={(key, branch) => {

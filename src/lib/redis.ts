@@ -27,9 +27,10 @@ function parseRedisConnection(urlString: string) {
     port: parseInt(url.port || "6379", 10),
     username: decodeURIComponent(url.username || "default"),
     password: url.password ? decodeURIComponent(url.password) : undefined,
-    tls: isTls ? { rejectUnauthorized: false } : undefined,
+    tls: isTls ? { rejectUnauthorized: false, servername: url.hostname } : undefined,
     maxRetriesPerRequest: null as null,
     connectTimeout: 15000,
+    enableOfflineQueue: true,
     retryStrategy(times: number) {
       return Math.min(times * 500, 5000);
     },

@@ -16,6 +16,9 @@ export function getScanQueue(): Queue {
         removeOnFail: { count: 500 },
       },
     });
+    _scanQueue.on("error", (err) => {
+      console.error("[scan-queue] error:", err.message);
+    });
   }
   return _scanQueue;
 }

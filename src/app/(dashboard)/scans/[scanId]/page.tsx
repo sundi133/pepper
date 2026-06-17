@@ -521,20 +521,20 @@ export default function ScanDetailPage() {
               <div className="flex justify-between text-sm">
                 <span>{isPaused ? "Scan paused" : "Scanning..."}</span>
                 <span className="text-muted-foreground font-medium">
-                  {etaInfo.etaText}
+                  {etaInfo?.etaText}
                 </span>
               </div>
               <Progress
                 value={computeScanProgress(scan.scannerProgress, scan.status)}
               />
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                {etaInfo.elapsedText && (
+                {etaInfo?.elapsedText && (
                   <span className="inline-flex items-center gap-1">
                     <Clock className="h-3 w-3" aria-hidden />
                     {etaInfo.elapsedText}
                   </span>
                 )}
-                {etaInfo.fileProgressText && (
+                {etaInfo?.fileProgressText && (
                   <span className="inline-flex items-center gap-1">
                     <Timer className="h-3 w-3" aria-hidden />
                     {etaInfo.fileProgressText}

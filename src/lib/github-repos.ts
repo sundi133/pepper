@@ -87,16 +87,15 @@ export async function listGithubRepositoriesForUser(
     for (const r of batch) {
       if (r.owner?.login && r.name) {
         const defaultBranch = r.default_branch || "main";
-        const branches = await listGithubBranches(token, r.owner.login, r.name);
+        // Don't fetch branches here — it causes N+1 API calls and timeouts.
+        // Branches are fetched lazily via /api/integrations/github/branches.
         items.push({
           id: r.id,
           fullName: r.full_name,
           owner: r.owner.login,
           name: r.name,
           defaultBranch,
-          branches: branches.includes(defaultBranch)
-            ? branches
-            : [defaultBranch, ...branches],
+          branches: [defaultBranch],
           language: r.language ?? null,
           private: Boolean(r.private),
           htmlUrl: r.html_url,

@@ -55,11 +55,6 @@ export async function connectGithubRepositories(params: {
       skipped.push({ repoId, reason: "Already connected" });
       continue;
     }
-    if (selectedBranch && !repo.branches.includes(selectedBranch)) {
-      skipped.push({ repoId, reason: `Branch "${selectedBranch}" not found` });
-      continue;
-    }
-
     const record = await connectGithubRepositoryRecord({
       organizationId: params.organizationId,
       userId: params.userId,

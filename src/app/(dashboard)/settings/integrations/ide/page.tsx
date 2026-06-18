@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -15,6 +16,9 @@ import { toast } from "sonner";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 
 export default function IdeIntegrationPage() {
+  const searchParams = useSearchParams();
+  const apiKeyFromUrl = searchParams.get("apiKey");
+
   const [baseUrl] = useState(() =>
     typeof window !== "undefined" ? window.location.origin : "",
   );
@@ -22,7 +26,8 @@ export default function IdeIntegrationPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [apiKeys, setApiKeys] = useState<Array<{ id: string; prefix: string; name: string }>>([]);
   const [selectedKeyId, setSelectedKeyId] = useState<string>("");
-  const [showConfig, setShowConfig] = useState(false);
+  const [showConfig, setShowConfig] = useState(!!apiKeyFromUrl);
+  const [manualApiKey, setManualApiKey] = useState<string>(apiKeyFromUrl || "");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -57,15 +62,18 @@ export default function IdeIntegrationPage() {
   }, []);
 
   const selectedKey = apiKeys.find((k) => k.id === selectedKeyId);
-  const curlCommand = selectedProjectId && selectedKey
+  const displayKey = manualApiKey || selectedKey?.prefix || "YOUR_FULL_API_KEY_HERE";
+  const isFullKeyProvided = manualApiKey.length > 10;
+
+  const curlCommand = selectedProjectId && (manualApiKey || selectedKey)
     ? `curl "${baseUrl}/api/ide/findings?projectId=${selectedProjectId}" \\
-  -H "Authorization: Bearer ${selectedKey.prefix}..."`
+  -H "Authorization: Bearer ${displayKey}"`
     : "";
 
-  const vsCodeSettings = selectedProjectId && selectedKey
+  const vsCodeSettings = selectedProjectId && (manualApiKey || selectedKey)
     ? JSON.stringify({
         "pepper.apiUrl": `${baseUrl}/api/ide/findings`,
-        "pepper.apiKey": selectedKey.prefix,
+        "pepper.apiKey": displayKey,
         "pepper.projectId": selectedProjectId,
       }, null, 2)
     : "{}";
@@ -163,13 +171,24 @@ export default function IdeIntegrationPage() {
               <CardDescription>Copy and paste into your VS Code settings.json</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="rounded bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
-                <p className="font-medium mb-1">⚠️ Important:</p>
-                <p>
-                  Replace <code className="bg-amber-100 px-1 rounded">ppr_eS7maG</code> with your <strong>full API key</strong>.
-                  Go to <Link href="/settings/apikeys" className="text-amber-900 underline">API Keys</Link> to copy your complete key.
-                </p>
-              </div>
+              {isFullKeyProvided ? (
+                <div className="rounded bg-blue-500/10 border border-blue-500/30 p-3 text-xs text-foreground">
+                  <p className="font-medium mb-1">✅ Full API Key Ready</p>
+                  <p>
+                    Your configuration below contains the full API key. Copy and paste it into your VS Code settings.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded bg-warning/10 border border-warning/30 p-3 text-xs text-foreground space-y-2">
+                  <p className="font-medium mb-1">⚠️ Need Full API Key:</p>
+                  <p>
+                    The prefix shown above is only for reference. You must use your <strong>FULL API key</strong>.
+                  </p>
+                  <p>
+                    <Link href="/settings/apikeys" className="text-primary underline font-medium">→ Go to API Keys page</Link> and click <strong>"Setup in IDE"</strong> to auto-fill your full key here.
+                  </p>
+                </div>
+              )}
               <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
                 {vsCodeSettings}
               </pre>
@@ -190,13 +209,21 @@ export default function IdeIntegrationPage() {
               <CardDescription>Test the API directly from your terminal</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="rounded bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
-                <p className="font-medium mb-1">⚠️ Remember:</p>
-                <p>
-                  Replace <code className="bg-amber-100 px-1 rounded">ppr_eS7maG...</code> with your <strong>full API key</strong> from the
-                  <Link href="/settings/apikeys" className="text-amber-900 underline ml-1">API Keys page</Link>.
-                </p>
-              </div>
+              {isFullKeyProvided ? (
+                <div className="rounded bg-blue-500/10 border border-blue-500/30 p-3 text-xs text-foreground">
+                  <p className="font-medium mb-1">✅ Ready to Run</p>
+                  <p>
+                    Copy the cURL command below and run it in your terminal. It includes your full API key.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded bg-warning/10 border border-warning/30 p-3 text-xs text-foreground">
+                  <p className="font-medium mb-1">⚠️ Replace with Full API Key</p>
+                  <p>
+                    The prefix shown is for reference only. <Link href="/settings/apikeys" className="text-primary underline font-medium">Get your full API key here</Link> and copy it into the command before running.
+                  </p>
+                </div>
+              )}
               <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
                 {curlCommand}
               </pre>
@@ -258,11 +285,13 @@ export default function IdeIntegrationPage() {
               <CardTitle className="text-lg">Integration Examples</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
-              <div className="rounded bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900">
-                <p className="font-medium mb-1">💡 Tip:</p>
+              <div className="rounded bg-blue-500/10 border border-blue-500/30 p-3 text-xs text-foreground space-y-2">
+                <p className="font-medium mb-1">💡 Important:</p>
                 <p>
-                  Use your <strong>full API key</strong> from the <Link href="/settings/apikeys" className="text-blue-900 underline">API Keys page</Link>.
+                  In all examples below, replace <code className="bg-blue-500/20 px-1 rounded font-mono">ppr_xxxxxxxxxxxx</code> with your <strong>FULL API key</strong> from the
+                  <Link href="/settings/apikeys" className="text-primary underline font-medium ml-1">API Keys page</Link>.
                 </p>
+                <p className="text-xs">The prefix shown in the configuration above is for reference only - you must use the complete key.</p>
               </div>
 
               <div>

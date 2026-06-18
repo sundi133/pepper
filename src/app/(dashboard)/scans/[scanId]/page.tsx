@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
 import { useScanPolling, useFindings } from "@/hooks/use-scan-polling";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,6 +104,7 @@ const FINDING_SECTIONS = [
 ];
 
 export default function ScanDetailPage() {
+  const { data: session } = useSession();
   const params = useParams();
   const scanId = params.scanId as string;
   const router = useRouter();
@@ -115,6 +117,11 @@ export default function ScanDetailPage() {
   const [resuming, setResuming] = useState(false);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const [now, setNow] = useState(Date.now());
+
+  const orgRole = session?.user?.memberships?.[0]?.role;
+  const canRescan = orgRole && ["ADMIN", "SECURITY", "DEVELOPER"].includes(orgRole);
+  const canDelete = orgRole && ["ADMIN", "SECURITY"].includes(orgRole);
+  const canManageScan = orgRole && ["ADMIN", "SECURITY"].includes(orgRole);
 
   const filters: Record<string, string> = {};
   if (severityFilter !== "all") filters.severity = severityFilter;
@@ -371,25 +378,29 @@ export default function ScanDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
-          <Button
-            variant="destructive"
-            className="font-semibold shadow-sm"
-            disabled={deleting || isRunning || isPaused}
-            onClick={handleDelete}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
-          </Button>
-          <Button
-            variant="outline"
-            className={scanToolbarOutlineClass}
-            disabled={rescanning}
-            onClick={handleRescan}
-          >
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Rescan
-          </Button>
-          {isRunning && (
+          {canDelete && (
+            <Button
+              variant="destructive"
+              className="font-semibold shadow-sm"
+              disabled={deleting || isRunning || isPaused}
+              onClick={handleDelete}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </Button>
+          )}
+          {canRescan && (
+            <Button
+              variant="outline"
+              className={scanToolbarOutlineClass}
+              disabled={rescanning}
+              onClick={handleRescan}
+            >
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Rescan
+            </Button>
+          )}
+          {canManageScan && isRunning && (
             <Button
               variant="outline"
               className={scanToolbarOutlineClass}
@@ -400,7 +411,7 @@ export default function ScanDetailPage() {
               {pausing ? "Pausing..." : "Pause"}
             </Button>
           )}
-          {(isPaused || isStopped) && (
+          {canManageScan && (isPaused || isStopped) && (
             <Button
               variant="outline"
               className={scanToolbarOutlineClass}
@@ -417,7 +428,7 @@ export default function ScanDetailPage() {
                   : "Resume"}
             </Button>
           )}
-          {isActive && (
+          {canManageScan && isActive && (
             <Button
               variant="outline"
               className={scanToolbarOutlineClass}

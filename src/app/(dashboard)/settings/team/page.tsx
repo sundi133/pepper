@@ -42,10 +42,26 @@ import {
 } from "@/components/ui/dialog";
 
 const ORG_ROLES = [
-  { value: "ADMIN", label: "Admin" },
-  { value: "SECURITY", label: "Security" },
-  { value: "DEVELOPER", label: "Developer" },
-  { value: "VIEWER", label: "Viewer" },
+  {
+    value: "ADMIN",
+    label: "Admin",
+    description: "Full control: invite/remove members, manage roles, start/stop scans, access all settings",
+  },
+  {
+    value: "SECURITY",
+    label: "Security",
+    description: "Start, stop, pause, resume, and delete scans; view all findings and manage security policies",
+  },
+  {
+    value: "DEVELOPER",
+    label: "Developer",
+    description: "Start and rescan projects; view findings but cannot stop scans or manage team",
+  },
+  {
+    value: "VIEWER",
+    label: "Viewer",
+    description: "Read-only access to findings and reports; no scan or team management",
+  },
 ] as const;
 
 export default function TeamPage() {
@@ -211,6 +227,20 @@ export default function TeamPage() {
           with the email and initial password you set. Only admins can invite,
           change roles, or remove members.
         </p>
+
+        <div className="mt-4 grid gap-3 rounded-lg border p-4 bg-muted/30">
+          <p className="text-sm font-semibold">Role Permissions</p>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            {ORG_ROLES.map((role) => (
+              <div key={role.value} className="flex gap-2">
+                <span className="font-medium text-foreground min-w-fit">
+                  {role.label}:
+                </span>
+                <span>{role.description}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {isOrgAdmin ? (
@@ -251,11 +281,16 @@ export default function TeamPage() {
                   <SelectContent>
                     {ORG_ROLES.map((r) => (
                       <SelectItem key={r.value} value={r.value}>
-                        {r.label}
+                        <div className="flex flex-col">
+                          <span className="font-medium">{r.label}</span>
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  {ORG_ROLES.find((r) => r.value === role)?.description}
+                </p>
               </div>
               <div className="space-y-2">
                 <Label>Password</Label>

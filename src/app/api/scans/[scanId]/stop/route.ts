@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { scanQueue } from "@/lib/queue";
 
 export async function POST(
@@ -14,6 +14,9 @@ export async function POST(
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+
+  const roleAuth = await requireRole(orgId, "SECURITY");
+  if ("error" in roleAuth) return roleAuth.error;
 
   const { scanId } = await params;
   const scan = await prisma.scan.findFirst({

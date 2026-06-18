@@ -14,7 +14,6 @@ import {
 import { CreateScanDialog } from "@/components/scans/create-scan-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Shield,
   AlertTriangle,
   KeyRound,
   Package,
@@ -151,6 +150,13 @@ function scoreSubtitle(score: number, critical: number) {
   return "Strong security posture across findings.";
 }
 
+function getScoreColor(score: number): { bg: string; border: string; text: string } {
+  if (score < 50) return { bg: "#ef4444", border: "#dc2626", text: "#ffffff" };
+  if (score < 70) return { bg: "#f97316", border: "#ea580c", text: "#ffffff" };
+  if (score < 90) return { bg: "#eab308", border: "#ca8a04", text: "#ffffff" };
+  return { bg: "#22c55e", border: "#16a34a", text: "#ffffff" };
+}
+
 function activityDescription(a: {
   status: string;
   scanType: string;
@@ -239,27 +245,32 @@ export default function DashboardPage() {
       <section aria-labelledby="security-score-heading">
         <Card className="overflow-hidden border-border/60 bg-card/80 shadow-sm">
           <CardContent className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-5">
-              <div
-                className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-2 border-primary/40 bg-primary/10 shadow-inner shadow-primary/10 sm:h-24 sm:w-24"
-                aria-hidden
-              >
-                <Shield className="absolute h-8 w-8 text-primary/90 sm:h-10 sm:w-10" />
-                <span className="relative z-[1] pt-2 text-xl font-bold tabular-nums text-foreground sm:pt-3 sm:text-2xl">
-                  {score}
+            <div
+              className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-2 shadow-inner sm:h-28 sm:w-28"
+              style={{
+                backgroundColor: getScoreColor(score).bg,
+                borderColor: getScoreColor(score).border,
+              }}
+            >
+              <div className="flex flex-col items-center justify-center">
+                <span className="text-2xl font-bold tabular-nums sm:text-3xl" style={{ color: getScoreColor(score).text }}>
+                  {vulnTotal}
+                </span>
+                <span className="text-[10px] font-semibold" style={{ color: getScoreColor(score).text }}>
+                  issues
                 </span>
               </div>
-              <div className="text-center sm:min-w-0 sm:text-left">
-                <p
-                  id="security-score-heading"
-                  className="text-sm font-medium text-muted-foreground"
-                >
-                  Security score
-                </p>
-                <p className="mt-1 max-w-xl text-base font-medium leading-snug text-foreground sm:text-lg">
-                  {scoreSubtitle(score, criticalCount)}
-                </p>
-              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <p
+                id="security-score-heading"
+                className="text-sm font-medium text-muted-foreground"
+              >
+                Security score
+              </p>
+              <p className="max-w-xl text-base font-medium leading-snug text-foreground sm:text-lg">
+                {scoreSubtitle(score, criticalCount)}
+              </p>
             </div>
             <div className="grid w-full grid-cols-1 divide-y divide-border/50 overflow-hidden rounded-lg border border-border/40 bg-background/40 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               <div className="px-3 py-3 sm:px-4">
@@ -272,20 +283,20 @@ export default function DashboardPage() {
               </div>
               <div className="px-3 py-3 sm:px-4">
                 <p className="text-xs font-medium text-muted-foreground">
-                  Fixed this month
+                  Critical issues
                 </p>
-                <p className="mt-1 text-sm font-semibold text-foreground">
-                  {overview?.resolvedThisMonth ?? 0}{" "}
-                  <span className="font-normal text-muted-foreground">issues</span>
+                <p className="mt-1 text-sm font-semibold">
+                  <span className="text-destructive">{criticalCount}</span>
+                  <span className="ml-1 font-normal text-muted-foreground">found</span>
                 </p>
               </div>
               <div className="px-3 py-3 sm:px-4">
                 <p className="text-xs font-medium text-muted-foreground">
-                  Active monitoring
+                  Monitored projects
                 </p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
-                  {overview?.monitoredSchedules ?? 0}{" "}
-                  <span className="font-normal text-muted-foreground">repos</span>
+                  {overview?.projectCount ?? 0}{" "}
+                  <span className="font-normal text-muted-foreground">projects</span>
                 </p>
               </div>
             </div>
@@ -422,33 +433,56 @@ export default function DashboardPage() {
 
         <Card className="flex min-h-0 flex-col border-border/60 bg-card/80">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-lg sm:text-xl">Monitoring status</CardTitle>
+            <CardTitle className="text-lg sm:text-xl">Top vulnerabilities by type</CardTitle>
             <CardDescription className="text-xs sm:text-sm">
-              {(overview?.monitoredSchedules ?? 0) === 1
-                ? "1 repository on a scan schedule"
-                : `${overview?.monitoredSchedules ?? 0} repositories on a scan schedule`}
+              Vulnerability breakdown by severity level
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col">
-            {(overview?.monitoredSchedules ?? 0) === 0 ? (
+            {severityChart.filter((s) => s.count > 0).length === 0 ? (
               <div className="flex flex-1 flex-col justify-center rounded-lg bg-muted/15 px-3 py-6 text-center sm:py-8">
                 <p className="text-sm text-muted-foreground">
-                  No monitored repositories. Set up monitoring
-                </p>
-                <p className="mt-2 text-sm">
-                  <Link
-                    href="/settings/integrations"
-                    className="font-medium text-primary hover:underline"
-                  >
-                    Configure schedules & integrations
-                  </Link>
+                  No vulnerabilities detected
                 </p>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Scheduled scans run automatically. Adjust cadence in each
-                project&apos;s settings.
-              </p>
+              <ul className="space-y-3">
+                {severityChart
+                  .filter((s) => s.count > 0)
+                  .map((s) => {
+                    const pct =
+                      vulnTotal > 0 ? Math.round((s.count / vulnTotal) * 100) : 0;
+                    return (
+                      <li key={s.name} className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-sm font-medium">
+                            <span
+                              className="h-2.5 w-2.5 shrink-0 rounded-full"
+                              style={{
+                                backgroundColor: SEVERITY_HEX[s.name],
+                              }}
+                            />
+                            <span className="capitalize text-foreground">
+                              {s.name.toLowerCase()}
+                            </span>
+                          </span>
+                          <span className="text-sm font-semibold text-foreground">
+                            {s.count}
+                          </span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-muted/30">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${pct}%`,
+                              backgroundColor: SEVERITY_HEX[s.name],
+                            }}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+              </ul>
             )}
           </CardContent>
         </Card>

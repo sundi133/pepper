@@ -25,13 +25,14 @@ export async function POST(req: NextRequest) {
       const org = await prisma.organization.create({
         data: {
           name: `${auth.session.user.email || "User"}'s org`,
-          slug: `org-${Date.now()}`,
-          members: {
-            create: {
-              userId: auth.session.user.id,
-              role: "admin",
-            },
-          },
+          slug: `org-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        },
+      });
+      await prisma.orgMember.create({
+        data: {
+          userId: auth.session.user.id,
+          organizationId: org.id,
+          role: "admin",
         },
       });
       orgId = org.id;

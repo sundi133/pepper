@@ -12,6 +12,7 @@ export type BitbucketWebhookProject = NonNullable<
 export async function findProjectForBitbucketWebhook(params: {
   fullName: string;
   repoUuid?: string | null;
+  organizationId?: string | null;
 }) {
   const slug = params.fullName?.trim();
   if (!slug) return null;
@@ -27,6 +28,7 @@ export async function findProjectForBitbucketWebhook(params: {
           ? [{ bitbucketRepoUuid: normalizedUuid }]
           : []),
       ],
+      ...(params.organizationId ? { organizationId: params.organizationId } : {}),
     },
     include: {
       buildGate: true,

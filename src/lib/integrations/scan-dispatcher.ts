@@ -100,6 +100,7 @@ export async function dispatchScanCompleteIntegrations(scanId: string) {
         scanId: scan.id,
         severity: { in: ["CRITICAL", "HIGH"] },
         status: "OPEN",
+        scan: { project: { organizationId: orgId } },
       },
       take: 25,
     });
@@ -134,7 +135,7 @@ export async function dispatchScanCompleteIntegrations(scanId: string) {
   const siems = await loadEnabled<SiemConfig>(orgId, "SIEM");
   if (siems.length > 0) {
     const findings = await prisma.finding.findMany({
-      where: { scanId: scan.id },
+      where: { scanId: scan.id, scan: { project: { organizationId: orgId } } },
       select: {
         scanner: true,
         severity: true,

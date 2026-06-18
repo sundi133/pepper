@@ -41,12 +41,18 @@ export function mainBranchWebhookScanType(): ScanJobData["scanType"] {
   return "SAST_ONLY";
 }
 
-export async function findProjectForGithubWebhook(fullName: string) {
+export async function findProjectForGithubWebhook(
+  fullName: string,
+  organizationId?: string | null,
+) {
   const slug = fullName?.trim();
   if (!slug) return null;
 
   return prisma.project.findFirst({
-    where: { repoUrl: { contains: slug } },
+    where: {
+      repoUrl: { contains: slug },
+      ...(organizationId ? { organizationId } : {}),
+    },
     include: {
       buildGate: true,
       organization: { include: { settings: true } },

@@ -85,7 +85,7 @@ export async function GET(
   }
 
   const rawFindings = await prisma.finding.findMany({
-    where: { scanId },
+    where: { scanId, scan: { project: { organizationId: orgId } } },
     orderBy: [{ severity: "asc" }, { scanner: "asc" }, { filePath: "asc" }],
   });
   const findings = rawFindings.map(enrichFindingWithReport);

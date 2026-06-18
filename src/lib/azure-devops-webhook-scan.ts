@@ -9,12 +9,18 @@ export type AzureDevOpsWebhookProject = NonNullable<
   Awaited<ReturnType<typeof findProjectForAzureDevOpsWebhook>>
 >;
 
-export async function findProjectForAzureDevOpsWebhook(repoId: string) {
+export async function findProjectForAzureDevOpsWebhook(
+  repoId: string,
+  organizationId?: string | null,
+) {
   const id = repoId?.trim();
   if (!id) return null;
 
   return prisma.project.findFirst({
-    where: { azureRepoId: id },
+    where: {
+      azureRepoId: id,
+      ...(organizationId ? { organizationId } : {}),
+    },
     include: {
       buildGate: true,
       organization: { include: { settings: true } },

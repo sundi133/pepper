@@ -28,7 +28,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Event ignored" });
   }
 
-  const project = await findProjectForGithubWebhook(fullName);
+  const project = await findProjectForGithubWebhook(
+    fullName,
+    authResult.organizationId,
+  );
   if (!project) {
     return NextResponse.json({ message: "No matching project found" });
   }

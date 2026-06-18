@@ -24,7 +24,12 @@ export async function POST(req: NextRequest) {
     const prNumber = payload.object_attributes?.iid;
 
     const project = await prisma.project.findFirst({
-      where: { repoUrl: { contains: payload.project?.path_with_namespace } },
+      where: {
+        repoUrl: { contains: payload.project?.path_with_namespace },
+        ...(authResult.organizationId
+          ? { organizationId: authResult.organizationId }
+          : {}),
+      },
       include: {
         buildGate: true,
         organization: { include: { settings: true } },

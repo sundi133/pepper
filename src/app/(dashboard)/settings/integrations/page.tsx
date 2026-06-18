@@ -888,13 +888,13 @@ export default function IntegrationsPage() {
         <CardHeader>
           <CardTitle>Outbound integrations</CardTitle>
           <CardDescription>
-            Send findings and scan summaries to ticketing, chat and SIEM tools.
+            Send findings and scan summaries to ticketing and chat tools.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" asChild>
-              <Link href="/settings/integrations/outbound">Slack, Jira, SIEM, Dapper</Link>
+              <Link href="/settings/integrations/outbound">Slack, Jira</Link>
             </Button>
             <Button variant="outline" asChild>
               <Link href="/settings/integrations/precommit">Pre-commit hook</Link>

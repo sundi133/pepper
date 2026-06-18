@@ -41,7 +41,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Missing repository id" });
   }
 
-  const project = await findProjectForAzureDevOpsWebhook(repoId);
+  const project = await findProjectForAzureDevOpsWebhook(
+    repoId,
+    authResult.organizationId,
+  );
   if (!project) {
     return NextResponse.json({ message: "No matching project found" });
   }

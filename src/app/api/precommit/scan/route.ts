@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyApiKey } from "@/lib/api-key";
+import { SECRET_PATTERNS } from "@/lib/precommit-secret-patterns";
 
 interface PrecommitFile {
   path: string;
@@ -18,9 +19,32 @@ interface PrecommitFinding {
   cweId?: string;
 }
 
-/** Pattern-based pre-commit detection removed; use full Pepper scan (LLM + OSV). */
-function detectInFile(_file: PrecommitFile): PrecommitFinding[] {
-  return [];
+function detectInFile(file: PrecommitFile): PrecommitFinding[] {
+  const findings: PrecommitFinding[] = [];
+  const lines = file.content.split("\n");
+
+  for (const pattern of SECRET_PATTERNS) {
+    const regex = pattern.pattern instanceof RegExp
+      ? new RegExp(pattern.pattern.source, "gm")
+      : new RegExp(pattern.pattern, "gm");
+    const matches = file.content.matchAll(regex);
+    for (const match of matches) {
+      if (pattern.allowlist?.some((allow) => allow.test(match[0]))) continue;
+      const lineNum = file.content.substring(0, match.index).split("\n").length - 1;
+      const line = lines[lineNum] || "";
+      findings.push({
+        ruleId: pattern.id,
+        title: pattern.title,
+        description: pattern.description,
+        severity: pattern.severity,
+        filePath: file.path,
+        line: lineNum + 1,
+        snippet: line.slice(0, 100),
+        category: "secret",
+      });
+    }
+  }
+  return findings;
 }
 
 export async function POST(req: NextRequest) {
@@ -60,7 +84,6 @@ export async function POST(req: NextRequest) {
     summary: {
       total: allFindings.length,
       bySeverity: countBySeverity(allFindings),
-      note: "Pattern-based pre-commit scanning is disabled. Run a full Pepper scan for AI-driven findings.",
     },
     block: shouldFail,
     organizationId: auth.organizationId,

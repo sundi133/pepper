@@ -199,7 +199,7 @@ export async function postScanAzurePrSummary(scanId: string): Promise<void> {
   const topFindings =
     status === "COMPLETED"
       ? await prisma.finding.findMany({
-          where: { scanId, status: "OPEN" },
+          where: { scanId, status: "OPEN", scan: { project: { organizationId } } },
           select: {
             severity: true,
             title: true,

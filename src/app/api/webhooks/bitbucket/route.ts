@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
   const project = await findProjectForBitbucketWebhook({
     fullName,
     repoUuid: repository.uuid,
+    organizationId: authResult.organizationId,
   });
   if (!project) {
     return NextResponse.json({ message: "No matching project found" });

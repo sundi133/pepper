@@ -16,6 +16,23 @@
   --mono: ui-monospace, "Cascadia Code", "Source Code Pro", monospace;
 }
 
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f8fafc;
+    --bg-elevated: #f1f5f9;
+    --bg-card: #ffffff;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --accent: #22c55e;
+    --accent-dim: #16a34a14;
+    --link: #16a34a;
+    --code-bg: #f1f5f9;
+    --warn: #d97706;
+    --danger: #dc2626;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

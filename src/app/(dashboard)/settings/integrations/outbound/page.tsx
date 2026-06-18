@@ -22,7 +22,7 @@ import {
 import { toast } from "sonner";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 
-type IntegrationKind = "SLACK" | "JIRA" | "SIEM" | "DAST";
+type IntegrationKind = "SLACK" | "JIRA";
 
 interface IntegrationRow {
   id: string;
@@ -51,14 +51,6 @@ export default function OutboundIntegrationsPage() {
   const [jiraProject, setJiraProject] = useState("");
   const [jiraIssueType, setJiraIssueType] = useState("Bug");
 
-  // SIEM form
-  const [siemEndpoint, setSiemEndpoint] = useState("");
-  const [siemFormat, setSiemFormat] = useState<"cef" | "leef" | "json">("cef");
-  const [siemKey, setSiemKey] = useState("");
-
-  // Dapper form
-  const [dapperEndpoint, setDapperEndpoint] = useState("");
-  const [dapperKey, setDapperKey] = useState("");
 
   async function reload() {
     setLoading(true);
@@ -131,7 +123,7 @@ export default function OutboundIntegrationsPage() {
       <div>
         <h1 className="text-2xl font-bold">Outbound integrations</h1>
         <p className="text-muted-foreground">
-          Forward findings to ticketing, chat and SIEM tools. Secrets are
+          Forward findings to ticketing and chat tools. Secrets are
           encrypted at rest with AES-256-GCM.
         </p>
       </div>
@@ -294,135 +286,6 @@ export default function OutboundIntegrationsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>SIEM</CardTitle>
-          <CardDescription>
-            HTTPS endpoint or syslog target (udp://host:514 / tcp://host:601)
-            for CEF, LEEF or JSON event forwarding.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-1">
-            <Label>Endpoint</Label>
-            <Input
-              placeholder="https://collector.example.com/intake  or  udp://siem:514"
-              value={siemEndpoint}
-              onChange={(e) => setSiemEndpoint(e.target.value)}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Format</Label>
-              <Select
-                value={siemFormat}
-                onValueChange={(v) =>
-                  setSiemFormat(v as "cef" | "leef" | "json")
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cef">CEF</SelectItem>
-                  <SelectItem value="leef">LEEF</SelectItem>
-                  <SelectItem value="json">JSON</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Bearer token (HTTPS only)</Label>
-              <Input
-                type="password"
-                value={siemKey}
-                onChange={(e) => setSiemKey(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              disabled={!siemEndpoint}
-              onClick={() =>
-                void save({
-                  kind: "SIEM",
-                  name: `SIEM (${siemFormat.toUpperCase()})`,
-                  config: {
-                    endpoint: siemEndpoint,
-                    format: siemFormat,
-                    apiKey: siemKey || undefined,
-                  },
-                })
-              }
-            >
-              Save SIEM integration
-            </Button>
-            <Button
-              variant="outline"
-              disabled={!siemEndpoint}
-              onClick={() =>
-                void testIntegration("SIEM", {
-                  endpoint: siemEndpoint,
-                  format: siemFormat,
-                  apiKey: siemKey || undefined,
-                })
-              }
-            >
-              Send test event
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Dapper (DAST)</CardTitle>
-          <CardDescription>
-            Delegate dynamic application security testing to{" "}
-            <a
-              href="https://github.com/sundi133/dapper"
-              className="underline"
-              target="_blank"
-              rel="noreferrer"
-            >
-              dapper
-            </a>
-            . Set the target URL per project in its settings.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-1">
-            <Label>Dapper endpoint</Label>
-            <Input
-              placeholder="http://dapper:8080"
-              value={dapperEndpoint}
-              onChange={(e) => setDapperEndpoint(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>API key (optional)</Label>
-            <Input
-              type="password"
-              value={dapperKey}
-              onChange={(e) => setDapperKey(e.target.value)}
-            />
-          </div>
-          <Button
-            disabled={!dapperEndpoint}
-            onClick={() =>
-              void save({
-                kind: "DAST",
-                name: "Dapper",
-                config: {
-                  endpoint: dapperEndpoint,
-                  apiKey: dapperKey || undefined,
-                },
-              })
-            }
-          >
-            Save Dapper integration
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   );
 }

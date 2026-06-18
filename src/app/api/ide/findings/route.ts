@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   }
 
   const latestScan = await prisma.scan.findFirst({
-    where: { projectId, status: "COMPLETED" },
+    where: { projectId, status: "COMPLETED", project: { organizationId: auth.organizationId } },
     orderBy: { completedAt: "desc" },
     select: { id: true, completedAt: true, commitSha: true, branch: true },
   });

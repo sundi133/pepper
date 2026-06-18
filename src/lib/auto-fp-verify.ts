@@ -72,6 +72,7 @@ export async function autoVerifyFalsePositives(
           "SECRETS_LLM",
         ],
       },
+      scan: { project: { organizationId: { not: "" } } },
     },
     select: {
       id: true,

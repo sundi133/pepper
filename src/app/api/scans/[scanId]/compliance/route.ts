@@ -55,7 +55,7 @@ export async function GET(
 
   // Load findings for this scan
   const findings = await prisma.finding.findMany({
-    where: { scanId },
+    where: { scanId, scan: { project: { organizationId: orgId } } },
     select: {
       id: true,
       title: true,

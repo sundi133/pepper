@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 import { WebhookSecretsCard } from "@/components/settings/webhook-secrets-card";
+import { CicdSetupWizard } from "@/components/settings/cicd-setup-wizard";
 
 export default function IntegrationsPage() {
   const webhookUrl =
@@ -844,57 +845,19 @@ export default function IntegrationsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <CardTitle>CI/CD</CardTitle>
-            <Badge variant="outline">API</Badge>
-          </div>
-          <CardDescription>
-            Drop-in pipeline templates with fail-build gates, SBOM upload and
-            optional cosign signing.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm">
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" asChild>
-              <a href="/api/cicd-templates/github" download>
-                GitHub Actions
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href="/api/cicd-templates/gitlab" download>
-                GitLab CI
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href="/api/cicd-templates/jenkins" download>
-                Jenkinsfile
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/settings/apikeys">Manage API keys</Link>
-            </Button>
-          </div>
-          <p className="text-muted-foreground">
-            Each template uses <code>PEPPER_API_URL</code> +{" "}
-            <code>PEPPER_API_KEY</code>, downloads CycloneDX + SPDX SBOMs, and
-            fails the build when the project&apos;s build gate is breached.
-          </p>
-        </CardContent>
-      </Card>
+      <CicdSetupWizard />
 
       <Card>
         <CardHeader>
           <CardTitle>Outbound integrations</CardTitle>
           <CardDescription>
-            Send findings and scan summaries to ticketing, chat and SIEM tools.
+            Send findings and scan summaries to ticketing and chat tools.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" asChild>
-              <Link href="/settings/integrations/outbound">Slack, Jira, SIEM, Dapper</Link>
+              <Link href="/settings/integrations/outbound">Slack, Jira</Link>
             </Button>
             <Button variant="outline" asChild>
               <Link href="/settings/integrations/precommit">Pre-commit hook</Link>

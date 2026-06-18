@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   Card,
   CardContent,
@@ -10,21 +10,57 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Copy } from "lucide-react";
+import { Copy, Zap } from "lucide-react";
 import { toast } from "sonner";
-import Link from "next/link";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 
 export default function PrecommitInstallPage() {
-  const [baseUrl] = useState(() =>
-    typeof window !== "undefined" ? window.location.origin : "",
-  );
-  const [apiKey, setApiKey] = useState("");
+  const [mounted, setMounted] = useState(false);
+  const [baseUrl, setBaseUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    setBaseUrl(typeof window !== "undefined" ? window.location.origin : "");
+    setMounted(true);
+  }, []);
 
   const installCommand = apiKey
     ? `curl -fsSL ${baseUrl}/api/precommit/install.sh | bash -s -- ${baseUrl} ${apiKey}`
-    : `curl -fsSL ${baseUrl}/api/precommit/install.sh | bash -s -- ${baseUrl} <YOUR_API_KEY>`;
+    : null;
+
+  async function generateAndInstall() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/apikeys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "precommit-hook" }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let errorMsg = "Failed to create API key";
+        try {
+          const data = JSON.parse(text) as { error?: string };
+          errorMsg = data.error || `Status ${res.status}`;
+        } catch {
+          errorMsg = `Status ${res.status}: ${text.slice(0, 100)}`;
+        }
+        console.error("API key creation failed:", { status: res.status, text });
+        toast.error(errorMsg);
+        return;
+      }
+      const data = (await res.json()) as { plaintext: string };
+      setApiKey(data.plaintext);
+      toast.success("API key created! Copy the command below.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      console.error("API key creation error:", err);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function copy(s: string) {
     navigator.clipboard.writeText(s);
@@ -49,62 +85,61 @@ export default function PrecommitInstallPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Quick Install</CardTitle>
+          <CardTitle>One-Click Setup</CardTitle>
           <CardDescription>
-            Enter your API key to generate the install command.
+            Generate API key and installation script automatically.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label htmlFor="apikey" className="text-sm font-medium">
-              API Key{" "}
-              <Link
-                href="/settings/apikeys"
-                className="text-xs text-blue-600 hover:underline"
-              >
-                (create one)
-              </Link>
-            </label>
-            <Input
-              id="apikey"
-              placeholder="ppr_xxxxxxxxxxxx"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="font-mono text-xs"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Install Command</span>
+          {!installCommand ? (
+            <Button
+              onClick={() => void generateAndInstall()}
+              disabled={loading}
+              size="lg"
+              className="w-full"
+            >
+              <Zap className="mr-2 h-5 w-5" />
+              {loading ? "Creating API key..." : "Generate Install Script"}
+            </Button>
+          ) : (
+            <>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Install Command</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => copy(installCommand)}
+                  >
+                    <Copy className="mr-2 h-4 w-4" /> Copy
+                  </Button>
+                </div>
+                <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs font-mono">
+                  {installCommand}
+                </pre>
+              </div>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                onClick={() => copy(installCommand)}
-                disabled={!apiKey}
+                onClick={() => setApiKey(null)}
               >
-                <Copy className="mr-2 h-4 w-4" /> Copy
+                Generate New Key
               </Button>
-            </div>
-            <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
-              {installCommand}
-            </pre>
-          </div>
+            </>
+          )}
 
           <div className="space-y-2 border-t pt-4">
             <span className="text-sm font-medium">How it works</span>
             <ul className="list-disc pl-5 space-y-1 text-xs text-muted-foreground">
+              <li>Click the button to auto-generate an API key</li>
+              <li>Copy the command and run it in your git repository root</li>
               <li>
-                Copy the command above and run it in your git repository root
+                On <code>git commit</code>, staged files are checked for secrets
+                and SAST issues
               </li>
-              <li>
-                On <code>git commit</code>, staged files are POSTed to{" "}
-                <code>/api/precommit/scan</code>
-              </li>
-              <li>Pepper runs secret + SAST pattern checks in memory</li>
               <li>
                 Commit is blocked if any <Badge variant="outline">CRITICAL</Badge>{" "}
-                or <Badge variant="outline">HIGH</Badge> issue is found
+                or <Badge variant="outline">HIGH</Badge> severity issue is found
               </li>
               <li>
                 Override with <code>PEPPER_FAIL_ON=CRITICAL</code> env var

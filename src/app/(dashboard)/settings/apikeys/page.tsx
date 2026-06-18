@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -11,7 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Copy } from "lucide-react";
+import { Copy, Code2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 
@@ -29,6 +30,7 @@ export default function ApiKeysPage() {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [revealed, setRevealed] = useState<string | null>(null);
+  const [revealedKeyName, setRevealedKeyName] = useState<string | null>(null);
 
   async function reload() {
     try {
@@ -70,8 +72,9 @@ export default function ApiKeysPage() {
         }
         return;
       }
-      const data = (await res.json()) as { plaintext: string; prefix: string };
+      const data = (await res.json()) as { plaintext: string; prefix: string; name: string };
       setRevealed(data.plaintext);
+      setRevealedKeyName(data.name);
       setName("");
       toast.success("Key created! Copy it now—it won't be shown again.");
       await new Promise((r) => setTimeout(r, 500));
@@ -141,20 +144,31 @@ export default function ApiKeysPage() {
             {creating ? "Creating…" : "Create key"}
           </Button>
           {revealed && (
-            <div className="rounded-md border border-amber-400 bg-amber-50 p-3 text-xs dark:bg-amber-950/30">
-              <div className="mb-1 font-medium">Copy this value now — it won&apos;t be shown again.</div>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 break-all">{revealed}</code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    navigator.clipboard.writeText(revealed);
-                    toast.success("Copied");
-                  }}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
+            <div className="space-y-3">
+              <div className="rounded-md border border-amber-400 bg-amber-50 p-3 text-xs dark:bg-amber-950/30">
+                <div className="mb-2 font-medium">Copy this value now — it won&apos;t be shown again.</div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 break-all font-mono text-xs bg-amber-100/50 dark:bg-amber-900/20 px-2 py-1 rounded">{revealed}</code>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(revealed);
+                      toast.success("Copied");
+                    }}
+                    title="Copy full API key"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Link href={`/settings/integrations/ide?apiKey=${encodeURIComponent(revealed)}`} className="flex-1">
+                  <Button size="sm" className="w-full" variant="default">
+                    <Code2 className="h-3 w-3 mr-2" />
+                    Setup in IDE
+                  </Button>
+                </Link>
               </div>
             </div>
           )}

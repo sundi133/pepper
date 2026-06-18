@@ -1,5 +1,6 @@
 "use client";
 
+import { useSession } from "next-auth/react";
 import { useScans } from "@/hooks/use-scan-polling";
 import {
   Card,
@@ -62,10 +63,16 @@ function getScanSourceName(scan: Record<string, unknown>) {
 }
 
 export default function ScansPage() {
+  const { data: session } = useSession();
   const { scans, isLoading, refresh } = useScans();
   const router = useRouter();
   const [rescanningId, setRescanningId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const orgRole = session?.user?.memberships?.[0]?.role;
+  const canCreateScan = orgRole && ["ADMIN", "SECURITY", "DEVELOPER"].includes(orgRole);
+  const canDeleteScan = orgRole && ["ADMIN", "SECURITY"].includes(orgRole);
+  const canRescanScan = orgRole && ["ADMIN", "SECURITY", "DEVELOPER"].includes(orgRole);
 
   async function handleRescan(scanId: string) {
     setRescanningId(scanId);
@@ -122,11 +129,12 @@ export default function ScansPage() {
         <div>
           <h1 className="text-2xl font-bold">Scans</h1>
           <p className="text-muted-foreground">
-            Review findings from the table. Use New scan to queue a scan from the
-            dialog.
+            {canCreateScan
+              ? "Review findings from the table. Use New scan to queue a scan from the dialog."
+              : "Review findings from the table. Only admins and security users can create scans."}
           </p>
         </div>
-        <CreateScanDialog onScanCreated={() => refresh()} />
+        {canCreateScan && <CreateScanDialog onScanCreated={() => refresh()} />}
       </div>
 
       <Card>
@@ -214,38 +222,42 @@ export default function ScansPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={rescanningId === scan.id}
-                              onClick={() => handleRescan(scan.id as string)}
-                              aria-label="Retry Scan"
-                            >
-                              <RotateCcw className="h-4 w-4" aria-hidden />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Retry Scan</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={
-                                deletingId === scan.id ||
-                                scan.status === "RUNNING" ||
-                                scan.status === "PAUSED"
-                              }
-                              onClick={() => handleDeleteScan(scan.id as string)}
-                              aria-label="Delete Scan"
-                            >
-                              <Trash2 className="h-4 w-4" aria-hidden />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Delete Scan</TooltipContent>
-                        </Tooltip>
+                        {canRescanScan && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={rescanningId === scan.id}
+                                onClick={() => handleRescan(scan.id as string)}
+                                aria-label="Retry Scan"
+                              >
+                                <RotateCcw className="h-4 w-4" aria-hidden />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Retry Scan</TooltipContent>
+                          </Tooltip>
+                        )}
+                        {canDeleteScan && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={
+                                  deletingId === scan.id ||
+                                  scan.status === "RUNNING" ||
+                                  scan.status === "PAUSED"
+                                }
+                                onClick={() => handleDeleteScan(scan.id as string)}
+                                aria-label="Delete Scan"
+                              >
+                                <Trash2 className="h-4 w-4" aria-hidden />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete Scan</TooltipContent>
+                          </Tooltip>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

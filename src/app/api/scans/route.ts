@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { scanQueue, ScanJobData } from "@/lib/queue";
 import { uploadObject, ensureBucket } from "@/lib/minio";
 import { z } from "zod";
@@ -66,6 +66,14 @@ export async function POST(req: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId) {
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
+  }
+
+  const roleAuth = await requireRole(orgId, "DEVELOPER");
+  if ("error" in roleAuth) return roleAuth.error;
+
   try {
     const contentType = req.headers.get("content-type") || "";
     let scanParams: z.infer<typeof createScanSchema>;
@@ -122,11 +130,6 @@ export async function POST(req: NextRequest) {
     } else {
       const body = await req.json();
       scanParams = createScanSchema.parse(body);
-    }
-
-    const orgId = getDefaultOrgId(auth.session);
-    if (!orgId) {
-      return NextResponse.json({ error: "No organization" }, { status: 403 });
     }
 
     if (!fileBuffer && !scanParams.repoUrl && !scanParams.svnUrl) {

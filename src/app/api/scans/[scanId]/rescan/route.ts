@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { scanQueue, ScanJobData } from "@/lib/queue";
 import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
 import { execFileSync } from "child_process";
@@ -30,6 +30,9 @@ export async function POST(
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+
+  const roleAuth = await requireRole(orgId, "DEVELOPER");
+  if ("error" in roleAuth) return roleAuth.error;
 
   const { scanId } = await params;
 

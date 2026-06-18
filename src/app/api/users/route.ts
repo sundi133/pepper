@@ -57,7 +57,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = inviteSchema.parse(body);
 
-    let user = await prisma.user.findUnique({ where: { email: data.email } });
+    let user = await prisma.user.findFirst({
+      where: { email: { equals: data.email, mode: "insensitive" } },
+    });
     let isNewUser = false;
 
     if (!user) {

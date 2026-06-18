@@ -31,10 +31,16 @@ export default function ApiKeysPage() {
   const [revealed, setRevealed] = useState<string | null>(null);
 
   async function reload() {
-    const res = await fetch("/api/apikeys");
-    if (res.ok) {
-      const j = (await res.json()) as { keys: Key[] };
-      setKeys(j.keys);
+    try {
+      const res = await fetch("/api/apikeys");
+      if (res.ok) {
+        const j = (await res.json()) as { keys: Key[] };
+        setKeys(j.keys);
+      } else {
+        toast.error("Failed to load API keys");
+      }
+    } catch (err) {
+      toast.error("Failed to load API keys");
     }
   }
 
@@ -43,23 +49,35 @@ export default function ApiKeysPage() {
   }, []);
 
   async function create() {
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      toast.error("Enter a key name");
+      return;
+    }
     setCreating(true);
     try {
       const res = await fetch("/api/apikeys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name: name.trim() }),
       });
       if (!res.ok) {
-        const j = (await res.json()) as { error?: string };
-        toast.error(j.error || "Create failed");
+        const text = await res.text();
+        try {
+          const j = JSON.parse(text) as { error?: string };
+          toast.error(j.error || `Error: ${res.status}`);
+        } catch {
+          toast.error(`Error: ${res.status} ${res.statusText}`);
+        }
         return;
       }
       const data = (await res.json()) as { plaintext: string; prefix: string };
       setRevealed(data.plaintext);
       setName("");
+      toast.success("Key created! Copy it now—it won't be shown again.");
+      await new Promise((r) => setTimeout(r, 500));
       void reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Create failed");
     } finally {
       setCreating(false);
     }
@@ -67,11 +85,23 @@ export default function ApiKeysPage() {
 
   async function revoke(id: string) {
     if (!confirm("Revoke this API key? Any clients using it will stop working.")) return;
-    const res = await fetch(`/api/apikeys/${id}`, { method: "DELETE" });
-    if (res.ok) {
-      toast.success("Revoked");
-      void reload();
-    } else toast.error("Revoke failed");
+    try {
+      const res = await fetch(`/api/apikeys/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Key revoked");
+        void reload();
+      } else {
+        const text = await res.text();
+        try {
+          const j = JSON.parse(text) as { error?: string };
+          toast.error(j.error || "Revoke failed");
+        } catch {
+          toast.error(`Revoke failed: ${res.status}`);
+        }
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Revoke failed");
+    }
   }
 
   return (

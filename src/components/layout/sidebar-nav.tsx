@@ -16,7 +16,6 @@ import {
   TrendingUp,
   KeyRound,
   History,
-  Globe,
   FileSignature,
   type LucideIcon,
 } from "lucide-react";
@@ -34,7 +33,6 @@ export const settingsNavigation: NavItem[] = [
   { name: "LLM Config", href: "/settings/llm", icon: Zap },
   { name: "Policies", href: "/settings/policies", icon: ScrollText },
   { name: "Build Gates", href: "/settings/build-gates", icon: ShieldCheck },
-  { name: "DAST", href: "/settings/dast", icon: Globe },
   { name: "Code Signing", href: "/settings/signing", icon: FileSignature },
   { name: "Team", href: "/settings/team", icon: Users },
   { name: "Integrations", href: "/settings/integrations", icon: Webhook },

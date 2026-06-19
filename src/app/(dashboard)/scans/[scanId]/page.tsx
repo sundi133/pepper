@@ -69,13 +69,13 @@ const FINDING_SECTIONS = [
     id: "SAST",
     title: "SAST Findings",
     scanners: ["SAST_LLM", "SAST_PATTERN"],
-    description: "Static application security findings (AI and pattern-based)",
+    description: "Static application security findings (LLM Analysis)",
   },
   {
     id: "SECRETS",
     title: "Secrets Findings",
     scanners: ["SECRETS_LLM", "SECRETS_PATTERN"],
-    description: "Leaked or exposed credential findings (AI and pattern-based)",
+    description: "Leaked or exposed credential findings (LLM Analysis)",
   },
   {
     id: "SCA",

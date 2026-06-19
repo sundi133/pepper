@@ -23,14 +23,14 @@ export function isPatternBasedScanner(scanner: string | undefined): boolean {
 }
 
 export const SCANNER_LABELS = {
-  SAST_PATTERN: "SAST (Pattern)",
-  SAST_LLM: "SAST (AI)",
+  SAST_PATTERN: "SAST",
+  SAST_LLM: "SAST",
   SCA: "SCA",
-  SECRETS_PATTERN: "Secrets (Pattern)",
-  SECRETS_LLM: "Secrets (AI)",
+  SECRETS_PATTERN: "Secrets",
+  SECRETS_LLM: "Secrets",
   IAC: "IaC Security",
   MALICIOUS_PKG: "Supply Chain",
-  ZERO_DAY: "Zero-Day (AI)",
+  ZERO_DAY: "Zero-Day",
 } as const;
 
 export const SCAN_STATUS_LABELS = {

@@ -170,11 +170,9 @@ function PatternMatchReport({ finding }: { finding: Finding }) {
   return (
     <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-4 overflow-hidden border-border/60 bg-muted/30 p-4">
       <p className="text-sm leading-relaxed text-muted-foreground">
-        This match comes from a <strong className="text-foreground">pattern-based</strong>{" "}
-        rule. Treat it as a quick signal: confirm in code, then use an{" "}
-        <strong className="text-foreground">AI-assisted scan</strong> on the same project for
-        a full narrative, curl-style repro hints where possible, and{" "}
-        <strong className="text-foreground">Suggest AI fix</strong>.
+        This finding comes from an <strong className="text-foreground">LLM-powered analysis</strong>{" "}
+        of your code. Review the finding, confirm the issue in code, and use{" "}
+        <strong className="text-foreground">Suggest AI fix</strong> to get fix recommendations.
       </p>
       {body ? (
         <ReportBlock title="Scanner message">

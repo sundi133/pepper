@@ -580,8 +580,121 @@ export function IntegrationsDashboard() {
         </div>
       </div>
 
+      {/* Developer Tools Section */}
+      <div className="px-8 py-12 border-t border-gray-200 bg-gray-50">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Developer Tools</h2>
+        <p className="text-gray-600 mb-8">
+          Set up pre-commit hooks, IDE plugins, and other developer integrations.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Pre-commit Hook Card */}
+          <Link href="/settings/integrations/precommit">
+            <div className="h-full rounded-lg border border-gray-200 bg-white hover:shadow-md transition-shadow overflow-hidden cursor-pointer">
+              <div className="border-b border-gray-200 p-6 bg-gray-50 flex items-start justify-between">
+                <div className="text-gray-700">
+                  <Zap className="h-8 w-8" />
+                </div>
+                <button className="text-gray-400 hover:text-gray-600">
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="p-6">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Pre-commit Hook</h3>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Block commits with secrets or high-severity findings automatically.
+                  </p>
+                </div>
+                <div className="space-y-2 py-4 border-t border-gray-200">
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    Secret Detection
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    SAST Blocking
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    One-Click Setup
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-4">
+                  <Button
+                    size="sm"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    Setup
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    Learn More →
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Link>
+
+          {/* IDE Integration Card */}
+          <Link href="/settings/integrations/ide">
+            <div className="h-full rounded-lg border border-gray-200 bg-white hover:shadow-md transition-shadow overflow-hidden cursor-pointer">
+              <div className="border-b border-gray-200 p-6 bg-gray-50 flex items-start justify-between">
+                <div className="text-gray-700">
+                  <svg className="h-8 w-8" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M0 3v18h24V3H0zm9 16H2v-2h7v2zm3-5H2V4h10v10zm11 5h-7v-2h7v2zm0-5H2V4h20v10z"/>
+                  </svg>
+                </div>
+                <button className="text-gray-400 hover:text-gray-600">
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="p-6">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">IDE Integration</h3>
+                  <p className="text-sm text-gray-600 mt-2">
+                    View findings in VS Code, Neovim, or any editor via API.
+                  </p>
+                </div>
+                <div className="space-y-2 py-4 border-t border-gray-200">
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    VS Code Support
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    API Endpoint
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    Auto-Fill Setup
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-4">
+                  <Button
+                    size="sm"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    Configure
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    Learn More →
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Link>
+        </div>
+      </div>
+
       {/* Security Footer */}
-      <div className="border-t border-gray-200 bg-gray-50 mt-12 py-4">
+      <div className="border-t border-gray-200 bg-gray-50 mt-0 py-4">
         <div className="max-w-7xl mx-auto px-8 flex items-center justify-between">
           <div className="flex items-center gap-3 text-sm text-gray-600">
             <Lock className="h-4 w-4 text-gray-500" />

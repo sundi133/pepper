@@ -223,7 +223,7 @@ export default function DashboardPage() {
 
       {/* Security score */}
       <section aria-labelledby="security-score-heading">
-        <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
+        <Card className="overflow-hidden border-border/60 bg-card/80 shadow-sm">
           <CardContent className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
             <div
               className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-2 shadow-inner sm:h-28 sm:w-28"
@@ -252,7 +252,7 @@ export default function DashboardPage() {
                 {scoreSubtitle(score, criticalCount)}
               </p>
             </div>
-            <div className="grid w-full grid-cols-1 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <div className="grid w-full grid-cols-1 divide-y divide-border/50 overflow-hidden rounded-lg border border-border/40 bg-background/40 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               <div className="px-3 py-3 sm:px-4">
                 <p className="text-xs font-medium text-muted-foreground">
                   Last scan
@@ -330,7 +330,7 @@ export default function DashboardPage() {
 
       {/* Severity + monitoring */}
       <section className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:items-stretch">
-        <Card className="flex min-h-0 flex-col border-slate-200 bg-white">
+        <Card className="flex min-h-0 flex-col border-border/60 bg-card/80">
           <CardHeader className="space-y-1 pb-2 sm:pb-4">
             <CardTitle className="text-lg sm:text-xl">
               Vulnerabilities by severity
@@ -367,8 +367,8 @@ export default function DashboardPage() {
                   </Pie>
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#ffffff",
-                      border: "1px solid #e5e7eb",
+                      backgroundColor: "oklch(0.19 0.03 260)",
+                      border: "1px solid oklch(1 0 0 / 12%)",
                       borderRadius: "8px",
                       fontSize: "12px",
                     }}
@@ -411,7 +411,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="flex min-h-0 flex-col border-slate-200 bg-white">
+        <Card className="flex min-h-0 flex-col border-border/60 bg-card/80">
           <CardHeader className="space-y-1">
             <CardTitle className="text-lg sm:text-xl">Top vulnerabilities by type</CardTitle>
             <CardDescription className="text-xs sm:text-sm">
@@ -470,7 +470,7 @@ export default function DashboardPage() {
 
       {/* Projects + activity */}
       <section className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:items-stretch">
-        <Card className="flex min-h-0 flex-col border-slate-200 bg-white">
+        <Card className="flex min-h-0 flex-col border-border/60 bg-card/80">
           <CardHeader className="flex flex-col gap-3 space-y-0 pb-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div className="min-w-0 space-y-1">
               <CardTitle className="text-lg sm:text-xl">Recent projects</CardTitle>
@@ -524,7 +524,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="flex min-h-0 flex-col border-slate-200 bg-white">
+        <Card className="flex min-h-0 flex-col border-border/60 bg-card/80">
           <CardHeader className="space-y-1">
             <CardTitle className="text-lg sm:text-xl">Activity feed</CardTitle>
             <CardDescription className="text-xs sm:text-sm">
@@ -541,7 +541,7 @@ export default function DashboardPage() {
                 {overview?.activities?.map((a) => (
                   <li
                     key={a.id}
-                    className="flex gap-3 border-b border-slate-200 py-3 first:pt-0 last:border-0 last:pb-0"
+                    className="flex gap-3 border-b border-border/40 py-3 first:pt-0 last:border-0 last:pb-0"
                   >
                     <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                       <CheckCircle2 className="h-3 w-3" />
@@ -579,7 +579,7 @@ function MetricTile({
   iconClassName?: string;
 }) {
   return (
-    <Card className="border-slate-200 bg-white shadow-sm">
+    <Card className="border-border/60 bg-card/80 shadow-sm">
       <CardContent className="flex items-start justify-between gap-2 p-3.5 sm:gap-3 sm:p-4">
         <div className="min-w-0 flex-1 space-y-1">
           <p className="text-[10px] font-medium uppercase leading-tight tracking-wide text-muted-foreground sm:text-xs">

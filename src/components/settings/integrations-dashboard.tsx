@@ -370,11 +370,20 @@ export function IntegrationsDashboard() {
           window.location.href = "/api/integrations/github/connect?returnTo=%2Fsettings%2Fintegrations";
         }
         break;
+      case "gitlab":
+        toast.info("GitLab integration coming soon");
+        break;
       case "bitbucket":
         setBitbucketFormOpen(true);
         break;
       case "azure":
         setAzureFormOpen(true);
+        break;
+      case "slack":
+        toast.info("Slack integration coming soon");
+        break;
+      case "jira":
+        toast.info("Jira integration coming soon");
         break;
       default:
         toast.info("Coming soon");
@@ -537,9 +546,7 @@ export function IntegrationsDashboard() {
                             <Button
                               size="sm"
                               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                              onClick={() => {
-                                /* Handle manage */
-                              }}
+                              onClick={() => toast.info("Manage feature coming soon")}
                             >
                               Manage
                             </Button>

@@ -180,12 +180,26 @@ export async function openAgenticSecurityFixPr(
 
   // ── Phase 1: PLAN ───────────────────────────────────────────────
 
-  let filesToExamine: string[] = [normalizeRepoFilePath(filePath)];
+  const normalizedPrimaryPath = normalizeRepoFilePath(filePath);
+  let resolvedPrimaryPath = normalizedPrimaryPath;
+  let filesToExamine: string[] = [resolvedPrimaryPath];
   let planReasoning = "Single file analysis (tree fetch failed or skipped).";
 
   try {
     const treeResult = await getRepoTree(token, owner, repo, head.sha);
     if (treeResult.ok && treeResult.tree) {
+      const treePaths = new Set(treeResult.tree.filter((e) => e.type === "blob").map((e) => e.path));
+
+      // If the finding path doesn't match the repo, try to find it by filename
+      if (!treePaths.has(resolvedPrimaryPath)) {
+        const basename = resolvedPrimaryPath.split("/").pop() || "";
+        const match = [...treePaths].find((p) => p.endsWith(`/${basename}`) || p === basename);
+        if (match) {
+          resolvedPrimaryPath = match;
+          filesToExamine = [resolvedPrimaryPath];
+        }
+      }
+
       const treeSummary = buildTreeSummary(treeResult.tree);
       const planPayload = {
         finding: {
@@ -212,17 +226,14 @@ export async function openAgenticSecurityFixPr(
       }>(planRaw, {});
 
       if (Array.isArray(planResult.filesToExamine) && planResult.filesToExamine.length > 0) {
-        // Validate paths exist in tree
-        const treePaths = new Set(treeResult.tree.filter((e) => e.type === "blob").map((e) => e.path));
-        const normalizedPrimary = normalizeRepoFilePath(filePath);
         const validated = planResult.filesToExamine
           .map((p) => normalizeRepoFilePath(p))
           .filter((p) => treePaths.has(p))
           .slice(0, MAX_FILES_TO_EXAMINE);
 
         // Always include the primary file
-        if (!validated.includes(normalizedPrimary)) {
-          validated.unshift(normalizedPrimary);
+        if (!validated.includes(resolvedPrimaryPath)) {
+          validated.unshift(resolvedPrimaryPath);
         }
         filesToExamine = validated;
         planReasoning = planResult.reasoning || "LLM-selected files for analysis.";
@@ -262,12 +273,12 @@ export async function openAgenticSecurityFixPr(
 
   trace.push({ type: "gather", filesRead: gatheredMeta });
 
-  const primaryPath = normalizeRepoFilePath(filePath);
+  const primaryPath = resolvedPrimaryPath;
   if (!gatheredFiles[primaryPath]) {
     return {
       ok: false,
       status: 404,
-      error: `Could not read "${primaryPath}" from ${owner}/${repo}.`,
+      error: `Could not read "${primaryPath}" from ${owner}/${repo}. The file path from the scan may not match the repository layout.`,
       agentTrace: trace,
     };
   }

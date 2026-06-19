@@ -71,6 +71,28 @@ export function IntegrationsDashboard() {
     pat: "",
   });
 
+  // ─── Slack Integration ──────────────────────────────────────────────
+  const [slackFormOpen, setSlackFormOpen] = useState(false);
+  const [slackSubmitting, setSlackSubmitting] = useState(false);
+  const [slackTesting, setSlackTesting] = useState(false);
+  const [slackForm, setSlackForm] = useState({
+    webhookUrl: "",
+    channel: "",
+  });
+  const [slackIntegrationId, setSlackIntegrationId] = useState<string | null>(null);
+
+  // ─── Jira Integration ──────────────────────────────────────────────
+  const [jiraFormOpen, setJiraFormOpen] = useState(false);
+  const [jiraSubmitting, setJiraSubmitting] = useState(false);
+  const [jiraTesting, setJiraTesting] = useState(false);
+  const [jiraForm, setJiraForm] = useState({
+    baseUrl: "",
+    email: "",
+    apiToken: "",
+    projectKey: "",
+  });
+  const [jiraIntegrationId, setJiraIntegrationId] = useState<string | null>(null);
+
   async function refreshAzure() {
     try {
       const res = await fetch("/api/integrations/azure-devops/connect");
@@ -389,6 +411,135 @@ export function IntegrationsDashboard() {
     }
   };
 
+  async function connectSlack(e: React.FormEvent) {
+    e.preventDefault();
+    const webhookUrl = slackForm.webhookUrl.trim();
+    if (!webhookUrl) {
+      toast.error("Webhook URL is required");
+      return;
+    }
+    setSlackSubmitting(true);
+    try {
+      const res = await fetch("/api/integrations/slack/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          webhookUrl,
+          channel: slackForm.channel || undefined,
+          name: "Slack",
+        }),
+      });
+      const data = (await res.json()) as { error?: string; success?: boolean; id?: string };
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to connect Slack");
+      }
+      toast.success("Slack connected successfully");
+      setSlackIntegrationId(data.id || null);
+      setSlackForm({ webhookUrl: "", channel: "" });
+      // Don't close form yet - let user verify setup
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to connect Slack",
+      );
+    } finally {
+      setSlackSubmitting(false);
+    }
+  }
+
+  async function testSlackSetup() {
+    if (!slackIntegrationId) {
+      toast.error("No Slack integration found");
+      return;
+    }
+    setSlackTesting(true);
+    try {
+      const res = await fetch("/api/integrations/slack/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: slackIntegrationId }),
+      });
+      const data = (await res.json()) as { error?: string; success?: boolean };
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to send test notification");
+      }
+      toast.success("Test notification sent! Check your Slack channel.");
+      setSlackFormOpen(false);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to send test notification",
+      );
+    } finally {
+      setSlackTesting(false);
+    }
+  }
+
+  async function connectJira(e: React.FormEvent) {
+    e.preventDefault();
+    const baseUrl = jiraForm.baseUrl.trim();
+    const email = jiraForm.email.trim();
+    const apiToken = jiraForm.apiToken.trim();
+    const projectKey = jiraForm.projectKey.trim();
+    if (!baseUrl || !email || !apiToken || !projectKey) {
+      toast.error("All fields are required");
+      return;
+    }
+    setJiraSubmitting(true);
+    try {
+      const res = await fetch("/api/integrations/jira/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseUrl,
+          email,
+          apiToken,
+          projectKey,
+          name: `Jira (${projectKey})`,
+        }),
+      });
+      const data = (await res.json()) as { error?: string; success?: boolean; id?: string };
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to connect Jira");
+      }
+      toast.success("Jira connected successfully");
+      setJiraIntegrationId(data.id || null);
+      setJiraForm({ baseUrl: "", email: "", apiToken: "", projectKey: "" });
+      // Don't close form yet - let user verify setup
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to connect Jira",
+      );
+    } finally {
+      setJiraSubmitting(false);
+    }
+  }
+
+  async function testJiraSetup() {
+    if (!jiraIntegrationId) {
+      toast.error("No Jira integration found");
+      return;
+    }
+    setJiraTesting(true);
+    try {
+      const res = await fetch("/api/integrations/jira/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: jiraIntegrationId }),
+      });
+      const data = (await res.json()) as { error?: string; success?: boolean; issueKey?: string };
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create test issue");
+      }
+      toast.success(`Test issue created! Key: ${data.issueKey}`);
+      setJiraFormOpen(false);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create test issue",
+      );
+    } finally {
+      setJiraTesting(false);
+    }
+  }
+
   const filteredIntegrations = integrations.filter((integration) => {
     const matchesCategory = activeCategory === "all" || integration.category === activeCategory;
     const matchesSearch =
@@ -422,10 +573,10 @@ export function IntegrationsDashboard() {
         setAzureFormOpen(true);
         break;
       case "slack":
-        toast.info("Slack integration coming soon");
+        setSlackFormOpen(true);
         break;
       case "jira":
-        toast.info("Jira integration coming soon");
+        setJiraFormOpen(true);
         break;
       default:
         toast.info("Coming soon");
@@ -829,6 +980,169 @@ export function IntegrationsDashboard() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Slack Form Modal */}
+      {slackFormOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold mb-2 text-gray-900">Connect Slack</h2>
+            <p className="text-sm text-slate-600 mb-4">
+              Get your webhook URL from Slack's incoming webhooks settings.
+            </p>
+            <form onSubmit={connectSlack} className="space-y-4">
+              <div>
+                <Label htmlFor="slack-webhook" className="">Webhook URL</Label>
+                <Input
+                  id="slack-webhook"
+                  type="password"
+                  value={slackForm.webhookUrl}
+                  onChange={(e) =>
+                    setSlackForm({ ...slackForm, webhookUrl: e.target.value })
+                  }
+                  placeholder="https://hooks.slack.com/services/..."
+                  className=""
+                />
+              </div>
+              <div>
+                <Label htmlFor="slack-channel" className="">Channel (optional)</Label>
+                <Input
+                  id="slack-channel"
+                  value={slackForm.channel}
+                  onChange={(e) =>
+                    setSlackForm({ ...slackForm, channel: e.target.value })
+                  }
+                  placeholder="#security-alerts"
+                  className=""
+                />
+              </div>
+              <div className="flex gap-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSlackFormOpen(false)}
+                  className=""
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={slackSubmitting}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {slackSubmitting ? "Connecting..." : "Connect"}
+                </Button>
+              </div>
+            </form>
+            {slackIntegrationId && (
+              <div className="border-t border-gray-200 mt-4 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={testSlackSetup}
+                  disabled={slackTesting}
+                  className="w-full"
+                >
+                  {slackTesting ? "Testing..." : "Verify Setup"}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Jira Form Modal */}
+      {jiraFormOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold mb-2 text-gray-900">Connect Jira</h2>
+            <p className="text-sm text-slate-600 mb-4">
+              Generate an API token from your Jira account settings.
+            </p>
+            <form onSubmit={connectJira} className="space-y-4">
+              <div>
+                <Label htmlFor="jira-url" className="">Base URL</Label>
+                <Input
+                  id="jira-url"
+                  value={jiraForm.baseUrl}
+                  onChange={(e) =>
+                    setJiraForm({ ...jiraForm, baseUrl: e.target.value })
+                  }
+                  placeholder="https://company.atlassian.net"
+                  className=""
+                />
+              </div>
+              <div>
+                <Label htmlFor="jira-email" className="">Email</Label>
+                <Input
+                  id="jira-email"
+                  type="email"
+                  value={jiraForm.email}
+                  onChange={(e) =>
+                    setJiraForm({ ...jiraForm, email: e.target.value })
+                  }
+                  placeholder="admin@company.com"
+                  className=""
+                />
+              </div>
+              <div>
+                <Label htmlFor="jira-token" className="">API Token</Label>
+                <Input
+                  id="jira-token"
+                  type="password"
+                  value={jiraForm.apiToken}
+                  onChange={(e) =>
+                    setJiraForm({ ...jiraForm, apiToken: e.target.value })
+                  }
+                  placeholder="••••••••"
+                  className=""
+                />
+              </div>
+              <div>
+                <Label htmlFor="jira-project" className="">Project Key</Label>
+                <Input
+                  id="jira-project"
+                  value={jiraForm.projectKey}
+                  onChange={(e) =>
+                    setJiraForm({ ...jiraForm, projectKey: e.target.value })
+                  }
+                  placeholder="SEC"
+                  className=""
+                />
+              </div>
+              <div className="flex gap-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setJiraFormOpen(false)}
+                  className=""
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={jiraSubmitting}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {jiraSubmitting ? "Connecting..." : "Connect"}
+                </Button>
+              </div>
+            </form>
+            {jiraIntegrationId && (
+              <div className="border-t border-gray-200 mt-4 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={testJiraSetup}
+                  disabled={jiraTesting}
+                  className="w-full"
+                >
+                  {jiraTesting ? "Testing..." : "Verify Setup"}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}

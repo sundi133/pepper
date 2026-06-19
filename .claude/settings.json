@@ -23,10 +23,12 @@
       "Bash(pkill -9 -f node)",
       "Bash(pkill -9 -f npm)",
       "Bash(rm -rf /home/sam/pepper/.next /tmp/next-panic-*.log)",
-      "Bash(npm ls *)"
+      "Bash(npm ls *)",
+      "Bash(cp /tmp/scanid-page.tsx \"/home/sam/pepper/src/app/\\(dashboard\\)/scans/[scanId]/page.tsx\")"
     ],
     "additionalDirectories": [
-      "/tmp"
+      "/tmp",
+      "/home/sam/pepper/src/app/(dashboard)/scans/[scanId]"
     ]
   }
 }

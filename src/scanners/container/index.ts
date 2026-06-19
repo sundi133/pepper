@@ -58,6 +58,7 @@ interface TrivyOutput {
 }
 
 function mapSeverity(sev?: string): SeverityLevel {
+  // Return Trivy's initial severity — will be recalibrated by LLM in triage
   switch ((sev || "").toUpperCase()) {
     case "CRITICAL":
       return "CRITICAL";
@@ -125,6 +126,75 @@ interface ConfigLlmFinding {
   confidence: number;
   remediation: string;
   validationSteps?: string[];
+}
+
+interface CveTriageEntry {
+  vulnerabilityId: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+  reason?: string;
+}
+
+async function triageContainerCves(
+  findings: RawFinding[],
+  llmConfig: {
+    provider: string;
+    baseUrl: string;
+    apiKey?: string;
+    model: string;
+  },
+): Promise<RawFinding[]> {
+  if (findings.length === 0) return [];
+
+  const client = createLlmClient(llmConfig);
+  const BATCH = 20;
+  const triaged: RawFinding[] = [];
+
+  for (let i = 0; i < findings.length; i += BATCH) {
+    const batch = findings.slice(i, i + BATCH);
+    const summary = batch.map((f) => ({
+      vulnerabilityId: f.cveId || f.ruleId,
+      title: f.title,
+      description: f.description,
+      currentSeverity: f.severity,
+      packageName: (f.metadata as Record<string, unknown>)?.packageName,
+      image: (f.metadata as Record<string, unknown>)?.image,
+    }));
+
+    try {
+      const raw = await analyzeWithLlm(
+        client,
+        llmConfig.model,
+        `Triage container CVE findings for severity calibration. For each CVE, assign SEVERITY (CRITICAL|HIGH|MEDIUM|LOW) based on:
+  - Exploitability in containerized deployments (easy RCE = CRITICAL; complex preconditions = MEDIUM)
+  - Impact on running container (privilege escalation = CRITICAL; DoS = HIGH; info leak = MEDIUM)
+  - Whether the vulnerable package is actually running in the image (in process = higher severity)
+
+Return JSON: { "triaged": [{ "vulnerabilityId", "severity": "CRITICAL|HIGH|MEDIUM|LOW|INFO", "reason" }] }`,
+        JSON.stringify({ vulnerabilities: summary }, null, 2),
+      );
+      const parsed = parseLlmJsonResponse<{ triaged: CveTriageEntry[] }>(raw, {
+        triaged: [],
+      });
+      const decisionMap = new Map(
+        (parsed.triaged || []).map((t) => [t.vulnerabilityId, t]),
+      );
+
+      for (const f of batch) {
+        const decision = decisionMap.get(f.cveId || f.ruleId || "");
+        const llmSeverity = decision?.severity || f.severity;
+
+        triaged.push({
+          ...f,
+          severity: llmSeverity,
+        });
+      }
+    } catch (err) {
+      logger.warn({ err }, "Container CVE triage batch failed — keeping Trivy findings");
+      triaged.push(...batch);
+    }
+  }
+
+  return triaged;
 }
 
 async function scanContainerConfig(
@@ -301,7 +371,7 @@ export const containerScanner: ScannerPlugin = {
             scanner: "CONTAINER",
             severity: mapSeverity(vuln.Severity),
             title: `${vuln.VulnerabilityID}: ${vuln.PkgName || "package"} in ${ref.image}`,
-            description: "",
+            description: vuln.Description || "",
             filePath: ref.filePath,
             startLine: ref.line,
             ruleId: vuln.VulnerabilityID,
@@ -334,6 +404,26 @@ export const containerScanner: ScannerPlugin = {
             }),
           );
         }
+      }
+    }
+
+    // Apply LLM-based severity calibration to all CVE findings
+    const cveFindings = findings.filter(f => (f.metadata as Record<string, unknown>)?.category === "CONTAINER_CVE");
+    const configOnlyFindings = findings.filter(f => (f.metadata as Record<string, unknown>)?.category !== "CONTAINER_CVE");
+
+    if (cveFindings.length > 0) {
+      try {
+        const triaged = await triageContainerCves(cveFindings, {
+          provider: ctx.orgSettings.llmProvider,
+          baseUrl: ctx.orgSettings.llmBaseUrl,
+          apiKey: ctx.orgSettings.llmApiKey,
+          model: ctx.orgSettings.llmModel,
+        });
+        ctx.onProgress?.(`CONTAINER: ${configOnlyFindings.length + triaged.length} findings after LLM severity calibration`);
+        return [...configOnlyFindings, ...triaged];
+      } catch (err) {
+        logger.warn({ err }, "Container CVE LLM triage failed — returning Trivy severities");
+        return findings;
       }
     }
 

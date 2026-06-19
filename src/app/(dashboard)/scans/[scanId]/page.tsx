@@ -230,17 +230,9 @@ export default function ScanDetailPage() {
 
   const hasReportableFindings =
     scan.status === "COMPLETED" || scan.status === "STOPPED";
-  const totalFindings =
-    scan.criticalCount +
-    scan.highCount +
-    scan.mediumCount +
-    scan.lowCount +
-    scan.infoCount;
   const visibleFindings = findings as Finding[];
-  const visibleFindingCount =
-    visibleFindings.length === totalFindings
-      ? String(visibleFindings.length)
-      : `${visibleFindings.length} of ${totalFindings}`;
+  // Use actual findings count instead of stored scan counts (which may be out of sync)
+  const visibleFindingCount = String(visibleFindings.length);
   const findingSections = groupFindingsBySection(visibleFindings);
 
   const fixPrSource = {

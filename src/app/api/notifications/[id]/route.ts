@@ -34,7 +34,7 @@ export async function PATCH(
     throw e;
   }
 
-  if (typeof data.read !== "boolean") {
+  if (typeof data.read === "undefined") {
     return NextResponse.json(
       { error: "Body must include read (boolean)" },
       { status: 400 },

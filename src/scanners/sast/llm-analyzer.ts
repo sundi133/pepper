@@ -20,6 +20,7 @@ import {
   LLM_MAX_FILE_SIZE_BYTES,
   MAX_LLM_CONCURRENCY,
   LLM_MIN_CONFIDENCE_DEFAULT,
+  detectIacFileType,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -87,8 +88,9 @@ const SYSTEM_PROMPT = `You are an expert security code auditor performing a DEEP
 
 STRICT RULES:
 1. Every finding must cite concrete evidence from the provided lines (functions, variables, sinks). If the exploit path depends on unseen callers or config, state that explicitly and lower confidence.
-2. Do NOT report noise: safe crypto (bcrypt/argon2 for passwords), obvious framework auto-escaping where it truly applies, parameterized queries/ORM where parameters are bound, bare env reads without secret material, or pure style/naming.
+2. Do NOT report noise: safe crypto (bcrypt/argon2 for passwords), obvious framework auto-escaping where it truly applies, parameterized queries/ORM where parameters are bound, bare env reads without secret material, pure style/naming, or OUTDATED DEPENDENCIES (report those to SCA, not SAST).
 3. Skip obvious test/fixture/mock files unless the pattern indicates production risk.
+4. NEVER report dependency version issues, package.json version mismatches, or "outdated" libraries — those are SCA findings, not code vulnerabilities.
 4. When you see a credible but context-dependent risk (e.g. missing authz check, suspicious sink, weak crypto), report it at MEDIUM/HIGH with honest confidence — do not suppress solely because a framework might mitigate elsewhere.
 5. Confidence MUST reflect certainty (model self-assessment):
    - 0.9-1.0: Certain — clear exploit path from visible code
@@ -302,7 +304,7 @@ export async function runLlmSastScanner(
     "LLM context configuration",
   );
 
-  // Collect all chunks from scannable files
+  // Collect all chunks from scannable files (excluding IaC files)
   for (const filePath of ctx.fileList) {
     await ctx.waitIfPaused?.();
     if (ctx.signal?.aborted) break;
@@ -312,6 +314,9 @@ export async function runLlmSastScanner(
 
     if (BINARY_EXTENSIONS.has(ext)) continue;
     if (!FILE_EXTENSIONS[ext]) continue;
+
+    // Skip IaC files — they're handled by the IaC scanner
+    if (detectIacFileType(filePath)) continue;
 
     const parts = filePath.split(path.sep);
     if (parts.some((p) => SKIP_DIRECTORIES.has(p))) continue;

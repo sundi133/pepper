@@ -13,6 +13,7 @@ interface TriageEntry {
   osvId: string;
   keep: boolean;
   reason?: string;
+  severity?: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
   metadata?: Record<string, unknown>;
 }
 
@@ -88,9 +89,12 @@ export async function triageScaFindings(
           confidenceReason: decision?.reason || "OSV advisory with AI triage",
         };
 
+        // Use LLM-calibrated severity if available, otherwise use OSV CVSS
+        const llmSeverity = decision?.severity || f.severity;
+
         triaged.push(
           enrichFinding(
-            { ...f, confidence: f.confidence ?? 1 },
+            { ...f, severity: llmSeverity, confidence: f.confidence ?? 1 },
             meta,
             {
               whatIsWrong: f.title,

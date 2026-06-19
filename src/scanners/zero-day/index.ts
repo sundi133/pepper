@@ -32,8 +32,10 @@ interface ZeroDayLlmFinding {
   endLine: number;
   cweId?: string;
   confidence?: number;
-  metadata?: Record<string, unknown>;
+  attackVector?: string;
+  stepsToReproduce?: string[];
   recommendation?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export const zeroDayScanner: ScannerPlugin = {
@@ -124,17 +126,19 @@ export const zeroDayScanner: ScannerPlugin = {
               ...(f.metadata || {}),
               category: f.category || "Novel",
               weaknessClass: f.category || "Business Logic",
+              attackScenario: f.attackVector,
+              affectedWorkflow: f.category,
+              exploitPreconditions: f.description,
+              businessLogicImpact: f.description,
             },
           });
           return enrichFinding(base, base.metadata as Record<string, unknown>, {
             whatIsWrong: f.title,
             where: `${f.filePath}:${f.startLine}`,
             whyExploitable: f.description,
-            attackPath: f.metadata?.attackPath as string,
-            fix:
-              f.recommendation ||
-              (f.metadata?.remediation as string) ||
-              "Close the exploit chain per recommendation.",
+            attackPath: f.attackVector,
+            fix: f.recommendation || "Apply the recommended security fix.",
+            validation: f.stepsToReproduce?.join("; "),
           });
         });
 

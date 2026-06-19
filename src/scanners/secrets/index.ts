@@ -73,6 +73,7 @@ interface SecretLlmFinding {
   provider?: string;
   impact: string;
   remediation: string;
+  validationSteps?: string[];
   confidence: number;
 }
 
@@ -209,7 +210,7 @@ async function analyzeSecretChunk(
         const masked = maskSecretValue(f.maskedValue || "****");
         const base: RawFinding = applySeverityCalibration({
           scanner: "SECRETS_LLM",
-          severity: f.severity?.toUpperCase() === "HIGH" ? "HIGH" : "CRITICAL",
+          severity: (f.severity?.toUpperCase() || "CRITICAL") as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO",
           title: `${f.credentialType}: ${f.title}`,
           description: "",
           filePath: chunk.filePath,
@@ -229,6 +230,7 @@ async function analyzeSecretChunk(
             evidence: f.whyReal,
             impact: f.impact,
             remediation: f.remediation,
+            validationSteps: f.validationSteps || [],
             confidenceReason: f.whyReal,
           },
         });

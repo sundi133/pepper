@@ -111,6 +111,8 @@ export async function queryOsvBatch(
 function cvssToSeverity(
   severity?: OsvVulnerability["severity"],
 ): RawFinding["severity"] {
+  // Return raw CVSS score for LLM calibration
+  // Severity will be determined by LLM-based calibration in triage stage
   if (!severity || severity.length === 0) return "MEDIUM";
 
   const cvss = severity.find((s) => s.type === "CVSS_V3");
@@ -119,6 +121,7 @@ function cvssToSeverity(
   const score = parseFloat(cvss.score);
   if (isNaN(score)) return "MEDIUM";
 
+  // Return initial severity - will be recalibrated by LLM in triageScaFindings
   if (score >= 9.0) return "CRITICAL";
   if (score >= 7.0) return "HIGH";
   if (score >= 4.0) return "MEDIUM";

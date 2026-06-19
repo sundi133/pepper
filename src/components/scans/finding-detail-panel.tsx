@@ -302,6 +302,31 @@ function FindingReportSections({ finding }: { finding: Finding }) {
     return <PatternMatchReport finding={finding} />;
   }
 
+  // SAST findings get professional format with metadata cards
+  if (finding.scanner === "SAST_LLM") {
+    return <SastReportSections finding={finding} />;
+  }
+
+  // Secrets findings get professional format with secret table
+  if (finding.scanner === "SECRETS_LLM") {
+    return <SecretsReportSections finding={finding} />;
+  }
+
+  // Container findings get professional CVE format
+  if (finding.scanner === "CONTAINER") {
+    return <ContainerReportSections finding={finding} />;
+  }
+
+  // Zero-Day findings get professional business logic format
+  if (finding.scanner === "ZERO_DAY") {
+    return <ZeroDayReportSections finding={finding} />;
+  }
+
+  // Special formatting for IaC and SCA findings
+  if (finding.scanner === "IAC" || finding.scanner === "SCA") {
+    return <IaCScaReportSections finding={finding} />;
+  }
+
   const report = buildStoredFindingReport(finding);
 
   return (
@@ -329,6 +354,666 @@ function FindingReportSections({ finding }: { finding: Finding }) {
       <ReportBlock title="Remediation">
         <ReportPlainList items={report.remediation} />
       </ReportBlock>
+    </section>
+  );
+}
+
+/** Professional SAST findings format with metadata cards and LLM-generated sections */
+function SastReportSections({ finding }: { finding: Finding }) {
+  const getSeverityColor = () => {
+    switch (finding.severity?.toUpperCase()) {
+      case "CRITICAL":
+        return { bg: "bg-red-50", border: "border-red-200", icon: "🔴", text: "text-red-700" };
+      case "HIGH":
+        return { bg: "bg-orange-50", border: "border-orange-200", icon: "🟠", text: "text-orange-700" };
+      case "MEDIUM":
+        return { bg: "bg-amber-50", border: "border-amber-200", icon: "🟡", text: "text-amber-700" };
+      case "LOW":
+        return { bg: "bg-blue-50", border: "border-blue-200", icon: "🔵", text: "text-blue-700" };
+      default:
+        return { bg: "bg-gray-50", border: "border-gray-200", icon: "ℹ️", text: "text-gray-700" };
+    }
+  };
+
+  const color = getSeverityColor();
+  const report = buildStoredFindingReport(finding);
+
+  return (
+    <section className="finding-detail-report min-w-0 max-w-full space-y-4 overflow-hidden">
+      <div className={`${color.bg} border ${color.border} rounded-lg p-4`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-2xl">{color.icon}</span>
+              <h2 className={`text-lg font-bold ${color.text}`}>{finding.severity?.toUpperCase()}</h2>
+              <span className="text-base font-semibold text-gray-900">
+                {stripReportMarkdown(report.vulnerabilityName)}
+              </span>
+            </div>
+          </div>
+          {finding.cweId && (
+            <div className={`px-3 py-1 rounded-full border ${color.border} ${color.text} text-sm font-semibold`}>
+              {finding.cweId}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {finding.metadata?.route ? (
+          <MetadataCard icon="📍" label="Endpoint" value={(finding.metadata.route as string)} />
+        ) : null}
+        {finding.filePath ? (
+          <MetadataCard icon="📄" label="File" value={`${finding.filePath}:${finding.startLine || 1}`} />
+        ) : null}
+        <MetadataCard icon="⚠️" label="Severity" value={finding.severity?.toUpperCase() || "UNKNOWN"} />
+        {finding.metadata?.weaknessClass ? (
+          <MetadataCard icon="🛡️" label="Category" value={(finding.metadata.weaknessClass as string)} />
+        ) : null}
+      </div>
+
+      <div className="space-y-4">
+        {report.summary ? (
+          <ReportSection icon="ℹ️" title="Summary" color={color}>
+            <ReportSummaryText text={report.summary} />
+          </ReportSection>
+        ) : null}
+
+        {finding.metadata?.exploitPreconditions ? (
+          <ReportSection icon="❓" title="Root Cause" color={color}>
+            <p className="text-sm text-gray-700">
+              {finding.metadata.exploitPreconditions as string}
+            </p>
+          </ReportSection>
+        ) : null}
+
+        {finding.metadata?.whyExploitable ? (
+          <ReportSection icon="⚡" title="Why This Is Exploitable" color={color}>
+            <p className="text-sm text-gray-700">
+              {finding.metadata.whyExploitable as string}
+            </p>
+          </ReportSection>
+        ) : null}
+
+        {report.stepsToReproduce.length > 0 ? (
+          <ReportSection icon="🧪" title="Steps to Reproduce" color={color}>
+            <ol className="space-y-2 text-sm text-gray-700">
+              {report.stepsToReproduce.map((step, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="font-semibold min-w-6">{i + 1}.</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+          </ReportSection>
+        ) : null}
+
+        {report.impact ? (
+          <ReportSection icon="💥" title="Impact" color={color}>
+            <ReportRichText text={report.impact} />
+          </ReportSection>
+        ) : null}
+
+        {report.remediation.length > 0 ? (
+          <ReportSection icon="🛠️" title="Remediation" color={color}>
+            <ul className="space-y-2 text-sm text-gray-700">
+              {report.remediation.map((fix, i) => (
+                <li key={i} className="flex gap-2">
+                  <span>•</span>
+                  <span>{fix}</span>
+                </li>
+              ))}
+            </ul>
+          </ReportSection>
+        ) : null}
+
+        {finding.metadata?.terminalCommand ? (
+          <div className="mt-4 p-4 bg-gray-900 rounded-lg">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-white font-bold">Terminal (Example)</span>
+            </div>
+            <pre className="text-green-400 text-xs font-mono overflow-x-auto">
+              <code>{finding.metadata.terminalCommand as string}</code>
+            </pre>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function MetadataCard({ icon, label, value }: { icon: string; label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-2 p-3 bg-white rounded-lg border border-gray-200">
+      <span className="text-lg mt-0.5">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-xs font-semibold text-gray-600">{label}</p>
+        <p className="text-sm font-semibold text-gray-900 truncate">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function ReportSection({
+  icon,
+  title,
+  children,
+  color,
+}: {
+  icon: string;
+  title: string;
+  children: React.ReactNode;
+  color: { text: string };
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-lg">{icon}</span>
+        <p className={`text-sm font-bold ${color.text}`}>{title}</p>
+      </div>
+      <div className="pl-6">{children}</div>
+    </div>
+  );
+}
+
+/** Professional Secrets findings format with secret details table */
+function SecretsReportSections({ finding }: { finding: Finding }) {
+  const credentialType = (finding.metadata?.credentialType as string) || "";
+  const maskedValue = (finding.metadata?.maskedValue as string) || "";
+  const location = finding.filePath ? `${finding.filePath}:${finding.startLine || 1}` : "";
+  const impact = (finding.metadata?.impact as string) || "";
+  const evidence = (finding.metadata?.evidence as string) || "";
+  const remediation = (finding.metadata?.remediation as string) || "";
+  const validationSteps = (finding.metadata?.validationSteps as string[]) || [];
+
+  return (
+    <section className="finding-detail-report min-w-0 max-w-full space-y-4 overflow-hidden">
+      {/* Secrets Identified Card */}
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">🔗</span>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Secrets Identified</h2>
+              <p className="text-sm text-gray-700 mt-1">
+                The following secret value was found exposed in the source code.
+              </p>
+            </div>
+          </div>
+          <button className="px-3 py-2 border border-red-300 text-red-700 rounded hover:bg-red-100 text-sm font-semibold flex items-center gap-2">
+            📋 Copy
+          </button>
+        </div>
+
+        {/* Secrets Details Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-red-200">
+                <th className="px-3 py-2 text-left font-semibold text-gray-700">Secret Type</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700">Secret Value</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700">Location</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-red-100">
+                <td className="px-3 py-3 font-semibold text-red-700">{credentialType}</td>
+                <td className="px-3 py-3 font-mono text-xs text-gray-900 break-all bg-gray-50 rounded">
+                  {maskedValue}
+                </td>
+                <td className="px-3 py-3">
+                  <a href="#" className="text-blue-600 hover:underline font-semibold">
+                    📄 {location}
+                  </a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Warning Banner */}
+        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded flex gap-2">
+          <span className="text-lg">⚠️</span>
+          <p className="text-sm text-yellow-800">
+            This secret was found in source code and may have been committed to version control.
+          </p>
+        </div>
+      </div>
+
+      {/* How to Validate - from LLM */}
+      {validationSteps.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🔍</span>
+            <p className="text-sm font-bold text-blue-700">How to Validate</p>
+          </div>
+          <div className="pl-6 text-sm text-gray-700">
+            {evidence ? <p className="mb-2">{evidence}</p> : null}
+            <ul className="space-y-1">
+              {validationSteps.map((step, i) => (
+                <li key={i} className="flex gap-2">
+                  <span>•</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Risk - from LLM */}
+      {impact ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🛡️</span>
+            <p className="text-sm font-bold text-red-700">Risk</p>
+          </div>
+          <div className="pl-6 text-sm text-gray-700">
+            <p>{impact}</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Recommendations - from LLM */}
+      {remediation ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">✅</span>
+            <p className="text-sm font-bold text-green-700">Recommendations</p>
+          </div>
+          <div className="pl-6 text-sm text-gray-700">
+            <ul className="space-y-2">
+              {remediation.split(/\n|;/).filter(Boolean).map((item, i) => (
+                <li key={i} className="flex gap-2">
+                  <span>•</span>
+                  <span>{item.trim()}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** Container CVE findings use IaC-style simple format with package/image details */
+function ContainerReportSections({ finding }: { finding: Finding }) {
+  const cveId = finding.cveId || finding.ruleId || "";
+  const packageName = (finding.metadata?.packageName as string) || "";
+  const packageVersion = (finding.metadata?.packageVersion as string) || "";
+  const fixedVersion = (finding.metadata?.fixedVersion as string) || "";
+  const image = (finding.metadata?.image as string) || "";
+  const location = finding.filePath ? `${finding.filePath}:${finding.startLine || 1}` : "";
+  const report = buildStoredFindingReport(finding);
+
+  const getSeverityColor = () => {
+    switch (finding.severity?.toUpperCase()) {
+      case "CRITICAL":
+        return { icon: "🔴", text: "text-red-700" };
+      case "HIGH":
+        return { icon: "🟠", text: "text-orange-700" };
+      case "MEDIUM":
+        return { icon: "🟡", text: "text-amber-700" };
+      case "LOW":
+        return { icon: "🔵", text: "text-blue-700" };
+      default:
+        return { icon: "ℹ️", text: "text-gray-700" };
+    }
+  };
+
+  const severity = getSeverityColor();
+
+  return (
+    <section className="finding-detail-report min-w-0 max-w-full space-y-4 overflow-hidden">
+      {/* Header with title and CVE */}
+      <div className="flex items-start justify-between gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{severity.icon}</span>
+            <h2 className={`text-lg font-bold ${severity.text}`}>{finding.severity?.toUpperCase()}</h2>
+            <span className="text-base font-semibold text-gray-900">{finding.title}</span>
+          </div>
+        </div>
+        {cveId && (
+          <div className="px-3 py-1 rounded-full border border-gray-300 text-gray-700 text-sm font-semibold">
+            {cveId}
+          </div>
+        )}
+      </div>
+
+      {/* Vulnerable Dependency Details */}
+      {packageName && (
+        <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <p className="text-xs font-semibold text-gray-600 mb-2">Vulnerable Dependency</p>
+          <div className="space-y-2">
+            {packageName && (
+              <p className="font-mono text-sm font-semibold text-gray-900 bg-white p-2 rounded border border-gray-200">
+                {packageName}@{packageVersion}
+              </p>
+            )}
+            {fixedVersion && (
+              <p className="text-sm text-gray-700">
+                <span className="font-semibold">Fix available:</span> {packageName}@{fixedVersion}
+              </p>
+            )}
+            {cveId && (
+              <p className="text-sm text-gray-700">
+                <span className="font-semibold">CVE:</span> {cveId}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Where - Image Location */}
+      {image && (
+        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <p className="text-xs font-semibold text-blue-700 mb-2">Where</p>
+          <a href="#" className="text-blue-600 hover:underline font-semibold text-sm">
+            🐳 {image}
+          </a>
+          {location && (
+            <p className="text-xs text-gray-600 mt-1">Referenced in {location}</p>
+          )}
+        </div>
+      )}
+
+      {/* Description */}
+      {finding.description ? (
+        <div className="p-4 bg-white rounded-lg border border-gray-200">
+          <p className="text-xs font-semibold text-gray-600 mb-2">Description</p>
+          <p className="text-sm text-gray-700">{finding.description}</p>
+        </div>
+      ) : null}
+
+      {/* Summary from report */}
+      {report.summary ? (
+        <div className="p-4 bg-white rounded-lg border border-gray-200">
+          <p className="text-xs font-semibold text-gray-600 mb-2">Summary</p>
+          <ReportSummaryText text={report.summary} />
+        </div>
+      ) : null}
+
+      {/* Remediation */}
+      {report.remediation.length > 0 ? (
+        <div className="p-4 bg-white rounded-lg border border-gray-200">
+          <p className="text-xs font-semibold text-gray-600 mb-2">Remediation</p>
+          <ul className="space-y-2 text-sm text-gray-700">
+            {report.remediation.map((fix, i) => (
+              <li key={i} className="flex gap-2">
+                <span>•</span>
+                <span>{fix}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** Zero-Day findings use SAST-style format with metadata cards */
+function ZeroDayReportSections({ finding }: { finding: Finding }) {
+  const getSeverityColor = () => {
+    switch (finding.severity?.toUpperCase()) {
+      case "CRITICAL":
+        return { bg: "bg-red-50", border: "border-red-200", icon: "🔴", text: "text-red-700" };
+      case "HIGH":
+        return { bg: "bg-orange-50", border: "border-orange-200", icon: "🟠", text: "text-orange-700" };
+      case "MEDIUM":
+        return { bg: "bg-amber-50", border: "border-amber-200", icon: "🟡", text: "text-amber-700" };
+      case "LOW":
+        return { bg: "bg-blue-50", border: "border-blue-200", icon: "🔵", text: "text-blue-700" };
+      default:
+        return { bg: "bg-gray-50", border: "border-gray-200", icon: "ℹ️", text: "text-gray-700" };
+    }
+  };
+
+  const color = getSeverityColor();
+  const report = buildStoredFindingReport(finding);
+  const category = (finding.metadata?.category as string) || "Business Logic";
+  const attackScenario = (finding.metadata?.attackScenario as string) || "";
+  const exploitPreconditions = (finding.metadata?.exploitPreconditions as string) || "";
+
+  return (
+    <section className="finding-detail-report min-w-0 max-w-full space-y-4 overflow-hidden">
+      {/* Header with severity and title */}
+      <div className={`${color.bg} border ${color.border} rounded-lg p-4`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-2xl">{color.icon}</span>
+              <h2 className={`text-lg font-bold ${color.text}`}>{finding.severity?.toUpperCase()}</h2>
+              <span className="text-base font-semibold text-gray-900">
+                {stripReportMarkdown(report.vulnerabilityName)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Metadata Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {finding.filePath ? (
+          <MetadataCard icon="📄" label="File" value={`${finding.filePath}:${finding.startLine || 1}`} />
+        ) : null}
+        <MetadataCard icon="⚠️" label="Severity" value={finding.severity?.toUpperCase() || "UNKNOWN"} />
+        {category ? (
+          <MetadataCard icon="🎯" label="Type" value={category} />
+        ) : null}
+      </div>
+
+      {/* Vulnerability Details */}
+      <div className="space-y-4">
+        {report.summary ? (
+          <ReportSection icon="📋" title="Summary" color={color}>
+            <ReportSummaryText text={report.summary} />
+          </ReportSection>
+        ) : null}
+
+        {exploitPreconditions ? (
+          <ReportSection icon="❓" title="Root Cause" color={color}>
+            <p className="text-sm text-gray-700">{exploitPreconditions}</p>
+          </ReportSection>
+        ) : null}
+
+        {attackScenario ? (
+          <ReportSection icon="⚡" title="Attack Scenario" color={color}>
+            <p className="text-sm text-gray-700">{attackScenario}</p>
+          </ReportSection>
+        ) : null}
+
+        {report.impact ? (
+          <ReportSection icon="💥" title="Business Impact" color={color}>
+            <ReportRichText text={report.impact} />
+          </ReportSection>
+        ) : null}
+
+        {report.remediation.length > 0 ? (
+          <ReportSection icon="🛠️" title="Remediation" color={color}>
+            <ul className="space-y-2 text-sm text-gray-700">
+              {report.remediation.map((fix, i) => (
+                <li key={i} className="flex gap-2">
+                  <span>•</span>
+                  <span>{fix}</span>
+                </li>
+              ))}
+            </ul>
+          </ReportSection>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/** Simplified report for IaC and SCA findings - shows Issue, Why It Matters, Customer Impact, and Remediation */
+function IaCScaReportSections({ finding }: { finding: Finding }) {
+  const packageName = (finding.metadata?.packageName as string) ||
+                     (finding.metadata?.image as string) ||
+                     finding.title;
+  const severity = finding.metadata?.severity || finding.severity;
+
+  const getSeverityIcon = () => {
+    switch (finding.severity?.toUpperCase()) {
+      case "CRITICAL":
+        return { bg: "bg-red-100", text: "text-red-600", icon: "⚠️", label: "CRITICAL" };
+      case "HIGH":
+        return { bg: "bg-orange-100", text: "text-orange-600", icon: "🔴", label: "HIGH" };
+      case "MEDIUM":
+        return { bg: "bg-amber-100", text: "text-amber-600", icon: "🟡", label: "MEDIUM" };
+      case "LOW":
+        return { bg: "bg-blue-100", text: "text-blue-600", icon: "🔵", label: "LOW" };
+      default:
+        return { bg: "bg-gray-100", text: "text-gray-600", icon: "ℹ️", label: "INFO" };
+    }
+  };
+
+  const severity_badge = getSeverityIcon();
+
+  return (
+    <section className="finding-detail-report interactive-card min-w-0 max-w-full space-y-6 overflow-hidden p-4">
+      <div className="flex items-start justify-between mb-4">
+        <h3 className="text-base font-semibold">{finding.title}</h3>
+        <div className={`flex items-center gap-2 px-3 py-2 rounded ${severity_badge.bg}`}>
+          <span className="text-lg">{severity_badge.icon}</span>
+          <span className={`text-sm font-bold ${severity_badge.text}`}>{severity_badge.label}</span>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded bg-blue-100">
+            <span className="text-sm font-bold text-blue-600">ℹ</span>
+          </div>
+          <p className="text-sm font-bold text-foreground">Issue</p>
+        </div>
+        <div className="space-y-2 pl-8">
+          <p className="text-sm text-foreground">{finding.description}</p>
+          {packageName && (
+            <div className="rounded bg-gray-50 p-3 font-mono text-sm">
+              {packageName}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded bg-red-100">
+            <span className="text-sm font-bold text-red-600">⚠</span>
+          </div>
+          <p className="text-sm font-bold text-red-600">Why It Matters</p>
+        </div>
+        <div className="pl-8">
+          {(finding.metadata?.exploitPreconditions || finding.metadata?.whyExploitable) ? (
+            <p className="text-sm text-foreground">
+              {(finding.metadata?.exploitPreconditions as string) ||
+               (finding.metadata?.whyExploitable as string)}
+            </p>
+          ) : (
+            <ul className="space-y-1 text-sm text-foreground">
+              <li>• Unauthorized access</li>
+              <li>• Execution of arbitrary code</li>
+              <li>• Data exposure</li>
+              <li>• Service disruption</li>
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2 rounded bg-amber-50 p-4">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">👥</span>
+          <p className="text-sm font-bold text-amber-900">Customer Impact</p>
+        </div>
+        <p className="text-sm text-amber-900">
+          {(finding.metadata?.businessImpact as string) ||
+           `The application is running on ${packageName}, which has reached end-of-life and no longer receives security updates. If attackers exploit known vulnerabilities in this version or its dependencies, they could gain unauthorized access, disrupt application services, or potentially expose sensitive customer data. This increases the risk of security incidents and may affect the availability, integrity, and reliability of the service.`}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        {finding.scanner === "SCA" ? (
+          <>
+            <p className="text-sm font-bold text-foreground">Vulnerable Dependency</p>
+            <div className="pl-4 space-y-2">
+              <div className="rounded bg-gray-50 p-3 font-mono text-sm">
+                {(finding.metadata?.packageName as string)}@{(finding.metadata?.packageVersion as string) || "unknown"}
+              </div>
+              {(finding.metadata?.fixVersion) ? (
+                <div className="text-sm text-foreground">
+                  <p className="font-semibold">Fix available:</p>
+                  <p className="pl-2 font-mono">{(finding.metadata?.packageName as string)}@{(finding.metadata?.fixVersion as string)}</p>
+                </div>
+              ) : null}
+              {(finding.cveId) ? (
+                <div className="text-sm text-foreground">
+                  <p className="font-semibold">CVE:</p>
+                  <p className="pl-2 font-mono">{finding.cveId}</p>
+                </div>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-bold text-foreground">Where</p>
+            <p className="pl-4 font-mono text-sm text-foreground">
+              {finding.filePath}:{finding.startLine}
+            </p>
+          </>
+        )}
+      </div>
+
+      {(finding.metadata?.validationSteps) ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🧪</span>
+            <p className="text-sm font-bold text-foreground">How to Validate</p>
+          </div>
+          <div className="space-y-2 pl-8">
+            {Array.isArray(finding.metadata?.validationSteps) ? (
+              (finding.metadata.validationSteps as string[]).map((step: string, i: number) => (
+                <div key={i} className="rounded bg-gray-50 p-2 font-mono text-sm">
+                  {step}
+                </div>
+              ))
+            ) : typeof finding.metadata?.validationSteps === "string" ? (
+              <p className="text-sm text-foreground">
+                {finding.metadata.validationSteps as string}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🔧</span>
+          <p className="text-sm font-bold text-green-600">Remediation</p>
+        </div>
+        <div className="space-y-2 pl-8">
+          {finding.metadata?.remediation ? (
+            Array.isArray(finding.metadata.remediation) ? (
+              (finding.metadata.remediation as string[]).map((item, i) => (
+                <div key={i} className="text-sm text-foreground">
+                  • {item}
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-foreground">
+                {(finding.metadata.remediation as string)}
+              </p>
+            )
+          ) : (
+            <div className="space-y-2 text-sm text-foreground">
+              <div>• Use a supported version</div>
+              <div>• Update the configuration in {finding.filePath}</div>
+              <div>• Rebuild and redeploy the application</div>
+            </div>
+          )}
+        </div>
+      </div>
     </section>
   );
 }

@@ -118,19 +118,21 @@ const SCANNERS: Scanner[] = [
   { id: "secrets", name: "Secrets", engines: ["Gitleaks"] },
   { id: "iac", name: "IaC", engines: ["Checkov"] },
   { id: "container", name: "Container", engines: ["Trivy"] },
+  { id: "zero-day", name: "Zero-Day", engines: ["LLM Analysis"] },
 ];
+
 
 // Scan presets - define which scanners are enabled for each preset
 const SCAN_PRESETS = {
   default: {
     name: "Default (Recommended)",
-    description: "Essential security checks",
-    scanners: ["sast", "sca", "secrets"],
+    description: "SAST · SCA · Secrets · IaC · Zero-day · Container",
+    scanners: ["sast", "sca", "secrets", "iac", "zero-day", "container"],
   },
   comprehensive: {
     name: "Comprehensive",
     description: "All available security scanners",
-    scanners: ["sast", "sca", "secrets", "iac", "container"],
+    scanners: ["sast", "sca", "secrets", "iac", "container", "zero-day"],
   },
   fast: {
     name: "Fast",
@@ -138,6 +140,7 @@ const SCAN_PRESETS = {
     scanners: ["sca", "secrets"],
   },
 };
+
 
 export default function NewScanPage() {
   const router = useRouter();
@@ -310,8 +313,37 @@ export default function NewScanPage() {
         .filter(([, enabled]) => enabled)
         .map(([id]) => id.toUpperCase());
 
+      // Determine scan type based on enabled scanners
+      const enabledScannerCount = Object.values(enabledScanners).filter(Boolean).length;
+      const allScannersEnabled = enabledScannerCount === SCANNERS.length;
+      
+      let scanType = "FULL";
+      if (!allScannersEnabled) {
+        const scannersList = Object.entries(enabledScanners)
+          .filter(([, enabled]) => enabled)
+          .map(([id]) => id.toUpperCase())
+          .sort()
+          .join("_");
+        
+        // Map to specific scan types for common combinations
+        const commonTypes: Record<string, string> = {
+          "SAST": "SAST_ONLY",
+          "SCA": "SCA_ONLY",
+          "SECRETS": "SECRETS_ONLY",
+          "IAC": "IAC_ONLY",
+          "CONTAINER": "CONTAINER_ONLY",
+          "ZERO_DAY": "ZERO_DAY_ONLY",
+          "SAST_SCA_SECRETS": "FULL",
+          "SAST_SCA_SECRETS_IAC": "FULL",
+          "SAST_SCA_SECRETS_IAC_CONTAINER": "FULL",
+          "SAST_SCA_SECRETS_IAC_CONTAINER_ZERO_DAY": "FULL",
+        };
+        
+        scanType = commonTypes[scannersList] || "FULL";
+      }
+      
       const scanPayload: any = {
-        scanType: "FULL",
+        scanType,
       };
 
       if (scanSource === "github") {
@@ -404,7 +436,7 @@ export default function NewScanPage() {
         const formData = new FormData();
         formData.append("file", uploadedFile);
         formData.append("data", JSON.stringify({
-          scanType: "FULL",
+          scanType,
           scanners: enabledScannerIds,
         }));
 

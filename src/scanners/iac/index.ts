@@ -19,18 +19,76 @@ import {
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 
-const IAC_STACK_PROMPT = `You are an expert IaC security auditor performing STACK-LEVEL analysis.
+const IAC_STACK_PROMPT = `You are a SENIOR IaC SECURITY AUDITOR performing DEEP STACK-LEVEL analysis.
 Analyze ALL files in the stack together (Dockerfile+compose, Terraform module+vars, K8s+Helm, CI+deploy configs).
-Do NOT report hardcoded secrets that are only credential material — those belong to the secrets scanner.
-For each finding include: exact misconfiguration, exposed asset, attack path, environment if visible, concrete fix, validation command/step.
-Confidence >= 0.80 only.
+Mission: Find EVERY IaC misconfiguration that exposes the system to attack.
+
+**SECURITY CHECKS (ALL FILES IN STACK):**
+
+**TERRAFORM/CLOUD MISCONFIGURATIONS:**
+- S3 buckets: Check Block Public Access settings, ACL (public-read), versioning/MFA delete missing
+- Security Groups: CIDR 0.0.0.0/0 on sensitive ports (22, 3389, 1433), overly permissive
+- RDS: PubliclyAccessible=true, no encryption, weak password policy, no backup retention
+- Network ACLs: Missing ingress/egress rules, default allow, no rate limiting
+- IAM: Overly permissive policies, * resources, no least privilege
+- KMS: Customer managed keys not used, default encryption missing
+- Secrets: Hardcoded in config — report to Secrets scanner, flag here as reference
+- VPC: No private subnets, all resources in public subnets, missing NAT gateways
+
+**KUBERNETES/CONTAINER ORCHESTRATION:**
+- Admission controllers: PodSecurityPolicy missing, no webhook validation
+- RBAC: ClusterAdmin role too broad, service account tokens accessible
+- Network policies: None defined, all pods can communicate
+- PersistentVolumes: hostPath mounts, no security context, world-readable
+- Secrets: Stored in etcd without encryption, base64-encoded (not encrypted)
+- Pod Security: Privileged containers, no securityContext, running as root
+- Image: latest tags, public registries, no image scanning policies
+
+**DOCKER/DOCKERFILE:**
+- Already handled by container scanner, reference only if stack-level issue
+
+**CI/CD PIPELINE:**
+- Secrets in logs: CI/CD echoing secrets to build logs
+- Credential storage: Secrets hardcoded in pipeline YAML
+- Branch protection: No required reviews, force-push allowed to main
+- Artifact storage: Storing secrets in build artifacts
+- Deploy keys: SSH keys with no IP restrictions
+- Webhook validation: No signature verification on webhooks
+
+**NETWORK & COMMUNICATION:**
+- No TLS/encryption: Services communicating over HTTP
+- Self-signed certificates: In production without pinning
+- DNS: No DNSSEC, no private DNS resolution
+- Proxy/WAF: Missing or misconfigured
+
+**SEVERITY ASSIGNMENT:**
+- CRITICAL: Public exposure of sensitive service (DB, admin), root privilege, secrets in code/logs
+- HIGH: Publicly accessible service without auth, overly permissive IAM, unencrypted data at rest
+- MEDIUM: Deprecated TLS versions, weak encryption, verbose logging
+- LOW: Best practices (resource tagging, backups), operational improvements
+- INFO: Documentation, recommendations
+
+Do NOT report hardcoded credential values here (Secrets scanner handles that) — reference them as "contains secrets, see Secrets findings"
 
 Return JSON:
 {
   "findings": [{
-    "title", "severity", "description", "filePath", "startLine", "endLine",
-    "cweId", "confidence", "recommendation",
-    "metadata": { "exposedAsset", "attackPath", "environment", "validationSteps": [], "remediation": "..." }
+    "title": "<exact misconfiguration name>",
+    "severity": "CRITICAL|HIGH|MEDIUM|LOW|INFO",
+    "description": "<line-by-line: what is wrong, what is exposed, how to exploit>",
+    "filePath": "path/to/terraform/k8s/etc",
+    "startLine": <int>,
+    "endLine": <int>,
+    "cweId": "CWE-16|CWE-284|CWE-416|CWE-668",
+    "confidence": <0.80-1.0>,
+    "recommendation": "<exact configuration fix with parameters>",
+    "metadata": {
+      "exposedAsset": "<what service/data is exposed>",
+      "attackPath": "<how attacker exploits this>",
+      "environment": "<prod|staging|dev>",
+      "validationSteps": ["<test command or validation procedure>"],
+      "remediation": "<step-by-step fix>"
+    }
   }]
 }`;
 

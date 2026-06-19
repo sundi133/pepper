@@ -1,16 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 import { useProjects } from "@/hooks/use-scan-polling";
 import type { ScanJobData } from "@/lib/queue";
 import {
   CheckCircle2,
   Clock,
+  Lock,
   GitBranch,
-  HardDrive,
-  Zap,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AddSourceCard } from "./add-source-card";
 import { ImportRepoDialog } from "./import-repo-dialog";
 import { RepositoryInventory } from "./repository-inventory";
@@ -30,46 +29,99 @@ export function ScanHub() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="pt-6 pb-6">
-          <PageBreadcrumb
-            items={[
-              { label: "Dashboard", href: "/dashboard" },
-              { label: "Scan" },
-            ]}
-          />
-        </div>
-
-        <div className="pb-8">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-50">
+    <div className="min-h-screen bg-white dark:bg-slate-950">
+      <div className="px-8 py-8">
+        {/* Page Header */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-slate-900 dark:text-white">
             Scan
           </h1>
           <p className="mt-2 text-base text-slate-600 dark:text-slate-400">
-            Start a new scan or manage your connected repositories
+            Scan your code for vulnerabilities, secrets, and misconfigurations.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          {/* Main Content Area */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Start a New Scan Section */}
-            <AddSourceCard
-              hub={hub}
-              projects={projects}
-              scanType={scanType}
-              onScanTypeChange={setScanType}
-            />
-
-            {/* Select a Repository Section */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-              <div className="border-b border-slate-200/80 px-6 py-5 dark:border-slate-800">
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
-                  Select a Repository
+        {/* Two Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Left Column (75%) */}
+          <div className="lg:col-span-3 space-y-6">
+            {/* Card 1: Start a New Scan */}
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+              <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Start a New Scan
                 </h2>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                  Choose from your connected repositories to view details
+                  Connect a repository or upload code to begin a security scan.
                 </p>
+              </div>
+              <div className="px-6 py-5">
+                <AddSourceCard
+                  hub={hub}
+                  projects={projects}
+                  scanType={scanType}
+                  onScanTypeChange={setScanType}
+                />
+              </div>
+            </div>
+
+            {/* Card 2: Scan Presets */}
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+              <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Scan Presets
+                </h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                  Use a preset scan configuration or create your own.
+                </p>
+              </div>
+              <div className="px-6 py-5">
+                <div>
+                  <label className="block text-sm font-medium text-slate-900 dark:text-white mb-4">
+                    Default (Recommended)
+                  </label>
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-50 dark:bg-slate-900/30">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        SAST
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-50 dark:bg-slate-900/30">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        SCA
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-50 dark:bg-slate-900/30">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Secrets
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-50 dark:bg-slate-900/30">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        IaC
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-50 dark:bg-slate-900/30">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Container
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Repository Selection */}
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+              <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Select a Repository
+                </h2>
               </div>
               <RepositoryInventory
                 repos={hub.filteredConnected}
@@ -87,15 +139,15 @@ export function ScanHub() {
               />
             </div>
 
-            {/* Recent Scans Section */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-              <div className="border-b border-slate-200/80 px-6 py-5 dark:border-slate-800">
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+            {/* Card 4: Recent Scans */}
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+              <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                   Recent Scans
                 </h2>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                  Latest scan activity across your repositories
-                </p>
+                <a href="#" className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+                  View all scans →
+                </a>
               </div>
               <div className="px-6 py-10 text-center">
                 <p className="text-sm text-slate-600 dark:text-slate-400">
@@ -105,147 +157,211 @@ export function ScanHub() {
             </div>
           </div>
 
-          {/* Sticky Right Panel: Scan Summary */}
+          {/* Right Column (25%) - Sticky Sidebar */}
           <div className="lg:col-span-1">
-            <div className="sticky top-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-              <div className="border-b border-slate-200/80 px-6 py-5 dark:border-slate-800">
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
-                  Scan Summary
-                </h3>
+            <div className="sticky top-6 space-y-6">
+              {/* Scan Summary Card */}
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Scan Summary
+                  </h3>
+                  {selectedRepo && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                      <span className="text-xs font-semibold">Ready</span>
+                    </span>
+                  )}
+                </div>
+
+                {selectedRepo ? (
+                  <div className="px-6 py-5 space-y-5">
+                    {/* Repository */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                        Repository
+                      </p>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                        {selectedRepo.name}
+                      </p>
+                    </div>
+
+                    {/* Provider */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-2">
+                        Provider
+                      </p>
+                      <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+                        <GitBranch className="h-4 w-4" />
+                        {selectedRepo.provider === "github"
+                          ? "GitHub"
+                          : selectedRepo.provider === "gitlab"
+                            ? "GitLab"
+                            : selectedRepo.provider === "bitbucket"
+                              ? "Bitbucket"
+                              : selectedRepo.provider === "azure"
+                                ? "Azure DevOps"
+                                : selectedRepo.provider}
+                      </span>
+                    </div>
+
+                    {/* Default Branch */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                        Default Branch
+                      </p>
+                      <p className="text-sm font-mono text-slate-900 dark:text-white">
+                        {selectedRepo.branch}
+                      </p>
+                    </div>
+
+                    {/* Last Updated */}
+                    {selectedRepo.lastScanAt && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                          Last Updated
+                        </p>
+                        <p className="text-sm text-slate-700 dark:text-slate-300">
+                          2 hours ago
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Visibility */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-2">
+                        Visibility
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Lock className="h-4 w-4 text-slate-500" />
+                        <span className="text-sm text-slate-700 dark:text-slate-300">
+                          Private
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="px-6 py-10 text-center">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      Select a repository to view summary details
+                    </p>
+                  </div>
+                )}
               </div>
 
-              {selectedRepo ? (
-                <div className="px-6 py-5 space-y-6">
-                  {/* Repository Info */}
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-                      Repository
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      {selectedRepo.name}
-                    </p>
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                      {selectedRepo.fullName}
-                    </p>
+              {/* Scan Configuration Card */}
+              {selectedRepo && (
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                  <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800 flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                      Scan Configuration
+                    </h3>
+                    <button className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+                      Edit
+                    </button>
                   </div>
 
-                  {/* Provider */}
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-                      Provider
-                    </p>
-                    <p className="mt-1 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                      <GitBranch className="h-3 w-3" />
-                      {selectedRepo.provider.toUpperCase()}
-                    </p>
-                  </div>
+                  <div className="px-6 py-5 space-y-4">
+                    {/* Scanner List */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-start gap-3">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white">
+                            SAST
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Semgrep, CodeQL
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white">
+                            SCA
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            OWASP Dependency Check
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white">
+                            Secrets
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Gitleaks
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white">
+                            IaC
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Checkov
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white">
+                            Container
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Trivy
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
-                  {/* Default Branch */}
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-                      Default Branch
-                    </p>
-                    <p className="mt-1 font-mono text-sm text-slate-700 dark:text-slate-300">
-                      {selectedRepo.branch}
-                    </p>
-                  </div>
+                    {/* Divider */}
+                    <div className="border-t border-slate-200 dark:border-slate-800 pt-4" />
 
-                  {/* Last Updated */}
-                  {selectedRepo.lastScanAt && (
+                    {/* Estimated Duration */}
                     <div>
-                      <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-                        Last Scanned
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-slate-900 dark:text-white">
+                          Estimated Duration
+                        </span>
+                        <Clock className="h-4 w-4 text-slate-400" />
+                      </div>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">
+                        3–5 minutes
                       </p>
-                      <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">
-                        {new Date(selectedRepo.lastScanAt).toLocaleDateString()}
-                      </p>
                     </div>
-                  )}
 
-                  {/* Status */}
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-                      Scan Status
-                    </p>
-                    <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">
-                      {selectedRepo.scanStatus || "Ready"}
-                    </p>
-                  </div>
-
-                  {/* Scan Configuration */}
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-3">
-                      Enabled Scanners
-                    </p>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        <span className="text-slate-700 dark:text-slate-300">
-                          SAST
+                    {/* Estimated Resources */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-slate-900 dark:text-white">
+                          Estimated Resources
                         </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        <span className="text-slate-700 dark:text-slate-300">
-                          Dependency Check
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        <span className="text-slate-700 dark:text-slate-300">
-                          Secret Scanning
+                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          Medium
                         </span>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Estimated Resources */}
-                  <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-900/50">
-                    <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-3">
-                      Estimated Resources
-                    </p>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-slate-500" />
-                          <span className="text-sm text-slate-700 dark:text-slate-300">
-                            Duration
-                          </span>
-                        </div>
-                        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                          5-10 min
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <HardDrive className="h-4 w-4 text-slate-500" />
-                          <span className="text-sm text-slate-700 dark:text-slate-300">
-                            Storage
-                          </span>
-                        </div>
-                        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                          ~100 MB
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Zap className="h-4 w-4 text-slate-500" />
-                          <span className="text-sm text-slate-700 dark:text-slate-300">
-                            CPU Usage
-                          </span>
-                        </div>
-                        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                          Moderate
-                        </span>
-                      </div>
+                    {/* Action Buttons */}
+                    <div className="space-y-3 pt-2">
+                      <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 h-auto rounded-lg">
+                        ▶ Start Scan
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="w-full border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-semibold py-2.5 h-auto rounded-lg"
+                      >
+                        Save as Preset
+                      </Button>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="px-6 py-10 text-center">
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Select a repository to view summary details
-                  </p>
                 </div>
               )}
             </div>

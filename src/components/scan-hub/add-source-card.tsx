@@ -137,24 +137,8 @@ export function AddSourceCard({
     activePill === "azure";
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-      <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800">
-        <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-500/15 text-teal-600 dark:text-teal-400">
-            <UploadCloud className="h-4 w-4" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
-              Start a Scan
-            </h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-              Connect a repository, upload code, or use a URL
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-1 flex-col gap-5 px-6 py-5">
+    <div className="flex flex-col overflow-hidden">
+      <div className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-2">
           {pill("github", "GitHub", <Github className="h-3.5 w-3.5" />)}
           {pill("bitbucket", "Bitbucket", <GitBranch className="h-3.5 w-3.5" />)}
@@ -166,7 +150,7 @@ export function AddSourceCard({
 
         <ScanTypeSelector value={scanType} onChange={onScanTypeChange} />
 
-        <div className="min-h-[200px] flex-1 rounded-lg border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900/50">
+        <div className="min-h-[200px] rounded-lg border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900/50">
           {isIntegration && activePill === "github" && (
             <IntegrationPanel
               connected={hub.status?.connected}

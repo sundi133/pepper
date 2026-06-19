@@ -22,12 +22,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   ExternalLink,
+  Github,
   GitBranch,
   Loader2,
   MoreHorizontal,
   RefreshCw,
   RotateCcw,
   Search,
+  Shield,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -44,6 +46,15 @@ import type { RepoProvider, UnifiedConnectedRepo } from "./types";
 
 type RepositoryInventoryProps = {
   repos: UnifiedConnectedRepo[];
+  availableRepos?: Array<{
+    id: number;
+    fullName: string;
+    defaultBranch: string;
+    language?: string | null;
+    private?: boolean;
+    branches?: string[];
+    branchesLoaded?: boolean;
+  }>;
   projects: ScanProject[];
   scanType: ScanJobData["scanType"];
   loading: boolean;
@@ -55,10 +66,12 @@ type RepositoryInventoryProps = {
   stats: { total: number; scanning: number; withIssues: number };
   selectedRepo?: UnifiedConnectedRepo | null;
   onSelectRepo?: (repo: UnifiedConnectedRepo) => void;
+  onLoadBranches?: (repoId: number) => void;
 };
 
 export function RepositoryInventory({
   repos,
+  availableRepos,
   projects,
   scanType,
   loading,
@@ -70,6 +83,7 @@ export function RepositoryInventory({
   stats,
   selectedRepo,
   onSelectRepo,
+  onLoadBranches,
 }: RepositoryInventoryProps) {
   const [rescanningId, setRescanningId] = useState<string | null>(null);
 
@@ -124,8 +138,8 @@ export function RepositoryInventory({
       className={cn(
         "rounded-full border px-3 py-1 text-xs font-medium transition-all",
         providerFilter === value
-          ? "border-slate-800 bg-slate-900 text-white dark:border-slate-200 dark:bg-slate-100 dark:text-slate-900"
-          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400",
+          ? "border-slate-800 bg-slate-900 text-white"
+          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
       )}
     >
       {label}
@@ -135,23 +149,23 @@ export function RepositoryInventory({
   const withFindingsCount = stats.withIssues;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-      <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800">
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 px-6 py-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+            <h2 className="text-lg font-semibold text-slate-900">
               Connected Repositories
             </h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            <p className="mt-1 text-sm text-slate-600">
               Monitored repositories and latest scan results
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center rounded-full border border-teal-200 bg-teal-50/80 px-3 py-1.5 text-xs font-medium text-teal-800 dark:border-teal-900/50 dark:bg-teal-950/50 dark:text-teal-300">
+            <span className="inline-flex items-center rounded-full border border-teal-200 bg-teal-50/80 px-3 py-1.5 text-xs font-medium text-teal-800">
               {stats.total} Connected
             </span>
             {withFindingsCount > 0 && (
-              <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50/80 px-3 py-1.5 text-xs font-medium text-red-800 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-300">
+              <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50/80 px-3 py-1.5 text-xs font-medium text-red-800">
                 {withFindingsCount} with Issues
               </span>
             )}
@@ -172,7 +186,7 @@ export function RepositoryInventory({
                 placeholder="Search repositories…"
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="h-10 border-slate-200 bg-slate-50 pl-10 dark:border-slate-700 dark:bg-slate-900/50"
+                className="h-10 border-slate-200 bg-slate-50 pl-10"
               />
             </div>
             <Button
@@ -199,10 +213,10 @@ export function RepositoryInventory({
           </div>
         ) : repos.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            <p className="text-sm font-medium text-slate-700">
               No repositories connected yet
             </p>
-            <p className="max-w-sm text-xs text-slate-600 dark:text-slate-400">
+            <p className="max-w-sm text-xs text-slate-600">
               Use the form above to add repositories from your integrations.
             </p>
           </div>
@@ -210,32 +224,32 @@ export function RepositoryInventory({
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="border-slate-200 hover:bg-transparent dark:border-slate-800">
-                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                <TableRow className="border-slate-200 hover:bg-transparent">
+                  <TableHead className="text-xs font-semibold text-slate-600">
                     Repository
                   </TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  <TableHead className="text-xs font-semibold text-slate-600">
                     Owner / Path
                   </TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  <TableHead className="text-xs font-semibold text-slate-600">
                     Provider
                   </TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  <TableHead className="text-xs font-semibold text-slate-600">
                     Branch
                   </TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  <TableHead className="text-xs font-semibold text-slate-600">
                     Status
                   </TableHead>
-                  <TableHead className="text-right text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  <TableHead className="text-right text-xs font-semibold text-slate-600">
                     Issues
                   </TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  <TableHead className="text-xs font-semibold text-slate-600">
                     Severity
                   </TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  <TableHead className="text-xs font-semibold text-slate-600">
                     Last Scan
                   </TableHead>
-                  <TableHead className="w-[120px] text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  <TableHead className="w-[120px] text-xs font-semibold text-slate-600">
                     Actions
                   </TableHead>
                 </TableRow>
@@ -255,28 +269,28 @@ export function RepositoryInventory({
                     <TableRow
                       key={repo.projectId}
                       className={cn(
-                        "border-slate-100 cursor-pointer transition-colors dark:border-slate-800/80",
+                        "border-slate-100 cursor-pointer transition-colors",
                         isSelected
-                          ? "bg-purple-50/50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800/50"
-                          : "hover:bg-slate-50/50 dark:hover:bg-slate-900/30"
+                          ? "bg-purple-50/50 border-purple-200"
+                          : "hover:bg-slate-50/50"
                       )}
                       onClick={() => onSelectRepo?.(repo)}
                     >
                       <TableCell className="py-3">
                         <Link
                           href={href}
-                          className="font-medium text-slate-900 hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-400"
+                          className="font-medium text-slate-900 hover:text-teal-700"
                         >
                           {repo.name}
                         </Link>
                       </TableCell>
-                      <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                      <TableCell className="font-mono text-xs text-slate-600">
                         {repo.fullName}
                       </TableCell>
                       <TableCell>
                         <Badge
                           variant="outline"
-                          className="border-slate-200 font-normal text-[11px] text-slate-700 dark:border-slate-700"
+                          className="border-slate-200 font-normal text-[11px] text-slate-700"
                         >
                           {PROVIDER_LABEL[repo.provider]}
                         </Badge>
@@ -292,7 +306,7 @@ export function RepositoryInventory({
                           {st.label}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                      <TableCell className="text-right font-semibold tabular-nums text-slate-900">
                         {repo.findingsCount}
                       </TableCell>
                       <TableCell>
@@ -384,6 +398,122 @@ export function RepositoryInventory({
           </div>
         )}
       </div>
+
+      {/* Select a Repository Section - Available GitHub Repos */}
+      {availableRepos && availableRepos.length > 0 && (
+        <div>
+          <div className="border-b border-slate-200 px-6 py-5">
+            <div className="flex items-center gap-2">
+              <Github className="h-5 w-5 text-slate-600" />
+              <h2 className="text-lg font-semibold text-slate-900">
+                Select a Repository
+              </h2>
+            </div>
+            <p className="mt-1 text-sm text-slate-600">
+              Choose a repository to begin a security scan.
+            </p>
+          </div>
+
+          <div className="border-b border-slate-200 px-6 py-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex-1 sm:max-w-xs">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    placeholder="Search repositories..."
+                    value={searchQuery}
+                    onChange={(e) => onSearchChange(e.target.value)}
+                    className="h-10 border-slate-200 bg-white pl-10"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-600">
+                  Showing {availableRepos.length} repositories
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b border-slate-200">
+                  <TableHead className="h-10 px-6 text-left text-xs font-medium text-slate-600 w-12">
+                    <span className="sr-only">Select</span>
+                  </TableHead>
+                  <TableHead className="h-10 px-6 text-left text-xs font-medium text-slate-600">
+                    Repository
+                  </TableHead>
+                  <TableHead className="h-10 px-6 text-left text-xs font-medium text-slate-600">
+                    Visibility
+                  </TableHead>
+                  <TableHead className="h-10 px-6 text-left text-xs font-medium text-slate-600">
+                    Default Branch
+                  </TableHead>
+                  <TableHead className="h-10 px-6 text-left text-xs font-medium text-slate-600">
+                    Last Updated
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {availableRepos.map((repo) => (
+                  <TableRow
+                    key={repo.id}
+                    className="border-b border-slate-200 hover:bg-slate-50 cursor-pointer"
+                  >
+                    <TableCell className="px-6 py-4">
+                      <input
+                        type="radio"
+                        name="repository"
+                        value={repo.id}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </TableCell>
+                    <TableCell className="px-6 py-4">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <Github className="h-4 w-4 text-slate-400" />
+                          <span className="font-medium text-slate-900">
+                            {repo.fullName.split("/")[1]}
+                          </span>
+                        </div>
+                        <span className="text-xs text-slate-600">
+                          {repo.language || "No language"}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-6 py-4">
+                      {repo.private ? (
+                        <Badge variant="secondary" className="text-xs">
+                          Private
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs">
+                          Public
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <GitBranch className="h-4 w-4 text-slate-400" />
+                        <span className="text-sm text-slate-900">
+                          {repo.defaultBranch}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-6 py-4">
+                      <span className="text-sm text-slate-600">
+                        Just now
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

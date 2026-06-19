@@ -106,9 +106,6 @@ export function AddSourceCard({
 
   function selectPill(pill: SourcePill) {
     setActivePill(pill);
-    if (pill === "github" || pill === "bitbucket" || pill === "azure") {
-      hub.setProvider(pill);
-    }
   }
 
   const pill = (
@@ -122,8 +119,8 @@ export function AddSourceCard({
       className={cn(
         PILL_BASE,
         activePill === id
-          ? "border-teal-500/60 bg-teal-500/10 text-teal-800 shadow-sm dark:text-teal-100"
-          : "border-slate-200/90 bg-white/80 text-slate-600 hover:border-teal-400/50 hover:text-teal-800 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300",
+          ? "border-teal-500/60 bg-teal-500/10 text-teal-800 shadow-sm"
+          : "border-slate-200/90 bg-white/80 text-slate-600 hover:border-teal-400/50 hover:text-teal-800",
       )}
     >
       {icon}
@@ -131,18 +128,11 @@ export function AddSourceCard({
     </button>
   );
 
-  const isIntegration =
-    activePill === "github" ||
-    activePill === "bitbucket" ||
-    activePill === "azure";
 
   return (
     <div className="flex flex-col overflow-hidden">
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-2">
-          {pill("github", "GitHub", <Github className="h-3.5 w-3.5" />)}
-          {pill("bitbucket", "Bitbucket", <GitBranch className="h-3.5 w-3.5" />)}
-          {pill("azure", "Azure DevOps", <Cloud className="h-3.5 w-3.5" />)}
           {pill("url", "Repository URL", <Link2 className="h-3.5 w-3.5" />)}
           {pill("svn", "SVN", <FolderArchive className="h-3.5 w-3.5" />)}
           {pill("upload", "Upload", <Upload className="h-3.5 w-3.5" />)}
@@ -150,76 +140,16 @@ export function AddSourceCard({
 
         <ScanTypeSelector value={scanType} onChange={onScanTypeChange} />
 
-        <div className="min-h-[200px] rounded-lg border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900/50">
-          {isIntegration && activePill === "github" && (
-            <IntegrationPanel
-              connected={hub.status?.connected}
-              connectedLabel={
-                hub.status?.connected
-                  ? `Signed in as ${hub.status.githubLogin}`
-                  : "Connect GitHub in Settings → Integrations to import private repositories and open fix PRs."
-              }
-              onConnect={() => hub.router.push("/settings/integrations")}
-              onImport={hub.openGithubPicker}
-              importDisabled={!hub.status?.connected}
-              settingsLink
-            />
-          )}
-
-          {isIntegration && activePill === "bitbucket" && (
-            <IntegrationPanel
-              connected={hub.bitbucketStatus?.connected}
-              connectedLabel={
-                hub.bitbucketStatus?.connected
-                  ? `Signed in as ${hub.bitbucketStatus.username}${hub.bitbucketStatus.workspace ? ` · ${hub.bitbucketStatus.workspace}` : ""}`
-                  : "Connect Bitbucket in Settings → Integrations to import repositories."
-              }
-              onConnect={() => hub.router.push("/settings/integrations")}
-              onImport={hub.openBitbucketPicker}
-              importDisabled={
-                !hub.bitbucketStatus?.connected ||
-                !hub.bitbucketStatus.workspace
-              }
-              settingsLink
-              extraWarning={
-                hub.bitbucketStatus?.connected &&
-                !hub.bitbucketStatus.workspace
-                  ? "Set your workspace slug in Settings → Integrations."
-                  : undefined
-              }
-            />
-          )}
-
-          {isIntegration && activePill === "azure" && (
-            <IntegrationPanel
-              connected={hub.azureStatus?.connected}
-              connectedLabel={
-                hub.azureStatus?.connected
-                  ? `${hub.azureStatus.azureUser ?? "Connected"}${hub.azureStatus.azureOrganization ? ` · ${hub.azureStatus.azureOrganization}` : ""}`
-                  : "Connect Azure DevOps in Settings → Integrations."
-              }
-              onConnect={() => hub.router.push("/settings/integrations")}
-              onImport={hub.openAzurePicker}
-              importDisabled={!hub.azureStatus?.connected}
-              settingsLink
-            />
-          )}
-
-          {isIntegration && (
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Connecting a repository queues an <strong>All</strong> scanners scan. Use Repository URL, SVN, or Upload to select a specific scanner set.
-            </p>
-          )}
-
+        <div className="min-h-[200px] rounded-lg border border-slate-200 bg-slate-50 p-5">
           {activePill === "url" && (
             <div className="space-y-4">
               <div>
-                <Label htmlFor="smart-repo-url" className="block text-sm font-medium text-slate-900 dark:text-slate-100 mb-2">
+                <Label htmlFor="smart-repo-url" className="block text-sm font-medium text-slate-900 mb-2">
                   Repository URL
                 </Label>
                 <Input
                   id="smart-repo-url"
-                  className="h-10 border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+                  className="h-10 border-slate-200 bg-white"
                   placeholder="e.g., github.com/owner/repo or owner/repo"
                   value={smartUrl}
                   onChange={(e) => setSmartUrl(e.target.value)}
@@ -234,26 +164,26 @@ export function AddSourceCard({
                 )}
               </div>
               <div>
-                <Label htmlFor="smart-branch" className="block text-sm font-medium text-slate-900 dark:text-slate-100 mb-2">
+                <Label htmlFor="smart-branch" className="block text-sm font-medium text-slate-900 mb-2">
                   Branch <span className="font-normal text-slate-500">(optional)</span>
                 </Label>
                 <Input
                   id="smart-branch"
-                  className="h-10 border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+                  className="h-10 border-slate-200 bg-white"
                   placeholder="e.g., main, develop"
                   value={smartBranch}
                   onChange={(e) => setSmartBranch(e.target.value)}
                 />
               </div>
               {(providerHint === "generic" || providerHint === null) && smartUrl.trim() && (
-                <div className="flex items-start gap-2 rounded-lg bg-blue-50 p-3 dark:bg-blue-950/30">
+                <div className="flex items-start gap-2 rounded-lg bg-blue-50 p-3">
                   <Checkbox
                     id="url-legal"
                     checked={urlLegalConfirm}
                     onCheckedChange={(c) => setUrlLegalConfirm(c === true)}
                     className="mt-1"
                   />
-                  <Label htmlFor="url-legal" className="text-xs font-normal leading-snug text-slate-700 dark:text-slate-300">
+                  <Label htmlFor="url-legal" className="text-xs font-normal leading-snug text-slate-700">
                     I have permission to scan this code
                   </Label>
                 </div>
@@ -333,23 +263,23 @@ function IntegrationPanel({
   return (
     <div className="space-y-4">
       {oauthWarning && (
-        <div className="flex gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="flex gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
           <span>GitHub OAuth is not configured on this server.</span>
         </div>
       )}
       {extraWarning && (
-        <div className="flex gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="flex gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
           <span>{extraWarning}</span>
         </div>
       )}
-      <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3.5 dark:bg-slate-900/40">
+      <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3.5">
         <div
           className={cn(
             "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
             connected
-              ? "bg-teal-500/15 text-teal-700 dark:text-teal-300"
+              ? "bg-teal-500/15 text-teal-700"
               : "bg-slate-200 text-slate-500",
           )}
         >
@@ -359,7 +289,7 @@ function IntegrationPanel({
             <AlertCircle className="h-4 w-4" />
           )}
         </div>
-        <p className="flex-1 text-sm text-slate-700 dark:text-slate-300">{connectedLabel}</p>
+        <p className="flex-1 text-sm text-slate-700">{connectedLabel}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         {connected ? (

@@ -180,11 +180,11 @@ export function WebhookIntegrations() {
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-950">
+    <div className="min-h-screen bg-white">
       {/* Header */}
-      <div className="border-b border-gray-200 dark:border-slate-800 px-8 py-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Webhook Setup</h1>
-        <p className="text-gray-600 dark:text-slate-400 mt-2">
+      <div className="border-b border-gray-200 px-8 py-8">
+        <h1 className="text-3xl font-bold text-gray-900">Webhook Setup</h1>
+        <p className="text-gray-600 mt-2">
           Configure webhooks for incremental scanning on pull requests and pushes.
         </p>
       </div>
@@ -199,18 +199,18 @@ export function WebhookIntegrations() {
             return (
               <div
                 key={webhook.name}
-                className="rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-md dark:hover:shadow-lg transition-shadow overflow-hidden"
+                className="rounded-lg border border-gray-200 bg-white hover:shadow-md transition-shadow overflow-hidden"
               >
                 {/* Card Header */}
-                <div className="border-b border-gray-200 dark:border-slate-800 px-6 py-5 bg-gray-50 dark:bg-slate-800 flex items-start justify-between">
+                <div className="border-b border-gray-200 px-6 py-5 bg-gray-50 flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="text-gray-700 dark:text-slate-300">{webhook.icon}</div>
+                    <div className="text-gray-700">{webhook.icon}</div>
                     <div>
-                      <h3 className="text-base font-semibold text-gray-900 dark:text-white">{webhook.name}</h3>
-                      <p className="text-xs text-gray-600 dark:text-slate-400 mt-1">{webhook.description}</p>
+                      <h3 className="text-base font-semibold text-gray-900">{webhook.name}</h3>
+                      <p className="text-xs text-gray-600 mt-1">{webhook.description}</p>
                     </div>
                   </div>
-                  <Badge variant="outline" className="text-xs flex-shrink-0 dark:border-slate-700 dark:text-slate-300 dark:bg-slate-800">
+                  <Badge variant="outline" className="text-xs flex-shrink-0">
                     {webhook.triggers}
                   </Badge>
                 </div>
@@ -218,9 +218,9 @@ export function WebhookIntegrations() {
                 {/* Card Content */}
                 <div className="px-6 py-5 space-y-4">
                   {/* Setup Instructions */}
-                  <div className="space-y-2 pb-4 border-b dark:border-slate-800">
-                    <h4 className="font-semibold text-xs text-gray-900 dark:text-white">Setup:</h4>
-                    <div className="text-xs text-gray-600 dark:text-slate-400 space-y-1">
+                  <div className="space-y-2 pb-4 border-b">
+                    <h4 className="font-semibold text-xs text-gray-900">Setup:</h4>
+                    <div className="text-xs text-gray-600 space-y-1">
                       {webhook.secretKey === "github" && (
                         <>
                           <p>1. Repo Settings → Webhooks → Add</p>
@@ -258,20 +258,20 @@ export function WebhookIntegrations() {
 
                   {/* Webhook URL */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-gray-900 dark:text-white">
+                    <Label className="text-xs font-medium text-gray-900">
                       Webhook URL
                     </Label>
                     <div className="flex gap-2">
                       <Input
                         value={webhook.url}
                         readOnly
-                        className="text-xs font-mono bg-gray-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 h-9"
+                        className="text-xs font-mono bg-gray-50 h-9"
                       />
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => copyUrl(webhook.url)}
-                        className="h-9 px-3 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                        className="h-9 px-3"
                       >
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
@@ -280,7 +280,7 @@ export function WebhookIntegrations() {
 
                   {/* Secret Input */}
                   <div className="space-y-1.5 pt-1">
-                    <Label htmlFor={`secret-${webhook.secretKey}`} className="text-xs font-medium text-gray-900 dark:text-white">
+                    <Label htmlFor={`secret-${webhook.secretKey}`} className="text-xs font-medium text-gray-900">
                       {webhook.secretLabel}
                     </Label>
                     <div className="flex gap-2">
@@ -292,13 +292,13 @@ export function WebhookIntegrations() {
                           onChange={(e) => setSecretValue(webhook.secretKey, e.target.value)}
                           placeholder="Generate or paste"
                           autoComplete="new-password"
-                          className="pr-10 text-xs h-9 dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                          className="pr-10 text-xs h-9"
                         />
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent dark:text-slate-400"
+                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
                           onClick={() => setShowValue(webhook.secretKey, !show)}
                         >
                           {show ? (
@@ -313,7 +313,7 @@ export function WebhookIntegrations() {
                         variant="outline"
                         size="sm"
                         onClick={() => setSecretValue(webhook.secretKey, randomSecret())}
-                        className="h-9 px-3 text-xs dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                        className="h-9 px-3 text-xs"
                       >
                         Generate
                       </Button>
@@ -325,7 +325,7 @@ export function WebhookIntegrations() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="flex-1 h-9 text-xs dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                        className="flex-1 h-9 text-xs"
                         onClick={() => copyUrl(secretValue)}
                         disabled={!secretValue}
                       >
@@ -334,7 +334,7 @@ export function WebhookIntegrations() {
                       </Button>
                       <Button
                         type="button"
-                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-9 text-xs dark:bg-blue-700 dark:hover:bg-blue-600"
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-9 text-xs"
                         size="sm"
                         disabled={!secretValue}
                         onClick={() => toast.success("Secret ready to use")}

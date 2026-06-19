@@ -145,10 +145,10 @@ export default function ApiKeysPage() {
           </Button>
           {revealed && (
             <div className="space-y-3">
-              <div className="rounded-md border border-amber-400 bg-amber-50 p-3 text-xs dark:bg-amber-950/30">
+              <div className="rounded-md border border-amber-400 bg-amber-50 p-3 text-xs">
                 <div className="mb-2 font-medium">Copy this value now — it won&apos;t be shown again.</div>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 break-all font-mono text-xs bg-amber-100/50 dark:bg-amber-900/20 px-2 py-1 rounded">{revealed}</code>
+                  <code className="flex-1 break-all font-mono text-xs bg-amber-100/50 px-2 py-1 rounded">{revealed}</code>
                   <Button
                     size="sm"
                     variant="outline"

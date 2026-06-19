@@ -64,24 +64,24 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   OPEN: {
     label: "Open",
     color:
-      "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-400",
+      "bg-yellow-100 text-yellow-800",
   },
   IN_PROGRESS: {
     label: "In Progress",
-    color: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-400",
+    color: "bg-blue-100 text-blue-800",
   },
   FALSE_POSITIVE: {
     label: "False Positive",
-    color: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+    color: "bg-gray-100 text-gray-600",
   },
   ACCEPTED_RISK: {
     label: "Accepted",
     color:
-      "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-400",
+      "bg-purple-100 text-purple-800",
   },
   RESOLVED: {
     label: "Resolved",
-    color: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-400",
+    color: "bg-green-100 text-green-800",
   },
 };
 
@@ -388,14 +388,14 @@ export function FindingsTable({
                     <p className="text-2xl font-bold">{verifyResults.total}</p>
                     <p className="text-xs text-muted-foreground">Analyzed</p>
                   </div>
-                  <div className="rounded-lg border bg-green-50 dark:bg-green-900/20 p-3">
-                    <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                  <div className="rounded-lg border bg-green-50 p-3">
+                    <p className="text-2xl font-bold text-green-700">
                       {verifyResults.falsePositives}
                     </p>
                     <p className="text-xs text-muted-foreground">Likely FP</p>
                   </div>
-                  <div className="rounded-lg border bg-red-50 dark:bg-red-900/20 p-3">
-                    <p className="text-2xl font-bold text-red-700 dark:text-red-400">
+                  <div className="rounded-lg border bg-red-50 p-3">
+                    <p className="text-2xl font-bold text-red-700">
                       {verifyResults.truePositives}
                     </p>
                     <p className="text-xs text-muted-foreground">Likely TP</p>
@@ -413,8 +413,8 @@ export function FindingsTable({
                         <Badge
                           className={
                             r.isFalsePositive
-                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 shrink-0"
-                              : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 shrink-0"
+                              ? "bg-green-100 text-green-800 shrink-0"
+                              : "bg-red-100 text-red-800 shrink-0"
                           }
                         >
                           {r.isFalsePositive ? "FP" : "TP"}
@@ -478,8 +478,8 @@ export function FindingsTable({
                 <Badge
                   className={
                     r.ok
-                      ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 shrink-0"
-                      : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 shrink-0"
+                      ? "bg-green-100 text-green-800 shrink-0"
+                      : "bg-red-100 text-red-800 shrink-0"
                   }
                 >
                   {r.ok ? "PR" : "Fail"}
@@ -491,7 +491,7 @@ export function FindingsTable({
                       href={r.prUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline dark:text-blue-400"
+                      className="text-blue-600 hover:underline"
                     >
                       View PR
                     </a>

@@ -2,8 +2,6 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -47,79 +45,43 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
-/* Pepper Security — warm coral primary + slate neutrals + teal accent */
+/* Pepper Premium SaaS Theme — Unified Purple/Lavender Palette */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.988 0.006 85);
+  --radius: 1.25rem;
+  --background: oklch(0.98 0.003 280);
   --foreground: oklch(0.21 0.035 265);
-  --card: oklch(1 0.002 85);
+  --card: oklch(1 0 0);
   --card-foreground: oklch(0.21 0.035 265);
-  --popover: oklch(1 0.002 85);
+  --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.035 265);
-  --primary: oklch(0.52 0.19 38);
+  --primary: oklch(0.52 0.19 280);
   --primary-foreground: oklch(0.99 0.005 85);
-  --secondary: oklch(0.96 0.012 265);
+  --secondary: oklch(0.97 0.004 280);
   --secondary-foreground: oklch(0.28 0.04 265);
-  --muted: oklch(0.94 0.01 265);
-  --muted-foreground: oklch(0.45 0.03 265);
-  --accent: oklch(0.93 0.045 195);
-  --accent-foreground: oklch(0.28 0.08 195);
+  --muted: oklch(0.93 0.008 280);
+  --muted-foreground: oklch(0.6 0.02 265);
+  --accent: oklch(0.60 0.19 290);
+  --accent-foreground: oklch(0.99 0.005 85);
   --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.99 0 0);
-  --border: oklch(0.88 0.015 265);
-  --input: oklch(0.9 0.012 265);
-  --ring: oklch(0.52 0.19 38);
+  --border: oklch(0.93 0.008 280);
+  --input: oklch(0.98 0.003 280);
+  --ring: oklch(0.52 0.19 280);
   --chart-1: oklch(0.55 0.2 25);
   --chart-2: oklch(0.58 0.16 55);
   --chart-3: oklch(0.52 0.14 195);
   --chart-4: oklch(0.5 0.12 265);
-  --chart-5: oklch(0.52 0.19 38);
-  --sidebar: oklch(0.99 0.004 85);
-  --sidebar-foreground: oklch(0.24 0.035 265);
-  --sidebar-primary: oklch(0.52 0.19 38);
+  --chart-5: oklch(0.65 0.22 320);
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.21 0.035 265);
+  --sidebar-primary: oklch(0.52 0.19 280);
   --sidebar-primary-foreground: oklch(0.99 0.005 85);
-  --sidebar-accent: oklch(0.95 0.03 38);
-  --sidebar-accent-foreground: oklch(0.35 0.1 38);
-  --sidebar-border: oklch(0.9 0.012 265);
-  --sidebar-ring: oklch(0.52 0.19 38);
-  --hover-overlay: oklch(0.52 0.19 38 / 8%);
-  --surface-glow: oklch(0.52 0.19 38 / 12%);
-}
-
-.dark {
-  --background: oklch(0.14 0.04 265);
-  --foreground: oklch(0.96 0.01 85);
-  --card: oklch(0.18 0.035 265);
-  --card-foreground: oklch(0.96 0.01 85);
-  --popover: oklch(0.2 0.035 265);
-  --popover-foreground: oklch(0.96 0.01 85);
-  --primary: oklch(0.72 0.17 42);
-  --primary-foreground: oklch(0.16 0.04 265);
-  --secondary: oklch(0.24 0.03 265);
-  --secondary-foreground: oklch(0.94 0.01 85);
-  --muted: oklch(0.24 0.025 265);
-  --muted-foreground: oklch(0.65 0.025 265);
-  --accent: oklch(0.26 0.05 195);
-  --accent-foreground: oklch(0.88 0.06 195);
-  --destructive: oklch(0.62 0.22 25);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.72 0.17 42);
-  --chart-1: oklch(0.62 0.22 25);
-  --chart-2: oklch(0.7 0.18 55);
-  --chart-3: oklch(0.75 0.14 195);
-  --chart-4: oklch(0.6 0.1 265);
-  --chart-5: oklch(0.72 0.17 42);
-  --sidebar: oklch(0.16 0.04 265);
-  --sidebar-foreground: oklch(0.94 0.01 85);
-  --sidebar-primary: oklch(0.72 0.17 42);
-  --sidebar-primary-foreground: oklch(0.16 0.04 265);
-  --sidebar-accent: oklch(0.22 0.05 38);
-  --sidebar-accent-foreground: oklch(0.9 0.06 42);
-  --sidebar-border: oklch(1 0 0 / 9%);
-  --sidebar-ring: oklch(0.72 0.17 42);
-  --hover-overlay: oklch(0.72 0.17 42 / 10%);
-  --surface-glow: oklch(0.72 0.17 42 / 18%);
+  --sidebar-accent: oklch(0.97 0.004 280);
+  --sidebar-accent-foreground: oklch(0.52 0.19 280);
+  --sidebar-border: oklch(0.93 0.008 280);
+  --sidebar-ring: oklch(0.52 0.19 280);
+  --hover-overlay: oklch(0.52 0.19 280 / 8%);
+  --surface-glow: oklch(0.52 0.19 280 / 12%);
 }
 
 @layer base {
@@ -140,21 +102,8 @@
       ),
       radial-gradient(
         ellipse 60% 50% at 100% 0%,
-        oklch(0.55 0.08 195 / 6%),
+        oklch(0.60 0.19 290 / 6%),
         transparent 50%
-      );
-  }
-  .dark body {
-    background-image:
-      radial-gradient(
-        ellipse 100% 70% at 50% -20%,
-        var(--surface-glow),
-        transparent 50%
-      ),
-      radial-gradient(
-        ellipse 50% 40% at 0% 100%,
-        oklch(0.55 0.1 195 / 8%),
-        transparent 45%
       );
   }
   h1,

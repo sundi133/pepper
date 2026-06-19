@@ -44,7 +44,7 @@ import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
 
 /** Stronger scan toolbar outline buttons (readable while a scan is running). */
 const scanToolbarOutlineClass =
-  "font-semibold text-foreground shadow-sm border-2 border-border bg-background hover:bg-muted/80 dark:border-border/80 dark:hover:bg-muted/50";
+  "font-semibold text-foreground shadow-sm border-2 border-border bg-background hover:bg-muted/80";
 
 type Finding = {
   id: string;

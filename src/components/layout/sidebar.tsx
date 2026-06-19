@@ -29,7 +29,7 @@ export function SidebarBrand({ onNavigate }: { onNavigate?: () => void }) {
 export function Sidebar() {
   return (
     <aside className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-64 lg:flex-col">
-      <div className="flex grow flex-col gap-y-4 overflow-y-auto border-r border-sidebar-border bg-sidebar bg-gradient-to-b from-sidebar to-sidebar/95 px-4 pb-4 pt-5 shadow-sm dark:from-sidebar dark:to-background/40">
+      <div className="flex grow flex-col gap-y-4 overflow-y-auto border-r border-sidebar-border bg-sidebar bg-gradient-to-b from-sidebar to-sidebar/95 px-4 pb-4 pt-5 shadow-sm">
         <SidebarBrand />
         <SidebarNav className="flex-1 px-1" />
       </div>

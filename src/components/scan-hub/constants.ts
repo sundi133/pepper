@@ -28,11 +28,11 @@ export const SEVERITY_STYLES: Record<
   FindingSeverity,
   string
 > = {
-  High: "bg-red-50 text-red-700 border-red-200/80 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/50",
+  High: "bg-red-50 text-red-700 border-red-200/80",
   Medium:
-    "bg-amber-50 text-amber-800 border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-900/50",
-  Low: "bg-slate-50 text-slate-600 border-slate-200/80 dark:bg-slate-900 dark:text-slate-400",
-  "—": "bg-slate-50 text-slate-500 border-slate-200/60 dark:bg-slate-900/50 dark:text-slate-500",
+    "bg-amber-50 text-amber-800 border-amber-200/80",
+  Low: "bg-slate-50 text-slate-600 border-slate-200/80",
+  "—": "bg-slate-50 text-slate-500 border-slate-200/60",
 };
 
 export function formatLastScan(iso: string | null): string {

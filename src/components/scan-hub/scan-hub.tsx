@@ -32,6 +32,7 @@ export function ScanHub() {
 
       <RepositoryInventory
         repos={hub.filteredConnected}
+        availableRepos={hub.importable}
         projects={projects}
         loading={hub.loading}
         providerFilter={hub.providerFilter}
@@ -41,6 +42,7 @@ export function ScanHub() {
         onRefresh={() => void hub.refreshAll()}
         stats={hub.stats}
         scanType={scanType}
+        onLoadBranches={hub.loadBranchesForRepo}
       />
 
       <ImportRepoDialog

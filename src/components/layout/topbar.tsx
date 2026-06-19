@@ -17,7 +17,6 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { LogOut, Search, User, Bell, Shield } from "lucide-react";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { MobileNav } from "@/components/layout/mobile-nav";
 
 const unreadFetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -62,13 +61,12 @@ export function Topbar() {
         <Input
           type="search"
           placeholder="Search projects, vulnerabilities…"
-          className="h-9 w-full border-border/80 bg-muted/50 pl-9 shadow-none transition-all duration-200 hover:border-primary/30 hover:bg-card lg:h-10 dark:bg-background/60"
+          className="h-9 w-full border-border/80 bg-muted/50 pl-9 shadow-none transition-all duration-200 hover:border-primary/30 hover:bg-card lg:h-10"
           aria-label="Search"
         />
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
-        <ThemeToggle />
         <Button
           type="button"
           variant="ghost"

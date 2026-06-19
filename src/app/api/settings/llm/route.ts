@@ -23,6 +23,10 @@ export async function GET() {
       hasApiKey: false,
       enableLlmSast: true,
       enableLlmSecrets: true,
+      enableLlmSca: true,
+      enableLlmIac: true,
+      enableLlmZeroDay: true,
+      enableLlmContainer: true,
       osvApiUrl: "https://api.osv.dev",
       vulnDbMode: "online",
     });
@@ -35,6 +39,10 @@ export async function GET() {
     hasApiKey: !!settings.llmApiKey,
     enableLlmSast: settings.enableLlmSast,
     enableLlmSecrets: settings.enableLlmSecrets,
+    enableLlmSca: settings.enableLlmSca,
+    enableLlmIac: settings.enableLlmIac,
+    enableLlmZeroDay: settings.enableLlmZeroDay,
+    enableLlmContainer: settings.enableLlmContainer,
     osvApiUrl: settings.osvApiUrl,
     vulnDbMode: settings.vulnDbMode,
   });
@@ -44,12 +52,16 @@ const updateSchema = z.object({
   llmProvider: z
     .enum(["ollama", "openai", "openrouter", "azure", "vllm", "custom"])
     .optional(),
-  llmBaseUrl: z.string().url().optional(),
+  llmBaseUrl: z.string().optional(),
   llmModel: z.string().min(1).optional(),
   llmApiKey: z.string().optional(),
   enableLlmSast: z.boolean().optional(),
   enableLlmSecrets: z.boolean().optional(),
-  osvApiUrl: z.string().url().optional(),
+  enableLlmSca: z.boolean().optional(),
+  enableLlmIac: z.boolean().optional(),
+  enableLlmZeroDay: z.boolean().optional(),
+  enableLlmContainer: z.boolean().optional(),
+  osvApiUrl: z.string().optional(),
   vulnDbMode: z.enum(["online", "mirror", "offline"]).optional(),
 });
 

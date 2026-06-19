@@ -45,23 +45,23 @@ import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 
 const THEME_COLORS: Record<string, string> = {
   Organizational:
-    "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-400",
-  People: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-400",
+    "bg-blue-100 text-blue-800",
+  People: "bg-green-100 text-green-800",
   Physical:
-    "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-400",
+    "bg-orange-100 text-orange-800",
   Technological:
-    "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-400",
+    "bg-purple-100 text-purple-800",
   "OWASP Top 10":
-    "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-300",
+    "bg-slate-100 text-slate-800",
 };
 
 const RELEVANCE_COLORS: Record<string, string> = {
   direct:
-    "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-400 border-red-200",
+    "bg-red-100 text-red-800 border-red-200",
   supporting:
-    "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-400 border-yellow-200",
+    "bg-yellow-100 text-yellow-800 border-yellow-200",
   related:
-    "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border-gray-200",
+    "bg-gray-100 text-gray-600 border-gray-200",
 };
 
 interface ControlMapping {

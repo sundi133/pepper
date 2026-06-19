@@ -72,13 +72,13 @@ export function GateResultBadge({ result }: { result: string }) {
 
 const SEVERITY_STYLES: Record<string, string> = {
   CRITICAL:
-    "border-red-600/40 bg-red-600 text-white shadow-sm hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-500",
+    "border-red-600/40 bg-red-600 text-white shadow-sm hover:bg-red-700",
   HIGH:
-    "border-orange-500/40 bg-orange-500 text-white shadow-sm hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-500",
+    "border-orange-500/40 bg-orange-500 text-white shadow-sm hover:bg-orange-600",
   MEDIUM:
-    "border-amber-500/40 bg-amber-500/90 text-amber-950 shadow-sm hover:bg-amber-500 dark:bg-amber-600 dark:text-amber-950 dark:hover:bg-amber-500",
+    "border-amber-500/40 bg-amber-500/90 text-amber-950 shadow-sm hover:bg-amber-500",
   LOW:
-    "border-sky-500/40 bg-sky-500/15 text-sky-800 hover:bg-sky-500/25 dark:bg-sky-500/20 dark:text-sky-300 dark:hover:bg-sky-500/30",
+    "border-sky-500/40 bg-sky-500/15 text-sky-800 hover:bg-sky-500/25",
   INFO:
     "border-border bg-muted text-muted-foreground hover:bg-muted/80",
 };

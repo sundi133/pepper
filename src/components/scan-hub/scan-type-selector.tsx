@@ -26,10 +26,10 @@ export function ScanTypeSelector({
   return (
     <div className={cn("space-y-2", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+        <Label className="text-xs font-medium text-slate-700">
           Scanners
         </Label>
-        <span className="text-[11px] text-slate-500 dark:text-slate-400">
+        <span className="text-[11px] text-slate-500">
           Default: All
         </span>
       </div>
@@ -45,8 +45,8 @@ export function ScanTypeSelector({
                 "rounded-full border px-2.5 py-1 text-xs font-medium transition-all",
                 compact && "px-2 py-0.5 text-[11px]",
                 active
-                  ? "border-teal-500/60 bg-teal-500/10 text-teal-900 shadow-sm dark:text-teal-100"
-                  : "border-slate-200/90 bg-white text-slate-600 hover:border-teal-400/40 hover:text-teal-800 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-400",
+                  ? "border-teal-500/60 bg-teal-500/10 text-teal-900 shadow-sm"
+                  : "border-slate-200/90 bg-white text-slate-600 hover:border-teal-400/40 hover:text-teal-800",
               )}
               aria-pressed={active}
             >
@@ -55,10 +55,10 @@ export function ScanTypeSelector({
           );
         })}
       </div>
-      <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+      <p className="text-xs leading-relaxed text-slate-500">
         {value === "FULL" ? (
           <>
-            <span className="font-medium text-slate-700 dark:text-slate-300">
+            <span className="font-medium text-slate-700">
               All scanners:
             </span>{" "}
             {ALL_SCANNERS_LIST}. Respects LLM Config and org settings for each

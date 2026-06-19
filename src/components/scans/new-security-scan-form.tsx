@@ -206,11 +206,11 @@ export function NewSecurityScanForm({
     <>
         {showOuterCard && (
         <div
-          className="mb-5 flex gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:border-amber-500/50 dark:bg-amber-950/40 dark:text-amber-50"
+          className="mb-5 flex gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950"
           role="note"
         >
           <AlertTriangle
-            className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400"
+            className="mt-0.5 h-4 w-4 shrink-0 text-amber-700"
             aria-hidden
           />
           <p className="leading-snug">

@@ -49,6 +49,7 @@ const nextConfig: NextConfig = {
   experimental: {
     proxyClientMaxBodySize: "150mb",
   },
+  turbopack: {},
 };
 
 export default nextConfig;

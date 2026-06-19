@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx prisma *)",
+      "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"yes\" npx prisma migrate reset --force)",
+      "Bash(npx ts-node *)",
+      "Bash(node -r esbuild-register prisma/seed.ts)",
+      "Bash(psql postgres://postgres:postgres@127.0.0.1:5432/pepper)",
+      "Bash(psql \"postgresql://pepper:pepper_dev@127.0.0.1:5432/pepper\")",
+      "Bash(psql \"postgresql://pepper:pepper_dev@127.0.0.1:5432/pepper\" -c \"\\\\dt\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/callback/credentials -H 'Content-Type: application/json' -H 'Cookie: ' -d '{\"email\":\"admin@pepper.local\",\"password\":\"pepper-admin-changeme\"}')",
+      "Bash(node -e ' *)",
+      "Bash(pkill -9 -f \"next dev\")",
+      "Bash(kill -9 838523)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(curl -s http://localhost:3000/api/admin/verify)",
+      "Bash(pkill -9 -f \"node\")",
+      "Bash(psql \"postgresql://pepper:pepper_dev@127.0.0.1:5432/pepper\" -c \"\\\\d \\\\\"Project\\\\\"\")",
+      "Bash(psql \"postgresql://pepper:pepper_dev@127.0.0.1:5432/pepper\" -c \"SELECT column_name FROM information_schema.columns WHERE table_name='Project' ORDER BY column_name;\")",
+      "Bash(awk '{print $1}')",
+      "Bash(psql \"postgresql://pepper:pepper_dev@127.0.0.1:5432/pepper\" -c \"SELECT column_name FROM information_schema.columns WHERE table_name='ScanSchedule' ORDER BY column_name;\")",
+      "Bash(pkill -9 -f \"next dev\" *)",
+      "Bash(pkill -9 -f node)",
+      "Bash(pkill -9 -f npm)",
+      "Bash(rm -rf /home/sam/pepper/.next /tmp/next-panic-*.log)",
+      "Bash(npm ls *)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

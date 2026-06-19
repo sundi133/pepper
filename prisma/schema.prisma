@@ -89,7 +89,7 @@ model OrgMember {
   emailOnCritical     Boolean @default(true)
 
   user         User         @relation(fields: [userId], references: [id])
-  organization Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([userId, organizationId])
 }
@@ -115,6 +115,16 @@ model User {
   sessions    Session[]
   memberships OrgMember[]
   notifications Notification[]
+  superAdmin  SuperAdmin?
+}
+
+model SuperAdmin {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // NextAuth required models
@@ -187,7 +197,7 @@ model Project {
   /// Target URL for DAST (dapper) scans of this project.
   dastTargetUrl      String?
 
-  organization Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   scans        Scan[]
   buildGate    BuildGate?
   schedule     ScanSchedule?
@@ -471,7 +481,7 @@ model SecurityPolicy {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, enabled])
 }
@@ -487,7 +497,7 @@ model ApiKey {
   lastUsedAt     DateTime?
   createdAt      DateTime  @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 /// Outbound integrations: Jira, Slack, SIEM (HTTPS/syslog), DAST (dapper).

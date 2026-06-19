@@ -62,11 +62,9 @@ export const authOptions: NextAuthOptions = {
       const userId =
         (typeof user?.id === "string" ? user.id : undefined) ??
         (typeof token.userId === "string" ? token.userId : undefined);
-      const shouldLoadMemberships =
-        userId !== undefined &&
-        (Boolean(user) || token.memberships === undefined);
 
-      if (shouldLoadMemberships) {
+      if (userId !== undefined) {
+        // Always reload memberships to ensure we have fresh data
         const memberships = await prisma.orgMember.findMany({
           where: { userId },
           orderBy: { createdAt: "asc" },

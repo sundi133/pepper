@@ -17,6 +17,7 @@ import {
   KeyRound,
   History,
   FileSignature,
+  User,
   type LucideIcon,
 } from "lucide-react";
 
@@ -30,6 +31,7 @@ export const mainNavigation: NavItem[] = [
 ];
 
 export const settingsNavigation: NavItem[] = [
+  { name: "Profile", href: "/settings/profile", icon: User },
   { name: "LLM Config", href: "/settings/llm", icon: Zap },
   { name: "Policies", href: "/settings/policies", icon: ScrollText },
   { name: "Build Gates", href: "/settings/build-gates", icon: ShieldCheck },

@@ -286,7 +286,11 @@ export function IntegrationsDashboard() {
       name: "GitHub",
       category: "source-control",
       description: "Import repositories, scan pull requests, and create AI fix PRs",
-      icon: <svg className="h-8 w-8" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v 3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>,
+      icon: (
+        <svg className="h-8 w-8" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v 3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+        </svg>
+      ),
       features: ["Repository Import", "PR Scanning & Reviews", "AI Fix Pull Requests"],
     },
     {
@@ -294,7 +298,11 @@ export function IntegrationsDashboard() {
       name: "GitLab",
       category: "source-control",
       description: "Automatically scan merge requests and push events",
-      icon: <svg className="h-8 w-8" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12s5.374 12 12 12 12-5.373 12-12-5.374-12-12-12zm0 2c5.514 0 10 4.486 10 10s-4.486 10-10 10-10-4.486-10-10 4.486-10 10-10z"/></svg>,
+      icon: (
+        <svg className="h-8 w-8" viewBox="0 0 24 24" fill="#FC6D26">
+          <path d="M12 1C5.925 1 1 5.925 1 12s4.925 11 11 11 11-4.925 11-11S18.075 1 12 1m0 2c4.965 0 9 4.035 9 9s-4.035 9-9 9-9-4.035-9-9 4.035-9 9-9m.5 3v3H10V6h2.5m0 5v3h-2.5v-3H12.5M8.5 11v3H6v-3h2.5m7 0v3h-2.5v-3H15.5z"/>
+        </svg>
+      ),
       features: ["Merge Request Scanning", "Security Reports", "Webhooks Support"],
     },
     {
@@ -302,7 +310,11 @@ export function IntegrationsDashboard() {
       name: "Bitbucket Cloud",
       category: "source-control",
       description: "Scan pull requests, post comments and build statuses",
-      icon: <svg className="h-8 w-8" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0z"/></svg>,
+      icon: (
+        <svg className="h-8 w-8" viewBox="0 0 24 24" fill="#0052CC">
+          <path d="M3.5 2A1.5 1.5 0 0 0 2 3.5V20.5A1.5 1.5 0 0 0 3.5 22h17A1.5 1.5 0 0 0 22 20.5V3.5A1.5 1.5 0 0 0 20.5 2h-17zM9 7.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zm6 0a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z"/>
+        </svg>
+      ),
       features: ["PR Scanning", "Inline Comments", "Build Status Updates"],
     },
     {
@@ -310,7 +322,11 @@ export function IntegrationsDashboard() {
       name: "Azure DevOps",
       category: "source-control",
       description: "Import repos and integrate with Azure Pipelines",
-      icon: <Zap className="h-8 w-8" />,
+      icon: (
+        <svg className="h-8 w-8" viewBox="0 0 24 24" fill="#0078D4">
+          <path d="M14.357.644a1 1 0 0 0-.994.116L1.961 8.955c-.335.238-.5.615-.5.992v4.106c0 .376.165.754.5.992l11.402 8.195c.304.218.693.218.997.116l11.4-8.195c.335-.238.5-.615.5-.992V9.947c0-.376-.165-.754-.5-.992L14.357.644zm-1.493 2.535l9.04 6.497-4.07 2.925-9.04-6.497 4.07-2.925zm1.496 13.098l-4.07-2.925v5.851l4.07 2.925v-5.851zm9.04-6.497L9.32 18.277l4.07 2.925 9.04-6.497-4.07-2.925z"/>
+        </svg>
+      ),
       features: ["PR Threads & Status Checks", "Pipeline Integration", "Service Hooks"],
     },
     {
@@ -318,7 +334,11 @@ export function IntegrationsDashboard() {
       name: "Slack",
       category: "notifications",
       description: "Get security alerts and scan summaries in your channels",
-      icon: <MessageSquare className="h-8 w-8" />,
+      icon: (
+        <svg className="h-8 w-8" viewBox="0 0 24 24" fill="#E01E5A">
+          <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.31A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.525v-6.31zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.527 2.527 0 0 1 2.521 2.521 2.527 2.527 0 0 1-2.521 2.521H2.525A2.527 2.527 0 0 1 0 8.834a2.527 2.527 0 0 1 2.525-2.521h6.309zm10.124 2.521a2.528 2.528 0 0 1 2.52-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.52V8.834zm-1.271 0a2.528 2.528 0 0 1-2.521 2.521 2.528 2.528 0 0 1-2.521-2.521V2.525A2.528 2.528 0 0 1 15.166 0a2.528 2.528 0 0 1 2.521 2.525v6.309zm0-6.309a2.528 2.528 0 0 1 2.521-2.52A2.528 2.528 0 0 1 24 2.525a2.528 2.528 0 0 1-2.522 2.52h-2.52V2.525zm0 10.124a2.527 2.527 0 0 1-2.521 2.521 2.527 2.527 0 0 1-2.521-2.521v-6.31h5.042v6.31z"/>
+        </svg>
+      ),
       features: ["Scan Notifications", "Custom Alerts", "Channel Integration"],
     },
     {
@@ -326,7 +346,11 @@ export function IntegrationsDashboard() {
       name: "Jira",
       category: "issue-tracking",
       description: "Create and sync issues for vulnerabilities and security findings",
-      icon: <AlertCircle className="h-8 w-8" />,
+      icon: (
+        <svg className="h-8 w-8" viewBox="0 0 24 24" fill="#0052CC">
+          <path d="M12 0a4 4 0 0 0-4 4v4H4a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4h16a4 4 0 0 0 4-4v-8a4 4 0 0 0-4-4h-4V4a4 4 0 0 0-4-4zm-2 5a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm4 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm6 4a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm-8 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm4 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm4 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/>
+        </svg>
+      ),
       features: ["Issue Creation", "Two-way Sync", "Custom Workflows"],
     },
   ];

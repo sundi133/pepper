@@ -4,14 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Loader2, RefreshCw, Shield, X, Search, ChevronDown } from "lucide-react";
+import { Loader2, RefreshCw, Shield, X, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo } from "react";
 
@@ -66,7 +59,7 @@ export function ImportRepoDialog({
   emptyHint,
 }: ImportRepoDialogProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
+  const [selectedRepoForBranch, setSelectedRepoForBranch] = useState<string | null>(null);
 
   const importable = items.filter((i) => !i.alreadyConnected);
   const selectedCount = importable.filter((i) => selectedKeys.has(i.key)).length;
@@ -82,15 +75,9 @@ export function ImportRepoDialog({
     );
   }, [items, searchQuery]);
 
-  const toggleExpanded = (key: string) => {
-    const newExpanded = new Set(expandedRepos);
-    if (newExpanded.has(key)) {
-      newExpanded.delete(key);
-    } else {
-      newExpanded.add(key);
-    }
-    setExpandedRepos(newExpanded);
-  };
+  const selectedRepoData = selectedRepoForBranch
+    ? items.find((r) => r.key === selectedRepoForBranch)
+    : null;
 
   if (!open) return null;
 
@@ -146,49 +133,61 @@ export function ImportRepoDialog({
         </Button>
       </div>
 
-      {/* Content List */}
-      <div className="flex-1 overflow-auto">
-        {loading || !loaded ? (
-          <div className="flex items-center justify-center gap-2 h-full text-slate-500 dark:text-slate-400">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            Loading repositories…
-          </div>
-        ) : importable.length === 0 && items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
-            <p className="text-sm text-slate-600 dark:text-slate-400">{emptyMessage}</p>
-            {emptyHint && (
-              <p className="text-xs text-slate-500 dark:text-slate-500">{emptyHint}</p>
-            )}
-          </div>
-        ) : filteredItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              No repositories found matching "{searchQuery}"
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-200 dark:divide-slate-800">
-            {filteredItems.map((repo) => (
-              <div
-                key={repo.key}
-                className={cn(
-                  "transition-colors",
-                  repo.alreadyConnected
-                    ? "bg-slate-50 dark:bg-slate-900/30 opacity-60"
-                    : selectedKeys.has(repo.key)
-                    ? "bg-teal-50/50 dark:bg-teal-950/20"
-                    : "hover:bg-slate-50 dark:hover:bg-slate-900/50",
-                )}
-              >
-                {/* Repository Row */}
-                <div className="px-6 py-4 flex items-center gap-4">
+      {/* Main Content - Two Column Layout */}
+      <div className="flex-1 overflow-hidden flex">
+        {/* Left: Repository List */}
+        <div className="flex-1 overflow-auto border-r border-slate-200 dark:border-slate-800">
+          {loading || !loaded ? (
+            <div className="flex items-center justify-center gap-2 h-full text-slate-500 dark:text-slate-400">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Loading repositories…
+            </div>
+          ) : importable.length === 0 && items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
+              <p className="text-sm text-slate-600 dark:text-slate-400">{emptyMessage}</p>
+              {emptyHint && (
+                <p className="text-xs text-slate-500 dark:text-slate-500">{emptyHint}</p>
+              )}
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                No repositories found matching "{searchQuery}"
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-200 dark:divide-slate-800">
+              {filteredItems.map((repo) => (
+                <div
+                  key={repo.key}
+                  onClick={() => {
+                    if (
+                      repo.branches &&
+                      repo.branches.length > 0 &&
+                      !repo.alreadyConnected
+                    ) {
+                      setSelectedRepoForBranch(repo.key);
+                    }
+                  }}
+                  className={cn(
+                    "px-6 py-4 flex items-center gap-4 transition-colors cursor-pointer",
+                    repo.alreadyConnected
+                      ? "bg-slate-50 dark:bg-slate-900/30 opacity-60 cursor-not-allowed"
+                      : selectedKeys.has(repo.key)
+                      ? "bg-teal-50 dark:bg-teal-950/20"
+                      : selectedRepoForBranch === repo.key
+                      ? "bg-slate-100 dark:bg-slate-900"
+                      : "hover:bg-slate-50 dark:hover:bg-slate-900/50",
+                  )}
+                >
                   <Checkbox
                     checked={selectedKeys.has(repo.key)}
                     disabled={repo.alreadyConnected}
-                    onCheckedChange={(checked) =>
-                      onToggle(repo.key, checked === true, repo.alreadyConnected)
-                    }
+                    onCheckedChange={(checked) => {
+                      onToggle(repo.key, checked === true, repo.alreadyConnected);
+                    }}
                     className="shrink-0"
+                    onClick={(e) => e.stopPropagation()}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -207,60 +206,56 @@ export function ImportRepoDialog({
                       {repo.private && <span>Private</span>}
                     </div>
                   </div>
-                  {repo.branches && repo.branches.length > 0 && !repo.alreadyConnected && (
-                    <button
-                      onClick={() => toggleExpanded(repo.key)}
-                      className={cn(
-                        "p-1 rounded-lg transition-colors flex-shrink-0",
-                        expandedRepos.has(repo.key)
-                          ? "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200"
-                          : "text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-500",
-                      )}
-                    >
-                      <ChevronDown
-                        className={cn(
-                          "h-4 w-4 transition-transform",
-                          expandedRepos.has(repo.key) && "rotate-180",
-                        )}
-                      />
-                    </button>
-                  )}
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-                {/* Branch Selector Sublist */}
-                {repo.branches &&
-                  repo.branches.length > 0 &&
-                  !repo.alreadyConnected &&
-                  expandedRepos.has(repo.key) && (
-                    <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 px-6 py-3 ml-10">
-                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-3">
-                        Select branch:
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {repo.branches.map((branch) => (
-                          <button
-                            key={branch}
-                            onClick={() => onBranchChange?.(repo.key, branch)}
-                            className={cn(
-                              "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border",
-                              (repo.selectedBranch || repo.defaultBranch) === branch
-                                ? "bg-teal-600 text-white border-teal-700 dark:border-teal-600"
-                                : "bg-white text-slate-700 border-slate-300 hover:border-teal-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 dark:hover:border-teal-500",
-                            )}
-                          >
-                            {branch}
-                            {branch === repo.defaultBranch && (
-                              <span className="ml-1.5 text-[10px] opacity-70">(default)</span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+        {/* Right: Branch Selector Sidebar */}
+        <div className="w-80 bg-slate-50 dark:bg-slate-900/30 border-l border-slate-200 dark:border-slate-800 flex flex-col">
+          {selectedRepoData && selectedRepoData.branches && selectedRepoData.branches.length > 0 && !selectedRepoData.alreadyConnected ? (
+            <>
+              <div className="border-b border-slate-200 dark:border-slate-800 px-6 py-4 sticky top-0 bg-slate-50 dark:bg-slate-900/30">
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                  Select branch
+                </p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                  {selectedRepoData.fullName}
+                </p>
               </div>
-            ))}
-          </div>
-        )}
+              <div className="flex-1 overflow-auto p-4 space-y-2">
+                {selectedRepoData.branches.map((branch) => (
+                  <button
+                    key={branch}
+                    onClick={() => onBranchChange?.(selectedRepoData.key, branch)}
+                    className={cn(
+                      "w-full px-4 py-3 rounded-lg text-sm font-medium text-left transition-colors border",
+                      (selectedRepoData.selectedBranch || selectedRepoData.defaultBranch) === branch
+                        ? "bg-teal-600 text-white border-teal-700 dark:border-teal-600"
+                        : "bg-white text-slate-700 border-slate-300 hover:border-teal-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 dark:hover:border-teal-500",
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span>{branch}</span>
+                      {branch === selectedRepoData.defaultBranch && (
+                        <span className="text-xs opacity-70">(default)</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-center px-6 py-8">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {selectedRepoData && selectedRepoData.alreadyConnected
+                  ? "This repository is already connected"
+                  : "Select a repository with branches to choose a branch"}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Footer */}

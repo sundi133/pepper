@@ -42,9 +42,9 @@ export function ScanHub() {
         </div>
 
         {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="flex flex-col lg:flex-row gap-8">
           {/* Left Column (75%) */}
-          <div className="lg:col-span-3 space-y-6">
+          <div className="flex-1 space-y-6 min-w-0">
             {/* Card 1: Start a New Scan */}
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
               <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800">
@@ -158,7 +158,7 @@ export function ScanHub() {
           </div>
 
           {/* Right Column (25%) - Sticky Sidebar */}
-          <div className="lg:col-span-1">
+          <div className="w-full lg:w-96 flex-shrink-0">
             <div className="sticky top-6 space-y-6">
               {/* Scan Summary Card */}
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">

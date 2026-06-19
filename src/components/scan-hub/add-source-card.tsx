@@ -137,24 +137,24 @@ export function AddSourceCard({
     activePill === "azure";
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-br from-teal-50/90 via-white to-cyan-50/40 shadow-[0_4px_24px_-4px_rgba(13,148,136,0.12)] dark:border-slate-800 dark:from-teal-950/30 dark:via-slate-950 dark:to-cyan-950/20">
-      <div className="border-b border-teal-100/80 px-5 py-4 dark:border-teal-900/40">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-cyan-500 text-white shadow-md shadow-teal-500/25">
-            <UploadCloud className="h-5 w-5" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-500/15 text-teal-600 dark:text-teal-400">
+            <UploadCloud className="h-4 w-4" />
           </div>
           <div>
-            <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-slate-50">
-              Add Source
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+              Start a Scan
             </h2>
-            <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
-              Import from integrations, paste a repo URL, or run an ad-hoc scan.
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              Connect a repository, upload code, or use a URL
             </p>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-4 px-5 py-4">
+      <div className="flex flex-1 flex-col gap-5 px-6 py-5">
         <div className="flex flex-wrap gap-2">
           {pill("github", "GitHub", <Github className="h-3.5 w-3.5" />)}
           {pill("bitbucket", "Bitbucket", <GitBranch className="h-3.5 w-3.5" />)}
@@ -166,7 +166,7 @@ export function AddSourceCard({
 
         <ScanTypeSelector value={scanType} onChange={onScanTypeChange} />
 
-        <div className="min-h-[200px] flex-1 rounded-xl border border-slate-200/70 bg-white/70 p-4 shadow-inner dark:border-slate-800 dark:bg-slate-900/40">
+        <div className="min-h-[200px] flex-1 rounded-lg border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900/50">
           {isIntegration && activePill === "github" && (
             <IntegrationPanel
               connected={hub.status?.connected}
@@ -225,60 +225,61 @@ export function AddSourceCard({
           )}
 
           {isIntegration && (
-            <p className="text-xs text-slate-500">
-              Browse & import queues an <strong>All</strong> scanners scan on first
-              connect. Use Repository URL, SVN, or Upload to run a specific scanner
-              set from the pills above.
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Connecting a repository queues an <strong>All</strong> scanners scan. Use Repository URL, SVN, or Upload to select a specific scanner set.
             </p>
           )}
 
           {activePill === "url" && (
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="smart-repo-url" className="text-xs font-medium text-slate-700">
-                  Repository
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="smart-repo-url" className="block text-sm font-medium text-slate-900 dark:text-slate-100 mb-2">
+                  Repository URL
                 </Label>
                 <Input
                   id="smart-repo-url"
-                  className="h-9 border-slate-200 bg-white"
-                  placeholder="owner/repo or full URL"
+                  className="h-10 border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+                  placeholder="e.g., github.com/owner/repo or owner/repo"
                   value={smartUrl}
                   onChange={(e) => setSmartUrl(e.target.value)}
                   spellCheck={false}
                 />
                 {providerHint && (
-                  <Badge variant="secondary" className="text-[10px]">
-                    {PROVIDER_HINT_LABEL[providerHint]}
-                  </Badge>
+                  <div className="mt-2">
+                    <Badge variant="secondary" className="text-xs">
+                      {PROVIDER_HINT_LABEL[providerHint]}
+                    </Badge>
+                  </div>
                 )}
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="smart-branch" className="text-xs font-medium text-slate-700">
+              <div>
+                <Label htmlFor="smart-branch" className="block text-sm font-medium text-slate-900 dark:text-slate-100 mb-2">
                   Branch <span className="font-normal text-slate-500">(optional)</span>
                 </Label>
                 <Input
                   id="smart-branch"
-                  className="h-9 border-slate-200 bg-white"
-                  placeholder="main"
+                  className="h-10 border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+                  placeholder="e.g., main, develop"
                   value={smartBranch}
                   onChange={(e) => setSmartBranch(e.target.value)}
                 />
               </div>
               {(providerHint === "generic" || providerHint === null) && smartUrl.trim() && (
-                <div className="flex items-start gap-2">
+                <div className="flex items-start gap-2 rounded-lg bg-blue-50 p-3 dark:bg-blue-950/30">
                   <Checkbox
                     id="url-legal"
                     checked={urlLegalConfirm}
                     onCheckedChange={(c) => setUrlLegalConfirm(c === true)}
+                    className="mt-1"
                   />
-                  <Label htmlFor="url-legal" className="text-xs font-normal leading-snug">
+                  <Label htmlFor="url-legal" className="text-xs font-normal leading-snug text-slate-700 dark:text-slate-300">
                     I have permission to scan this code
                   </Label>
                 </div>
               )}
               <Button
-                size="sm"
-                className="bg-teal-600 hover:bg-teal-700 text-white"
+                size="lg"
+                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-medium"
                 onClick={() => void handleSmartConnect()}
                 disabled={smartConnecting || !smartUrl.trim()}
               >
@@ -287,7 +288,7 @@ export function AddSourceCard({
                 ) : (
                   <Shield className="mr-2 h-4 w-4" />
                 )}
-                Connect & scan
+                Start Scan
               </Button>
             </div>
           )}
@@ -349,73 +350,76 @@ function IntegrationPanel({
   extraWarning?: string;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {oauthWarning && (
-        <p className="flex gap-2 text-xs text-amber-800 dark:text-amber-200">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          GitHub OAuth is not configured on this server.
-        </p>
+        <div className="flex gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>GitHub OAuth is not configured on this server.</span>
+        </div>
       )}
       {extraWarning && (
-        <p className="flex gap-2 text-xs text-amber-800 dark:text-amber-200">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {extraWarning}
-        </p>
-      )}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2.5">
-          <div
-            className={cn(
-              "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-              connected
-                ? "bg-teal-500/15 text-teal-700 dark:text-teal-300"
-                : "bg-slate-100 text-slate-500",
-            )}
-          >
-            {connected ? (
-              <CheckCircle2 className="h-4 w-4" />
-            ) : (
-              <AlertCircle className="h-4 w-4" />
-            )}
-          </div>
-          <p className="text-sm text-slate-600 dark:text-slate-400">{connectedLabel}</p>
+        <div className="flex gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>{extraWarning}</span>
         </div>
-        <div className="flex flex-wrap gap-2">
+      )}
+      <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3.5 dark:bg-slate-900/40">
+        <div
+          className={cn(
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+            connected
+              ? "bg-teal-500/15 text-teal-700 dark:text-teal-300"
+              : "bg-slate-200 text-slate-500",
+          )}
+        >
           {connected ? (
-            <>
-              <Button
-                size="sm"
-                className="gap-1.5 bg-teal-600 hover:bg-teal-700"
-                onClick={onImport}
-                disabled={importDisabled}
-              >
-                <Import className="h-3.5 w-3.5" />
-                Browse & import
-              </Button>
-              {settingsLink && (
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/settings/integrations">
-                    <Settings className="h-3.5 w-3.5" />
-                  </Link>
-                </Button>
-              )}
-              {onDisconnect && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={disconnecting}
-                  onClick={onDisconnect}
-                >
-                  <Unplug className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </>
+            <CheckCircle2 className="h-4 w-4" />
           ) : (
-            <Button size="sm" onClick={onConnect} disabled={connectDisabled}>
-              Connect
-            </Button>
+            <AlertCircle className="h-4 w-4" />
           )}
         </div>
+        <p className="flex-1 text-sm text-slate-700 dark:text-slate-300">{connectedLabel}</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {connected ? (
+          <>
+            <Button
+              size="sm"
+              className="flex-1 gap-2 bg-teal-600 hover:bg-teal-700 sm:flex-none"
+              onClick={onImport}
+              disabled={importDisabled}
+            >
+              <Import className="h-3.5 w-3.5" />
+              Browse & import
+            </Button>
+            {settingsLink && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/settings/integrations">
+                  <Settings className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            )}
+            {onDisconnect && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={disconnecting}
+                onClick={onDisconnect}
+              >
+                <Unplug className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </>
+        ) : (
+          <Button
+            size="sm"
+            className="w-full sm:w-auto"
+            onClick={onConnect}
+            disabled={connectDisabled}
+          >
+            Connect
+          </Button>
+        )}
       </div>
     </div>
   );

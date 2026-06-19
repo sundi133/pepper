@@ -131,107 +131,107 @@ export function RepositoryInventory({
   const withFindingsCount = stats.withIssues;
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-      <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-slate-50">
-              Repository Inventory
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+              Connected Repositories
             </h2>
-            <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
               Monitored repositories and latest scan results
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center rounded-full border border-teal-200/80 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-800 dark:border-teal-900/50 dark:bg-teal-950/40 dark:text-teal-200">
+            <span className="inline-flex items-center rounded-full border border-teal-200 bg-teal-50/80 px-3 py-1.5 text-xs font-medium text-teal-800 dark:border-teal-900/50 dark:bg-teal-950/50 dark:text-teal-300">
               {stats.total} Connected
             </span>
             {withFindingsCount > 0 && (
-              <span className="inline-flex items-center rounded-full border border-red-200/80 bg-red-50 px-3 py-1 text-xs font-medium text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
-                {withFindingsCount} with Findings
+              <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50/80 px-3 py-1.5 text-xs font-medium text-red-800 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-300">
+                {withFindingsCount} with Issues
               </span>
             )}
           </div>
         </div>
 
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-1.5">
+        <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-2">
             {filterPill("all", "All")}
             {filterPill("github", "GitHub")}
             {filterPill("bitbucket", "Bitbucket")}
             {filterPill("azure", "Azure DevOps")}
           </div>
           <div className="flex items-center gap-2">
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <div className="relative flex-1 sm:w-64">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
-                placeholder="Search repositories"
+                placeholder="Search repositories…"
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="h-9 border-slate-200 bg-slate-50/50 pl-9 dark:border-slate-700 dark:bg-slate-900/50"
+                className="h-10 border-slate-200 bg-slate-50 pl-10 dark:border-slate-700 dark:bg-slate-900/50"
               />
             </div>
             <Button
               variant="outline"
               size="sm"
-              className="h-9 shrink-0 gap-1.5 border-slate-200"
+              className="h-10 shrink-0 gap-2 border-slate-200 px-3"
               onClick={() => void onRefresh()}
               disabled={loading}
             >
               <RefreshCw
-                className={cn("h-3.5 w-3.5", loading && "animate-spin")}
+                className={cn("h-4 w-4", loading && "animate-spin")}
               />
-              Refresh
+              <span className="hidden sm:inline">Refresh</span>
             </Button>
           </div>
         </div>
       </div>
 
-      <div className="px-2 pb-2 pt-1">
+      <div className="px-1 pb-1 pt-0">
         {loading && repos.length === 0 ? (
           <div className="flex items-center justify-center gap-2 py-20 text-slate-500">
             <Loader2 className="h-5 w-5 animate-spin" />
-            Loading inventory…
+            Loading repositories…
           </div>
         ) : repos.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
             <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              No repositories in inventory
+              No repositories connected yet
             </p>
-            <p className="max-w-sm text-xs text-slate-500">
-              Add a source above to connect repositories and populate this table.
+            <p className="max-w-sm text-xs text-slate-600 dark:text-slate-400">
+              Use the form above to add repositories from your integrations.
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="border-slate-100 hover:bg-transparent dark:border-slate-800">
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <TableRow className="border-slate-200 hover:bg-transparent dark:border-slate-800">
+                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                     Repository
                   </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Owner / path
+                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    Owner / Path
                   </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                     Provider
                   </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                     Branch
                   </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                     Status
                   </TableHead>
-                  <TableHead className="text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Findings
+                  <TableHead className="text-right text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    Issues
                   </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                     Severity
                   </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Last scan
+                  <TableHead className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    Last Scan
                   </TableHead>
-                  <TableHead className="w-[120px] text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <TableHead className="w-[120px] text-xs font-semibold text-slate-600 dark:text-slate-400">
                     Actions
                   </TableHead>
                 </TableRow>

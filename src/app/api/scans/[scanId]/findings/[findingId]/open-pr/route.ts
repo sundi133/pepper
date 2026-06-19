@@ -9,7 +9,12 @@ import {
 import { openGithubSecurityFixPr } from "@/lib/github-open-fix-pr";
 import { openAgenticSecurityFixPr } from "@/lib/agentic-fix-pr";
 import { resolveGithubPrTokenForOrg } from "@/lib/github-pr-token-resolve";
-import { normalizeRepoFilePath } from "@/lib/github-api";
+import {
+  normalizeRepoFilePath,
+  getRepoTree,
+  getHeadShaForBranch,
+  fetchGithubRepo,
+} from "@/lib/github-api";
 import {
   githubHttpsCloneUrl,
   parseGithubRepoInput,
@@ -176,13 +181,56 @@ export async function POST(
     finding.scan.project?.defaultBranch?.trim() ||
     "main";
 
+  // Resolve the finding file path against the actual repo tree.
+  // Upload scans often have paths like "archive-dir/src/file.ts" but the
+  // repo only has "src/file.ts". Try to find the best match.
+  let resolvedFilePath = normalizeRepoFilePath(finding.filePath);
+  try {
+    const repoInfo = await fetchGithubRepo(githubToken, parsed.owner, parsed.repo);
+    const branch = baseBranch || repoInfo.info?.default_branch || "main";
+    const headSha = await getHeadShaForBranch(githubToken, parsed.owner, parsed.repo, branch);
+    if (headSha.ok && headSha.sha) {
+      const tree = await getRepoTree(githubToken, parsed.owner, parsed.repo, headSha.sha);
+      if (tree.ok && tree.tree) {
+        const treePaths = new Set(tree.tree.filter((e) => e.type === "blob").map((e) => e.path));
+
+        if (!treePaths.has(resolvedFilePath)) {
+          // Try stripping leading directory segments one at a time
+          const parts = resolvedFilePath.split("/");
+          let found = false;
+          for (let i = 1; i < parts.length; i++) {
+            const candidate = parts.slice(i).join("/");
+            if (treePaths.has(candidate)) {
+              resolvedFilePath = candidate;
+              found = true;
+              break;
+            }
+          }
+
+          // If still not found, try matching by basename
+          if (!found) {
+            const basename = parts[parts.length - 1];
+            const match = [...treePaths].find(
+              (p) => p === basename || p.endsWith(`/${basename}`),
+            );
+            if (match) {
+              resolvedFilePath = match;
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // Path resolution failed — continue with original path
+  }
+
   const fixInput = {
     githubToken,
     llm: { provider, baseUrl, model, apiKey },
     owner: parsed.owner,
     repo: parsed.repo,
     baseBranch,
-    filePath: normalizeRepoFilePath(finding.filePath),
+    filePath: resolvedFilePath,
     finding: {
       title: finding.title,
       description: finding.description,

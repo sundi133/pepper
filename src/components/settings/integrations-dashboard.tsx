@@ -442,52 +442,8 @@ export function IntegrationsDashboard() {
           ))}
         </div>
 
-        <div className="mt-8 flex gap-8">
-          {/* Left Sidebar */}
-          <div className="w-48 flex-shrink-0">
-            <div className="rounded-lg bg-blue-50 p-4 mb-6">
-              <div className="flex items-center gap-3 mb-3">
-                <MessageSquare className="h-5 w-5 text-blue-600" />
-                <h3 className="font-semibold text-gray-900">Need help?</h3>
-              </div>
-              <p className="text-sm text-gray-600 mb-4">
-                Learn how to set up integrations and automate your security workflow.
-              </p>
-              <Link href="#" className="text-sm font-medium text-blue-600 hover:text-blue-700">
-                View Documentation →
-              </Link>
-            </div>
-
-            <div className="space-y-3">
-              <div className="rounded-lg bg-gray-100 px-4 py-3">
-                <h3 className="font-semibold text-gray-900 text-sm mb-3">All Categories</h3>
-                <div className="space-y-2">
-                  {categories.map((cat) => (
-                    <button
-                      key={cat.id}
-                      onClick={() => setActiveCategory(cat.id as IntegrationCategory)}
-                      className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                        activeCategory === cat.id
-                          ? "bg-blue-100 text-blue-900 font-medium"
-                          : "text-gray-700 hover:bg-gray-200"
-                      }`}
-                    >
-                      {cat.label}
-                      {cat.id !== "all" && (
-                        <span className="ml-2 text-xs text-gray-500">
-                          {integrations.filter(i => i.category === cat.id).length}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Content */}
-          <div className="flex-1">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Full-Width Integration Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
               {filteredIntegrations.map((integration) => {
                 const isConnected = getConnectionStatus(integration.id);
                 return (
@@ -583,8 +539,6 @@ export function IntegrationsDashboard() {
                 );
               })}
             </div>
-          </div>
-        </div>
       </div>
 
       {/* Developer Tools Section */}

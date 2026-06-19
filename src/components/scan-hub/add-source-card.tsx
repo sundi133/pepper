@@ -173,15 +173,12 @@ export function AddSourceCard({
               connectedLabel={
                 hub.status?.connected
                   ? `Signed in as ${hub.status.githubLogin}`
-                  : "Connect GitHub to import private repositories and open fix PRs."
+                  : "Connect GitHub in Settings → Integrations to import private repositories and open fix PRs."
               }
-              onConnect={hub.connectGithub}
+              onConnect={() => hub.router.push("/settings/integrations")}
               onImport={hub.openGithubPicker}
-              onDisconnect={() => void hub.disconnectGithub()}
-              disconnecting={hub.disconnecting}
-              connectDisabled={hub.status?.oauthConfigured === false}
               importDisabled={!hub.status?.connected}
-              oauthWarning={hub.status?.oauthConfigured === false}
+              settingsLink
             />
           )}
 

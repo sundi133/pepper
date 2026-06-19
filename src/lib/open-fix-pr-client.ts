@@ -65,7 +65,7 @@ export type PostOpenFixPrResult =
 export async function postOpenFixPr(
   scanId: string,
   findingId: string,
-  options?: { repoUrl?: string; branch?: string },
+  options?: { repoUrl?: string; branch?: string; mode?: "quick" | "agentic" },
 ): Promise<PostOpenFixPrResult> {
   const res = await fetch(
     `/api/scans/${scanId}/findings/${findingId}/open-pr`,
@@ -75,6 +75,7 @@ export async function postOpenFixPr(
       body: JSON.stringify({
         repoUrl: options?.repoUrl?.trim() || undefined,
         branch: options?.branch?.trim() || undefined,
+        mode: options?.mode || "quick",
       }),
     },
   );

@@ -900,6 +900,7 @@ function OpenFixPrButton({
   sourceContext?: FindingScanSourceContext;
 }) {
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<"quick" | "agentic">("quick");
   const scanId = sourceContext?.scanId?.trim();
   if (!scanId) return null;
 
@@ -907,7 +908,7 @@ function OpenFixPrButton({
   const hasGithubRepo = Boolean(resolveGithubRepoForFixPr(sourceContext));
   const canOpen = !blockReason;
 
-  async function openPr() {
+  async function openPr(fixMode: "quick" | "agentic") {
     let manualRepoUrl: string | undefined;
     if (!hasGithubRepo) {
       const input = window.prompt(
@@ -917,10 +918,12 @@ function OpenFixPrButton({
       manualRepoUrl = input.trim();
     }
 
+    setMode(fixMode);
     setBusy(true);
     try {
       const outcome = await runOpenFixPrFlow(scanId!, finding.id, {
         repoUrl: manualRepoUrl,
+        mode: fixMode,
       });
       if ("redirected" in outcome) return;
       if (!outcome.ok) {
@@ -938,23 +941,37 @@ function OpenFixPrButton({
     }
   }
 
-  const label = busy ? "Opening…" : "Open fix PR";
-  const button = (
-    <Button
-      type="button"
-      variant="default"
-      size="sm"
-      className="h-8 gap-1.5 text-xs font-semibold"
-      disabled={busy || !canOpen}
-      onClick={() => void openPr()}
-    >
-      <GitPullRequest className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      {label}
-    </Button>
+  const busyLabel = mode === "agentic" ? "Analyzing..." : "Opening...";
+
+  const buttons = (
+    <>
+      <Button
+        type="button"
+        variant="default"
+        size="sm"
+        className="h-8 gap-1.5 text-xs font-semibold"
+        disabled={busy || !canOpen}
+        onClick={() => void openPr("quick")}
+      >
+        <GitPullRequest className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        {busy && mode === "quick" ? busyLabel : "Fix PR"}
+      </Button>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="h-8 gap-1.5 text-xs font-semibold"
+        disabled={busy || !canOpen}
+        onClick={() => void openPr("agentic")}
+      >
+        <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        {busy && mode === "agentic" ? busyLabel : "Deep Fix PR"}
+      </Button>
+    </>
   );
 
   if (canOpen) {
-    return button;
+    return buttons;
   }
 
   const hint = `${blockReason} Connect GitHub via OAuth when prompted. You can also enter owner/repo when opening the PR.`;
@@ -963,8 +980,8 @@ function OpenFixPrButton({
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="inline-flex cursor-default">
-            {button}
+          <span className="inline-flex cursor-default gap-2">
+            {buttons}
           </span>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs text-balance">

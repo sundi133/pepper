@@ -42,11 +42,16 @@ export async function runOpenFixPrFlow(
     skipConfirm?: boolean;
     repoUrl?: string;
     branch?: string;
+    mode?: "quick" | "agentic";
   },
 ): Promise<PostOpenFixPrResult | { redirected: true }> {
   if (
     !options?.skipConfirm &&
-    !window.confirm(OPEN_FIX_PR_CONFIRM_MESSAGE)
+    !window.confirm(
+      options?.mode === "agentic"
+        ? "Create a deep-analysis fix PR? Pepper will analyze the repo structure, read related files, generate a multi-file fix, and self-verify before opening the PR. This takes longer but produces better fixes for complex findings."
+        : OPEN_FIX_PR_CONFIRM_MESSAGE,
+    )
   ) {
     return { ok: false, status: 0, error: "Cancelled", code: "CANCELLED" };
   }
@@ -60,6 +65,7 @@ export async function runOpenFixPrFlow(
   const result = await postOpenFixPr(scanId, findingId, {
     repoUrl: options?.repoUrl,
     branch: options?.branch,
+    mode: options?.mode,
   });
   if (!result.ok && result.code === "GITHUB_OAUTH_REQUIRED") {
     redirectToGithubOAuth(buildOpenFixPrReturnPath(scanId, findingId));

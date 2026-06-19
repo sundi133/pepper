@@ -423,3 +423,130 @@ export async function createPullRequest(
     number: r.data.number,
   };
 }
+
+// ─── Git Trees API (multi-file atomic commits) ─────────────────────
+
+export type TreeEntry = {
+  path: string;
+  mode: string;
+  type: string;
+  sha?: string;
+  size?: number;
+};
+
+/**
+ * Get the full recursive tree for a commit SHA.
+ * Returns all file paths in the repo — used by the agent to understand layout.
+ */
+export async function getRepoTree(
+  token: string,
+  owner: string,
+  repo: string,
+  sha: string,
+): Promise<{
+  ok: boolean;
+  status: number;
+  tree?: TreeEntry[];
+  truncated?: boolean;
+  message?: string;
+}> {
+  const r = await githubGet<{
+    tree: TreeEntry[];
+    truncated: boolean;
+    message?: string;
+  }>(token, `/repos/${owner}/${repo}/git/trees/${sha}?recursive=1`);
+  if (!r.ok) {
+    const err = r.data as { message?: string };
+    return { ok: false, status: r.status, message: err?.message || r.raw };
+  }
+  return {
+    ok: true,
+    status: r.status,
+    tree: r.data.tree || [],
+    truncated: r.data.truncated,
+  };
+}
+
+export type GitTreeFileChange = {
+  path: string;
+  content: string;
+  mode?: string;
+};
+
+/**
+ * Create a Git tree with multiple file changes atomically.
+ * Uses the base_tree to preserve all unchanged files.
+ */
+export async function createGitTree(
+  token: string,
+  owner: string,
+  repo: string,
+  baseTreeSha: string,
+  files: GitTreeFileChange[],
+): Promise<{
+  ok: boolean;
+  status: number;
+  treeSha?: string;
+  message?: string;
+}> {
+  const tree = files.map((f) => ({
+    path: normalizeRepoFilePath(f.path),
+    mode: f.mode || "100644",
+    type: "blob" as const,
+    content: f.content,
+  }));
+
+  const r = await githubPost<{ sha: string; message?: string }>(
+    token,
+    `/repos/${owner}/${repo}/git/trees`,
+    { base_tree: baseTreeSha, tree },
+  );
+  if (!r.ok) {
+    const err = r.data as { message?: string };
+    return { ok: false, status: r.status, message: err?.message || r.raw };
+  }
+  return { ok: true, status: r.status, treeSha: r.data.sha };
+}
+
+/**
+ * Create a Git commit pointing at a tree, then update the branch ref.
+ * This is the second half of an atomic multi-file commit.
+ */
+export async function createGitCommitAndUpdateRef(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string,
+  treeSha: string,
+  parentSha: string,
+  message: string,
+): Promise<{
+  ok: boolean;
+  status: number;
+  commitSha?: string;
+  message?: string;
+}> {
+  // Create commit object
+  const commitRes = await githubPost<{ sha: string; message?: string }>(
+    token,
+    `/repos/${owner}/${repo}/git/commits`,
+    { message, tree: treeSha, parents: [parentSha] },
+  );
+  if (!commitRes.ok) {
+    const err = commitRes.data as { message?: string };
+    return { ok: false, status: commitRes.status, message: err?.message || commitRes.raw };
+  }
+
+  // Update branch ref to point at new commit
+  const refRes = await githubPatch<{ object?: { sha: string }; message?: string }>(
+    token,
+    `/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`,
+    { sha: commitRes.data.sha, force: false },
+  );
+  if (!refRes.ok) {
+    const err = refRes.data as { message?: string };
+    return { ok: false, status: refRes.status, message: err?.message || refRes.raw };
+  }
+
+  return { ok: true, status: refRes.status, commitSha: commitRes.data.sha };
+}

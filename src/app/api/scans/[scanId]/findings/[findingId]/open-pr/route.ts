@@ -7,6 +7,7 @@ import {
   resolveGithubRepoUrlForOpenPr,
 } from "@/lib/github-source-link";
 import { openGithubSecurityFixPr } from "@/lib/github-open-fix-pr";
+import { openAgenticSecurityFixPr } from "@/lib/agentic-fix-pr";
 import { resolveGithubPrTokenForOrg } from "@/lib/github-pr-token-resolve";
 import { normalizeRepoFilePath } from "@/lib/github-api";
 import {
@@ -18,6 +19,7 @@ const bodySchema = z
   .object({
     repoUrl: z.string().max(500).optional(),
     branch: z.string().max(200).optional(),
+    mode: z.enum(["quick", "agentic"]).default("quick").optional(),
   })
   .optional();
 
@@ -174,7 +176,7 @@ export async function POST(
     finding.scan.project?.defaultBranch?.trim() ||
     "main";
 
-  const result = await openGithubSecurityFixPr({
+  const fixInput = {
     githubToken,
     llm: { provider, baseUrl, model, apiKey },
     owner: parsed.owner,
@@ -190,7 +192,12 @@ export async function POST(
       cweId: finding.cweId,
       ruleId: finding.ruleId,
     },
-  });
+  };
+
+  const useAgentic = body?.mode === "agentic";
+  const result = useAgentic
+    ? await openAgenticSecurityFixPr(fixInput)
+    : await openGithubSecurityFixPr(fixInput);
 
   if (!result.ok) {
     return NextResponse.json(
@@ -203,5 +210,6 @@ export async function POST(
     pullRequestUrl: result.pullRequestUrl,
     pullRequestNumber: result.pullRequestNumber,
     branch: result.branch,
+    agentTrace: "agentTrace" in result ? result.agentTrace : undefined,
   });
 }

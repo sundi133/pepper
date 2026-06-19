@@ -7,7 +7,7 @@ import type { ScanJobData } from "@/lib/queue";
 import {
   CheckCircle2,
   Clock,
-  Git,
+  GitBranch,
   HardDrive,
   Zap,
 } from "lucide-react";
@@ -135,7 +135,7 @@ export function ScanHub() {
                       Provider
                     </p>
                     <p className="mt-1 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                      <Git className="h-3 w-3" />
+                      <GitBranch className="h-3 w-3" />
                       {selectedRepo.provider.toUpperCase()}
                     </p>
                   </div>

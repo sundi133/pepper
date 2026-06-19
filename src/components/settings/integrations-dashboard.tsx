@@ -429,17 +429,17 @@ export function IntegrationsDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white dark:bg-slate-950">
       {/* Header */}
-      <div className="border-b border-gray-200 px-8 py-8">
+      <div className="border-b border-gray-200 dark:border-slate-800 px-8 py-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Integrations</h1>
-            <p className="mt-2 text-base text-gray-600">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Integrations</h1>
+            <p className="mt-2 text-base text-gray-600 dark:text-slate-400">
               Connect external services to Pepper and supercharge your security workflow.
             </p>
           </div>
-          <Button variant="outline" className="gap-2" asChild>
+          <Button variant="outline" className="gap-2 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" asChild>
             <Link href="#help">
               <HelpCircle className="h-4 w-4" />
               Learn how integrations work
@@ -450,15 +450,15 @@ export function IntegrationsDashboard() {
 
       <div className="px-8 py-8">
         {/* Category Tabs */}
-        <div className="flex gap-8 border-b border-gray-200 pb-0">
+        <div className="flex gap-8 border-b border-gray-200 dark:border-slate-800 pb-0">
           {categories.map((cat) => (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id as IntegrationCategory)}
               className={`pb-4 px-1 text-sm font-medium border-b-2 transition-colors ${
                 activeCategory === cat.id
-                  ? "text-blue-600 border-blue-600"
-                  : "text-gray-600 border-transparent hover:text-gray-900"
+                  ? "text-blue-600 border-blue-600 dark:text-blue-400 dark:border-blue-400"
+                  : "text-gray-600 border-transparent hover:text-gray-900 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
               {cat.label}
@@ -473,12 +473,12 @@ export function IntegrationsDashboard() {
                 return (
                   <div
                     key={integration.id}
-                    className="rounded-lg border border-gray-200 bg-white hover:shadow-md transition-shadow overflow-hidden"
+                    className="rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-md dark:hover:shadow-lg transition-shadow overflow-hidden"
                   >
                     {/* Card Header */}
-                    <div className="border-b border-gray-200 p-6 bg-gray-50 flex items-start justify-between">
-                      <div className="text-gray-700">{integration.icon}</div>
-                      <button className="text-gray-400 hover:text-gray-600">
+                    <div className="border-b border-gray-200 dark:border-slate-800 p-6 bg-gray-50 dark:bg-slate-800 flex items-start justify-between">
+                      <div className="text-gray-700 dark:text-slate-300">{integration.icon}</div>
+                      <button className="text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-400">
                         <MoreVertical className="h-4 w-4" />
                       </button>
                     </div>
@@ -487,13 +487,13 @@ export function IntegrationsDashboard() {
                     <div className="p-6">
                       <div className="mb-4">
                         <div className="flex items-center gap-2 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">{integration.name}</h3>
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{integration.name}</h3>
                           <Badge
                             variant={isConnected ? "default" : "outline"}
                             className={
                               isConnected
-                                ? "bg-green-100 text-green-800 border-green-300"
-                                : "bg-gray-100 text-gray-800 border-gray-300"
+                                ? "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800"
+                                : "bg-gray-100 text-gray-800 border-gray-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
                             }
                           >
                             {isConnected ? (
@@ -506,13 +506,13 @@ export function IntegrationsDashboard() {
                             )}
                           </Badge>
                         </div>
-                        <p className="text-sm text-gray-600">{integration.description}</p>
+                        <p className="text-sm text-gray-600 dark:text-slate-400">{integration.description}</p>
                       </div>
 
                       {/* Features */}
-                      <div className="space-y-2 py-4 border-t border-gray-200">
+                      <div className="space-y-2 py-4 border-t border-gray-200 dark:border-slate-800">
                         {integration.features.map((feature) => (
-                          <div key={feature} className="flex items-center gap-2 text-sm text-gray-700">
+                          <div key={feature} className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
                             <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
                             {feature}
                           </div>
@@ -525,7 +525,7 @@ export function IntegrationsDashboard() {
                           <>
                             <Button
                               size="sm"
-                              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-700 dark:hover:bg-blue-600"
                               onClick={() => toast.info("Manage feature coming soon")}
                             >
                               Manage
@@ -533,7 +533,7 @@ export function IntegrationsDashboard() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="flex-1"
+                              className="flex-1 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                               onClick={() => handleDisconnect(integration.id)}
                             >
                               Disconnect
@@ -543,7 +543,7 @@ export function IntegrationsDashboard() {
                           <>
                             <Button
                               size="sm"
-                              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-700 dark:hover:bg-blue-600"
                               onClick={() => handleConnect(integration.id)}
                             >
                               Connect
@@ -551,7 +551,7 @@ export function IntegrationsDashboard() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="flex-1"
+                              className="flex-1 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                             >
                               View Details →
                             </Button>
@@ -566,40 +566,40 @@ export function IntegrationsDashboard() {
       </div>
 
       {/* Developer Tools Section */}
-      <div className="px-8 py-12 border-t border-gray-200 bg-gray-50">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Developer Tools</h2>
-        <p className="text-gray-600 mb-8">
+      <div className="px-8 py-12 border-t border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Developer Tools</h2>
+        <p className="text-gray-600 dark:text-slate-400 mb-8">
           Set up pre-commit hooks, IDE plugins, and other developer integrations.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Pre-commit Hook Card */}
           <Link href="/settings/integrations/precommit">
-            <div className="h-full rounded-lg border border-gray-200 bg-white hover:shadow-md transition-shadow overflow-hidden cursor-pointer">
-              <div className="border-b border-gray-200 p-6 bg-gray-50 flex items-start justify-between">
-                <div className="text-gray-700">
+            <div className="h-full rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-md dark:hover:shadow-lg transition-shadow overflow-hidden cursor-pointer">
+              <div className="border-b border-gray-200 dark:border-slate-800 p-6 bg-gray-50 dark:bg-slate-800 flex items-start justify-between">
+                <div className="text-gray-700 dark:text-slate-300">
                   <Zap className="h-8 w-8" />
                 </div>
-                <button className="text-gray-400 hover:text-gray-600">
+                <button className="text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-400">
                   <MoreVertical className="h-4 w-4" />
                 </button>
               </div>
               <div className="p-6">
                 <div className="mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Pre-commit Hook</h3>
-                  <p className="text-sm text-gray-600 mt-2">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Pre-commit Hook</h3>
+                  <p className="text-sm text-gray-600 dark:text-slate-400 mt-2">
                     Block commits with secrets or high-severity findings automatically.
                   </p>
                 </div>
-                <div className="space-y-2 py-4 border-t border-gray-200">
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                <div className="space-y-2 py-4 border-t border-gray-200 dark:border-slate-800">
+                  <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
                     <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
                     Secret Detection
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
                     <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
                     SAST Blocking
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
                     <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
                     One-Click Setup
                   </div>
@@ -607,14 +607,14 @@ export function IntegrationsDashboard() {
                 <div className="flex gap-2 pt-4">
                   <Button
                     size="sm"
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-700 dark:hover:bg-blue-600"
                   >
                     Setup
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="flex-1"
+                    className="flex-1 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
                     Learn More →
                   </Button>
@@ -625,34 +625,34 @@ export function IntegrationsDashboard() {
 
           {/* IDE Integration Card */}
           <Link href="/settings/integrations/ide">
-            <div className="h-full rounded-lg border border-gray-200 bg-white hover:shadow-md transition-shadow overflow-hidden cursor-pointer">
-              <div className="border-b border-gray-200 p-6 bg-gray-50 flex items-start justify-between">
-                <div className="text-gray-700">
+            <div className="h-full rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-md dark:hover:shadow-lg transition-shadow overflow-hidden cursor-pointer">
+              <div className="border-b border-gray-200 dark:border-slate-800 p-6 bg-gray-50 dark:bg-slate-800 flex items-start justify-between">
+                <div className="text-gray-700 dark:text-slate-300">
                   <svg className="h-8 w-8" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M0 3v18h24V3H0zm9 16H2v-2h7v2zm3-5H2V4h10v10zm11 5h-7v-2h7v2zm0-5H2V4h20v10z"/>
                   </svg>
                 </div>
-                <button className="text-gray-400 hover:text-gray-600">
+                <button className="text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-400">
                   <MoreVertical className="h-4 w-4" />
                 </button>
               </div>
               <div className="p-6">
                 <div className="mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">IDE Integration</h3>
-                  <p className="text-sm text-gray-600 mt-2">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">IDE Integration</h3>
+                  <p className="text-sm text-gray-600 dark:text-slate-400 mt-2">
                     View findings in VS Code, Neovim, or any editor via API.
                   </p>
                 </div>
-                <div className="space-y-2 py-4 border-t border-gray-200">
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                <div className="space-y-2 py-4 border-t border-gray-200 dark:border-slate-800">
+                  <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
                     <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
                     VS Code Support
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
                     <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
                     API Endpoint
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
                     <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
                     Auto-Fill Setup
                   </div>
@@ -660,14 +660,14 @@ export function IntegrationsDashboard() {
                 <div className="flex gap-2 pt-4">
                   <Button
                     size="sm"
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-700 dark:hover:bg-blue-600"
                   >
                     Configure
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="flex-1"
+                    className="flex-1 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
                     Learn More →
                   </Button>
@@ -679,15 +679,15 @@ export function IntegrationsDashboard() {
       </div>
 
       {/* Security Footer */}
-      <div className="border-t border-gray-200 bg-gray-50 mt-0 py-4">
+      <div className="border-t border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900 mt-0 py-4">
         <div className="max-w-7xl mx-auto px-8 flex items-center justify-between">
-          <div className="flex items-center gap-3 text-sm text-gray-600">
-            <Lock className="h-4 w-4 text-gray-500" />
+          <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-slate-400">
+            <Lock className="h-4 w-4 text-gray-500 dark:text-slate-500" />
             <span>
               All integrations are secure and encrypted. Pepper never stores your credentials in plain text.
             </span>
           </div>
-          <Button variant="link" className="text-blue-600 hover:text-blue-700 gap-1 h-auto p-0">
+          <Button variant="link" className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 gap-1 h-auto p-0">
             Learn more about security
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -697,11 +697,11 @@ export function IntegrationsDashboard() {
       {/* Bitbucket Form Modal */}
       {bitbucketFormOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h2 className="text-xl font-bold mb-4">Connect Bitbucket</h2>
+          <div className="bg-white dark:bg-slate-900 rounded-lg p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Connect Bitbucket</h2>
             <form onSubmit={connectBitbucket} className="space-y-4">
               <div>
-                <Label htmlFor="bb-username">Username</Label>
+                <Label htmlFor="bb-username" className="dark:text-slate-300">Username</Label>
                 <Input
                   id="bb-username"
                   value={bitbucketForm.username}
@@ -709,10 +709,11 @@ export function IntegrationsDashboard() {
                     setBitbucketForm({ ...bitbucketForm, username: e.target.value })
                   }
                   placeholder="your-username"
+                  className="dark:bg-slate-800 dark:border-slate-700 dark:text-white"
                 />
               </div>
               <div>
-                <Label htmlFor="bb-password">App Password</Label>
+                <Label htmlFor="bb-password" className="dark:text-slate-300">App Password</Label>
                 <Input
                   id="bb-password"
                   type="password"
@@ -721,10 +722,11 @@ export function IntegrationsDashboard() {
                     setBitbucketForm({ ...bitbucketForm, appPassword: e.target.value })
                   }
                   placeholder="••••••••"
+                  className="dark:bg-slate-800 dark:border-slate-700 dark:text-white"
                 />
               </div>
               <div>
-                <Label htmlFor="bb-workspace">Workspace (optional)</Label>
+                <Label htmlFor="bb-workspace" className="dark:text-slate-300">Workspace (optional)</Label>
                 <Input
                   id="bb-workspace"
                   value={bitbucketForm.workspace}
@@ -732,6 +734,7 @@ export function IntegrationsDashboard() {
                     setBitbucketForm({ ...bitbucketForm, workspace: e.target.value })
                   }
                   placeholder="workspace-slug"
+                  className="dark:bg-slate-800 dark:border-slate-700 dark:text-white"
                 />
               </div>
               <div className="flex gap-2 pt-4">
@@ -739,13 +742,14 @@ export function IntegrationsDashboard() {
                   type="button"
                   variant="outline"
                   onClick={() => setBitbucketFormOpen(false)}
+                  className="dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={bitbucketSubmitting}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-700 dark:hover:bg-blue-600"
                 >
                   {bitbucketSubmitting ? "Connecting..." : "Connect"}
                 </Button>
@@ -758,11 +762,11 @@ export function IntegrationsDashboard() {
       {/* Azure Form Modal */}
       {azureFormOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h2 className="text-xl font-bold mb-4">Connect Azure DevOps</h2>
+          <div className="bg-white dark:bg-slate-900 rounded-lg p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Connect Azure DevOps</h2>
             <form onSubmit={connectAzure} className="space-y-4">
               <div>
-                <Label htmlFor="az-org">Organization</Label>
+                <Label htmlFor="az-org" className="dark:text-slate-300">Organization</Label>
                 <Input
                   id="az-org"
                   value={azureForm.azureOrganization}
@@ -770,10 +774,11 @@ export function IntegrationsDashboard() {
                     setAzureForm({ ...azureForm, azureOrganization: e.target.value })
                   }
                   placeholder="your-organization"
+                  className="dark:bg-slate-800 dark:border-slate-700 dark:text-white"
                 />
               </div>
               <div>
-                <Label htmlFor="az-pat">Personal Access Token</Label>
+                <Label htmlFor="az-pat" className="dark:text-slate-300">Personal Access Token</Label>
                 <Input
                   id="az-pat"
                   type="password"
@@ -782,6 +787,7 @@ export function IntegrationsDashboard() {
                     setAzureForm({ ...azureForm, pat: e.target.value })
                   }
                   placeholder="••••••••"
+                  className="dark:bg-slate-800 dark:border-slate-700 dark:text-white"
                 />
               </div>
               <div className="flex gap-2 pt-4">
@@ -789,13 +795,14 @@ export function IntegrationsDashboard() {
                   type="button"
                   variant="outline"
                   onClick={() => setAzureFormOpen(false)}
+                  className="dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={azureSubmitting}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-700 dark:hover:bg-blue-600"
                 >
                   {azureSubmitting ? "Connecting..." : "Connect"}
                 </Button>

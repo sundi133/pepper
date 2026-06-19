@@ -10,7 +10,7 @@ export const MANUAL_SCAN_TYPE_OPTIONS: ReadonlyArray<{
     value: "FULL",
     label: "All",
     description:
-      "Runs every enabled scanner: SAST, SCA, secrets, IaC, zero-day, container, and DAST.",
+      "Runs every enabled scanner: SAST, SCA, secrets, IaC, zero-day, and container.",
   },
   {
     value: "SAST_ONLY",
@@ -45,11 +45,6 @@ export const MANUAL_SCAN_TYPE_OPTIONS: ReadonlyArray<{
     description:
       "Container, serverless, and VM image artifact review (Trivy when available).",
   },
-  {
-    value: "DAST_ONLY",
-    label: "DAST",
-    description: "Dynamic testing against the project DAST target URL.",
-  },
 ] as const;
 
 export const API_CREATE_SCAN_TYPES = [
@@ -60,5 +55,4 @@ export const API_CREATE_SCAN_TYPES = [
   "IAC_ONLY",
   "ZERO_DAY_ONLY",
   "CONTAINER_ONLY",
-  "DAST_ONLY",
 ] as const satisfies readonly ScanJobData["scanType"][];

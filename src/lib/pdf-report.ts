@@ -611,16 +611,15 @@ function drawFindingCard(
   const metaLine = [f.ruleId || f.id.slice(0, 12), `Status: ${statusLabel}`, confLabel].filter(Boolean).join(" \u00B7 ");
   doc.fontSize(7).fillColor(COLORS.textMuted).text(metaLine, x, y, { width: w - 80 });
 
-  // CVSS-style severity score (right side)
-  const sevScore = f.severity === "CRITICAL" ? "9.8" : f.severity === "HIGH" ? "8.1" : f.severity === "MEDIUM" ? "6.1" : f.severity === "LOW" ? "3.5" : "0.0";
-  doc.roundedRect(x + w - 50, y - 4, 50, 36, 4).fill(severityColor(f.severity));
-  doc.fontSize(14).fillColor(COLORS.white).text(sevScore, x + w - 50, y - 1, { width: 50, align: "center" });
-  doc.fontSize(6).fillColor(COLORS.white).text(f.severity, x + w - 50, y + 17, { width: 50, align: "center" });
+  // Severity badge (right side)
+  const sevBadgeW = f.severity.length * 7 + 16;
+  doc.roundedRect(x + w - sevBadgeW, y - 2, sevBadgeW, 18, 4).fill(severityColor(f.severity));
+  doc.fontSize(8).fillColor(COLORS.white).text(f.severity, x + w - sevBadgeW, y + 2, { width: sevBadgeW, align: "center" });
   y += 16;
 
   // Title
   doc.fontSize(13).fillColor(COLORS.textPrimary)
-    .text(truncate(report.vulnerabilityName || f.title, 70), x, y, { width: w - 65 });
+    .text(truncate(report.vulnerabilityName || f.title, 80), x, y, { width: w });
   y = doc.y + 6;
 
   // Tags: CWE, OWASP, Category, Scanner

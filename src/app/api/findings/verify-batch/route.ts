@@ -210,9 +210,10 @@ export async function POST(req: NextRequest) {
       results,
     });
   } catch (e) {
-    console.error("Batch FP verification LLM error:", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("Batch FP verification LLM error:", msg, e instanceof Error ? e.stack : "");
     return NextResponse.json(
-      { error: "Failed to verify findings" },
+      { error: `Failed to verify findings: ${msg}` },
       { status: 500 },
     );
   }

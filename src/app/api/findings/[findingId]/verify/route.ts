@@ -183,9 +183,10 @@ export async function POST(
 
     return NextResponse.json({ ...result, applied: false });
   } catch (e) {
-    console.error("FP verification LLM error:", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("FP verification LLM error:", msg, e instanceof Error ? e.stack : "");
     return NextResponse.json(
-      { error: "Failed to verify finding" },
+      { error: `Failed to verify finding: ${msg}` },
       { status: 500 },
     );
   }

@@ -11,8 +11,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CreateScanDialog } from "@/components/scans/create-scan-dialog";
-import { Button } from "@/components/ui/button";
 import {
   AlertTriangle,
   KeyRound,
@@ -21,7 +19,6 @@ import {
   Users,
   FolderKanban,
   CheckCircle2,
-  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
@@ -176,7 +173,7 @@ function activityDescription(a: {
 export default function DashboardPage() {
   const { data: session } = useSession();
   const { projects } = useProjects();
-  const { data: stats, mutate: refreshStats } = useSWR<DashboardStats>(
+  const { data: stats } = useSWR<DashboardStats>(
     "/api/dashboard/stats",
     fetcher,
     { refreshInterval: 30000 },
@@ -197,8 +194,6 @@ export default function DashboardPage() {
   const displayName = greetingName(session?.user?.name || session?.user?.email);
   const orgName =
     session?.user?.memberships?.[0]?.organizationName || "your organization";
-  const orgRole = session?.user?.memberships?.[0]?.role;
-  const canCreateScan = orgRole && ["ADMIN", "SECURITY", "DEVELOPER"].includes(orgRole);
 
   const lastScanLabel = formatRelative(overview?.lastScanAt ?? null);
 
@@ -223,25 +218,6 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:max-w-md sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:max-w-none lg:shrink-0">
-          {canCreateScan && (
-            <CreateScanDialog
-              triggerLabel="New Scan"
-              triggerClassName="w-full bg-primary font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 sm:w-auto"
-              onScanCreated={() => {
-                void refreshStats();
-              }}
-            />
-          )}
-          <Button
-            variant="outline"
-            className="w-full border-border/80 sm:w-auto"
-            asChild
-          >
-            <Link href="/projects">
-              View All Projects
-              <ChevronRight className="ml-1 h-4 w-4 shrink-0" />
-            </Link>
-          </Button>
         </div>
       </section>
 

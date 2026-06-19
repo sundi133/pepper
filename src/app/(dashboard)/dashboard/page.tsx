@@ -21,7 +21,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -57,6 +57,7 @@ type DashboardOverview = {
 type DashboardStats = {
   severity?: { name: string; count: number }[];
   overview?: DashboardOverview;
+  owasp?: { category: string; count: number }[];
 };
 
 const SEVERITY_ORDER = [
@@ -68,11 +69,11 @@ const SEVERITY_ORDER = [
 ] as const;
 
 const SEVERITY_HEX: Record<string, string> = {
-  CRITICAL: "#ef4444",
-  HIGH: "#f97316",
-  MEDIUM: "#eab308",
-  LOW: "#3b82f6",
-  INFO: "#14b8a6",
+  CRITICAL: "#d32f2f",
+  HIGH: "#f57c00",
+  MEDIUM: "#fbc02d",
+  LOW: "#1976d2",
+  INFO: "#00796b",
 };
 
 const SCAN_STATUS_USER: Record<string, string> = {
@@ -127,33 +128,6 @@ function totalFindings(chart: { count: number }[]) {
   return chart.reduce((a, b) => a + b.count, 0);
 }
 
-function securityScore(chart: { name: string; count: number }[]) {
-  let score = 100;
-  for (const { name, count } of chart) {
-    if (name === "CRITICAL") score -= count * 12;
-    else if (name === "HIGH") score -= count * 5;
-    else if (name === "MEDIUM") score -= count * 2;
-    else if (name === "LOW") score -= count * 0.5;
-    else if (name === "INFO") score -= count * 0.2;
-  }
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
-
-function scoreSubtitle(score: number, critical: number) {
-  if (critical > 0 && score < 50)
-    return "Critical: immediate attention required.";
-  if (score < 70) return "Elevated risk: review high-severity items.";
-  if (score < 90) return "Good posture with room to tighten controls.";
-  return "Strong security posture across findings.";
-}
-
-function getScoreColor(score: number): { bg: string; border: string; text: string } {
-  if (score < 50) return { bg: "#ef4444", border: "#dc2626", text: "#ffffff" };
-  if (score < 70) return { bg: "#f97316", border: "#ea580c", text: "#ffffff" };
-  if (score < 90) return { bg: "#eab308", border: "#ca8a04", text: "#ffffff" };
-  return { bg: "#22c55e", border: "#16a34a", text: "#ffffff" };
-}
-
 function activityDescription(a: {
   status: string;
   scanType: string;
@@ -189,13 +163,10 @@ export default function DashboardPage() {
   const vulnTotal = totalFindings(severityChart);
   const criticalCount =
     severityChart.find((s) => s.name === "CRITICAL")?.count ?? 0;
-  const score = securityScore(severityChart);
 
   const displayName = greetingName(session?.user?.name || session?.user?.email);
   const orgName =
     session?.user?.memberships?.[0]?.organizationName || "your organization";
-
-  const lastScanLabel = formatRelative(overview?.lastScanAt ?? null);
 
   const pieData = severityChart.filter((s) => s.count > 0);
   const pieFallback =
@@ -221,68 +192,6 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Security score */}
-      <section aria-labelledby="security-score-heading">
-        <Card className="overflow-hidden border-border/60 bg-card/80 shadow-sm">
-          <CardContent className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
-            <div
-              className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-2 shadow-inner sm:h-28 sm:w-28"
-              style={{
-                backgroundColor: getScoreColor(score).bg,
-                borderColor: getScoreColor(score).border,
-              }}
-            >
-              <div className="flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold tabular-nums sm:text-3xl" style={{ color: getScoreColor(score).text }}>
-                  {vulnTotal}
-                </span>
-                <span className="text-[10px] font-semibold" style={{ color: getScoreColor(score).text }}>
-                  issues
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              <p
-                id="security-score-heading"
-                className="text-sm font-medium text-muted-foreground"
-              >
-                Security score
-              </p>
-              <p className="max-w-xl text-base font-medium leading-snug text-foreground sm:text-lg">
-                {scoreSubtitle(score, criticalCount)}
-              </p>
-            </div>
-            <div className="grid w-full grid-cols-1 divide-y divide-border/50 overflow-hidden rounded-lg border border-border/40 bg-background/40 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-              <div className="px-3 py-3 sm:px-4">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Last scan
-                </p>
-                <p className="mt-1 truncate text-sm font-semibold text-foreground">
-                  {lastScanLabel}
-                </p>
-              </div>
-              <div className="px-3 py-3 sm:px-4">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Critical issues
-                </p>
-                <p className="mt-1 text-sm font-semibold">
-                  <span className="text-destructive">{criticalCount}</span>
-                  <span className="ml-1 font-normal text-muted-foreground">found</span>
-                </p>
-              </div>
-              <div className="px-3 py-3 sm:px-4">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Monitored projects
-                </p>
-                <p className="mt-1 text-sm font-semibold text-foreground">
-                  {overview?.projectCount ?? 0}{" "}
-                  <span className="font-normal text-muted-foreground">projects</span>
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
 
       {/* Metrics */}
       <section aria-label="Summary metrics">
@@ -359,18 +268,20 @@ export default function DashboardPage() {
                         key={i}
                         fill={
                           (entry as { _empty?: boolean })._empty
-                            ? "oklch(0.28 0.02 260)"
-                            : SEVERITY_HEX[entry.name] || "#64748b"
+                            ? "#e5e5e5"
+                            : SEVERITY_HEX[entry.name] || "#999999"
                         }
                       />
                     ))}
                   </Pie>
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "oklch(0.19 0.03 260)",
-                      border: "1px solid oklch(1 0 0 / 12%)",
+                      backgroundColor: "#ffffff",
+                      border: "1px solid #e0e0e0",
                       borderRadius: "8px",
                       fontSize: "12px",
+                      color: "#1a1a1a",
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
                     }}
                   />
                 </PieChart>
@@ -463,6 +374,68 @@ export default function DashboardPage() {
                     );
                   })}
               </ul>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Top Vulnerabilities Distribution */}
+      <section aria-label="Top Vulnerabilities">
+        <Card className="flex min-h-0 flex-col border-border/60 bg-card/80">
+          <CardHeader className="space-y-1 pb-2 sm:pb-3">
+            <CardTitle className="text-base sm:text-lg">Top 10 Vulnerabilities</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">
+              Most common findings across all scans
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col pt-0">
+            {(!stats?.owasp || stats.owasp.length === 0) ? (
+              <div className="flex flex-1 flex-col justify-center rounded-lg bg-muted/15 px-3 py-4 text-center sm:py-6">
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  No findings yet
+                </p>
+              </div>
+            ) : (
+              <div className="h-48 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={stats.owasp}
+                    margin={{ top: 10, right: 15, left: 0, bottom: 60 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" vertical={false} />
+                    <XAxis
+                      dataKey="category"
+                      angle={-45}
+                      textAnchor="end"
+                      height={70}
+                      tick={{ fontSize: 9, fill: "#666666" }}
+                      interval={0}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: "#666666" }}
+                      width={25}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#ffffff",
+                        border: "1px solid #e0e0e0",
+                        borderRadius: "4px",
+                        fontSize: "10px",
+                        color: "#1a1a1a",
+                        boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                      }}
+                      formatter={(value) => value}
+                      labelFormatter={(label) => `${label}`}
+                    />
+                    <Bar
+                      dataKey="count"
+                      fill="#ff8c42"
+                      radius={[4, 4, 0, 0]}
+                      name="Findings"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -619,22 +592,22 @@ function SeverityBadges({
   return (
     <div className="flex flex-wrap gap-1">
       {c > 0 && (
-        <span className="rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white bg-[#ef4444]">
+        <span className="rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white bg-[#d32f2f]">
           {c}
         </span>
       )}
       {h > 0 && (
-        <span className="rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white bg-[#f97316]">
+        <span className="rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white bg-[#f57c00]">
           {h}
         </span>
       )}
       {m > 0 && (
-        <span className="rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-foreground bg-[#eab308]">
+        <span className="rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-black bg-[#fbc02d]">
           {m}
         </span>
       )}
       {l > 0 && (
-        <span className="rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white bg-[#3b82f6]">
+        <span className="rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white bg-[#1976d2]">
           {l}
         </span>
       )}

@@ -25,6 +25,7 @@ export async function GET() {
     lastScan,
     recentProjects,
     recentScansForFeed,
+    owaspBreakdown,
   ] = await Promise.all([
     prisma.finding.groupBy({
       by: ["severity"],
@@ -104,12 +105,30 @@ export async function GET() {
         project: { select: { name: true } },
       },
     }),
+    prisma.$queryRaw<Array<{ title: string; count: bigint }>>`
+      SELECT f.title, COUNT(*) as count
+      FROM "Finding" f
+      JOIN "Scan" s ON f."scanId" = s.id
+      JOIN "Project" p ON s."projectId" = p.id
+      WHERE p."organizationId" = ${orgId} AND f.title IS NOT NULL
+      GROUP BY f.title
+      ORDER BY COUNT(*) DESC
+      LIMIT 10
+    `,
   ]);
 
   const severity = severityBreakdown.map((s) => ({
     name: s.severity,
     count: s._count,
   }));
+
+  const owasp = owaspBreakdown
+    .map((o) => ({
+      category: o.title || "Unknown Vulnerability",
+      count: Number(o.count),
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
 
   const overview = {
     projectCount,
@@ -143,5 +162,5 @@ export async function GET() {
     })),
   };
 
-  return NextResponse.json({ severity, overview });
+  return NextResponse.json({ severity, overview, owasp });
 }

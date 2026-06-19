@@ -45,43 +45,43 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
-/* Pepper Premium SaaS Theme — Unified Purple/Lavender Palette */
+/* Pepper Light White Theme */
 :root {
   --radius: 1.25rem;
-  --background: oklch(0.98 0.003 280);
-  --foreground: oklch(0.21 0.035 265);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.035 265);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.035 265);
-  --primary: oklch(0.52 0.19 280);
-  --primary-foreground: oklch(0.99 0.005 85);
-  --secondary: oklch(0.97 0.004 280);
-  --secondary-foreground: oklch(0.28 0.04 265);
-  --muted: oklch(0.93 0.008 280);
-  --muted-foreground: oklch(0.6 0.02 265);
-  --accent: oklch(0.60 0.19 290);
-  --accent-foreground: oklch(0.99 0.005 85);
-  --destructive: oklch(0.55 0.22 25);
-  --destructive-foreground: oklch(0.99 0 0);
-  --border: oklch(0.93 0.008 280);
-  --input: oklch(0.98 0.003 280);
-  --ring: oklch(0.52 0.19 280);
-  --chart-1: oklch(0.55 0.2 25);
-  --chart-2: oklch(0.58 0.16 55);
-  --chart-3: oklch(0.52 0.14 195);
-  --chart-4: oklch(0.5 0.12 265);
-  --chart-5: oklch(0.65 0.22 320);
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.21 0.035 265);
-  --sidebar-primary: oklch(0.52 0.19 280);
-  --sidebar-primary-foreground: oklch(0.99 0.005 85);
-  --sidebar-accent: oklch(0.97 0.004 280);
-  --sidebar-accent-foreground: oklch(0.52 0.19 280);
-  --sidebar-border: oklch(0.93 0.008 280);
-  --sidebar-ring: oklch(0.52 0.19 280);
-  --hover-overlay: oklch(0.52 0.19 280 / 8%);
-  --surface-glow: oklch(0.52 0.19 280 / 12%);
+  --background: #ffffff;
+  --foreground: #1a1a1a;
+  --card: #f9f9f9;
+  --card-foreground: #1a1a1a;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a1a;
+  --primary: #0066cc;
+  --primary-foreground: #ffffff;
+  --secondary: #f0f0f0;
+  --secondary-foreground: #1a1a1a;
+  --muted: #e5e5e5;
+  --muted-foreground: #666666;
+  --accent: #0066cc;
+  --accent-foreground: #ffffff;
+  --destructive: #d32f2f;
+  --destructive-foreground: #ffffff;
+  --border: #e0e0e0;
+  --input: #ffffff;
+  --ring: #0066cc;
+  --chart-1: #d32f2f;
+  --chart-2: #f57c00;
+  --chart-3: #fbc02d;
+  --chart-4: #1976d2;
+  --chart-5: #00796b;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1a1a1a;
+  --sidebar-primary: #0066cc;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f0f0;
+  --sidebar-accent-foreground: #0066cc;
+  --sidebar-border: #e0e0e0;
+  --sidebar-ring: #0066cc;
+  --hover-overlay: #0066cc;
+  --surface-glow: #0066cc;
 }
 
 @layer base {
@@ -90,33 +90,70 @@
   }
   html {
     @apply scroll-smooth;
+    font-size: 16px;
   }
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     background-image:
       radial-gradient(
         ellipse 120% 80% at 50% -30%,
-        var(--surface-glow),
+        rgba(0, 102, 204, 0.06),
         transparent 55%
       ),
       radial-gradient(
         ellipse 60% 50% at 100% 0%,
-        oklch(0.60 0.19 290 / 6%),
+        rgba(0, 102, 204, 0.03),
         transparent 50%
       );
   }
-  h1,
-  h2,
-  h3,
+  h1 {
+    @apply text-foreground font-bold tracking-tight;
+    font-size: clamp(1.875rem, 5vw, 2.25rem);
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    @apply text-foreground font-bold tracking-tight;
+    font-size: clamp(1.5rem, 4vw, 1.875rem);
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+  }
+  h3 {
+    @apply text-foreground font-semibold;
+    font-size: 1.25rem;
+    line-height: 1.3;
+    letter-spacing: -0.005em;
+  }
   h4 {
-    @apply text-foreground tracking-tight;
+    @apply text-foreground font-semibold;
+    font-size: 1.125rem;
+    line-height: 1.35;
   }
   p {
     @apply leading-relaxed;
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+  small, .text-sm {
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+  .text-xs {
+    font-size: 0.75rem;
+    line-height: 1.4;
   }
   code:not(pre code) {
     @apply rounded-md bg-muted px-1.5 py-0.5 text-[0.9em] font-medium text-foreground;
+    font-family: var(--font-geist-mono), "Courier New", monospace;
+  }
+  pre {
+    @apply bg-muted px-4 py-3 rounded-lg overflow-x-auto;
+    font-family: var(--font-geist-mono), "Courier New", monospace;
+    font-size: 0.875rem;
   }
   ::selection {
     @apply bg-primary/25 text-foreground;
@@ -158,17 +195,37 @@
   }
   .nav-link-active {
     @apply border-primary bg-primary/12 text-primary shadow-sm shadow-primary/10;
+    font-weight: 600;
   }
   .nav-link-inactive {
     @apply border-transparent text-muted-foreground hover:border-primary/40 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-sm;
   }
   .text-label {
-    @apply text-sm font-medium text-foreground;
+    @apply text-sm font-semibold text-foreground;
+    letter-spacing: 0.005em;
   }
   .text-help {
     @apply text-sm text-muted-foreground;
+    font-weight: 400;
   }
   .icon-btn-hover {
     @apply transition-all duration-200 hover:bg-accent hover:text-accent-foreground hover:shadow-sm;
+  }
+
+  /* Dashboard-specific typography */
+  .dashboard-title {
+    @apply text-3xl font-bold tracking-tight;
+    letter-spacing: -0.02em;
+  }
+  .dashboard-subtitle {
+    @apply text-lg text-muted-foreground font-normal;
+  }
+  .metric-value {
+    @apply text-3xl font-bold tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  .metric-label {
+    @apply text-xs font-semibold uppercase tracking-wide text-muted-foreground;
+    letter-spacing: 0.1em;
   }
 }

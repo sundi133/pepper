@@ -18,7 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
+
 import { getSourceCodeUrl } from "@/lib/app-source";
 import { Code2, Github, UserPlus } from "lucide-react";
 
@@ -111,7 +111,6 @@ export function RegisterForm({ captchaSiteKey }: { captchaSiteKey: string }) {
             </a>
           </Button>
         ) : null}
-        <ThemeToggle />
       </div>
 
       <div className="grid min-h-screen lg:grid-cols-2">

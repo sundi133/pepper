@@ -107,6 +107,15 @@ export function FindingsTable({
   const [bulkStatus, setBulkStatus] = useState<string>("");
   const [bulkLoading, setBulkLoading] = useState(false);
 
+  // Bulk Fix PR state
+  const [fixPrDialogOpen, setFixPrDialogOpen] = useState(false);
+  const [fixPrRunning, setFixPrRunning] = useState(false);
+  const [fixPrResults, setFixPrResults] = useState<
+    Array<{ findingId: string; title: string; ok: boolean; prUrl?: string; error?: string }>
+  >([]);
+  const [fixPrCurrent, setFixPrCurrent] = useState<number>(0);
+  const [fixPrTotal, setFixPrTotal] = useState<number>(0);
+
   // Batch FP verification state
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
@@ -229,6 +238,60 @@ export function FindingsTable({
     }
   }
 
+  async function handleBulkFixPr() {
+    if (selected.size === 0 || !fixPrSource) return;
+    const selectedFindings = findings.filter((f) => selected.has(f.id) && f.filePath);
+    if (selectedFindings.length === 0) {
+      toast.error("No selected findings have file paths");
+      return;
+    }
+
+    setFixPrDialogOpen(true);
+    setFixPrRunning(true);
+    setFixPrResults([]);
+    setFixPrCurrent(0);
+    setFixPrTotal(selectedFindings.length);
+
+    const results: typeof fixPrResults = [];
+
+    for (let i = 0; i < selectedFindings.length; i++) {
+      const f = selectedFindings[i];
+      setFixPrCurrent(i + 1);
+
+      try {
+        const outcome = await runOpenFixPrFlow(
+          fixPrSource.scanId,
+          f.id,
+          { skipConfirm: true },
+        );
+        if ("redirected" in outcome) {
+          results.push({ findingId: f.id, title: f.title, ok: false, error: "GitHub OAuth required — redirecting" });
+          break;
+        }
+        if (outcome.ok) {
+          results.push({ findingId: f.id, title: f.title, ok: true, prUrl: outcome.pullRequestUrl });
+        } else {
+          results.push({ findingId: f.id, title: f.title, ok: false, error: outcome.error });
+        }
+      } catch (e) {
+        results.push({
+          findingId: f.id,
+          title: f.title,
+          ok: false,
+          error: e instanceof Error ? e.message : "Unknown error",
+        });
+      }
+
+      setFixPrResults([...results]);
+    }
+
+    setFixPrRunning(false);
+    const successCount = results.filter((r) => r.ok).length;
+    if (successCount > 0) {
+      toast.success(`Opened ${successCount} fix PR${successCount > 1 ? "s" : ""}`);
+    }
+  }
+
   if (findings.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -276,6 +339,24 @@ export function FindingsTable({
             <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
             {verifyLoading ? "Verifying..." : "Verify FP"}
           </Button>
+          {fixPrSource && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => {
+                if (window.confirm(
+                  `Open fix PRs for ${selected.size} selected finding(s)? Each finding creates a separate branch and PR. This uses your LLM to generate fixes.`
+                )) {
+                  void handleBulkFixPr();
+                }
+              }}
+              disabled={fixPrRunning}
+            >
+              <GitPullRequest className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              {fixPrRunning ? "Fixing..." : "Fix PRs"}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"
@@ -368,6 +449,62 @@ export function FindingsTable({
                   </Button>
                 )}
               </>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Fix PR Results Dialog */}
+      <Dialog open={fixPrDialogOpen} onOpenChange={(open) => { if (!fixPrRunning) setFixPrDialogOpen(open); }}>
+        <DialogContent className="max-h-[85vh] max-w-lg gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <DialogHeader className="border-b border-border/60 px-6 py-4">
+            <DialogTitle className="text-left text-base">
+              {fixPrRunning
+                ? `Opening Fix PRs (${fixPrCurrent}/${fixPrTotal})...`
+                : "Fix PR Results"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[calc(85vh-8rem)] overflow-y-auto px-6 py-4 space-y-3">
+            {fixPrRunning && fixPrResults.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Generating fix for finding {fixPrCurrent} of {fixPrTotal}...
+              </p>
+            ) : null}
+            {fixPrResults.map((r) => (
+              <div
+                key={r.findingId}
+                className="flex items-start gap-2 rounded border p-2 text-xs"
+              >
+                <Badge
+                  className={
+                    r.ok
+                      ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 shrink-0"
+                      : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 shrink-0"
+                  }
+                >
+                  {r.ok ? "PR" : "Fail"}
+                </Badge>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium truncate">{r.title}</p>
+                  {r.ok && r.prUrl ? (
+                    <a
+                      href={r.prUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      View PR
+                    </a>
+                  ) : r.error ? (
+                    <p className="text-muted-foreground line-clamp-2">{r.error}</p>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+            {fixPrRunning && fixPrResults.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Processing finding {fixPrCurrent} of {fixPrTotal}...
+              </p>
             ) : null}
           </div>
         </DialogContent>

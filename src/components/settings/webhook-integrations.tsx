@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Eye, EyeOff, KeyRound, AlertCircle } from "lucide-react";
+import { Copy, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 interface WebhookConfig {
@@ -190,22 +190,8 @@ export function WebhookIntegrations() {
       </div>
 
       <div className="px-8 py-8">
-        {/* Webhook Secrets Info Card */}
-        <div className="rounded-lg border border-gray-200 bg-white overflow-hidden mb-8">
-          <div className="border-b border-gray-200 px-6 py-5 bg-gray-50">
-            <div className="flex items-center gap-2">
-              <KeyRound className="h-5 w-5 text-gray-700" />
-              <h3 className="text-lg font-semibold text-gray-900">Webhook Secrets</h3>
-              <Badge variant="outline">Required for 401-free deliveries</Badge>
-            </div>
-            <p className="text-sm text-gray-600 mt-3">
-              Set the same secret here and in each Git host webhook configuration. Use the eye icon to show/hide while typing, or generate a random secret.
-            </p>
-          </div>
-        </div>
-
         {/* 4 Grid Layout with Full Details - Same as Integrations */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {webhooks.map((webhook) => {
             const secretValue = getSecretValue(webhook.secretKey);
             const show = getShowValue(webhook.secretKey);
@@ -363,26 +349,6 @@ export function WebhookIntegrations() {
           })}
         </div>
 
-        {/* Scan Behavior Info */}
-        <div className="rounded-lg border border-blue-200 bg-blue-50/50 overflow-hidden">
-          <div className="px-6 py-5">
-            <h3 className="text-base font-semibold text-blue-900 flex items-center gap-2">
-              <AlertCircle className="h-5 w-5" />
-              Scan Behavior
-            </h3>
-            <div className="mt-4 space-y-2 text-sm text-blue-800">
-              <p>
-                <strong>Pull Request / Merge Request events</strong> trigger <code className="bg-white px-2 py-1 rounded text-xs border border-blue-300">INCREMENTAL</code> scans (changed files only)
-              </p>
-              <p>
-                <strong>Push to default branch</strong> triggers <code className="bg-white px-2 py-1 rounded text-xs border border-blue-300">SAST_ONLY</code> scans
-              </p>
-              <p>
-                Override with environment variables: <code className="bg-white px-2 py-1 rounded text-xs border border-blue-300 font-mono">GITHUB_WEBHOOK_MAIN_SCAN_TYPE=FULL</code>
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

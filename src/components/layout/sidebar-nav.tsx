@@ -17,6 +17,7 @@ import {
   KeyRound,
   History,
   FileSignature,
+  ShieldOff,
   type LucideIcon,
 } from "lucide-react";
 
@@ -32,6 +33,7 @@ export const mainNavigation: NavItem[] = [
 export const settingsNavigation: NavItem[] = [
   { name: "LLM Config", href: "/settings/llm", icon: Zap },
   { name: "Policies", href: "/settings/policies", icon: ScrollText },
+  { name: "Suppressions", href: "/settings/suppressions", icon: ShieldOff },
   { name: "Build Gates", href: "/settings/build-gates", icon: ShieldCheck },
   { name: "Code Signing", href: "/settings/signing", icon: FileSignature },
   { name: "Team", href: "/settings/team", icon: Users },

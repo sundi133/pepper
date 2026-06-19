@@ -24,6 +24,7 @@ model Organization {
   azureDevOpsConnection OrgAzureDevOpsConnection?
   apiKeys          ApiKey[]
   securityPolicies SecurityPolicy[]
+  suppressionRules SuppressionRule[]
   notifications    Notification[]
   integrations     IntegrationConfig[]
 }
@@ -470,6 +471,33 @@ model SecurityPolicy {
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId, enabled])
+}
+
+/// Per-org suppression rules — auto-generated when users mark findings as FP.
+/// During scans, new findings are checked against active rules and pre-suppressed.
+model SuppressionRule {
+  id              String    @id @default(cuid())
+  organizationId  String
+  projectId       String?                  // null = org-wide, set = project-specific
+  ruleId          String?                  // scanner rule ID to match
+  cweId           String?                  // CWE ID to match
+  scanner         String?                  // scanner type to match (e.g. "SAST_PATTERN")
+  filePathPattern String?                  // glob or substring match against finding filePath
+  titlePattern    String?                  // substring match against finding title
+  snippetHash     String?                  // SHA-256 of normalized snippet for exact code match
+  reason          String    @db.Text       // why this was suppressed
+  source          String    @default("user") // "user" | "auto" | "bulk"
+  sourceFindingId String?                  // the finding that triggered this rule
+  enabled         Boolean   @default(true)
+  expiresAt       DateTime?                // optional TTL
+  createdAt       DateTime  @default(now())
+  createdBy       String?                  // userId
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, enabled])
+  @@index([organizationId, ruleId])
+  @@index([organizationId, cweId])
 }
 
 model ApiKey {

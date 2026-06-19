@@ -369,29 +369,86 @@ export async function processScanJob(job: Job<ScanJobData>) {
     async function insertFindings(findings: RawFinding[]) {
       if (findings.length === 0) return;
       await assertScanActive();
-      await prisma.finding.createMany({
-        data: findings.map((finding) => {
-          const f = enrichFindingWithReport(finding);
-          return {
-            scanId,
-            scanner: f.scanner,
-            severity: f.severity,
-            title: f.title,
-            description: f.description,
-            filePath: f.filePath,
-            startLine: f.startLine,
-            endLine: f.endLine,
-            snippet: f.snippet,
-            ruleId: f.ruleId,
-            cweId: f.cweId,
-            cveId: f.cveId,
-            confidence: f.confidence,
-            metadata: f.metadata as object,
-            masked: f.masked ?? false,
-          };
-        }),
-      });
-      const counts = countSeverities(findings);
+
+      // Check findings against org suppression rules
+      let keptFindings = findings;
+      let suppressedFindings: RawFinding[] = [];
+      try {
+        const { filterSuppressedFindings } = await import(
+          "@/lib/suppression-rules"
+        );
+        const orgId = orgSettings.orgId;
+        if (orgId) {
+          const result = await filterSuppressedFindings(findings, orgId, projectId);
+          keptFindings = result.kept;
+          suppressedFindings = result.suppressed.map((s) => s.finding);
+          if (suppressedFindings.length > 0) {
+            log.info(
+              { suppressed: suppressedFindings.length, kept: keptFindings.length },
+              "Suppression rules applied",
+            );
+          }
+        }
+      } catch {
+        // Suppression check failed — insert all findings as normal
+      }
+
+      // Insert kept findings as OPEN
+      if (keptFindings.length > 0) {
+        await prisma.finding.createMany({
+          data: keptFindings.map((finding) => {
+            const f = enrichFindingWithReport(finding);
+            return {
+              scanId,
+              scanner: f.scanner,
+              severity: f.severity,
+              title: f.title,
+              description: f.description,
+              filePath: f.filePath,
+              startLine: f.startLine,
+              endLine: f.endLine,
+              snippet: f.snippet,
+              ruleId: f.ruleId,
+              cweId: f.cweId,
+              cveId: f.cveId,
+              confidence: f.confidence,
+              metadata: f.metadata as object,
+              masked: f.masked ?? false,
+            };
+          }),
+        });
+      }
+
+      // Insert suppressed findings pre-marked as FALSE_POSITIVE
+      if (suppressedFindings.length > 0) {
+        await prisma.finding.createMany({
+          data: suppressedFindings.map((finding) => {
+            const f = enrichFindingWithReport(finding);
+            return {
+              scanId,
+              scanner: f.scanner,
+              severity: f.severity,
+              title: f.title,
+              description: f.description,
+              filePath: f.filePath,
+              startLine: f.startLine,
+              endLine: f.endLine,
+              snippet: f.snippet,
+              ruleId: f.ruleId,
+              cweId: f.cweId,
+              cveId: f.cveId,
+              confidence: f.confidence,
+              metadata: f.metadata as object,
+              masked: f.masked ?? false,
+              status: "FALSE_POSITIVE",
+              statusNote: "Auto-suppressed by learned rule",
+            };
+          }),
+        });
+      }
+
+      // Only count kept findings toward severity totals
+      const counts = countSeverities(keptFindings);
       await prisma.scan.update({
         where: { id: scanId },
         data: {

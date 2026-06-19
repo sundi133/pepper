@@ -6,6 +6,7 @@ import {
   findingHasStoredReport,
 } from "@/lib/finding-report";
 import { z } from "zod";
+import { generateSuppressionRule } from "@/lib/suppression-rules";
 
 const updateStatusSchema = z.object({
   status: z.enum([
@@ -55,6 +56,34 @@ export async function PATCH(
         statusUpdatedAt: new Date(),
       },
     });
+
+    // Auto-create suppression rule when marking as false positive
+    if (data.status === "FALSE_POSITIVE") {
+      try {
+        const scanProject = await prisma.finding.findFirst({
+          where: { id: findingId },
+          select: { scan: { select: { project: { select: { id: true, organizationId: true } } } } },
+        });
+        await generateSuppressionRule({
+          organizationId: orgId,
+          projectId: scanProject?.scan.project?.id,
+          finding: {
+            id: finding.id,
+            ruleId: finding.ruleId,
+            cweId: finding.cweId,
+            scanner: finding.scanner,
+            filePath: finding.filePath,
+            title: finding.title,
+            snippet: finding.snippet,
+          },
+          reason: data.statusNote || "Marked as false positive",
+          userId: auth.session.user.id,
+          source: "user",
+        });
+      } catch {
+        // Non-blocking — suppression rule creation failure shouldn't block status update
+      }
+    }
 
     const enrichedFinding = enrichFindingWithReport(finding);
     if (!findingHasStoredReport(finding)) {

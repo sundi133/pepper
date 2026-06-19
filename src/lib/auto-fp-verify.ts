@@ -105,6 +105,25 @@ export async function autoVerifyFalsePositives(
     model: orgSettings.llmModel,
   });
 
+  // Inject org-specific FP history as few-shot examples
+  let enrichedPrompt = SYSTEM_PROMPT;
+  try {
+    const { buildFpExamplesForPrompt } = await import("@/lib/suppression-rules");
+    const orgId = orgSettings.orgId;
+    if (orgId) {
+      const fpExamples = await buildFpExamplesForPrompt(orgId, 20);
+      if (fpExamples) {
+        enrichedPrompt = `${SYSTEM_PROMPT}\n\nHere are findings previously marked as false positives by this organization's security team. Use these as guidance for similar patterns:\n\n${fpExamples}`;
+        log.info(
+          { exampleCount: fpExamples.split("Example FP").length - 1 },
+          "Injected org FP examples into verification prompt",
+        );
+      }
+    }
+  } catch {
+    // FP examples unavailable — continue with base prompt
+  }
+
   let totalMarked = 0;
 
   // Process in batches
@@ -127,7 +146,7 @@ export async function autoVerifyFalsePositives(
       const raw = await analyzeWithLlm(
         client,
         orgSettings.llmModel,
-        SYSTEM_PROMPT,
+        enrichedPrompt,
         JSON.stringify({ findings: context }),
         { temperature: 0.1, maxTokens: 4096 },
       );

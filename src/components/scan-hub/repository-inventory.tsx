@@ -53,6 +53,8 @@ type RepositoryInventoryProps = {
   onSearchChange: (q: string) => void;
   onRefresh: () => void;
   stats: { total: number; scanning: number; withIssues: number };
+  selectedRepo?: UnifiedConnectedRepo | null;
+  onSelectRepo?: (repo: UnifiedConnectedRepo) => void;
 };
 
 export function RepositoryInventory({
@@ -66,6 +68,8 @@ export function RepositoryInventory({
   onSearchChange,
   onRefresh,
   stats,
+  selectedRepo,
+  onSelectRepo,
 }: RepositoryInventoryProps) {
   const [rescanningId, setRescanningId] = useState<string | null>(null);
 
@@ -245,11 +249,18 @@ export function RepositoryInventory({
                   const href = repo.scanId
                     ? `/scans/${repo.scanId}`
                     : `/projects/${repo.projectId}`;
+                  const isSelected = selectedRepo?.projectId === repo.projectId;
 
                   return (
                     <TableRow
                       key={repo.projectId}
-                      className="border-slate-100 dark:border-slate-800/80"
+                      className={cn(
+                        "border-slate-100 cursor-pointer transition-colors dark:border-slate-800/80",
+                        isSelected
+                          ? "bg-purple-50/50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800/50"
+                          : "hover:bg-slate-50/50 dark:hover:bg-slate-900/30"
+                      )}
+                      onClick={() => onSelectRepo?.(repo)}
                     >
                       <TableCell className="py-3">
                         <Link

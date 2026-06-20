@@ -6,6 +6,7 @@ import type {
   SlackConfig,
   SiemConfig,
   DapperIntegrationConfig,
+  WebhookConfig,
 } from "./types";
 
 export type {
@@ -14,6 +15,7 @@ export type {
   SlackConfig,
   SiemConfig,
   DapperIntegrationConfig,
+  WebhookConfig,
 };
 
 type Kind = IntegrationConfigData["kind"];
@@ -113,5 +115,15 @@ function defaultNameFor(data: IntegrationConfigData): string {
       return `SIEM (${(data.config as SiemConfig).format.toUpperCase()})`;
     case "DAST":
       return `Dapper (${new URL((data.config as DapperIntegrationConfig).endpoint).host})`;
+    case "WEBHOOK": {
+      const wh = data.config as WebhookConfig;
+      try {
+        return `Webhook (${new URL(wh.webhookUrl).host})`;
+      } catch {
+        return "Webhook";
+      }
+    }
+    default:
+      return "Integration";
   }
 }

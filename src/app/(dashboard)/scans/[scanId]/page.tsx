@@ -37,10 +37,12 @@ import {
   Timer,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { mutate } from "swr";
 import { useRouter } from "next/navigation";
 import { nextFindingSelection } from "@/lib/create-scan-validation";
 import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
+import { ScanTriageChat } from "@/components/scans/scan-triage-chat";
 
 /** Stronger scan toolbar outline buttons (readable while a scan is running). */
 const scanToolbarOutlineClass =
@@ -61,6 +63,8 @@ type Finding = {
   cweId?: string;
   cveId?: string;
   confidence?: number;
+  riskScore?: number | null;
+  isNew?: boolean | null;
   metadata?: Record<string, unknown>;
 };
 
@@ -111,6 +115,8 @@ export default function ScanDetailPage() {
   const { scan, isLoading } = useScanPolling(scanId);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [scannerFilter, setScannerFilter] = useState<string>("all");
+  const [newOnlyFilter, setNewOnlyFilter] = useState(false);
+  const [sortBy, setSortBy] = useState<string>("severity");
   const [rescanning, setRescanning] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [pausing, setPausing] = useState(false);
@@ -126,6 +132,8 @@ export default function ScanDetailPage() {
   const filters: Record<string, string> = {};
   if (severityFilter !== "all") filters.severity = severityFilter;
   if (scannerFilter !== "all") filters.scanner = scannerFilter;
+  if (newOnlyFilter) filters.isNew = "true";
+  if (sortBy !== "severity") filters.sort = sortBy;
 
   const { findings, refresh: refreshFindings } = useFindings(
     scanId,
@@ -650,6 +658,19 @@ export default function ScanDetailPage() {
         </div>
       )}
 
+      {/* Auto-resolved banner */}
+      {scan.status === "COMPLETED" && (scan as { autoResolvedCount?: number }).autoResolvedCount ? (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+          <Check className="h-4 w-4 shrink-0" />
+          <span>
+            <span className="font-semibold">{(scan as { autoResolvedCount?: number }).autoResolvedCount}</span>
+            {" "}previously-open{" "}
+            {(scan as { autoResolvedCount?: number }).autoResolvedCount === 1 ? "finding was" : "findings were"}{" "}
+            auto-resolved — no longer detected in this scan.
+          </span>
+        </div>
+      ) : null}
+
       {/* Findings */}
       {(hasReportableFindings || isActive) && (
         <Card
@@ -659,7 +680,23 @@ export default function ScanDetailPage() {
         >
           <CardHeader>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-              <CardTitle>Findings ({visibleFindingCount})</CardTitle>
+              <div className="flex items-center gap-2 flex-wrap">
+                <CardTitle>Findings ({visibleFindingCount})</CardTitle>
+                {scan.status === "COMPLETED" && (scan as { newFindingCount?: number }).newFindingCount ? (
+                  <button
+                    type="button"
+                    onClick={() => setNewOnlyFilter((v) => !v)}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors",
+                      newOnlyFilter
+                        ? "bg-blue-600 text-white"
+                        : "bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300",
+                    )}
+                  >
+                    {(scan as { newFindingCount?: number }).newFindingCount} new
+                  </button>
+                ) : null}
+              </div>
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
                 <Select
                   value={severityFilter}
@@ -693,6 +730,17 @@ export default function ScanDetailPage() {
                     <SelectItem value="IAC">IaC Security</SelectItem>
                     <SelectItem value="MALICIOUS_PKG">Supply Chain</SelectItem>
                     <SelectItem value="ZERO_DAY">Zero-Day (AI)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-full sm:w-36">
+                    <SelectValue placeholder="Sort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="severity">By Severity</SelectItem>
+                    <SelectItem value="risk">By Risk Score</SelectItem>
+                    <SelectItem value="file">By File</SelectItem>
+                    <SelectItem value="recent">Most Recent</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -802,6 +850,8 @@ export default function ScanDetailPage() {
         </Card>
       )}
 
+      {/* AI Triage Chat — shown when scan is complete */}
+      {scan.status === "COMPLETED" && <ScanTriageChat scanId={scanId} />}
     </div>
   );
 }
@@ -927,6 +977,7 @@ function formatScanMetadataLine(scan: {
   sourceRef?: string | null;
   branch?: string | null;
   commitSha?: string | null;
+  prNumber?: number | null;
   createdAt: string;
 }): string {
   const parts: string[] = [];
@@ -934,6 +985,7 @@ function formatScanMetadataLine(scan: {
     if (scan.sourceRef) parts.push(`SVN: ${scan.sourceRef}`);
     if (scan.commitSha) parts.push(`Rev: ${scan.commitSha}`);
   } else {
+    if (scan.prNumber) parts.push(`PR #${scan.prNumber}`);
     if (scan.branch) parts.push(`Branch: ${scan.branch}`);
     if (scan.commitSha)
       parts.push(`Commit: ${scan.commitSha.substring(0, 8)}`);

@@ -148,6 +148,50 @@ export async function analyzeWithLlm(
   return response.choices[0]?.message?.content || "{}";
 }
 
+// ─── Streaming Chat ───────────────────────────────────────────────────
+//
+// Unlike analyzeWithLlm (which forces JSON output), this returns a plain-text
+// async generator suitable for chat interfaces. Each yielded value is a text
+// chunk to append to the response.
+
+export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+export async function* streamChatWithLlm(
+  llmClient: LlmClient,
+  messages: ChatMessage[],
+  options?: { temperature?: number; maxTokens?: number },
+): AsyncGenerator<string> {
+  const temperature = options?.temperature ?? 0.7;
+  const maxTokens = options?.maxTokens ?? 2048;
+
+  if (llmClient.type === "ollama") {
+    const stream = await llmClient.client.chat({
+      model: llmClient.model,
+      messages,
+      stream: true,
+      options: { temperature, num_predict: maxTokens },
+    });
+    for await (const chunk of stream) {
+      const text = chunk.message?.content;
+      if (text) yield text;
+    }
+    return;
+  }
+
+  // OpenAI-compatible (openai + openrouter)
+  const stream = await llmClient.client.chat.completions.create({
+    model: llmClient.model,
+    messages,
+    temperature,
+    max_tokens: maxTokens,
+    stream: true,
+  });
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content;
+    if (text) yield text;
+  }
+}
+
 // ─── JSON Response Parser ─────────────────────────────────────────────
 
 export function parseLlmJsonResponse<T>(raw: string, fallback: T): T {

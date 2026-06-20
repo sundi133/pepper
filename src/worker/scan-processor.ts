@@ -23,6 +23,7 @@ import {
   type SignatureBundle,
 } from "@/lib/code-signing";
 import { decryptSecret } from "@/lib/token-encryption";
+import { computeRiskScore } from "@/lib/risk-score";
 
 // prisma is imported from @/lib/prisma
 
@@ -414,6 +415,12 @@ export async function processScanJob(job: Job<ScanJobData>) {
               confidence: f.confidence,
               metadata: f.metadata as object,
               masked: f.masked ?? false,
+              riskScore: computeRiskScore({
+                severity: f.severity,
+                scanner: f.scanner,
+                confidence: f.confidence,
+                filePath: f.filePath,
+              }),
             };
           }),
         });
@@ -440,6 +447,12 @@ export async function processScanJob(job: Job<ScanJobData>) {
               confidence: f.confidence,
               metadata: f.metadata as object,
               masked: f.masked ?? false,
+              riskScore: computeRiskScore({
+                severity: f.severity,
+                scanner: f.scanner,
+                confidence: f.confidence,
+                filePath: f.filePath,
+              }),
               status: "FALSE_POSITIVE",
               statusNote: "Auto-suppressed by learned rule",
             };
@@ -757,7 +770,17 @@ export async function processScanJob(job: Job<ScanJobData>) {
 
     log.info({ gateResult }, "Scan completed successfully");
 
-    // 9b. Auto FP verification — re-check findings with LLM to flag likely false positives
+    // 9b. Auto-resolve findings that were fixed (no longer appear in this scan)
+    try {
+      const { autoResolveFixedFindings } = await import(
+        "@/lib/fix-verification"
+      );
+      await autoResolveFixedFindings(scanId, projectId, log);
+    } catch (fixErr) {
+      log.warn({ fixErr }, "Fix verification failed (non-blocking)");
+    }
+
+    // 9c. Auto FP verification — re-check findings with LLM to flag likely false positives
     try {
       const { autoVerifyFalsePositives } = await import(
         "@/lib/auto-fp-verify"

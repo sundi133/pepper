@@ -65,6 +65,8 @@ export function AddSourceCard({
   const [activePill, setActivePill] = useState<SourcePill>("github");
   const [smartUrl, setSmartUrl] = useState("");
   const [smartBranch, setSmartBranch] = useState("");
+  const [smartPrNumber, setSmartPrNumber] = useState("");
+  const [smartBaseSha, setSmartBaseSha] = useState("");
   const [smartConnecting, setSmartConnecting] = useState(false);
   const [urlLegalConfirm, setUrlLegalConfirm] = useState(false);
 
@@ -86,14 +88,19 @@ export function AddSourceCard({
           toast.error("Confirm you have permission to scan this code.");
           return;
         }
+        const prNum = smartPrNumber.trim() ? parseInt(smartPrNumber.trim(), 10) : undefined;
         const scanId = await hub.createAdHocGitScan(
           smartUrl,
           smartBranch,
           scanType,
+          Number.isFinite(prNum) ? prNum : undefined,
+          smartBaseSha.trim() || undefined,
         );
         toast.success("Scan queued");
         setSmartUrl("");
         setSmartBranch("");
+        setSmartPrNumber("");
+        setSmartBaseSha("");
         router.push(`/scans/${scanId}`);
         return;
       }
@@ -264,6 +271,40 @@ export function AddSourceCard({
                   onChange={(e) => setSmartBranch(e.target.value)}
                 />
               </div>
+              {scanType === "INCREMENTAL" && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="smart-pr-number" className="text-xs font-medium text-slate-700">
+                      PR number <span className="font-normal text-slate-500">(optional)</span>
+                    </Label>
+                    <Input
+                      id="smart-pr-number"
+                      type="number"
+                      min={1}
+                      className="h-9 border-slate-200 bg-white"
+                      placeholder="e.g. 42"
+                      value={smartPrNumber}
+                      onChange={(e) => setSmartPrNumber(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="smart-base-sha" className="text-xs font-medium text-slate-700">
+                      Base branch / commit SHA <span className="font-normal text-slate-500">(optional)</span>
+                    </Label>
+                    <Input
+                      id="smart-base-sha"
+                      className="h-9 border-slate-200 bg-white font-mono text-xs"
+                      placeholder="main or abc1234"
+                      value={smartBaseSha}
+                      onChange={(e) => setSmartBaseSha(e.target.value)}
+                      spellCheck={false}
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Only files changed relative to this branch or SHA will be scanned.
+                    </p>
+                  </div>
+                </>
+              )}
               {(providerHint === "generic" || providerHint === null) && smartUrl.trim() && (
                 <div className="flex items-start gap-2">
                   <Checkbox

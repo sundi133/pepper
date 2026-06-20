@@ -32,6 +32,7 @@ export async function GET(
   const scanner = searchParams.get("scanner")?.split(",");
   const filePath = searchParams.get("filePath");
   const status = searchParams.get("status")?.split(",");
+  const isNewParam = searchParams.get("isNew");
   const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
   const limit = Math.min(
     500,
@@ -44,10 +45,14 @@ export async function GET(
   if (scanner) where.scanner = { in: scanner };
   if (filePath) where.filePath = { contains: filePath };
   if (status) where.status = { in: status };
+  if (isNewParam === "true") where.isNew = true;
+  else if (isNewParam === "false") where.isNew = false;
 
   const orderBy: Record<string, string> = {};
-  if (sort === "severity") {
-    orderBy.severity = "asc"; // CRITICAL first
+  if (sort === "risk") {
+    orderBy.riskScore = "desc"; // highest risk first
+  } else if (sort === "severity") {
+    orderBy.severity = "asc"; // CRITICAL first (enum ordering)
   } else if (sort === "file") {
     orderBy.filePath = "asc";
   } else {

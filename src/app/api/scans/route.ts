@@ -43,6 +43,7 @@ const createScanSchema = z
     branch: z.string().optional(),
     commitSha: z.string().optional(),
     baseSha: z.string().optional(),
+    prNumber: z.number().int().positive().optional(),
     repoUrl: z.string().optional(),
     /** Used only for clone; never stored on Scan.sourceRef. */
     repoToken: z.string().optional(),
@@ -206,6 +207,7 @@ export async function POST(req: NextRequest) {
         branch: scanParams.branch,
         commitSha: scanParams.commitSha,
         baseSha: scanParams.baseSha,
+        prNumber: scanParams.prNumber,
         sourceType: fileBuffer
           ? "UPLOAD"
           : scanParams.repoUrl
@@ -267,6 +269,7 @@ export async function POST(req: NextRequest) {
       scanType: scanParams.scanType,
       baseSha: scanParams.baseSha,
       commitSha: scanParams.commitSha,
+      prNumber: scanParams.prNumber,
       repoUrl: cloneRepoUrl,
       repoUrlDisplay: scanParams.repoUrl,
       svnUrl: scanParams.svnUrl,

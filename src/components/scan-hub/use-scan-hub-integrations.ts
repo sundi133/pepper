@@ -951,6 +951,8 @@ export function useScanHubIntegrations() {
     url: string,
     branch: string,
     scanType: string = "FULL",
+    prNumber?: number,
+    baseSha?: string,
   ) {
     const formData = new FormData();
     formData.append(
@@ -959,6 +961,8 @@ export function useScanHubIntegrations() {
         scanType,
         repoUrl: url,
         branch: branch.trim() || undefined,
+        prNumber: prNumber || undefined,
+        baseSha: baseSha?.trim() || undefined,
       }),
     );
     const res = await fetch("/api/scans", { method: "POST", body: formData });

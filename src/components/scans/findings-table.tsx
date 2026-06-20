@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SCANNER_LABELS } from "@/lib/constants";
+import { riskScoreLabel } from "@/lib/risk-score";
 import {
   type FixPrScanSourceContext,
   fixPrUnavailableReason,
@@ -57,6 +58,8 @@ interface Finding {
   cweId?: string;
   cveId?: string;
   confidence?: number;
+  riskScore?: number | null;
+  isNew?: boolean | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -525,6 +528,7 @@ export function FindingsTable({
                 onCheckedChange={toggleAll}
               />
             </TableHead>
+            <TableHead className="w-16 text-center">Risk</TableHead>
             <TableHead className="w-24">Severity</TableHead>
             <TableHead className="w-[28%] min-w-0">Bug / Vulnerability</TableHead>
             <TableHead className="w-24">Status</TableHead>
@@ -553,6 +557,9 @@ export function FindingsTable({
                     checked={selected.has(finding.id)}
                     onCheckedChange={() => toggleOne(finding.id)}
                   />
+                </TableCell>
+                <TableCell className="text-center" onClick={() => onSelect?.(finding)}>
+                  <RiskScoreBadge score={finding.riskScore} />
                 </TableCell>
                 <TableCell onClick={() => onSelect?.(finding)}>
                   <SeverityBadge severity={finding.severity} />
@@ -707,6 +714,37 @@ function FindingFixPrIcon({
         </TooltipTrigger>
         <TooltipContent side="left" className="max-w-xs text-balance">
           {hint}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+// ─── Risk Score Badge ────────────────────────────────────────────────────────
+
+const RISK_COLORS: Record<ReturnType<typeof riskScoreLabel>, string> = {
+  critical: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  high:     "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
+  medium:   "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300",
+  low:      "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+  info:     "bg-slate-100 text-slate-400 dark:bg-slate-900 dark:text-slate-500",
+};
+
+function RiskScoreBadge({ score }: { score?: number | null }) {
+  if (score == null) return <span className="text-xs text-muted-foreground">—</span>;
+  const label = riskScoreLabel(score);
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${RISK_COLORS[label]}`}
+          >
+            {score}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          Risk score {score}/100 — {label} priority
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

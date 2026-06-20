@@ -223,8 +223,10 @@ model Scan {
   lowCount      Int @default(0)
   infoCount     Int @default(0)
 
-  filesScanned Int @default(0)
-  depsScanned  Int @default(0)
+  filesScanned      Int @default(0)
+  depsScanned       Int @default(0)
+  autoResolvedCount Int @default(0)
+  newFindingCount   Int @default(0)
 
   scannerProgress Json?
 
@@ -311,6 +313,8 @@ model Finding {
   confidence      Float?
   metadata        Json?
   masked          Boolean       @default(false)
+  riskScore       Int?          // 1–100 composite risk score (severity × scanner × confidence × file-path)
+  isNew           Boolean?      // null = no previous scan; true = new; false = persisting
   status          FindingStatus @default(OPEN)
   statusNote      String?
   statusUpdatedBy String?
@@ -323,6 +327,7 @@ model Finding {
   @@index([scanId, scanner])
   @@index([scanId, filePath])
   @@index([scanId, status])
+  @@index([scanId, isNew])
 }
 
 enum FindingStatus {
@@ -537,6 +542,7 @@ enum IntegrationKind {
   SIEM
   DAST
   CODE_SIGNING
+  WEBHOOK
 }
 
 model AuditLog {

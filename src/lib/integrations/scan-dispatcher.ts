@@ -6,7 +6,8 @@ import {
 } from "./slack";
 import { createJiraIssueForFinding, shouldOpenJiraTicket } from "./jira";
 import { forwardToSiem, type SiemFindingEvent } from "./siem";
-import type { JiraConfig, SlackConfig, SiemConfig } from "./types";
+import { fireWebhook, type WebhookScanPayload, type WebhookFindingPayload } from "./webhook";
+import type { JiraConfig, SlackConfig, SiemConfig, WebhookConfig } from "./types";
 
 interface DecryptedRow<TKind extends string, TConfig> {
   id: string;
@@ -169,5 +170,71 @@ export async function dispatchScanCompleteIntegrations(scanId: string) {
         ),
       ),
     );
+  }
+
+  // ----- Generic Webhooks -----
+  const webhooks = await loadEnabled<WebhookConfig>(orgId, "WEBHOOK");
+  if (webhooks.length > 0) {
+    // Fetch new critical/high findings for finding.new.* events
+    const newCriticalFindings = await prisma.finding.findMany({
+      where: { scanId: scan.id, severity: "CRITICAL", isNew: true, status: "OPEN" },
+      select: { id: true, severity: true, title: true, scanner: true, filePath: true, startLine: true, ruleId: true, cweId: true, cveId: true, riskScore: true },
+      take: 25,
+      orderBy: { riskScore: "desc" },
+    });
+    const newHighFindings = await prisma.finding.findMany({
+      where: { scanId: scan.id, severity: { in: ["CRITICAL", "HIGH"] }, isNew: true, status: "OPEN" },
+      select: { id: true, severity: true, title: true, scanner: true, filePath: true, startLine: true, ruleId: true, cweId: true, cveId: true, riskScore: true },
+      take: 25,
+      orderBy: { riskScore: "desc" },
+    });
+
+    const toFindingPayload = (f: typeof newCriticalFindings[0]): WebhookFindingPayload => ({
+      id: f.id,
+      severity: f.severity,
+      title: f.title,
+      scanner: f.scanner,
+      filePath: f.filePath,
+      startLine: f.startLine,
+      ruleId: f.ruleId,
+      cweId: f.cweId,
+      cveId: f.cveId,
+      riskScore: f.riskScore,
+      scanUrl: scanUrl,
+    });
+
+    const baseScanData: WebhookScanPayload["scan"] = {
+      id: scan.id,
+      projectName: scan.project!.name,
+      branch: scan.branch,
+      url: scanUrl,
+      criticalCount: scan.criticalCount,
+      highCount: scan.highCount,
+      mediumCount: scan.mediumCount,
+      lowCount: scan.lowCount,
+      infoCount: scan.infoCount,
+      gateResult: scan.gateResult,
+    };
+
+    const gateFailed = scan.gateResult === "FAILED";
+
+    for (const wh of webhooks) {
+      // Check project filter
+      if (wh.config.projectIds && wh.config.projectIds.length > 0) {
+        // We need projectId for this check — fetch it once
+        const proj = await prisma.scan.findUnique({ where: { id: scan.id }, select: { projectId: true } });
+        if (proj && !wh.config.projectIds.includes(proj.projectId)) continue;
+      }
+
+      const fire = (event: WebhookScanPayload["event"], findings?: WebhookFindingPayload[]) =>
+        fireWebhook(wh.config, event, { event, timestamp: new Date().toISOString(), scan: baseScanData, findings }).catch((e) =>
+          console.warn(`[integrations] Webhook "${wh.name}" failed for ${event}:`, e),
+        );
+
+      void fire("scan.completed");
+      if (gateFailed) void fire("scan.gate_failed");
+      if (newCriticalFindings.length > 0) void fire("finding.new.critical", newCriticalFindings.map(toFindingPayload));
+      if (newHighFindings.length > 0) void fire("finding.new.high", newHighFindings.map(toFindingPayload));
+    }
   }
 }

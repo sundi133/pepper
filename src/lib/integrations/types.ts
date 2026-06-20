@@ -3,7 +3,8 @@ export type IntegrationKind =
   | "SLACK"
   | "SIEM"
   | "DAST"
-  | "CODE_SIGNING";
+  | "CODE_SIGNING"
+  | "WEBHOOK";
 
 export interface JiraConfig {
   baseUrl: string;
@@ -39,8 +40,39 @@ export interface DapperIntegrationConfig {
   apiKey?: string;
 }
 
+export type WebhookEvent =
+  | "scan.completed"
+  | "scan.gate_failed"
+  | "finding.new.critical"
+  | "finding.new.high";
+
+export type WebhookPayloadTemplate =
+  | "default"
+  | "slack"
+  | "teams"
+  | "pagerduty"
+  | "linear";
+
+export interface WebhookConfig {
+  /** Target URL to POST to. */
+  webhookUrl: string;
+  /** Which events should trigger this webhook. */
+  events: WebhookEvent[];
+  /** Optional custom HTTP headers (e.g. auth tokens). */
+  headers?: Array<{ key: string; value: string }>;
+  /** Only fire when the scan has at least one finding at this severity or above. */
+  minSeverity?: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+  /** Limit to specific project IDs; empty / omitted = all projects. */
+  projectIds?: string[];
+  /** Pre-built payload shape. "default" sends Pepper's native JSON. */
+  payloadTemplate?: WebhookPayloadTemplate;
+  /** Optional HMAC-SHA256 signing secret — added as X-Pepper-Signature header. */
+  secret?: string;
+}
+
 export type IntegrationConfigData =
   | { kind: "JIRA"; config: JiraConfig }
   | { kind: "SLACK"; config: SlackConfig }
   | { kind: "SIEM"; config: SiemConfig }
-  | { kind: "DAST"; config: DapperIntegrationConfig };
+  | { kind: "DAST"; config: DapperIntegrationConfig }
+  | { kind: "WEBHOOK"; config: WebhookConfig };

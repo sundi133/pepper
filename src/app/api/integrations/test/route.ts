@@ -5,12 +5,14 @@ import {
   type JiraConfig,
   type SlackConfig,
   type SiemConfig,
+  type WebhookConfig,
 } from "@/lib/integrations";
 import {
   createJiraIssueForFinding,
 } from "@/lib/integrations/jira";
 import { notifySlackScanComplete } from "@/lib/integrations/slack";
 import { forwardToSiem } from "@/lib/integrations/siem";
+import { fireWebhook } from "@/lib/integrations/webhook";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
@@ -52,6 +54,30 @@ export async function POST(req: NextRequest) {
           detectedAt: new Date().toISOString(),
         },
       ]);
+    } else if (body.kind === "WEBHOOK") {
+      const result = await fireWebhook(body.config as WebhookConfig, "scan.completed", {
+        event: "scan.completed",
+        timestamp: new Date().toISOString(),
+        scan: {
+          id: "test-scan-id",
+          projectName: "Pepper test project",
+          branch: "main",
+          url: undefined,
+          criticalCount: 1,
+          highCount: 2,
+          mediumCount: 5,
+          lowCount: 3,
+          infoCount: 0,
+          gateResult: "PASSED",
+        },
+      });
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: result.error ?? `HTTP ${result.status}` },
+          { status: 500 },
+        );
+      }
+      return NextResponse.json({ ok: true, status: result.status });
     } else {
       return NextResponse.json(
         { error: `Test not implemented for ${body.kind}` },

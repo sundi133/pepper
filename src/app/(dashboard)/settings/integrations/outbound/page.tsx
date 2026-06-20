@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -21,8 +22,9 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
+import { Plus, Trash2 } from "lucide-react";
 
-type IntegrationKind = "SLACK" | "JIRA";
+type IntegrationKind = "SLACK" | "JIRA" | "WEBHOOK";
 
 interface IntegrationRow {
   id: string;
@@ -35,6 +37,25 @@ interface IntegrationRow {
 interface ApiList {
   integrations: IntegrationRow[];
 }
+
+type WebhookEvent = "scan.completed" | "scan.gate_failed" | "finding.new.critical" | "finding.new.high";
+
+const WEBHOOK_EVENTS: { value: WebhookEvent; label: string; description: string }[] = [
+  { value: "scan.completed", label: "Scan completed", description: "Every time a scan finishes" },
+  { value: "scan.gate_failed", label: "Gate failed", description: "When the build gate is blocked" },
+  { value: "finding.new.critical", label: "New critical finding", description: "When a new critical severity finding is detected" },
+  { value: "finding.new.high", label: "New high finding", description: "When a new high or critical finding is detected" },
+];
+
+const PAYLOAD_TEMPLATES = [
+  { value: "default", label: "Default JSON (Pepper native format)" },
+  { value: "slack", label: "Slack incoming webhook (Block Kit)" },
+  { value: "teams", label: "Microsoft Teams (MessageCard)" },
+  { value: "pagerduty", label: "PagerDuty Events API v2" },
+  { value: "linear", label: "Linear create-issue format" },
+];
+
+const SEVERITY_OPTIONS = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
 
 export default function OutboundIntegrationsPage() {
   const [rows, setRows] = useState<IntegrationRow[]>([]);
@@ -51,6 +72,13 @@ export default function OutboundIntegrationsPage() {
   const [jiraProject, setJiraProject] = useState("");
   const [jiraIssueType, setJiraIssueType] = useState("Bug");
 
+  // Generic webhook form
+  const [whUrl, setWhUrl] = useState("");
+  const [whEvents, setWhEvents] = useState<WebhookEvent[]>(["scan.completed", "scan.gate_failed"]);
+  const [whMinSeverity, setWhMinSeverity] = useState("INFO");
+  const [whTemplate, setWhTemplate] = useState("default");
+  const [whSecret, setWhSecret] = useState("");
+  const [whHeaders, setWhHeaders] = useState<{ key: string; value: string }[]>([]);
 
   async function reload() {
     setLoading(true);
@@ -97,10 +125,7 @@ export default function OutboundIntegrationsPage() {
     } else toast.error("Delete failed");
   }
 
-  async function testIntegration(
-    kind: IntegrationKind,
-    config: unknown,
-  ) {
+  async function testIntegration(kind: IntegrationKind, config: unknown) {
     const res = await fetch("/api/integrations/test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -109,6 +134,35 @@ export default function OutboundIntegrationsPage() {
     const j = (await res.json()) as { error?: string; ok?: boolean };
     if (res.ok && j.ok) toast.success(`${kind} test ok`);
     else toast.error(j.error || `${kind} test failed`);
+  }
+
+  function toggleWhEvent(event: WebhookEvent) {
+    setWhEvents((prev) =>
+      prev.includes(event) ? prev.filter((e) => e !== event) : [...prev, event],
+    );
+  }
+
+  function addHeader() {
+    setWhHeaders((prev) => [...prev, { key: "", value: "" }]);
+  }
+
+  function updateHeader(idx: number, field: "key" | "value", val: string) {
+    setWhHeaders((prev) => prev.map((h, i) => (i === idx ? { ...h, [field]: val } : h)));
+  }
+
+  function removeHeader(idx: number) {
+    setWhHeaders((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function buildWebhookConfig() {
+    return {
+      webhookUrl: whUrl,
+      events: whEvents,
+      minSeverity: whMinSeverity !== "INFO" ? whMinSeverity : undefined,
+      payloadTemplate: whTemplate !== "default" ? whTemplate : undefined,
+      secret: whSecret || undefined,
+      headers: whHeaders.filter((h) => h.key && h.value),
+    };
   }
 
   return (
@@ -155,6 +209,7 @@ export default function OutboundIntegrationsPage() {
         </CardContent>
       </Card>
 
+      {/* ── Slack ── */}
       <Card>
         <CardHeader>
           <CardTitle>Slack</CardTitle>
@@ -213,6 +268,7 @@ export default function OutboundIntegrationsPage() {
         </CardContent>
       </Card>
 
+      {/* ── Jira ── */}
       <Card>
         <CardHeader>
           <CardTitle>Jira</CardTitle>
@@ -286,6 +342,157 @@ export default function OutboundIntegrationsPage() {
         </CardContent>
       </Card>
 
+      {/* ── Generic Webhook ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Generic Webhook</CardTitle>
+          <CardDescription>
+            POST scan events to any URL — Slack, Teams, PagerDuty, Linear, Zapier, email relay, or your own endpoint.
+            Payload shape is configurable with pre-built templates.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* URL */}
+          <div className="space-y-1">
+            <Label>Webhook URL</Label>
+            <Input
+              placeholder="https://hooks.example.com/..."
+              value={whUrl}
+              onChange={(e) => setWhUrl(e.target.value)}
+            />
+          </div>
+
+          {/* Events */}
+          <div className="space-y-2">
+            <Label>Trigger on</Label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {WEBHOOK_EVENTS.map((ev) => (
+                <label key={ev.value} className="flex items-start gap-2 rounded-md border p-2.5 cursor-pointer hover:bg-muted/50">
+                  <Checkbox
+                    checked={whEvents.includes(ev.value)}
+                    onCheckedChange={() => toggleWhEvent(ev.value)}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <p className="text-sm font-medium">{ev.label}</p>
+                    <p className="text-xs text-muted-foreground">{ev.description}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Payload template */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label>Payload template</Label>
+              <Select value={whTemplate} onValueChange={setWhTemplate}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAYLOAD_TEMPLATES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Min severity (skip if no findings meet threshold)</Label>
+              <Select value={whMinSeverity} onValueChange={setWhMinSeverity}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SEVERITY_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Custom headers */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Custom headers</Label>
+              <Button type="button" size="sm" variant="outline" onClick={addHeader} className="h-7 gap-1 text-xs">
+                <Plus className="h-3 w-3" /> Add header
+              </Button>
+            </div>
+            {whHeaders.length === 0 && (
+              <p className="text-xs text-muted-foreground">No custom headers. Add one for Bearer auth or API keys.</p>
+            )}
+            {whHeaders.map((h, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <Input
+                  placeholder="Header name (e.g. Authorization)"
+                  value={h.key}
+                  onChange={(e) => updateHeader(idx, "key", e.target.value)}
+                  className="flex-1"
+                />
+                <Input
+                  placeholder="Value (e.g. Bearer token…)"
+                  value={h.value}
+                  onChange={(e) => updateHeader(idx, "value", e.target.value)}
+                  className="flex-1"
+                  type="password"
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => removeHeader(idx)}
+                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          {/* Signing secret */}
+          <div className="space-y-1">
+            <Label>Signing secret (optional)</Label>
+            <Input
+              type="password"
+              placeholder="Used to generate X-Pepper-Signature: sha256=… header"
+              value={whSecret}
+              onChange={(e) => setWhSecret(e.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              If set, each request includes a HMAC-SHA256 signature so your endpoint can verify it came from Pepper.
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              disabled={!whUrl || whEvents.length === 0}
+              onClick={() => {
+                const config = buildWebhookConfig();
+                void save({
+                  kind: "WEBHOOK",
+                  name: (() => {
+                    try { return `Webhook (${new URL(whUrl).host})`; } catch { return "Webhook"; }
+                  })(),
+                  config,
+                });
+              }}
+            >
+              Save webhook
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!whUrl}
+              onClick={() => void testIntegration("WEBHOOK", buildWebhookConfig())}
+            >
+              Send test event
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

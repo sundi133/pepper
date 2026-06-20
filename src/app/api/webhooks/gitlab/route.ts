@@ -23,6 +23,10 @@ export async function POST(req: NextRequest) {
     const baseSha = payload.object_attributes?.last_commit?.id;
     const prNumber = payload.object_attributes?.iid;
 
+    const gitlabProjectId: number | undefined =
+      typeof payload.project?.id === "number" ? payload.project.id : undefined;
+    const gitlabNamespace: string | undefined = payload.project?.path_with_namespace;
+
     const project = await prisma.project.findFirst({
       where: {
         repoUrl: { contains: payload.project?.path_with_namespace },
@@ -38,6 +42,14 @@ export async function POST(req: NextRequest) {
 
     if (!project) {
       return NextResponse.json({ message: "No matching project found" });
+    }
+
+    // Store the GitLab project ID so the PR bot can post MR notes
+    if (gitlabProjectId && !project.gitlabProjectId) {
+      await prisma.project.update({
+        where: { id: project.id },
+        data: { gitlabProjectId, gitlabNamespace: gitlabNamespace ?? null },
+      });
     }
 
     const { removeAllScansForProject } = await import(

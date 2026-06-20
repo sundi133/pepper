@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 import { WebhookSecretsCard } from "@/components/settings/webhook-secrets-card";
 import { CicdSetupWizard } from "@/components/settings/cicd-setup-wizard";
+import { GitLabConnectionCard } from "@/components/settings/gitlab-connection-card";
 
 export default function IntegrationsPage() {
   const webhookUrl =
@@ -814,6 +815,7 @@ export default function IntegrationsPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
+            <GitBranch className="h-5 w-5" />
             <CardTitle>GitLab</CardTitle>
             <Badge variant="outline">Webhook</Badge>
           </div>
@@ -844,6 +846,8 @@ export default function IntegrationsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <GitLabConnectionCard />
 
       <CicdSetupWizard />
 

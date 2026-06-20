@@ -3,6 +3,7 @@ import { logger } from "./logger";
 import { postScanPrSummary } from "./github-pr-comment";
 import { postScanBitbucketPrSummary } from "./bitbucket-pr-comment";
 import { postScanAzurePrSummary } from "./azure-devops-pr-comment";
+import { postScanGitLabMrSummary } from "./gitlab-mr-comment";
 
 const log = logger.child({ module: "pr-bot" });
 
@@ -25,6 +26,7 @@ export async function postScanPrReview(scanId: string): Promise<void> {
           bitbucketRepoSlug: true,
           azureProjectName: true,
           azureRepoId: true,
+          gitlabProjectId: true,
         },
       },
     },
@@ -44,6 +46,11 @@ export async function postScanPrReview(scanId: string): Promise<void> {
 
   if (scan.project.azureProjectName && scan.project.azureRepoId) {
     await postScanAzurePrSummary(scanId);
+    return;
+  }
+
+  if (scan.project.gitlabProjectId) {
+    await postScanGitLabMrSummary(scanId);
     return;
   }
 

@@ -39,9 +39,12 @@ export async function removeAllScansForProject(projectId: string): Promise<void>
     if (s.jobId) {
       try {
         const job = await scanQueue.getJob(s.jobId);
-        await job?.remove();
-      } catch {
-        // job may be active or already removed
+        if (job) {
+          await job.remove();
+        }
+      } catch (err) {
+        // job may be active, already removed, or Redis key expired
+        // silently continue - the job is being cleaned up anyway
       }
     }
   }

@@ -168,8 +168,8 @@ export async function DELETE(
     try {
       const job = await scanQueue.getJob(scan.jobId);
       if (job) await job.remove();
-    } catch {
-      // The queue entry may already be gone or locked by a worker.
+    } catch (err) {
+      // The queue entry may already be gone, locked by a worker, or Redis key expired.
     }
   }
 

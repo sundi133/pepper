@@ -42,8 +42,9 @@ export async function POST(
     try {
       const job = await scanQueue.getJob(scan.jobId);
       if (job) await job.remove();
-    } catch {
+    } catch (err) {
       // Active jobs cannot always be removed; the worker exits on STOPPED.
+      // Job may also not exist if Redis key expired.
     }
   }
 

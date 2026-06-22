@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import {
   Sheet,
@@ -165,6 +165,261 @@ function githubCodeUrl(
   });
 }
 
+function SecretFindingReport({ finding }: { finding: Finding }) {
+  const metadata = finding.metadata as Record<string, unknown> | undefined;
+  const secretType = typeof metadata?.secretType === "string"
+    ? metadata.secretType
+    : (finding.title.split(":")[0] || "Secret");
+  const report = buildStoredFindingReport(finding);
+
+  return (
+    <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
+      {/* Secrets Identified Card */}
+      <ReportBlock title="Secrets Identified" icon={<span className="text-lg">🔐</span>}>
+        <div className="space-y-3">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            The following secret value was found exposed in the source code.
+          </p>
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Secret Type</p>
+                <p className="text-sm font-semibold text-foreground">{secretType}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Secret Value</p>
+                <p className="text-sm font-mono text-foreground">****</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Location</p>
+                <p className="text-sm text-foreground">
+                  {finding.filePath}
+                  {finding.startLine ? `:${finding.startLine}` : ""}
+                </p>
+              </div>
+            </div>
+          </div>
+          {finding.snippet && (
+            <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+              <p className="text-xs font-medium text-orange-900 mb-1">⚠️ Warning</p>
+              <p className="text-xs text-orange-800">
+                This secret was found in source code and may have been committed to version control.
+              </p>
+            </div>
+          )}
+        </div>
+      </ReportBlock>
+
+      {/* Risk Section */}
+      <ReportBlock title="Risk" icon={<span className="text-lg">🛡️</span>}>
+        <ReportRichText text={report.impact} />
+      </ReportBlock>
+
+      {/* Recommendations Section */}
+      <ReportBlock title="Recommendations" icon={<span className="text-lg">✅</span>}>
+        <ReportPlainList items={report.remediation} />
+      </ReportBlock>
+    </section>
+  );
+}
+
+function ScaFindingReport({ finding }: { finding: Finding }) {
+  const report = buildStoredFindingReport(finding);
+  const metadata = finding.metadata as Record<string, unknown> | undefined;
+  const fixVersion = typeof metadata?.fixVersion === "string" ? metadata.fixVersion : undefined;
+
+  // Extract structured fields from summary
+  const summaryLines = report.summary.split("\n\n");
+  const whatIsWrong = summaryLines.find(line => line.includes("What is wrong:"))?.replace(/^What is wrong:\s*/i, "") || "";
+  const whereInfo = summaryLines.find(line => line.includes("Where:"))?.replace(/^Where:\s*/i, "") || "";
+
+  return (
+    <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
+      {/* Issue Section */}
+      <ReportBlock title="Issue" icon={<span className="text-lg">ℹ️</span>}>
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-foreground">
+            {stripReportMarkdown(report.vulnerabilityName)}
+          </p>
+          {finding.ruleId && (
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Vulnerable Dependency</p>
+                <code className="text-sm font-mono text-foreground">{finding.ruleId}</code>
+              </div>
+              {fixVersion && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Fixed in Version</p>
+                  <code className="text-sm font-mono text-foreground">{fixVersion}</code>
+                </div>
+              )}
+              {whereInfo && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Location</p>
+                  <code className="text-sm font-mono text-foreground">{whereInfo}</code>
+                </div>
+              )}
+            </div>
+          )}
+          {whatIsWrong && (
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">What is wrong</p>
+              <p className="text-sm leading-relaxed text-foreground">
+                <ReportRichText text={whatIsWrong} />
+              </p>
+            </div>
+          )}
+        </div>
+      </ReportBlock>
+
+      {/* Why It Matters Section */}
+      <div className="border-t border-border/40 pt-4">
+        <ReportBlock title="Why it Matters" icon={<span className="text-lg">⚠️</span>}>
+          <div className="space-y-2">
+            <p className="text-sm leading-relaxed text-foreground font-medium">
+              {stripReportMarkdown(report.summary.split("\n\n")[0] || "A vulnerable dependency was identified.")}
+            </p>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              This package is no longer receiving security updates and may contain exploitable vulnerabilities. Attackers can target known weaknesses in older versions.
+            </p>
+          </div>
+        </ReportBlock>
+      </div>
+
+      {/* Customer Impact Section */}
+      <div className="border-t border-border/40 pt-4">
+        <ReportBlock title="Customer Impact" icon={<span className="text-lg">👥</span>}>
+          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+            <ReportRichText text={report.impact} />
+          </div>
+        </ReportBlock>
+      </div>
+
+      {/* Remediation Section */}
+      <div className="border-t border-border/40 pt-4">
+        <ReportBlock title="Remediation" icon={<span className="text-lg">🔧</span>}>
+          <ol className="space-y-3 list-decimal pl-5">
+            {report.remediation.map((step, i) => (
+              <li key={i} className="text-sm text-muted-foreground leading-relaxed">
+                <ReportRichText text={step} />
+              </li>
+            ))}
+          </ol>
+        </ReportBlock>
+      </div>
+    </section>
+  );
+}
+
+function IacFindingReport({
+  finding,
+  scanId,
+}: {
+  finding: Finding;
+  scanId: string;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<AiSuggestFixResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchAiOutput() {
+      try {
+        const res = await fetch(
+          `/api/scans/${scanId}/findings/${finding.id}/suggest-fix`,
+          { method: "POST" },
+        );
+        const json = (await res.json()) as AiSuggestFixResponse & { error?: string };
+        if (!res.ok) {
+          throw new Error(json.error || "Failed to generate AI output");
+        }
+        setData(json);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to fetch AI output");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchAiOutput();
+  }, [finding.id, scanId]);
+
+  const report = buildStoredFindingReport(finding);
+
+  return (
+    <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
+      {loading ? (
+        <ReportBlock title="AI Analysis" icon={<span className="text-lg">✨</span>}>
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+            <p className="text-sm text-muted-foreground">Analyzing with AI...</p>
+          </div>
+        </ReportBlock>
+      ) : error ? (
+        <ReportBlock title="AI Analysis" icon={<span className="text-lg">⚠️</span>}>
+          <p className="text-sm text-red-600">{error}</p>
+        </ReportBlock>
+      ) : data ? (
+        <>
+          {/* Issue Section */}
+          <ReportBlock title="Issue" icon={<span className="text-lg">ℹ️</span>}>
+            <div className="space-y-2">
+              <ReportRichText text={data.summary} />
+            </div>
+          </ReportBlock>
+
+          {/* Why It Matters Section */}
+          <div className="border-t border-border/40 pt-4">
+            <ReportBlock title="Why it Matters" icon={<span className="text-lg">⚠️</span>}>
+              <div className="flex gap-2">
+                <span className="text-lg">🔴</span>
+                <ReportRichText text={report.impact} />
+              </div>
+            </ReportBlock>
+          </div>
+
+          {/* What to Change Section */}
+          <div className="border-t border-border/40 pt-4">
+            <ReportBlock title="What to Change" icon={<span className="text-lg">🔧</span>}>
+              <ReportRichText text={data.developerFix} />
+            </ReportBlock>
+          </div>
+
+          {/* Verification Section */}
+          {data.verificationSteps.length > 0 && (
+            <div className="border-t border-border/40 pt-4">
+              <ReportBlock title="How to Validate" icon={<span className="text-lg">✓</span>}>
+                <ol className="space-y-2 list-decimal pl-5">
+                  {data.verificationSteps.map((step, i) => (
+                    <li key={i} className="text-sm text-muted-foreground">
+                      <ReportRichText text={step} />
+                    </li>
+                  ))}
+                </ol>
+              </ReportBlock>
+            </div>
+          )}
+
+          {/* Suggested Patch Section */}
+          {data.optionalUnifiedDiff && (
+            <div className="border-t border-border/40 pt-4">
+              <ReportBlock title="Suggested Patch (Diff)" icon={<span className="text-lg">📝</span>}>
+                <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono">
+                  {data.optionalUnifiedDiff}
+                </pre>
+              </ReportBlock>
+            </div>
+          )}
+        </>
+      ) : (
+        <ReportBlock title="Impact" icon={<span className="text-lg">⚠️</span>}>
+          <ReportRichText text={report.impact} />
+        </ReportBlock>
+      )}
+    </section>
+  );
+}
+
 function PatternMatchReport({ finding }: { finding: Finding }) {
   const body = stripGeneratedSections(finding.description);
   return (
@@ -289,48 +544,132 @@ function ReportRichText({ text }: { text: string }) {
 
 function ReportPlainList({ items }: { items: string[] }) {
   return (
-    <div className="space-y-3">
+    <ol className="space-y-3 list-none">
       {items.map((step, index) => (
-        <p key={index} className="text-sm leading-relaxed text-muted-foreground">
-          <ReportRichText text={step} />
-        </p>
+        <li key={index} className="flex gap-3">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary shrink-0">
+            {index + 1}
+          </span>
+          <div className="pt-0.5 min-w-0">
+            <ReportRichText text={step} />
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function FindingMetadataGrid({ finding }: { finding: Finding }) {
+  const metadata = finding.metadata as Record<string, unknown> | undefined;
+  const details: Array<{ label: string; value: string | React.ReactNode }> = [];
+
+  if (finding.filePath) {
+    details.push({ label: "File", value: finding.filePath });
+  }
+
+  if (metadata?.endpoint) {
+    details.push({ label: "Endpoint", value: String(metadata.endpoint) });
+  }
+
+  if (finding.severity) {
+    details.push({ label: "Severity", value: finding.severity });
+  }
+
+  if (metadata?.category || metadata?.vulnerabilityClass) {
+    details.push({
+      label: "Category",
+      value: String(metadata.category || metadata.vulnerabilityClass),
+    });
+  }
+
+  if (finding.ruleId) {
+    details.push({ label: "Rule ID", value: finding.ruleId });
+  }
+
+  if (metadata?.cweCategory || metadata?.weaknessClass) {
+    details.push({
+      label: "Weakness Class",
+      value: String(metadata.cweCategory || metadata.weaknessClass),
+    });
+  }
+
+  if (details.length === 0) return null;
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      {details.map((detail, idx) => (
+        <div
+          key={idx}
+          className="rounded-lg border border-border/60 bg-muted/30 p-3"
+        >
+          <p className="text-xs font-medium text-muted-foreground">{detail.label}</p>
+          <p className="mt-1 break-words text-sm font-semibold text-foreground">
+            {detail.value}
+          </p>
+        </div>
       ))}
     </div>
   );
 }
 
-function FindingReportSections({ finding }: { finding: Finding }) {
+interface AiSuggestFixResponse {
+  summary: string;
+  developerFix: string;
+  verificationSteps: string[];
+  optionalUnifiedDiff: string | null;
+}
+
+function FindingReportSections({ finding, sourceContext }: { finding: Finding; sourceContext?: FindingScanSourceContext }) {
   if (isPatternBasedScanner(finding.scanner)) {
     return <PatternMatchReport finding={finding} />;
+  }
+
+  const isSecret = finding.scanner?.startsWith("SECRETS");
+  if (isSecret) {
+    return <SecretFindingReport finding={finding} />;
+  }
+
+  const isSca = finding.scanner === "SCA";
+  if (isSca) {
+    return <ScaFindingReport finding={finding} />;
+  }
+
+  const isIac = finding.scanner === "IAC";
+  if (isIac && sourceContext?.scanId) {
+    return <IacFindingReport finding={finding} scanId={sourceContext.scanId} />;
   }
 
   const report = buildStoredFindingReport(finding);
 
   return (
-    <section className="finding-detail-report interactive-card min-w-0 max-w-full space-y-4 overflow-hidden p-4">
-      <ReportBlock title="Bug / Vulnerability Name">
-        <p className="break-words text-base font-semibold leading-snug">
+    <section className="finding-detail-report interactive-card min-w-0 max-w-full space-y-6 overflow-hidden p-4">
+      <FindingMetadataGrid finding={finding} />
+
+      <div className="border-t border-border/40 pt-6">
+        <h2 className="text-lg font-bold text-foreground mb-4">
           {stripReportMarkdown(report.vulnerabilityName)}
-        </p>
-      </ReportBlock>
+        </h2>
 
-      <ReportBlock title="Summary">
-        <ReportSummaryText text={report.summary} />
-      </ReportBlock>
+        <div className="space-y-6">
+          <ReportBlock title="Summary" icon="📋">
+            <ReportSummaryText text={report.summary} />
+          </ReportBlock>
 
-      {report.stepsToReproduce.length > 0 && (
-        <ReportBlock title="Steps to Reproduce">
-          <ReportPlainList items={report.stepsToReproduce} />
-        </ReportBlock>
-      )}
+          {report.stepsToReproduce.length > 0 && (
+            <ReportBlock title="Steps to Reproduce" icon="🔧">
+              <ReportPlainList items={report.stepsToReproduce} />
+            </ReportBlock>
+          )}
 
-      <ReportBlock title="Impact">
-        <ReportRichText text={report.impact} />
-      </ReportBlock>
+          <ReportBlock title="Impact" icon="⚠️">
+            <ReportRichText text={report.impact} />
+          </ReportBlock>
 
-      <ReportBlock title="Remediation">
-        <ReportPlainList items={report.remediation} />
-      </ReportBlock>
+          <ReportBlock title="Remediation" icon="🔒">
+            <ReportPlainList items={report.remediation} />
+          </ReportBlock>
+        </div>
+      </div>
     </section>
   );
 }
@@ -338,14 +677,19 @@ function FindingReportSections({ finding }: { finding: Finding }) {
 function ReportBlock({
   title,
   children,
+  icon,
 }: {
   title: string;
   children: ReactNode;
+  icon?: React.ReactNode;
 }) {
   return (
-    <div className="space-y-2">
-      <p className="text-sm font-bold text-foreground">{title}</p>
-      {children}
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        {icon && <span className="text-lg">{icon}</span>}
+        <h3 className="text-base font-bold text-foreground">{title}</h3>
+      </div>
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }
@@ -591,7 +935,7 @@ function FindingActionButtons({
   sourceContext?: FindingScanSourceContext;
 }) {
   return (
-    <div className="flex min-w-0 max-w-full flex-wrap gap-2">
+    <div className="flex min-w-0 w-full flex-wrap gap-2">
       <CopyReportButton finding={finding} />
       <CopyAiPromptButton finding={finding} sourceContext={sourceContext} tool="claude" />
       <CopyAiPromptButton finding={finding} sourceContext={sourceContext} tool="cursor" />
@@ -1022,9 +1366,9 @@ export function FindingDetailPanel({
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full max-w-[100vw] overflow-x-hidden p-0 sm:max-w-2xl">
+      <SheetContent className="w-full max-w-[100vw] overflow-x-hidden flex flex-col p-0 sm:max-w-2xl">
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-background border-b px-6 py-4">
+        <div className="sticky top-0 z-10 bg-background border-b px-4 py-4 sm:px-6">
           <SheetHeader className="space-y-3">
             <div className="flex items-center gap-2 flex-wrap">
               <SeverityBadge severity={finding.severity} />
@@ -1034,37 +1378,41 @@ export function FindingDetailPanel({
                 ] || finding.scanner}
               </Badge>
             </div>
-            <SheetTitle className="text-left text-lg leading-tight">
+            <SheetTitle className="text-left text-lg leading-tight break-words">
               {finding.title}
             </SheetTitle>
             <FindingLocationRow finding={finding} sourceContext={sourceContext} />
             {/* Status Control */}
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <FindingActionButtons finding={finding} sourceContext={sourceContext} />
-              <span className="text-xs text-muted-foreground">Status:</span>
-              <Select
-                value={finding.status || "OPEN"}
-                onValueChange={handleStatusChange}
-              >
-                <SelectTrigger className="h-7 w-[160px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FINDING_STATUSES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      <span
-                        className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${s.color}`}
-                      >
-                        {s.label}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:flex-wrap">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <FindingActionButtons finding={finding} sourceContext={sourceContext} />
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-muted-foreground shrink-0">Status:</span>
+                <Select
+                  value={finding.status || "OPEN"}
+                  onValueChange={handleStatusChange}
+                >
+                  <SelectTrigger className="h-7 w-full sm:w-[140px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FINDING_STATUSES.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
+                        <span
+                          className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${s.color}`}
+                        >
+                          {s.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <SheetDescription className="text-left flex items-center gap-3 flex-wrap">
+            <SheetDescription className="text-left flex items-center gap-2 flex-wrap text-xs">
               {finding.ruleId && (
-                <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                <code className="bg-muted px-1.5 py-0.5 rounded break-all">
                   {finding.ruleId}
                 </code>
               )}
@@ -1073,10 +1421,10 @@ export function FindingDetailPanel({
                   href={getCweUrl(finding.cweId)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                  className="text-blue-600 hover:underline flex items-center gap-1 shrink-0"
                 >
                   {finding.cweId}
-                  <ExternalLink className="h-3 w-3" />
+                  <ExternalLink className="h-3 w-3 shrink-0" />
                 </a>
               )}
               {finding.cveId && (
@@ -1084,20 +1432,19 @@ export function FindingDetailPanel({
                   href={getCveUrl(finding.cveId)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                  className="text-blue-600 hover:underline flex items-center gap-1 shrink-0"
                 >
                   {finding.cveId}
-                  <ExternalLink className="h-3 w-3" />
+                  <ExternalLink className="h-3 w-3 shrink-0" />
                 </a>
               )}
             </SheetDescription>
           </SheetHeader>
         </div>
 
-        <ScrollArea className="h-[calc(100vh-10rem)] w-full">
-          <div className="min-w-0 space-y-5 overflow-hidden px-6 py-5">
-            <FindingReportSections finding={finding} />
-
+        <ScrollArea className="flex-1 w-full min-h-0">
+          <div className="min-w-0 space-y-5 overflow-hidden px-4 py-5 sm:px-6">
+            <FindingReportSections finding={finding} sourceContext={sourceContext} />
           </div>
         </ScrollArea>
       </SheetContent>
@@ -1130,9 +1477,9 @@ export function FindingDetailInline({
   };
 
   return (
-    <div className="finding-detail-inline min-w-0 w-full max-w-full overflow-hidden rounded-xl border bg-card shadow-sm">
+    <div className="finding-detail-inline min-w-0 w-full max-w-full overflow-hidden rounded-xl border bg-card shadow-sm flex flex-col">
       <div className="min-w-0 border-b px-4 py-4 sm:px-5">
-        <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
           <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <SeverityBadge severity={finding.severity} />
@@ -1154,7 +1501,7 @@ export function FindingDetailInline({
                   className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
                 >
                   {finding.cweId}
-                  <ExternalLink className="h-3 w-3" />
+                  <ExternalLink className="h-3 w-3 shrink-0" />
                 </a>
               )}
               {finding.cveId && (
@@ -1165,7 +1512,7 @@ export function FindingDetailInline({
                   className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
                 >
                   {finding.cveId}
-                  <ExternalLink className="h-3 w-3" />
+                  <ExternalLink className="h-3 w-3 shrink-0" />
                 </a>
               )}
             </div>
@@ -1174,13 +1521,15 @@ export function FindingDetailInline({
             </h3>
             <FindingLocationRow finding={finding} sourceContext={sourceContext} />
           </div>
-          <div className="flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2">
-            <FindingActionButtons finding={finding} sourceContext={sourceContext} />
+          <div className="flex min-w-0 w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-nowrap lg:justify-end lg:shrink-0">
+            <div className="min-w-0 flex-1 lg:flex-1 basis-full lg:basis-auto">
+              <FindingActionButtons finding={finding} sourceContext={sourceContext} />
+            </div>
             <Select
               value={finding.status || "OPEN"}
               onValueChange={handleStatusChange}
             >
-              <SelectTrigger className="h-8 w-[160px] text-xs">
+              <SelectTrigger className="h-8 w-full min-w-fit lg:w-[140px] text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1199,8 +1548,8 @@ export function FindingDetailInline({
         </div>
       </div>
 
-      <div className="min-w-0 w-full max-w-full space-y-5 overflow-hidden p-4 sm:p-5">
-        <FindingReportSections finding={finding} />
+      <div className="min-w-0 flex-1 overflow-y-auto space-y-5 p-4 sm:p-5">
+        <FindingReportSections finding={finding} sourceContext={sourceContext} />
       </div>
     </div>
   );

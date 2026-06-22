@@ -340,23 +340,7 @@ function buildSteps(input: {
   }
 
   if (family === "secrets") {
-    const fp = input.finding.filePath || "the reported file";
-    const start = input.finding.startLine ?? 1;
-    const end = Math.max(
-      input.finding.endLine ?? start,
-      start + 2,
-    );
-    const sedRange = `${start},${end}`;
-    const loc =
-      location || (input.finding.startLine != null ? `${fp}:${start}` : fp);
-    return [
-      `From your repository root in a terminal, run: sed -n '${sedRange}p' ${fp.includes(" ") ? `"${fp}"` : fp}`,
-      "Observe the output and confirm it contains a secret-like value (API key, token, password, private key, encryption key, database credential, etc.).",
-      "Check if this value is active in your accounts, services, or vault systems. Do NOT attempt to use the credential against external systems.",
-      `If the secret is confirmed real and active, immediately revoke or rotate it in the owning service (e.g., regenerate API keys, reset passwords, revoke tokens).`,
-      `Remove the credential from ${loc} and ensure the file uses a secret manager (env vars, .env files excluded from git, HashiCorp Vault, AWS Secrets Manager, etc.) instead.`,
-      `Verify the fix by running: git log -p ${fp} | grep -i "secret\\|password\\|key\\|token" to check if the value was previously committed. If so, use git-filter-branch or BFG Repo-Cleaner to purge it from history.`,
-    ];
+    return [];
   }
 
   if (family === "iac") {

@@ -231,7 +231,7 @@ export function RepositoryInventory({
                   <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Last scan
                   </TableHead>
-                  <TableHead className="w-[120px] text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <TableHead className="w-[160px] text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Actions
                   </TableHead>
                 </TableRow>
@@ -271,9 +271,9 @@ export function RepositoryInventory({
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <span className="inline-flex items-center gap-1 font-mono text-xs text-slate-600">
-                          <GitBranch className="h-3 w-3 text-slate-400" />
-                          {repo.branch}
+                        <span className="inline-flex items-center gap-1 font-mono text-xs text-slate-600 truncate max-w-xs" title={repo.branch}>
+                          <GitBranch className="h-3 w-3 text-slate-400 shrink-0" />
+                          <span className="truncate">{repo.branch}</span>
                         </span>
                       </TableCell>
                       <TableCell>
@@ -298,12 +298,12 @@ export function RepositoryInventory({
                         {formatLastScan(repo.lastScanAt)}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1.5 shrink-0">
                           {repo.scanId && (
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-8 gap-1 border-slate-200 text-xs"
+                              className="h-8 gap-1 border-slate-200 text-xs whitespace-nowrap"
                               disabled={
                                 rescanningId === (repo.scanId ?? repo.projectId)
                               }
@@ -311,13 +311,13 @@ export function RepositoryInventory({
                             >
                               <RotateCcw
                                 className={cn(
-                                  "h-3 w-3",
+                                  "h-3 w-3 shrink-0",
                                   rescanningId ===
                                     (repo.scanId ?? repo.projectId) &&
                                     "animate-spin",
                                 )}
                               />
-                              Rescan
+                              <span className="hidden sm:inline">Rescan</span>
                             </Button>
                           )}
                           <DropdownMenu>
@@ -325,7 +325,7 @@ export function RepositoryInventory({
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500"
+                                className="h-8 w-8 text-slate-500 shrink-0"
                               >
                                 <MoreHorizontal className="h-4 w-4" />
                                 <span className="sr-only">Actions</span>

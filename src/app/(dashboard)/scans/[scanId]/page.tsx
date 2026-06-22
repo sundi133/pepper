@@ -964,12 +964,12 @@ function computeEta(
   }
 
   const progressFraction = progress / 100;
-  // Perfect formula: if we're at P% done in E seconds,
-  // total time = E / P, so remaining = (E / P) - E = E * (1 - P) / P
-  const remainingSec = Math.round((elapsedSec / progressFraction) - elapsedSec);
+  // Formula: if we're at P% done in E seconds,
+  // remaining time = E * (1 - P) / P
+  const remainingSec = Math.round((elapsedSec * (1 - progressFraction)) / progressFraction);
 
   // Clamp to reasonable values
-  if (remainingSec <= 0) {
+  if (remainingSec < 0) {
     return { elapsedText, etaText: "Almost done...", fileProgressText };
   }
 

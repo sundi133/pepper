@@ -340,14 +340,7 @@ function buildSteps(input: {
   }
 
   if (family === "secrets") {
-    return [
-      "Inspect the reported file in a safe local or test environment.",
-      "Confirm the scanner evidence contains a secret-like value or credential assignment.",
-      "Verify whether the value is active only through the owning account, organization settings, or approved secret management system. Do not attempt to use the credential.",
-      location
-        ? `Confirm the finding maps to ${location}.`
-        : "Confirm the finding maps to the reported source location.",
-    ];
+    return [];
   }
 
   if (family === "iac") {

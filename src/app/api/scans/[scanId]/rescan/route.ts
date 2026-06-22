@@ -72,7 +72,15 @@ export async function POST(
       : originalScan.branch || undefined;
 
   const { removeAllScansForProject } = await import("@/lib/remove-project-scans");
-  await removeAllScansForProject(projectId);
+  try {
+    await removeAllScansForProject(projectId);
+  } catch (err) {
+    console.error("Failed to remove old scans during rescan:", err);
+    return NextResponse.json(
+      { error: "Failed to prepare project for rescan. Please try again." },
+      { status: 500 },
+    );
+  }
 
   const scan = await prisma.scan.create({
     data: {

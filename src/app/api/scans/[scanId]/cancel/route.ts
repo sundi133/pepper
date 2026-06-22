@@ -45,8 +45,8 @@ export async function POST(
       if (job) {
         await job.remove();
       }
-    } catch {
-      // Job might already be processing
+    } catch (err) {
+      // Job might already be processing or Redis key expired
     }
   }
 

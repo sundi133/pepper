@@ -958,8 +958,20 @@ function computeEta(
     return { elapsedText, etaText: "Estimating...", fileProgressText };
   }
 
-  const fraction = progress / 100;
-  const remainingSec = Math.round((elapsedSec / fraction) * (1 - fraction));
+  // Prevent division by zero and near-completion edge cases
+  if (progress >= 99) {
+    return { elapsedText, etaText: "Almost done...", fileProgressText };
+  }
+
+  const progressFraction = progress / 100;
+  // Formula: if we're at P% done in E seconds,
+  // remaining time = E * (1 - P) / P
+  const remainingSec = Math.round((elapsedSec * (1 - progressFraction)) / progressFraction);
+
+  // Clamp to reasonable values
+  if (remainingSec < 0) {
+    return { elapsedText, etaText: "Almost done...", fileProgressText };
+  }
 
   if (remainingSec < 60) {
     return { elapsedText, etaText: "< 1 min remaining", fileProgressText };

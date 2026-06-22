@@ -138,24 +138,25 @@ export default function ProjectDetailPage() {
           { label: project.name as string },
         ]}
       />
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold">{project.name as string}</h1>
-          <p className="text-muted-foreground">
+      <div className="flex flex-col gap-4 sm:items-center sm:justify-between sm:flex-row">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold truncate">{project.name as string}</h1>
+          <p className="text-muted-foreground line-clamp-2">
             {(project.description as string) || "No description"}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 shrink-0">
+        <div className="flex flex-wrap gap-2 shrink-0 self-end sm:self-auto">
           <Button
             variant="destructive"
             disabled={deleting}
             onClick={() => setProjectDeleteOpen(true)}
+            className="whitespace-nowrap"
           >
             <Trash2 className="mr-2 h-4 w-4" />
             Delete
           </Button>
           <Link href={`/projects/${projectId}/settings`}>
-            <Button variant="outline">
+            <Button variant="outline" className="whitespace-nowrap">
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </Button>
@@ -220,21 +221,19 @@ export default function ProjectDetailPage() {
               project).
             </p>
           ) : (
-            <div className="flex flex-col gap-4 rounded-lg border border-border/60 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 space-y-2">
+            <div className="flex flex-col gap-4 rounded-lg border border-border/60 bg-muted/20 p-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
                     href={`/scans/${scan.id as string}`}
-                    className="font-semibold text-foreground hover:text-primary hover:underline"
+                    className="font-semibold text-foreground hover:text-primary hover:underline truncate"
                   >
                     {scan.scanType as string}
                   </Link>
                   <ScanStatusBadge status={scan.status as string} />
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Branch: {(scan.branch as string) || "—"} · Files scanned:{" "}
-                  {scan.filesScanned as number} ·{" "}
-                  {new Date(scan.createdAt as string).toLocaleString()}
+                <p className="text-sm text-muted-foreground break-words">
+                  <span className="inline-block">Branch: <span className="font-mono truncate">{(scan.branch as string) || "—"}</span></span> · <span className="inline-block">Files scanned: {scan.filesScanned as number}</span> · <span className="inline-block whitespace-nowrap">{new Date(scan.createdAt as string).toLocaleString()}</span>
                 </p>
                 <p className="text-sm">
                   Findings:{" "}
@@ -257,7 +256,7 @@ export default function ProjectDetailPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="shrink-0"
+                    className="shrink-0 self-start sm:self-center"
                     disabled={
                       deletingScanId === (scan.id as string) ||
                       scan.status === "RUNNING" ||

@@ -484,10 +484,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
       scaFileList,
       scanType,
       scanId,
-      orgSettings: {
-        ...orgSettings,
-        dastTargetUrl: job.data.dastTargetUrl || orgSettings.dastTargetUrl,
-      },
+      orgSettings,
       signal: abortController.signal,
       waitIfPaused: assertScanActive,
       onProgress: async (msg) => {

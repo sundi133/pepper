@@ -25,6 +25,11 @@ import { csprojParser, packagesConfigParser } from "./parsers/csproj";
 import { pubspecYamlParser } from "./parsers/pubspec-yaml";
 import { mixLockParser } from "./parsers/mix-lock";
 import { swiftPackageResolvedParser } from "./parsers/swift-package";
+import { parsePoetryLock } from "./parsers/poetry-lock";
+import { parsePnpmLock } from "./parsers/pnpm-lock";
+import { parsCargoLock } from "./parsers/cargo-lock";
+import { parseGoSum } from "./parsers/go-sum";
+import { parseYarnLock } from "./parsers/yarn-lock";
 import { queryOsvBatch } from "./osv-client";
 import { triageScaFindings } from "./triage";
 
@@ -32,14 +37,39 @@ const ALL_PARSERS: DependencyParser[] = [
   // JavaScript/TypeScript
   packageLockParser,
   packageJsonParser,
+  {
+    filePatterns: ["yarn.lock"],
+    ecosystem: "npm",
+    parse: (content: string) => parseYarnLock(content),
+  } as DependencyParser,
+  {
+    filePatterns: ["pnpm-lock.yaml"],
+    ecosystem: "npm",
+    parse: (content: string) => parsePnpmLock(content),
+  } as DependencyParser,
   // Python
   requirementsTxtParser,
   pipfileLockParser,
   pyprojectTomlParser,
+  {
+    filePatterns: ["poetry.lock"],
+    ecosystem: "pip",
+    parse: (content: string) => parsePoetryLock(content),
+  } as DependencyParser,
   // Go
   goModParser,
+  {
+    filePatterns: ["go.sum"],
+    ecosystem: "go",
+    parse: (content: string) => parseGoSum(content),
+  } as DependencyParser,
   // Rust
   cargoTomlParser,
+  {
+    filePatterns: ["Cargo.lock"],
+    ecosystem: "cargo",
+    parse: (content: string) => parsCargoLock(content),
+  } as DependencyParser,
   // Java/Kotlin/Scala
   pomXmlParser,
   buildGradleParser,

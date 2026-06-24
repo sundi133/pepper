@@ -319,7 +319,7 @@ function CreateRuleDialog({
           <div>
             <Label>Scanner (optional)</Label>
             <Input
-              placeholder="e.g. SAST_PATTERN, SCA, IAC"
+              placeholder="e.g. SAST_LLM, SCA, IAC"
               value={form.scanner}
               onChange={(e) => setForm({ ...form, scanner: e.target.value })}
             />

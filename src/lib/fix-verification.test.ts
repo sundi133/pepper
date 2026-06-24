@@ -6,7 +6,7 @@ import { findingFingerprint } from "./fix-verification";
 // logic that drives matching.
 
 const base = {
-  scanner: "SAST_PATTERN",
+  scanner: "SAST_LLM",
   ruleId: "no-eval",
   cweId: "CWE-78",
   cveId: null,
@@ -41,8 +41,8 @@ describe("findingFingerprint", () => {
   });
 
   it("differentiates findings by scanner", () => {
-    const a = findingFingerprint({ ...base, scanner: "SAST_PATTERN" });
-    const b = findingFingerprint({ ...base, scanner: "SAST_LLM" });
+    const a = findingFingerprint({ ...base, scanner: "SAST_LLM" });
+    const b = findingFingerprint({ ...base, scanner: "SECRETS_LLM" });
     expect(a).not.toBe(b);
   });
 

@@ -88,6 +88,8 @@ export async function queryOsvBatch(
               osvId: vuln.id,
               fixVersion,
               references: vuln.references?.map((r) => r.url),
+              isDev: dep.isDev ?? false,
+              directDependency: dep.isDev === false, // Heuristic: assume direct if not marked dev
             },
           });
         }

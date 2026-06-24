@@ -15,7 +15,7 @@ export const SEVERITY_COLORS = {
 } as const;
 
 /** Pattern-only findings: no synthetic LLM-style report blocks. */
-export const PATTERN_BASED_SCANNERS = new Set(["SAST_PATTERN", "SECRETS_PATTERN"]);
+export const PATTERN_BASED_SCANNERS = new Set(["SECRETS_PATTERN"]);
 
 export function isPatternBasedScanner(scanner: string | undefined): boolean {
   if (!scanner) return false;
@@ -23,7 +23,6 @@ export function isPatternBasedScanner(scanner: string | undefined): boolean {
 }
 
 export const SCANNER_LABELS = {
-  SAST_PATTERN: "SAST (Pattern)",
   SAST_LLM: "SAST (AI)",
   SCA: "SCA",
   SECRETS_PATTERN: "Secrets (Pattern)",

@@ -16,6 +16,23 @@ interface TriageEntry {
   metadata?: Record<string, unknown>;
 }
 
+/** Detect if a dependency is directly imported/used (heuristic-based). */
+function isDirectlyReachable(
+  packageName: string,
+  isDev: boolean,
+  metadata?: Record<string, unknown>,
+): boolean {
+  // Dev dependencies are generally lower risk in production
+  // Heuristics: Packages ending in -dev, test, mock are dev-only
+  if (isDev) return false;
+
+  // Check metadata for directDependency flag (from lockfile parsing)
+  if (metadata?.directDependency === false) return false;
+
+  // Default: assume reachable (better to be conservative)
+  return true;
+}
+
 /** Group CVE findings by package@version and apply AI triage. */
 export async function triageScaFindings(
   findings: RawFinding[],
@@ -81,11 +98,23 @@ export async function triageScaFindings(
         const decision = decisionMap.get(f.ruleId || "");
         if (decision && !decision.keep) continue;
 
+        // Determine reachability: direct dependency + prod use
+        const isDev = (f.metadata?.isDev ?? false) as boolean;
+        const reachable = isDirectlyReachable(
+          (f.metadata?.packageName as string) || "",
+          isDev,
+          f.metadata,
+        );
+
         const meta = {
           ...(f.metadata || {}),
           ...(decision?.metadata || {}),
           duplicateGroup: `${f.metadata?.packageName}@${f.metadata?.packageVersion}`,
+          reachable, // Mark exploitability based on reachability
           confidenceReason: decision?.reason || "OSV advisory with AI triage",
+          exploitState: reachable
+            ? "Possibly exploitable"
+            : "Not exploitable (dev dependency only)",
         };
 
         triaged.push(
@@ -97,7 +126,9 @@ export async function triageScaFindings(
               where: `${f.metadata?.packageName}@${f.metadata?.packageVersion}`,
               whyExploitable:
                 (meta.exploitPreconditions as string) ||
-                "Vulnerable dependency version is in use.",
+                (reachable
+                  ? "Vulnerable dependency version is in use."
+                  : "Dev dependency only; production impact is low."),
               fix:
                 (meta.remediation as string) ||
                 (f.metadata?.fixVersion

@@ -30,6 +30,11 @@ const DEFAULT_SETTINGS = {
   hasApiKey: false,
   enableLlmSast: true,
   enableLlmSecrets: true,
+  enableLlmPrDiff: false,
+  enableLlmSca: false,
+  enableLlmIac: false,
+  enableLlmZeroDay: false,
+  enableLlmContainer: false,
   osvApiUrl: "https://api.osv.dev",
   vulnDbMode: "online",
 };
@@ -43,21 +48,40 @@ export default function LlmSettingsPage() {
   useEffect(() => {
     fetch("/api/settings/llm")
       .then((res) => res.json())
-      .then((data) => setSettings((s) => ({ ...s, ...data })));
+      .then((data) => {
+        const mergedSettings: LlmSettings = {
+          ...DEFAULT_SETTINGS,
+          ...data,
+        };
+        setSettings(mergedSettings);
+      });
   }, []);
 
   async function saveSettings(nextSettings: LlmSettings, silent = false) {
     setLoading(true);
     try {
+      // Don't send hasApiKey or empty llmApiKey to API
+      const { hasApiKey, ...dataToSend } = nextSettings as any;
+      const payload = {
+        ...dataToSend,
+        llmApiKey: (dataToSend.llmApiKey || "") === "" ? "" : dataToSend.llmApiKey,
+      };
+
       const res = await fetch("/api/settings/llm", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nextSettings),
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("Failed to save");
+      const data = await res.json();
+      if (!res.ok) {
+        const error = data?.error || "Failed to save";
+        throw new Error(error);
+      }
       if (!silent) toast.success("Settings saved");
-    } catch {
-      toast.error("Failed to save settings");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to save settings";
+      console.error("Save error:", message, error);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -69,7 +93,7 @@ export default function LlmSettingsPage() {
 
   async function updateSettings(
     patch: Partial<
-      Pick<LlmSettings, "enableLlmSast" | "enableLlmSecrets" | "vulnDbMode">
+      Pick<LlmSettings, "enableLlmSast" | "enableLlmSecrets" | "enableLlmPrDiff" | "enableLlmSca" | "enableLlmIac" | "enableLlmZeroDay" | "enableLlmContainer" | "vulnDbMode" | "osvApiUrl">
     >,
   ) {
     const nextSettings = { ...settings, ...patch };
@@ -298,6 +322,76 @@ export default function LlmSettingsPage() {
               onCheckedChange={(v) => updateSettings({ enableLlmSecrets: v })}
             />
           </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Enable LLM for PR Diff</Label>
+              <p className="text-sm text-muted-foreground">
+                Use AI to analyze changes in pull requests
+              </p>
+            </div>
+            <Switch
+              checked={settings.enableLlmPrDiff}
+              disabled={loading}
+              onCheckedChange={(v) => updateSettings({ enableLlmPrDiff: v })}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Enable LLM for SCA</Label>
+              <p className="text-sm text-muted-foreground">
+                Use AI for supply chain and dependency analysis
+              </p>
+            </div>
+            <Switch
+              checked={settings.enableLlmSca}
+              disabled={loading}
+              onCheckedChange={(v) => updateSettings({ enableLlmSca: v })}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Enable LLM for IaC</Label>
+              <p className="text-sm text-muted-foreground">
+                Use AI to analyze Infrastructure as Code configurations
+              </p>
+            </div>
+            <Switch
+              checked={settings.enableLlmIac}
+              disabled={loading}
+              onCheckedChange={(v) => updateSettings({ enableLlmIac: v })}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Enable LLM for Zero-Day</Label>
+              <p className="text-sm text-muted-foreground">
+                Use AI for advanced zero-day and business logic vulnerability detection
+              </p>
+            </div>
+            <Switch
+              checked={settings.enableLlmZeroDay}
+              disabled={loading}
+              onCheckedChange={(v) => updateSettings({ enableLlmZeroDay: v })}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Enable LLM for Container</Label>
+              <p className="text-sm text-muted-foreground">
+                Use AI to analyze container images and configurations
+              </p>
+            </div>
+            <Switch
+              checked={settings.enableLlmContainer}
+              disabled={loading}
+              onCheckedChange={(v) => updateSettings({ enableLlmContainer: v })}
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -330,19 +424,56 @@ export default function LlmSettingsPage() {
                 </SelectItem>
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground mt-2">
+              {settings.vulnDbMode === "online" && (
+                <>
+                  <span className="font-semibold">Online:</span> Fetches real-time vulnerability data from OSV.dev. Requires internet connection. Recommended for most deployments.
+                </>
+              )}
+              {settings.vulnDbMode === "mirror" && (
+                <>
+                  <span className="font-semibold">Mirrored:</span> Uses a self-hosted copy of the vulnerability database. Requires you to set up and maintain your own database mirror.
+                </>
+              )}
+              {settings.vulnDbMode === "offline" && (
+                <>
+                  <span className="font-semibold">Offline:</span> Disables vulnerability database lookups. SCA scans will report dependencies without checking for known vulnerabilities.
+                </>
+              )}
+            </p>
           </div>
 
-          <div className="space-y-2">
-            <Label>OSV API URL</Label>
-            <Input
-              value={settings.osvApiUrl}
-              disabled={settings.vulnDbMode === "offline"}
-              onChange={(e) =>
-                setSettings((s) => ({ ...s, osvApiUrl: e.target.value }))
-              }
-              placeholder="https://api.osv.dev"
-            />
-          </div>
+          {settings.vulnDbMode !== "offline" && (
+            <div className="space-y-2">
+              <Label>
+                {settings.vulnDbMode === "online" ? "OSV" : "Database"} API URL
+              </Label>
+              <Input
+                value={settings.osvApiUrl}
+                disabled={loading}
+                onChange={(e) => {
+                  const newUrl = e.target.value;
+                  setSettings((s) => ({ ...s, osvApiUrl: newUrl }));
+                }}
+                onBlur={(e) => {
+                  const newUrl = e.target.value;
+                  if (newUrl && newUrl !== settings.osvApiUrl) {
+                    void updateSettings({ osvApiUrl: newUrl });
+                  }
+                }}
+                placeholder={
+                  settings.vulnDbMode === "online"
+                    ? "https://api.osv.dev"
+                    : "https://your-mirror.example.com"
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                {settings.vulnDbMode === "online"
+                  ? "Official OSV.dev API endpoint for fetching vulnerability data"
+                  : "URL of your self-hosted vulnerability database"}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -447,6 +447,11 @@ model OrgSettings {
   llmApiKey        String? @db.Text
   enableLlmSast    Boolean @default(true)
   enableLlmSecrets Boolean @default(true)
+  enableLlmPrDiff  Boolean @default(false)
+  enableLlmSca     Boolean @default(false)
+  enableLlmIac     Boolean @default(false)
+  enableLlmZeroDay Boolean @default(false)
+  enableLlmContainer Boolean @default(false)
   /** Fine-grained or classic PAT: contents + pull requests (repo scope for classic). Used only to open fix PRs. */
   githubPrToken    String? @db.Text
   osvApiUrl        String  @default("https://api.osv.dev")

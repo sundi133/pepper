@@ -55,7 +55,7 @@ export function buildRootCauseKey(f: RawFinding): string {
   return parts.join("|");
 }
 
-const SAST_LIKE_SCANNERS = new Set(["SAST_LLM", "ZERO_DAY", "SAST_PATTERN"]);
+const SAST_LIKE_SCANNERS = new Set(["SAST_LLM", "ZERO_DAY"]);
 
 export function areRootCauseDuplicates(a: RawFinding, b: RawFinding): boolean {
   if (buildRootCauseKey(a) === buildRootCauseKey(b)) return true;

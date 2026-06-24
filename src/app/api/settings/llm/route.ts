@@ -23,6 +23,11 @@ export async function GET() {
       hasApiKey: false,
       enableLlmSast: true,
       enableLlmSecrets: true,
+      enableLlmPrDiff: false,
+      enableLlmSca: false,
+      enableLlmIac: false,
+      enableLlmZeroDay: false,
+      enableLlmContainer: false,
       osvApiUrl: "https://api.osv.dev",
       vulnDbMode: "online",
     });
@@ -33,8 +38,13 @@ export async function GET() {
     llmBaseUrl: settings.llmBaseUrl,
     llmModel: settings.llmModel,
     hasApiKey: !!settings.llmApiKey,
-    enableLlmSast: settings.enableLlmSast,
-    enableLlmSecrets: settings.enableLlmSecrets,
+    enableLlmSast: settings.enableLlmSast ?? true,
+    enableLlmSecrets: settings.enableLlmSecrets ?? true,
+    enableLlmPrDiff: settings.enableLlmPrDiff ?? false,
+    enableLlmSca: settings.enableLlmSca ?? false,
+    enableLlmIac: settings.enableLlmIac ?? false,
+    enableLlmZeroDay: settings.enableLlmZeroDay ?? false,
+    enableLlmContainer: settings.enableLlmContainer ?? false,
     osvApiUrl: settings.osvApiUrl,
     vulnDbMode: settings.vulnDbMode,
   });
@@ -44,12 +54,17 @@ const updateSchema = z.object({
   llmProvider: z
     .enum(["ollama", "openai", "anthropic", "openrouter", "azure", "vllm", "custom"])
     .optional(),
-  llmBaseUrl: z.string().url().optional(),
+  llmBaseUrl: z.string().min(1).optional(),
   llmModel: z.string().min(1).optional(),
   llmApiKey: z.string().optional(),
   enableLlmSast: z.boolean().optional(),
   enableLlmSecrets: z.boolean().optional(),
-  osvApiUrl: z.string().url().optional(),
+  enableLlmPrDiff: z.boolean().optional(),
+  enableLlmSca: z.boolean().optional(),
+  enableLlmIac: z.boolean().optional(),
+  enableLlmZeroDay: z.boolean().optional(),
+  enableLlmContainer: z.boolean().optional(),
+  osvApiUrl: z.string().min(1).optional(),
   vulnDbMode: z.enum(["online", "mirror", "offline"]).optional(),
 });
 
@@ -65,17 +80,38 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const data = updateSchema.parse(body);
 
-    // Don't update llmApiKey if empty string (means "keep existing")
-    const updateData: Record<string, unknown> = { ...data };
-    if (data.llmApiKey === "") delete updateData.llmApiKey;
+    // Build updateData, filtering out empty values and undefined
+    const updateData: Record<string, unknown> = {};
+    Object.entries(data).forEach(([key, value]) => {
+      if (key === "llmApiKey" && value === "") {
+        // Skip empty llmApiKey (means "keep existing")
+        return;
+      }
+      if (value !== undefined) {
+        updateData[key] = value;
+      }
+    });
+
+    const createData = {
+      organizationId: orgId,
+      llmProvider: data.llmProvider ?? "openai",
+      llmBaseUrl: data.llmBaseUrl ?? "https://api.openai.com/v1",
+      llmModel: data.llmModel ?? "gpt-4o-mini",
+      enableLlmSast: data.enableLlmSast ?? true,
+      enableLlmSecrets: data.enableLlmSecrets ?? true,
+      enableLlmPrDiff: data.enableLlmPrDiff ?? false,
+      enableLlmSca: data.enableLlmSca ?? false,
+      enableLlmIac: data.enableLlmIac ?? false,
+      enableLlmZeroDay: data.enableLlmZeroDay ?? false,
+      enableLlmContainer: data.enableLlmContainer ?? false,
+      osvApiUrl: data.osvApiUrl ?? "https://api.osv.dev",
+      vulnDbMode: data.vulnDbMode ?? "online",
+    };
 
     await prisma.orgSettings.upsert({
       where: { organizationId: orgId },
       update: updateData,
-      create: {
-        organizationId: orgId,
-        ...updateData,
-      },
+      create: createData,
     });
 
     return NextResponse.json({ success: true });
@@ -86,6 +122,7 @@ export async function PUT(req: NextRequest) {
         { status: 400 },
       );
     }
+    console.error("Failed to update settings:", error);
     return NextResponse.json(
       { error: "Failed to update settings" },
       { status: 500 },

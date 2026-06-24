@@ -1,11 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { sastPatternScanner } from "./sast";
 import { secretsPatternScanner } from "./secrets";
 import { FindingDeduplicator, getScanners } from "./index";
 import { applyQualityGates } from "./shared/quality-gates";
 import { maskSecretValue, redactSensitiveText } from "./shared/evidence-redaction";
 import { buildRootCauseKey, areRootCauseDuplicates } from "./shared/dedupe";
-import { dastScanner } from "./dast";
 import { containerScanner } from "./container";
 import type { RawFinding } from "./types";
 import * as fs from "fs";
@@ -31,7 +29,6 @@ describe("scanner framework", () => {
   const llmOn = {
     enableLlmSast: true,
     enableLlmSecrets: true,
-    dastEnabled: true,
   };
 
   it("FULL includes IaC and zero-day when LLM SAST is enabled", () => {
@@ -55,7 +52,7 @@ describe("scanner framework", () => {
     expect(names).not.toContain("ZERO_DAY");
   });
 
-  it("pattern scanners never emit findings", async () => {
+  it("secrets pattern scanner never emits findings", async () => {
     const ctx = {
       workDir: "/tmp",
       fileList: ["src/index.ts"],
@@ -70,30 +67,9 @@ describe("scanner framework", () => {
         vulnDbMode: "offline" as const,
       },
     };
-    expect(await sastPatternScanner.scan(ctx)).toEqual([]);
     expect(await secretsPatternScanner.scan(ctx)).toEqual([]);
   });
 
-  it("scanner failure does not become finding (DAST unavailable)", async () => {
-    const findings = await dastScanner.scan({
-      workDir: "/tmp",
-      fileList: [],
-      scanType: "DAST_ONLY",
-      orgSettings: {
-        llmProvider: "openai",
-        llmBaseUrl: "",
-        llmModel: "",
-        enableLlmSast: false,
-        enableLlmSecrets: false,
-        osvApiUrl: "",
-        vulnDbMode: "offline",
-        dastEnabled: true,
-        dastTargetUrl: "https://example.com",
-        dastEndpoint: "http://127.0.0.1:1",
-      },
-    });
-    expect(findings.find((f) => f.ruleId === "DAST-UNAVAILABLE")).toBeUndefined();
-  });
 
   it("duplicate SAST and ZERO_DAY findings collapse", () => {
     const dedupe = new FindingDeduplicator();

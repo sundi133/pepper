@@ -29,7 +29,6 @@ const SCANNER_MULTIPLIER: Record<string, number> = {
   IAC:             0.85,
   ZERO_DAY:        0.85, // cross-file AI reasoning is speculative
   SCA:             0.80, // package is vulnerable but reachability unknown
-  SAST_PATTERN:    0.75, // pattern-based — highest FP rate
   CONTAINER:       0.75,
 };
 

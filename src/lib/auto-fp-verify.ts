@@ -58,14 +58,13 @@ export async function autoVerifyFalsePositives(
     return { analyzed: 0, marked: 0 };
   }
 
-  // Only verify SAST and secrets findings (pattern-based are most FP-prone)
+  // Only verify SAST and secrets findings
   const findings = await prisma.finding.findMany({
     where: {
       scanId,
       status: "OPEN",
       scanner: {
         in: [
-          "SAST_PATTERN",
           "SECRETS_PATTERN",
           "IAC",
           "SAST_LLM",

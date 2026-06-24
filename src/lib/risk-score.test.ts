@@ -5,7 +5,7 @@ describe("computeRiskScore", () => {
   it("returns a number between 1 and 100", () => {
     const cases = [
       { severity: "CRITICAL", scanner: "SECRETS_PATTERN", confidence: 0.95, filePath: "src/auth/login.ts" },
-      { severity: "INFO",     scanner: "SAST_PATTERN",    confidence: 0.2,  filePath: "src/__tests__/util.test.ts" },
+      { severity: "INFO",     scanner: "SAST_LLM",       confidence: 0.2,  filePath: "src/__tests__/util.test.ts" },
       { severity: "HIGH",     scanner: "SCA",             confidence: null, filePath: null },
       { severity: "MEDIUM",   scanner: "IAC",             confidence: 0.7,  filePath: "infra/terraform/main.tf" },
     ];
@@ -22,10 +22,10 @@ describe("computeRiskScore", () => {
     expect(critical).toBeGreaterThan(high);
   });
 
-  it("boosts secrets scanner over pattern SAST for same severity", () => {
+  it("boosts secrets scanner over SAST LLM for same severity", () => {
     const secret  = computeRiskScore({ severity: "HIGH", scanner: "SECRETS_PATTERN", confidence: 0.8, filePath: "src/config.ts" });
-    const pattern = computeRiskScore({ severity: "HIGH", scanner: "SAST_PATTERN",    confidence: 0.8, filePath: "src/config.ts" });
-    expect(secret).toBeGreaterThan(pattern);
+    const sast    = computeRiskScore({ severity: "HIGH", scanner: "SAST_LLM",        confidence: 0.8, filePath: "src/config.ts" });
+    expect(secret).toBeGreaterThan(sast);
   });
 
   it("penalises test file paths", () => {

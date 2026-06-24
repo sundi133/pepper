@@ -1,6 +1,5 @@
 export type SeverityLevel = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
 export type ScannerType =
-  | "SAST_PATTERN"
   | "SAST_LLM"
   | "SCA"
   | "SECRETS_PATTERN"
@@ -8,8 +7,7 @@ export type ScannerType =
   | "IAC"
   | "MALICIOUS_PKG"
   | "ZERO_DAY"
-  | "CONTAINER"
-  | "DAST";
+  | "CONTAINER";
 
 export interface ScanContext {
   workDir: string;
@@ -27,11 +25,6 @@ export interface ScanContext {
     osvApiUrl: string;
     vulnDbMode: "online" | "mirror" | "offline";
     orgId?: string;
-    dastEnabled?: boolean;
-    dastTargetUrl?: string;
-    dastEndpoint?: string;
-    dastApiKey?: string;
-    dastConfigYaml?: string;
   };
   scanId?: string;
   signal?: AbortSignal;

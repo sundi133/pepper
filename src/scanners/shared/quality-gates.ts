@@ -6,7 +6,7 @@ import {
   ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 
-const PATTERN_SCANNERS = new Set(["SAST_PATTERN", "SECRETS_PATTERN"]);
+const PATTERN_SCANNERS = new Set(["SECRETS_PATTERN"]);
 
 const FAILURE_RULE_IDS = new Set([
   "DAST-UNAVAILABLE",
@@ -33,7 +33,6 @@ function confidenceFloor(scanner: ScannerType): number {
     case "SAST_LLM":
     case "MALICIOUS_PKG":
     case "CONTAINER":
-    case "DAST":
     case "SCA":
       return LLM_MIN_CONFIDENCE_DEFAULT;
     default:
@@ -77,11 +76,6 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
       (!f.startLine || f.startLine < 1)
     ) {
       return false;
-    }
-
-    if (f.scanner === "DAST") {
-      const url = (f.metadata?.url as string) || f.filePath;
-      if (!url) return false;
     }
 
     if (f.scanner === "SCA" || f.scanner === "MALICIOUS_PKG") {

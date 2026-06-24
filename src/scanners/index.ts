@@ -6,7 +6,6 @@ import { iacScanner } from "./iac";
 import { maliciousPkgScanner } from "./sca/malicious-pkg";
 import { zeroDayScanner } from "./zero-day";
 import { containerScanner } from "./container";
-import { dastScanner } from "./dast";
 import {
   buildRootCauseKey,
   areRootCauseDuplicates,
@@ -19,7 +18,6 @@ export function getScanners(
   orgSettings: {
     enableLlmSast: boolean;
     enableLlmSecrets: boolean;
-    dastEnabled?: boolean;
   },
 ): ScannerPlugin[] {
   const scanners: ScannerPlugin[] = [];
@@ -33,7 +31,6 @@ export function getScanners(
   const includeIac = ["FULL", "IAC_ONLY"].includes(scanType);
   const includeZeroDay = ["FULL", "ZERO_DAY_ONLY"].includes(scanType);
   const includeContainer = ["FULL", "CONTAINER_ONLY"].includes(scanType);
-  const includeDast = ["FULL", "DAST_ONLY"].includes(scanType);
 
   if (includeSast && orgSettings.enableLlmSast) {
     scanners.push(sastLlmScanner);
@@ -58,10 +55,6 @@ export function getScanners(
 
   if (includeContainer) {
     scanners.push(containerScanner);
-  }
-
-  if (includeDast && orgSettings.dastEnabled) {
-    scanners.push(dastScanner);
   }
 
   return scanners;

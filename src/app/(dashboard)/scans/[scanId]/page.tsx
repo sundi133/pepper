@@ -72,7 +72,7 @@ const FINDING_SECTIONS = [
   {
     id: "SAST",
     title: "SAST Findings",
-    scanners: ["SAST_LLM", "SAST_PATTERN"],
+    scanners: ["SAST_LLM"],
     description: "Static application security findings",
   },
   {

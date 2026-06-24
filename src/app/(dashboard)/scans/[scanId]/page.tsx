@@ -135,7 +135,7 @@ export default function ScanDetailPage() {
   if (newOnlyFilter) filters.isNew = "true";
   if (sortBy !== "severity") filters.sort = sortBy;
 
-  const { findings, refresh: refreshFindings } = useFindings(
+  const { findings, pagination, refresh: refreshFindings } = useFindings(
     scanId,
     filters,
     scan?.status,
@@ -238,7 +238,7 @@ export default function ScanDetailPage() {
 
   const hasReportableFindings =
     scan.status === "COMPLETED" || scan.status === "STOPPED";
-  const totalFindings =
+  const totalFindings = pagination?.total ??
     scan.criticalCount +
     scan.highCount +
     scan.mediumCount +
@@ -246,8 +246,8 @@ export default function ScanDetailPage() {
     scan.infoCount;
   const visibleFindings = findings as Finding[];
   const visibleFindingCount =
-    visibleFindings.length === totalFindings
-      ? String(visibleFindings.length)
+    visibleFindings.length >= totalFindings
+      ? String(totalFindings)
       : `${visibleFindings.length} of ${totalFindings}`;
   const findingSections = groupFindingsBySection(visibleFindings);
 

@@ -96,8 +96,8 @@ export default function LlmSettingsPage() {
         <CardHeader>
           <CardTitle>LLM Provider</CardTitle>
           <CardDescription>
-            Supports Ollama, OpenAI, OpenRouter, Azure, vLLM, or any
-            OpenAI-compatible endpoint
+            Supports Ollama, OpenAI, Anthropic, OpenRouter, Azure, vLLM, or
+            any OpenAI-compatible endpoint
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -111,6 +111,10 @@ export default function LlmSettingsPage() {
                     openai: {
                       url: "https://api.openai.com/v1",
                       model: "gpt-4o-mini",
+                    },
+                    anthropic: {
+                      url: "https://api.anthropic.com/v1",
+                      model: "claude-sonnet-4-6",
                     },
                     openrouter: {
                       url: "https://openrouter.ai/api/v1",
@@ -147,6 +151,9 @@ export default function LlmSettingsPage() {
                   Ollama (Local, recommended)
                 </SelectItem>
                 <SelectItem value="openai">OpenAI</SelectItem>
+                <SelectItem value="anthropic">
+                  Anthropic (Claude)
+                </SelectItem>
                 <SelectItem value="openrouter">
                   OpenRouter (Multi-model)
                 </SelectItem>
@@ -202,6 +209,47 @@ export default function LlmSettingsPage() {
               Ollama runs locally — no API key needed. The model will be pulled
               automatically on first scan. Make sure the Ollama service is
               running (included in Docker Compose).
+            </div>
+          )}
+
+          {settings.llmProvider === "anthropic" && (
+            <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+              Anthropic provides Claude models for advanced code analysis. Get
+              your API key at{" "}
+              <a
+                href="https://console.anthropic.com/settings/keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                console.anthropic.com
+              </a>
+              . Models:{" "}
+              <code className="text-xs">claude-opus-4-6</code>,{" "}
+              <code className="text-xs">claude-sonnet-4-6</code>,{" "}
+              <code className="text-xs">claude-haiku-4-5-20251001</code>.
+            </div>
+          )}
+
+          {settings.llmProvider === "openai" && (
+            <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+              Get your API key at{" "}
+              <a
+                href="https://platform.openai.com/api-keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                platform.openai.com
+              </a>
+              . Models:{" "}
+              <code className="text-xs">gpt-4o</code>,{" "}
+              <code className="text-xs">gpt-4o-mini</code>,{" "}
+              <code className="text-xs">gpt-4.1</code>,{" "}
+              <code className="text-xs">gpt-4.1-mini</code>,{" "}
+              <code className="text-xs">o3</code>,{" "}
+              <code className="text-xs">o3-mini</code>,{" "}
+              <code className="text-xs">o4-mini</code>.
             </div>
           )}
 

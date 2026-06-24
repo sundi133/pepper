@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { Ollama } from "ollama";
 
 export interface LlmConfig {
@@ -61,6 +62,7 @@ function createOpenAIClient(config: LlmConfig): OpenAI {
 
 export type LlmClient =
   | { type: "ollama"; client: Ollama; model: string }
+  | { type: "anthropic"; client: Anthropic; model: string }
   | { type: "openrouter"; client: OpenAI; model: string }
   | { type: "openai"; client: OpenAI; model: string };
 
@@ -71,6 +73,14 @@ export function createLlmClient(config: LlmConfig): LlmClient {
     return {
       type: "ollama",
       client: getOllamaClient(config.baseUrl || OLLAMA_HOST),
+      model: config.model,
+    };
+  }
+
+  if (provider === "anthropic") {
+    return {
+      type: "anthropic",
+      client: new Anthropic({ apiKey: config.apiKey || "" }),
       model: config.model,
     };
   }
@@ -116,6 +126,19 @@ export async function analyzeWithLlm(
       },
     });
     return response.message?.content || "{}";
+  }
+
+  // Anthropic path — uses native Messages API
+  if (llmClient.type === "anthropic") {
+    const response = await llmClient.client.messages.create({
+      model: model || llmClient.model,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userContent }],
+      temperature,
+      max_tokens: options?.maxTokens ?? 8192,
+    });
+    const block = response.content[0];
+    return block.type === "text" ? block.text : "{}";
   }
 
   // OpenRouter path — many models don't support response_format, so we
@@ -174,6 +197,27 @@ export async function* streamChatWithLlm(
     for await (const chunk of stream) {
       const text = chunk.message?.content;
       if (text) yield text;
+    }
+    return;
+  }
+
+  // Anthropic streaming
+  if (llmClient.type === "anthropic") {
+    const systemMsg = messages.find((m) => m.role === "system");
+    const nonSystemMsgs = messages
+      .filter((m) => m.role !== "system")
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+    const stream = llmClient.client.messages.stream({
+      model: llmClient.model,
+      system: systemMsg?.content,
+      messages: nonSystemMsgs,
+      temperature,
+      max_tokens: maxTokens,
+    });
+    for await (const event of stream) {
+      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+        yield event.delta.text;
+      }
     }
     return;
   }

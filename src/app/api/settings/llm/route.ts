@@ -42,7 +42,7 @@ export async function GET() {
 
 const updateSchema = z.object({
   llmProvider: z
-    .enum(["ollama", "openai", "openrouter", "azure", "vllm", "custom"])
+    .enum(["ollama", "openai", "anthropic", "openrouter", "azure", "vllm", "custom"])
     .optional(),
   llmBaseUrl: z.string().url().optional(),
   llmModel: z.string().min(1).optional(),

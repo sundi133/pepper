@@ -8,13 +8,17 @@ import {
   DependencyParser,
 } from "../types";
 import { packageJsonParser, packageLockParser } from "./parsers/package-json";
+import { yarnLockParser } from "./parsers/yarn-lock";
+import { pnpmLockParser } from "./parsers/pnpm-lock";
 import {
   requirementsTxtParser,
   pipfileLockParser,
 } from "./parsers/requirements-txt";
 import { pyprojectTomlParser } from "./parsers/pyproject-toml";
+import { poetryLockParser } from "./parsers/poetry-lock";
 import { goModParser } from "./parsers/go-mod";
 import { cargoTomlParser } from "./parsers/cargo-toml";
+import { cargoLockParser } from "./parsers/cargo-lock";
 import { pomXmlParser, buildGradleParser } from "./parsers/pom-xml";
 import { gemfileLockParser } from "./parsers/gemfile-lock";
 import {
@@ -29,16 +33,20 @@ import { queryOsvBatch } from "./osv-client";
 import { triageScaFindings } from "./triage";
 
 const ALL_PARSERS: DependencyParser[] = [
-  // JavaScript/TypeScript
+  // JavaScript/TypeScript — lock files first for full transitive tree
   packageLockParser,
+  yarnLockParser,
+  pnpmLockParser,
   packageJsonParser,
-  // Python
-  requirementsTxtParser,
+  // Python — lock files first
   pipfileLockParser,
+  poetryLockParser,
+  requirementsTxtParser,
   pyprojectTomlParser,
   // Go
   goModParser,
-  // Rust
+  // Rust — lock file first
+  cargoLockParser,
   cargoTomlParser,
   // Java/Kotlin/Scala
   pomXmlParser,
@@ -46,8 +54,8 @@ const ALL_PARSERS: DependencyParser[] = [
   // Ruby
   gemfileLockParser,
   // PHP
-  composerJsonParser,
   composerLockParser,
+  composerJsonParser,
   // .NET / C# / F#
   csprojParser,
   packagesConfigParser,

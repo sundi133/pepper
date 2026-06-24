@@ -114,5 +114,8 @@ export async function triageScaFindings(
     }
   }
 
-  return triaged.filter((f) => (f.confidence ?? 1) >= LLM_MIN_CONFIDENCE_DEFAULT);
+  // SCA findings are database-confirmed (confidence=1.0 from OSV); do not
+  // filter them by the LLM confidence floor which is meant for LLM-generated
+  // findings.  The AI triage already removed low-value entries via keep=false.
+  return triaged;
 }

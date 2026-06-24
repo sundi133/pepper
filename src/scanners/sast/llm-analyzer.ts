@@ -5,6 +5,13 @@ import {
 } from "@/lib/llm-gateway";
 import { Chunk, RawFinding, ScanContext } from "../types";
 import { chunkFile } from "./chunker";
+import {
+  getOwasp2024Category,
+  getOwaspApiCategory,
+  getOwaspLlmCategory,
+  calculateExploitabilityScore,
+  getExploitabilityLabel,
+} from "./owasp-mapper";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -656,7 +663,7 @@ async function analyzeChunk(
       findings: [],
     });
 
-    const pass1Floor = 0.65;
+    const pass1Floor = 0.75; // Tightened from 0.65 to reduce false positives
 
     const allFindings = (parsed.findings || []).filter(
       (f) => f.title && f.severity,
@@ -699,6 +706,16 @@ async function analyzeChunk(
         meta.sink = null;
       }
 
+      const exploitabilityScore = calculateExploitabilityScore(
+        f.confidence ?? pass1Floor,
+        f.severity,
+        f.metadata,
+      );
+
+      const owaspCategory = getOwasp2024Category(f.cweId);
+      const owaspApiCategory = getOwaspApiCategory(f.cweId);
+      const owaspLlmCategory = getOwaspLlmCategory(f.cweId);
+
       let base: RawFinding = applySeverityCalibration({
         scanner: "SAST_LLM" as const,
         severity: parseSeverity(f.severity),
@@ -714,7 +731,21 @@ async function analyzeChunk(
         ruleId: isPolicy
           ? `POLICY-${matchedPolicy || "CUSTOM"}`
           : `LLM-${f.cweId || "GENERIC"}`,
-        metadata: meta,
+        metadata: {
+          ...meta,
+          owasp2024: owaspCategory,
+          owaspApi: owaspApiCategory,
+          owaspLlm: owaspLlmCategory,
+          exploitability: {
+            score: exploitabilityScore.score,
+            label: getExploitabilityLabel(exploitabilityScore.score),
+            attackVector: exploitabilityScore.attackVector,
+            attackComplexity: exploitabilityScore.attackComplexity,
+            privilegesRequired: exploitabilityScore.privilegesRequired,
+            userInteraction: exploitabilityScore.userInteraction,
+            scope: exploitabilityScore.scope,
+          },
+        },
       });
 
       if (passPhase === 2) {

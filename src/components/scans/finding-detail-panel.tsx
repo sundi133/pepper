@@ -593,21 +593,45 @@ function FindingMetadataGrid({ finding }: { finding: Finding }) {
     });
   }
 
-  if (details.length === 0) return null;
+  // Add usage locations for SCA findings
+  const usageLocations = metadata?.usageLocations as Array<{ filePath: string; line: number; usage: string }> | undefined;
+
+  if (details.length === 0 && !usageLocations?.length) return null;
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-      {details.map((detail, idx) => (
-        <div
-          key={idx}
-          className="rounded-lg border border-border/60 bg-muted/30 p-3"
-        >
-          <p className="text-xs font-medium text-muted-foreground">{detail.label}</p>
-          <p className="mt-1 break-words text-sm font-semibold text-foreground">
-            {detail.value}
-          </p>
+    <div className="space-y-4">
+      {details.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {details.map((detail, idx) => (
+            <div
+              key={idx}
+              className="rounded-lg border border-border/60 bg-muted/30 p-3"
+            >
+              <p className="text-xs font-medium text-muted-foreground">{detail.label}</p>
+              <p className="mt-1 break-words text-sm font-semibold text-foreground">
+                {detail.value}
+              </p>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
+
+      {usageLocations && usageLocations.length > 0 && (
+        <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-3">WHERE USED IN SOURCE CODE</p>
+          <div className="space-y-2">
+            {usageLocations.map((loc, idx) => (
+              <div key={idx} className="text-xs space-y-1 p-2 bg-background rounded border border-border">
+                <div className="text-foreground font-semibold">{loc.filePath}</div>
+                <div className="text-muted-foreground">Line {loc.line}</div>
+                <div className="text-muted-foreground font-mono text-xs mt-1 break-all">
+                  {loc.usage}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

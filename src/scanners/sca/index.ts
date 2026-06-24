@@ -111,7 +111,7 @@ export function parseDependencies(
           const key = `${dep.ecosystem}:${dep.name}@${dep.version}`;
           if (!seen.has(key)) {
             seen.add(key);
-            dependencies.push(dep);
+            dependencies.push({ ...dep, sourceFile: filePath });
           }
         }
 
@@ -156,6 +156,7 @@ export const scaScanner: ScannerPlugin = {
     let findings = await queryOsvBatch(
       dependencies,
       ctx.orgSettings.osvApiUrl,
+      { workDir: ctx.workDir, fileList: ctx.fileList },
     );
 
     if (findings.length > 0 && ctx.orgSettings.enableLlmSast) {

@@ -33,6 +33,39 @@ import {
   applySeverityCalibration,
   parseSeverity,
 } from "@/lib/severity-calibration";
+import { SAST_EXCLUDED_EXTENSIONS } from "../shared/extension-filters";
+
+// Dependency manifest files excluded from SAST analysis (more aggressive filtering)
+const DEPENDENCY_MANIFEST_FILES = new Set([
+  "package.json",
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "requirements.txt",
+  "Pipfile",
+  "Pipfile.lock",
+  "pyproject.toml",
+  "poetry.lock",
+  "go.mod",
+  "go.sum",
+  "Cargo.toml",
+  "Cargo.lock",
+  "pom.xml",
+  "Gemfile",
+  "Gemfile.lock",
+  "composer.json",
+  "composer.lock",
+  ".csproj",
+  ".fsproj",
+  ".vbproj",
+  "packages.config",
+  "pubspec.yaml",
+  "pubspec.lock",
+  "mix.exs",
+  "mix.lock",
+  "Package.swift",
+  "Package.resolved",
+]);
 
 // ─── Custom Policy Integration ────────────────────────────────────────
 
@@ -309,12 +342,17 @@ export async function runLlmSastScanner(
 
     const fullPath = path.join(ctx.workDir, filePath);
     const ext = path.extname(filePath).toLowerCase();
+    const fileName = path.basename(filePath);
 
     if (BINARY_EXTENSIONS.has(ext)) continue;
     if (!FILE_EXTENSIONS[ext]) continue;
 
     const parts = filePath.split(path.sep);
     if (parts.some((p) => SKIP_DIRECTORIES.has(p))) continue;
+
+    // Exclude config, data, and lock files from SAST
+    if (SAST_EXCLUDED_EXTENSIONS.has(ext)) continue;
+    if (DEPENDENCY_MANIFEST_FILES.has(fileName)) continue;
 
     try {
       const stat = fs.statSync(fullPath);

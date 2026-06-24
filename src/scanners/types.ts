@@ -79,6 +79,7 @@ export interface Dependency {
   ecosystem: string;
   isDev?: boolean;
   lockfileVersion?: string;
+  sourceFile?: string; // The manifest file this dependency came from (e.g., package.json)
 }
 
 export interface DependencyParser {

@@ -73,13 +73,13 @@ const FINDING_SECTIONS = [
     id: "SAST",
     title: "SAST Findings",
     scanners: ["SAST_LLM", "SAST_PATTERN"],
-    description: "Static application security findings (AI and pattern-based)",
+    description: "Static application security findings",
   },
   {
     id: "SECRETS",
     title: "Secrets Findings",
     scanners: ["SECRETS_LLM", "SECRETS_PATTERN"],
-    description: "Leaked or exposed credential findings (AI and pattern-based)",
+    description: "Leaked or exposed credential findings",
   },
   {
     id: "SCA",
@@ -721,15 +721,12 @@ export default function ScanDetailPage() {
                   <SelectContent>
                     <SelectItem value="all">All Scanners</SelectItem>
                     <SelectItem value="SAST_LLM">SAST (AI)</SelectItem>
-                    <SelectItem value="SAST_PATTERN">SAST (Pattern)</SelectItem>
                     <SelectItem value="SCA">SCA</SelectItem>
                     <SelectItem value="SECRETS_LLM">Secrets (AI)</SelectItem>
-                    <SelectItem value="SECRETS_PATTERN">
-                      Secrets (Pattern)
-                    </SelectItem>
                     <SelectItem value="IAC">IaC Security</SelectItem>
                     <SelectItem value="MALICIOUS_PKG">Supply Chain</SelectItem>
                     <SelectItem value="ZERO_DAY">Zero-Day (AI)</SelectItem>
+                    <SelectItem value="CONTAINER">Container</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={sortBy} onValueChange={setSortBy}>

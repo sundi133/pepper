@@ -31,6 +31,7 @@ export const SCANNER_LABELS = {
   IAC: "IaC Security",
   MALICIOUS_PKG: "Supply Chain",
   ZERO_DAY: "Zero-Day (AI)",
+  CONTAINER: "Container",
 } as const;
 
 export const SCAN_STATUS_LABELS = {

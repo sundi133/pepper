@@ -165,12 +165,106 @@ function githubCodeUrl(
   });
 }
 
+function buildReproductionCommand(finding: Finding): string | null {
+  const metadata = finding.metadata as Record<string, unknown> | undefined;
+  const scanner = finding.scanner || "";
+  const filePath = finding.filePath;
+  const startLine = finding.startLine ?? 0;
+
+  // SAST_LLM / ZERO_DAY: curl command if route available, fallback to sed
+  if (scanner === "SAST_LLM" || scanner === "ZERO_DAY") {
+    const route = metadata?.route ? String(metadata.route) : null;
+    const method = metadata?.method ? String(metadata.method) : "GET";
+    if (route) {
+      return `curl -i -sk -X ${method} -H "Authorization: Bearer <TOKEN>" "${route}"`;
+    }
+    if (filePath) {
+      return `sed -n '${startLine},${startLine + 10}p' ${filePath}`;
+    }
+    return null;
+  }
+
+  // SCA: package manager upgrade command
+  if (scanner === "SCA") {
+    const pkg = metadata?.packageName ? String(metadata.packageName) : null;
+    const fix = metadata?.fixVersion ? String(metadata.fixVersion) : "latest";
+    const eco = metadata?.ecosystem ? String(metadata.ecosystem) : null;
+
+    if (!pkg) return null;
+
+    const commands: Record<string, string> = {
+      npm: `npm install ${pkg}@${fix}`,
+      PyPI: `pip install ${pkg}==${fix}`,
+      Go: `go get ${pkg}@${fix}`,
+      cargo: `cargo update -p ${pkg}`,
+      Packagist: `composer require ${pkg}:${fix}`,
+      RubyGems: `gem update ${pkg}`,
+      Maven: `mvn versions:use-dep-version -Dincludes=${pkg}:${fix}`,
+      NuGet: `dotnet add package ${pkg} --version ${fix}`,
+    };
+
+    return commands[eco || ""] || `npm install ${pkg}@${fix}`;
+  }
+
+  // MALICIOUS_PKG: package manager remove
+  if (scanner === "MALICIOUS_PKG") {
+    const pkg = metadata?.packageName ? String(metadata.packageName) : null;
+    const eco = metadata?.ecosystem ? String(metadata.ecosystem) : null;
+
+    if (!pkg) return null;
+
+    const commands: Record<string, string> = {
+      npm: `npm uninstall ${pkg}`,
+      PyPI: `pip uninstall ${pkg}`,
+      Go: `go mod edit -droprequire=${pkg}`,
+      cargo: `cargo remove ${pkg}`,
+      Packagist: `composer remove ${pkg}`,
+      RubyGems: `gem uninstall ${pkg}`,
+      Maven: `mvn dependency:purge-local-repository -DreResolve=false`,
+      NuGet: `dotnet remove package ${pkg}`,
+    };
+
+    return commands[eco || ""] || `npm uninstall ${pkg}`;
+  }
+
+  // SECRETS: sed to location + revoke instruction
+  if (scanner.startsWith("SECRETS")) {
+    if (!filePath) return null;
+    const credentialType = metadata?.credentialType
+      ? String(metadata.credentialType)
+      : "credential";
+    return `sed -n '${startLine},${startLine + 3}p' ${filePath}\n# Action required: revoke ${credentialType} immediately`;
+  }
+
+  // IAC: sed to location
+  if (scanner === "IAC") {
+    if (!filePath) return null;
+    return `sed -n '${startLine},${startLine + 10}p' ${filePath}`;
+  }
+
+  // CONTAINER: trivy if image available, else sed
+  if (scanner === "CONTAINER") {
+    const image = metadata?.image ? String(metadata.image) : null;
+    if (image) {
+      return `trivy image ${image}`;
+    }
+    if (filePath) {
+      return `sed -n '${startLine},${startLine + 5}p' ${filePath}`;
+    }
+    return null;
+  }
+
+  // DAST or others: no reproduction command
+  return null;
+}
+
 function SecretFindingReport({ finding }: { finding: Finding }) {
   const metadata = finding.metadata as Record<string, unknown> | undefined;
   const secretType = typeof metadata?.secretType === "string"
     ? metadata.secretType
     : (finding.title.split(":")[0] || "Secret");
   const report = buildStoredFindingReport(finding);
+  const reproCommand = buildReproductionCommand(finding);
 
   return (
     <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
@@ -210,6 +304,24 @@ function SecretFindingReport({ finding }: { finding: Finding }) {
         </div>
       </ReportBlock>
 
+      {/* Location & Revoke Instruction */}
+      {reproCommand && (
+        <ReportBlock title="How to Locate" icon={<span className="text-lg">📍</span>}>
+          <div className="space-y-3">
+            <pre className="max-w-full overflow-x-auto rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono leading-relaxed text-foreground">
+              {reproCommand}
+            </pre>
+            <CopyCommandButton command={reproCommand} />
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+              <p className="text-sm font-semibold text-red-900">⚠️ Action Required</p>
+              <p className="text-xs text-red-800 mt-1">
+                Immediately revoke {metadata?.credentialType ? String(metadata.credentialType).toLowerCase() : "this credential"} and rotate any access keys or passwords.
+              </p>
+            </div>
+          </div>
+        </ReportBlock>
+      )}
+
       {/* Risk Section */}
       <ReportBlock title="Risk" icon={<span className="text-lg">🛡️</span>}>
         <ReportRichText text={report.impact} />
@@ -227,6 +339,7 @@ function ScaFindingReport({ finding }: { finding: Finding }) {
   const report = buildStoredFindingReport(finding);
   const metadata = finding.metadata as Record<string, unknown> | undefined;
   const fixVersion = typeof metadata?.fixVersion === "string" ? metadata.fixVersion : undefined;
+  const reproCommand = buildReproductionCommand(finding);
 
   // Extract structured fields from summary
   const summaryLines = report.summary.split("\n\n");
@@ -307,6 +420,20 @@ function ScaFindingReport({ finding }: { finding: Finding }) {
           </ol>
         </ReportBlock>
       </div>
+
+      {/* How to Fix Section */}
+      {reproCommand && (
+        <div className="border-t border-border/40 pt-4">
+          <ReportBlock title="How to Fix" icon={<span className="text-lg">💻</span>}>
+            <div className="space-y-3">
+              <pre className="max-w-full overflow-x-auto rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono leading-relaxed text-foreground">
+                {reproCommand}
+              </pre>
+              <CopyCommandButton command={reproCommand} />
+            </div>
+          </ReportBlock>
+        </div>
+      )}
     </section>
   );
 }
@@ -345,6 +472,7 @@ function IacFindingReport({
   }, [finding.id, scanId]);
 
   const report = buildStoredFindingReport(finding);
+  const reproCommand = buildReproductionCommand(finding);
 
   return (
     <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
@@ -377,6 +505,20 @@ function IacFindingReport({
               </div>
             </ReportBlock>
           </div>
+
+          {/* Locate Issue Section */}
+          {reproCommand && (
+            <div className="border-t border-border/40 pt-4">
+              <ReportBlock title="Locate in Code" icon={<span className="text-lg">📍</span>}>
+                <div className="space-y-3">
+                  <pre className="max-w-full overflow-x-auto rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono leading-relaxed text-foreground">
+                    {reproCommand}
+                  </pre>
+                  <CopyCommandButton command={reproCommand} />
+                </div>
+              </ReportBlock>
+            </div>
+          )}
 
           {/* What to Change Section */}
           <div className="border-t border-border/40 pt-4">
@@ -417,6 +559,98 @@ function IacFindingReport({
         </ReportBlock>
       )}
     </section>
+  );
+}
+
+function ContainerFindingReport({ finding }: { finding: Finding }) {
+  const report = buildStoredFindingReport(finding);
+  const metadata = finding.metadata as Record<string, unknown> | undefined;
+  const reproCommand = buildReproductionCommand(finding);
+  const image = typeof metadata?.image === "string" ? metadata.image : null;
+  const packageName = typeof metadata?.packageName === "string" ? metadata.packageName : null;
+  const packageVersion = typeof metadata?.packageVersion === "string" ? metadata.packageVersion : null;
+  const fixVersion = typeof metadata?.fixVersion === "string" ? metadata.fixVersion : null;
+
+  return (
+    <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
+      {image && (
+        <ReportBlock title="Container Image" icon={<span className="text-lg">🐳</span>}>
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+            <p className="text-xs font-medium text-muted-foreground">Image</p>
+            <code className="text-sm font-mono text-foreground">{image}</code>
+          </div>
+        </ReportBlock>
+      )}
+
+      {packageName && (
+        <ReportBlock title="Affected Package" icon={<span className="text-lg">📦</span>}>
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Package</p>
+              <code className="text-sm font-mono text-foreground">
+                {packageName}
+                {packageVersion && `@${packageVersion}`}
+              </code>
+            </div>
+            {fixVersion && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Fixed in Version</p>
+                <code className="text-sm font-mono text-foreground">{fixVersion}</code>
+              </div>
+            )}
+          </div>
+        </ReportBlock>
+      )}
+
+      {reproCommand && (
+        <ReportBlock title="How to Scan" icon={<span className="text-lg">🔍</span>}>
+          <div className="space-y-3">
+            <pre className="max-w-full overflow-x-auto rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono leading-relaxed text-foreground">
+              {reproCommand}
+            </pre>
+            <CopyCommandButton command={reproCommand} />
+          </div>
+        </ReportBlock>
+      )}
+
+      <ReportBlock title="Impact" icon={<span className="text-lg">⚠️</span>}>
+        <ReportRichText text={report.impact} />
+      </ReportBlock>
+
+      <ReportBlock title="Remediation" icon={<span className="text-lg">🔧</span>}>
+        <ReportPlainList items={report.remediation} />
+      </ReportBlock>
+    </section>
+  );
+}
+
+function CopyCommandButton({ command }: { command: string }) {
+  const [busy, setBusy] = useState(false);
+
+  async function copyCommand() {
+    setBusy(true);
+    try {
+      await navigator.clipboard.writeText(command);
+      toast.success("Command copied");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to copy command");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-8 gap-1.5 text-xs font-medium"
+      disabled={busy}
+      onClick={() => void copyCommand()}
+    >
+      <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      {busy ? "Copying…" : "Copy command"}
+    </Button>
   );
 }
 
@@ -639,7 +873,13 @@ function FindingReportSections({ finding, sourceContext }: { finding: Finding; s
     return <IacFindingReport finding={finding} scanId={sourceContext.scanId} />;
   }
 
+  const isContainer = finding.scanner === "CONTAINER";
+  if (isContainer) {
+    return <ContainerFindingReport finding={finding} />;
+  }
+
   const report = buildStoredFindingReport(finding);
+  const reproCommand = buildReproductionCommand(finding);
 
   return (
     <section className="finding-detail-report interactive-card min-w-0 max-w-full space-y-6 overflow-hidden p-4">
@@ -658,6 +898,17 @@ function FindingReportSections({ finding, sourceContext }: { finding: Finding; s
           {report.stepsToReproduce.length > 0 && (
             <ReportBlock title="Steps to Reproduce" icon="🔧">
               <ReportPlainList items={report.stepsToReproduce} />
+            </ReportBlock>
+          )}
+
+          {reproCommand && (
+            <ReportBlock title="Example Command" icon="💻">
+              <div className="space-y-3">
+                <pre className="max-w-full overflow-x-auto rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono leading-relaxed text-foreground">
+                  {reproCommand}
+                </pre>
+                <CopyCommandButton command={reproCommand} />
+              </div>
             </ReportBlock>
           )}
 

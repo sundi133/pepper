@@ -667,6 +667,22 @@ function drawFindingCard(
     y = doc.y + 8;
   }
 
+  // Steps to Reproduce
+  if (report.stepsToReproduce.length > 0) {
+    if (y > 700) { doc.addPage(); y = 50; }
+    doc.fontSize(8).fillColor(COLORS.high).text("STEPS TO REPRODUCE", x, y);
+    y += 12;
+    const stepsText = report.stepsToReproduce
+      .slice(0, 3)
+      .map((step, i) => `${i + 1}. ${truncate(step, 150)}`)
+      .join(" ");
+    const stepsH = Math.min(60, Math.max(24, Math.ceil(stepsText.length / 85) * 12 + 10));
+    doc.roundedRect(x, y, w, stepsH, 4).fillAndStroke(COLORS.remedBg, COLORS.remedBorder);
+    doc.fontSize(8).fillColor(COLORS.textSecondary)
+      .text(stepsText, x + 8, y + 6, { width: w - 16 });
+    y += stepsH + 8;
+  }
+
   // Proof of Concept / Snippet
   if (f.snippet) {
     if (y > 680) { doc.addPage(); y = 50; }

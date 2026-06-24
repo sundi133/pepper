@@ -59,20 +59,39 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
     const floor = confidenceFloor(f.scanner);
     if ((f.confidence ?? 0) < floor) return false;
 
-    if (!hasRemediation(f)) return false;
+    // Remediation is required for most findings, but ZERO_DAY and high-confidence
+    // SAST_LLM findings with a valid CWE are exempt — business logic, race
+    // condition, and trust boundary findings often describe the flaw without a
+    // formulaic "Fix:" section.
+    if (!hasRemediation(f)) {
+      const hasCwe = Boolean(f.cweId);
+      const isHighConfidence = (f.confidence ?? 0) >= 0.78;
+      const exemptScanner = f.scanner === "ZERO_DAY" || f.scanner === "SAST_LLM";
+      if (!(exemptScanner && hasCwe && isHighConfidence)) {
+        return false;
+      }
+    }
 
     const text = `${f.title}\n${f.description}\n${f.snippet || ""}`;
 
+    // Placeholder text filter: only apply to SECRETS_LLM (where placeholders
+    // almost always mean a false positive). For SAST_LLM, legitimate findings
+    // routinely reference process.env, localhost, or template syntax in their
+    // descriptions — filtering on these tokens was dropping real injection,
+    // trust boundary, and misconfiguration findings.
     if (
-      (f.scanner === "SECRETS_LLM" || f.scanner === "SAST_LLM") &&
+      f.scanner === "SECRETS_LLM" &&
       PLACEHOLDER_TEXT.test(text) &&
       (f.confidence ?? 0) < 0.92
     ) {
       return false;
     }
 
+    // Missing line number: still required for SAST_LLM and SECRETS_LLM (these
+    // analyze specific code locations). ZERO_DAY and IAC scanners can report
+    // cross-file or config-level findings without a precise line.
     if (
-      ["SAST_LLM", "IAC", "ZERO_DAY", "SECRETS_LLM"].includes(f.scanner) &&
+      ["SAST_LLM", "SECRETS_LLM"].includes(f.scanner) &&
       f.filePath &&
       (!f.startLine || f.startLine < 1)
     ) {

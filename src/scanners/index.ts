@@ -31,7 +31,7 @@ export function getScanners(
     scanType,
   );
   const includeIac = ["FULL", "IAC_ONLY"].includes(scanType);
-  const includeZeroDay = ["FULL", "ZERO_DAY_ONLY"].includes(scanType);
+  const includeZeroDay = ["FULL", "ZERO_DAY_ONLY", "INCREMENTAL"].includes(scanType);
   const includeContainer = ["FULL", "CONTAINER_ONLY"].includes(scanType);
   const includeDast = ["FULL", "DAST_ONLY"].includes(scanType);
 

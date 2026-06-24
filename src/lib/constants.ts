@@ -233,15 +233,15 @@ export const MAX_LLM_CONCURRENCY = parseInt(
 
 /** Default minimum model confidence to keep an LLM finding (SAST / IaC / supply-chain LLM phases). */
 export const LLM_MIN_CONFIDENCE_DEFAULT = parseFloat(
-  process.env.LLM_MIN_CONFIDENCE || "0.80",
+  process.env.LLM_MIN_CONFIDENCE || "0.75",
 );
 
 export const IAC_MIN_CONFIDENCE_DEFAULT = parseFloat(
-  process.env.IAC_MIN_CONFIDENCE || "0.80",
+  process.env.IAC_MIN_CONFIDENCE || "0.75",
 );
 
 export const ZERO_DAY_MIN_CONFIDENCE_DEFAULT = parseFloat(
-  process.env.ZERO_DAY_MIN_CONFIDENCE || "0.80",
+  process.env.ZERO_DAY_MIN_CONFIDENCE || "0.72",
 );
 
 export const SECRETS_MIN_CONFIDENCE_DEFAULT = parseFloat(

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { ScanJobData } from "@/lib/queue";
 import {
   getOrgGithubAccessTokenOrThrow,
   GithubTokenInvalidError,
@@ -16,6 +17,7 @@ export async function connectGithubRepositories(params: {
   userId: string;
   repoIds: number[];
   branchesByRepoId?: Map<number, string>;
+  scanType?: ScanJobData["scanType"];
 }): Promise<ConnectGithubRepoResult> {
   const token = await getOrgGithubAccessTokenOrThrow(params.organizationId);
 
@@ -66,6 +68,7 @@ export async function connectGithubRepositories(params: {
       language: repo.language,
       connectedViaGithub: true,
       branch: selectedBranch || repo.defaultBranch,
+      scanType: params.scanType,
     });
 
     connected.push({

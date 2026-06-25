@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { ScanJobData } from "@/lib/queue";
 import { createProjectWithBuildGate } from "@/lib/create-project-with-build-gate";
 import { queueProjectScan } from "@/lib/queue-project-scan";
 import { githubHttpsCloneUrl } from "@/lib/parse-github-repo-input";
@@ -22,6 +23,7 @@ export async function connectGithubRepositoryRecord(params: {
   /** True when linked via OAuth import; false for manual URL-only project link. */
   connectedViaGithub: boolean;
   branch?: string;
+  scanType?: ScanJobData["scanType"];
 }): Promise<ConnectGithubRepoRecord> {
   const fullName = `${params.owner}/${params.repo}`;
   const cloneUrl = params.cloneUrl.trim() || githubHttpsCloneUrl(params.owner, params.repo);
@@ -52,6 +54,7 @@ export async function connectGithubRepositoryRecord(params: {
       userId: params.userId,
       branch: params.branch?.trim() || params.defaultBranch,
       useOrgGithubToken: true,
+      scanType: params.scanType,
     });
     return {
       projectId: existing.id,
@@ -85,6 +88,7 @@ export async function connectGithubRepositoryRecord(params: {
     userId: params.userId,
     branch: params.branch?.trim() || params.defaultBranch,
     useOrgGithubToken: true,
+    scanType: params.scanType,
   });
 
   return {

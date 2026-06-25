@@ -31,6 +31,7 @@ import { mixLockParser } from "./parsers/mix-lock";
 import { swiftPackageResolvedParser } from "./parsers/swift-package";
 import { queryOsvBatch } from "./osv-client";
 import { triageScaFindings } from "./triage";
+import { enhanceSCAFindingWithRiskScore } from "./supply-chain-scorer";
 
 const ALL_PARSERS: DependencyParser[] = [
   // JavaScript/TypeScript — lock files first for full transitive tree
@@ -111,7 +112,7 @@ export function parseDependencies(
           const key = `${dep.ecosystem}:${dep.name}@${dep.version}`;
           if (!seen.has(key)) {
             seen.add(key);
-            dependencies.push(dep);
+            dependencies.push({ ...dep, sourceFile: filePath });
           }
         }
 
@@ -142,6 +143,39 @@ export const scaScanner: ScannerPlugin = {
 
     if (dependencies.length === 0) return [];
 
+    // Identify direct dependencies for risk scoring
+    const directDependencies = new Set<string>();
+    for (const filePath of parsedFiles) {
+      const fileName = path.basename(filePath);
+      // Direct dependencies are typically in lock files or manifest files
+      if (
+        fileName === "package.json" ||
+        fileName === "requirements.txt" ||
+        fileName === "go.mod" ||
+        fileName === "Cargo.toml" ||
+        fileName === "pom.xml" ||
+        fileName === "Gemfile" ||
+        fileName === "composer.json" ||
+        fileName === "pyproject.toml" ||
+        fileName === "pubspec.yaml" ||
+        fileName === "mix.exs" ||
+        fileName === "Package.swift"
+      ) {
+        // Parse direct deps from manifests
+        const fullPath = path.join(ctx.workDir, filePath);
+        try {
+          const content = fs.readFileSync(fullPath, "utf-8");
+          for (const dep of dependencies) {
+            if (dep.sourceFile === filePath) {
+              directDependencies.add(dep.name);
+            }
+          }
+        } catch {
+          // Continue on parse errors
+        }
+      }
+    }
+
     if (ctx.orgSettings.vulnDbMode === "offline") {
       ctx.onProgress?.(
         "SCA: vulnerability database is offline; skipping OSV vulnerability lookup",
@@ -156,6 +190,13 @@ export const scaScanner: ScannerPlugin = {
     let findings = await queryOsvBatch(
       dependencies,
       ctx.orgSettings.osvApiUrl,
+      { workDir: ctx.workDir, fileList: ctx.fileList },
+    );
+
+    // Enhance findings with supply-chain risk scoring
+    ctx.onProgress?.(`SCA: scoring supply-chain risk for ${findings.length} vulnerabilities...`);
+    findings = findings.map((f) =>
+      enhanceSCAFindingWithRiskScore(f, directDependencies),
     );
 
     if (findings.length > 0 && ctx.orgSettings.enableLlmSast) {

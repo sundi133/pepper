@@ -1,3 +1,4 @@
+import type { ScanJobData } from "@/lib/queue";
 import {
   getOrgGithubAccessTokenOrThrow,
   GithubTokenInvalidError,
@@ -23,6 +24,7 @@ export async function connectManualGithubRepository(params: {
   userId: string;
   repoInput: string;
   branch?: string;
+  scanType?: ScanJobData["scanType"];
 }) {
   const parsed = parseGithubRepoInput(params.repoInput);
   if (!parsed) {
@@ -70,6 +72,7 @@ export async function connectManualGithubRepository(params: {
     language: repo.language ?? null,
     connectedViaGithub: true,
     branch: params.branch,
+    scanType: params.scanType,
   });
 
   return record;

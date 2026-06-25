@@ -16,6 +16,18 @@ const bodySchema = z.object({
     .min(1)
     .max(50)
     .optional(),
+  scanType: z
+    .enum([
+      "FULL",
+      "INCREMENTAL",
+      "SAST_ONLY",
+      "SCA_ONLY",
+      "SECRETS_ONLY",
+      "IAC_ONLY",
+      "ZERO_DAY_ONLY",
+      "CONTAINER_ONLY",
+    ])
+    .optional(),
 }).refine((body) => body.repoIds?.length || body.repositories?.length, {
   message: "Select at least one repository",
 });
@@ -43,6 +55,7 @@ export async function POST(req: NextRequest) {
       userId: auth.session.user.id,
       repoIds,
       branchesByRepoId,
+      scanType: body.scanType,
     });
     return NextResponse.json(result, { status: 201 });
   } catch (e) {

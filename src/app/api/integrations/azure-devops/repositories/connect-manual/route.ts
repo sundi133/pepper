@@ -7,6 +7,18 @@ import { AzureDevOpsCredentialsInvalidError } from "@/lib/azure-devops-connectio
 const bodySchema = z.object({
   repoUrl: z.string().min(1).max(500),
   branch: z.string().max(200).optional(),
+  scanType: z
+    .enum([
+      "FULL",
+      "INCREMENTAL",
+      "SAST_ONLY",
+      "SCA_ONLY",
+      "SECRETS_ONLY",
+      "IAC_ONLY",
+      "ZERO_DAY_ONLY",
+      "CONTAINER_ONLY",
+    ])
+    .optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -25,6 +37,7 @@ export async function POST(req: NextRequest) {
       userId: auth.session.user.id,
       repoInput: body.repoUrl,
       branch: body.branch,
+      scanType: body.scanType,
     });
     return NextResponse.json(
       {

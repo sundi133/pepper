@@ -1,5 +1,6 @@
-import { Dependency, RawFinding } from "../types";
+import { Dependency, RawFinding, ScanContext } from "../types";
 import { logger } from "@/lib/logger";
+import { findPackageUsageWithLines } from "./find-package-usage";
 
 interface OsvQuery {
   package: { name: string; ecosystem: string };
@@ -27,6 +28,7 @@ interface OsvBatchResponse {
 export async function queryOsvBatch(
   dependencies: Dependency[],
   apiUrl = "https://api.osv.dev",
+  ctx?: { workDir: string; fileList: string[] },
 ): Promise<RawFinding[]> {
   if (dependencies.length === 0) return [];
 
@@ -73,11 +75,26 @@ export async function queryOsvBatch(
           const cveId = vuln.aliases?.find((a) => a.startsWith("CVE-"));
           const fixVersion = getFixVersion(vuln);
 
+          // Find where this package is used in source code
+          let usageLocations: Array<{ filePath: string; line: number; usage: string }> = [];
+          if (ctx) {
+            try {
+              usageLocations = await findPackageUsageWithLines(
+                ctx.workDir,
+                ctx.fileList,
+                dep.name,
+              );
+            } catch (err) {
+              // Silently continue if usage analysis fails
+            }
+          }
+
           findings.push({
             scanner: "SCA",
             severity,
             title: `${vuln.id}: ${vuln.summary || "Vulnerability in " + dep.name}`,
             description: buildDescription(vuln, dep, fixVersion),
+            filePath: (dep as any).sourceFile || undefined,
             ruleId: vuln.id,
             cveId,
             confidence: 1.0,
@@ -88,6 +105,7 @@ export async function queryOsvBatch(
               osvId: vuln.id,
               fixVersion,
               references: vuln.references?.map((r) => r.url),
+              usageLocations: usageLocations.length > 0 ? usageLocations : undefined,
             },
           });
         }

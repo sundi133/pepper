@@ -13,6 +13,7 @@ import { SECRETS_AI_PROMPT } from "../shared/prompts";
 import { applySeverityCalibration } from "@/lib/severity-calibration";
 import { buildDeepRepoContext } from "../shared/repo-context";
 import { buildRepoContextSummary } from "@/lib/llm-repo-context";
+import { validateSecretCandidate, getEntropyLabel } from "./entropy-validator";
 import {
   FILE_EXTENSIONS,
   SKIP_DIRECTORIES,
@@ -206,6 +207,34 @@ async function analyzeSecretChunk(
           (f.confidence ?? 0) >= SECRETS_MIN_CONFIDENCE_DEFAULT,
       )
       .map((f) => {
+        // Entropy-based validation to reduce false positives
+        const entropy = validateSecretCandidate(
+          f.maskedValue || "****",
+          f.credentialType,
+          f.whyReal,
+        );
+
+        // Adjust confidence based on entropy analysis
+        let adjustedConfidence = f.confidence ?? 0.8;
+        if (entropy.matchesKnownFormat) {
+          adjustedConfidence = Math.min(1.0, adjustedConfidence + 0.15);
+        } else if (!entropy.isHighEntropy) {
+          // Lower confidence for low-entropy values
+          adjustedConfidence = Math.min(
+            adjustedConfidence,
+            entropy.confidence * 0.9,
+          );
+        }
+
+        // Filter out findings with very low entropy that don't match formats
+        if (
+          !entropy.matchesKnownFormat &&
+          entropy.shannonEntropy < 3.0 &&
+          adjustedConfidence < 0.8
+        ) {
+          return null; // Will be filtered below
+        }
+
         const masked = maskSecretValue(f.maskedValue || "****");
         const base: RawFinding = applySeverityCalibration({
           scanner: "SECRETS_LLM",
@@ -218,7 +247,7 @@ async function analyzeSecretChunk(
           snippet: `${f.startLine}: [MASKED ${f.credentialType}]`,
           ruleId: `SECRET-${f.credentialType.toUpperCase().replace(/\s+/g, "_")}`,
           cweId: "CWE-798",
-          confidence: f.confidence,
+          confidence: adjustedConfidence,
           masked: true,
           metadata: {
             credentialType: f.credentialType,
@@ -230,6 +259,13 @@ async function analyzeSecretChunk(
             impact: f.impact,
             remediation: f.remediation,
             confidenceReason: f.whyReal,
+            entropy: {
+              score: entropy.shannonEntropy,
+              isHighEntropy: entropy.isHighEntropy,
+              label: getEntropyLabel(entropy.shannonEntropy),
+              matchesKnownFormat: entropy.matchesKnownFormat,
+              detectedType: entropy.credentialType,
+            },
           },
         });
         const endLine = f.endLine || f.startLine;
@@ -246,7 +282,8 @@ async function analyzeSecretChunk(
           validation:
             "Rotate or revoke the credential and verify that it no longer appears in repository history scans",
         });
-      });
+      })
+      .filter(Boolean);
   } catch (err) {
     logger.error({ err, file: chunk.filePath }, "Secrets AI chunk failed");
     return [];

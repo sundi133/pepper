@@ -9,6 +9,18 @@ import {
 
 const bodySchema = z.object({
   repoUuids: z.array(z.string().min(1)).min(1).max(50),
+  scanType: z
+    .enum([
+      "FULL",
+      "INCREMENTAL",
+      "SAST_ONLY",
+      "SCA_ONLY",
+      "SECRETS_ONLY",
+      "IAC_ONLY",
+      "ZERO_DAY_ONLY",
+      "CONTAINER_ONLY",
+    ])
+    .optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -40,6 +52,7 @@ export async function POST(req: NextRequest) {
       userId: auth.session.user.id,
       repoUuids: body.repoUuids,
       workspace,
+      scanType: body.scanType,
     });
     return NextResponse.json(result, { status: 201 });
   } catch (e) {

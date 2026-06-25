@@ -10,9 +10,9 @@ import { RepositoryInventory } from "./repository-inventory";
 import { useScanHubIntegrations } from "./use-scan-hub-integrations";
 
 export function ScanHub() {
-  const hub = useScanHubIntegrations();
-  const { projects } = useProjects();
   const [scanType, setScanType] = useState<ScanJobData["scanType"]>("FULL");
+  const hub = useScanHubIntegrations(scanType);
+  const { projects } = useProjects();
 
   return (
     <div className="space-y-6 pb-10">

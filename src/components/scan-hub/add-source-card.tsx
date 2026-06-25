@@ -82,7 +82,7 @@ export function AddSourceCard({
   async function handleSmartConnect() {
     setSmartConnecting(true);
     try {
-      const outcome = await hub.connectSmartRepoUrl(smartUrl, smartBranch);
+      const outcome = await hub.connectSmartRepoUrl(smartUrl, smartBranch, scanType);
       if (outcome === "adhoc") {
         if (!urlLegalConfirm) {
           toast.error("Confirm you have permission to scan this code.");

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { ScanJobData } from "@/lib/queue";
 import { createProjectWithBuildGate } from "@/lib/create-project-with-build-gate";
 import { queueProjectScan } from "@/lib/queue-project-scan";
 import { bitbucketHttpsCloneUrl } from "@/lib/parse-bitbucket-repo-input";
@@ -24,6 +25,7 @@ export async function connectBitbucketRepositoryRecord(params: {
   branch?: string;
   /** Queue an initial scan (import / manual connect). Reconnects skip unless true. */
   queueInitialScan?: boolean;
+  scanType?: ScanJobData["scanType"];
 }): Promise<ConnectBitbucketRepoRecord> {
   const fullName = `${params.workspace}/${params.slug}`;
   const repoUuid = normalizeBitbucketUuid(params.bitbucketRepoUuid);
@@ -60,6 +62,7 @@ export async function connectBitbucketRepositoryRecord(params: {
         userId: params.userId,
         branch: params.branch?.trim() || params.defaultBranch,
         useOrgBitbucketToken: true,
+        scanType: params.scanType,
       });
       scanId = queued.scanId;
     }
@@ -97,6 +100,7 @@ export async function connectBitbucketRepositoryRecord(params: {
       userId: params.userId,
       branch: params.branch?.trim() || params.defaultBranch,
       useOrgBitbucketToken: true,
+      scanType: params.scanType,
     });
     scanId = queued.scanId;
   }

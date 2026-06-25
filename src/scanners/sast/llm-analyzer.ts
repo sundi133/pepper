@@ -5,6 +5,13 @@ import {
 } from "@/lib/llm-gateway";
 import { Chunk, RawFinding, ScanContext } from "../types";
 import { chunkFile } from "./chunker";
+import {
+  getOwasp2024Category,
+  getOwaspApiCategory,
+  getOwaspLlmCategory,
+  calculateExploitabilityScore,
+  getExploitabilityLabel,
+} from "./owasp-mapper";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -33,6 +40,39 @@ import {
   applySeverityCalibration,
   parseSeverity,
 } from "@/lib/severity-calibration";
+import { SAST_EXCLUDED_EXTENSIONS } from "../shared/extension-filters";
+
+// Dependency manifest files excluded from SAST analysis (more aggressive filtering)
+const DEPENDENCY_MANIFEST_FILES = new Set([
+  "package.json",
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "requirements.txt",
+  "Pipfile",
+  "Pipfile.lock",
+  "pyproject.toml",
+  "poetry.lock",
+  "go.mod",
+  "go.sum",
+  "Cargo.toml",
+  "Cargo.lock",
+  "pom.xml",
+  "Gemfile",
+  "Gemfile.lock",
+  "composer.json",
+  "composer.lock",
+  ".csproj",
+  ".fsproj",
+  ".vbproj",
+  "packages.config",
+  "pubspec.yaml",
+  "pubspec.lock",
+  "mix.exs",
+  "mix.lock",
+  "Package.swift",
+  "Package.resolved",
+]);
 
 // ─── Custom Policy Integration ────────────────────────────────────────
 
@@ -309,12 +349,17 @@ export async function runLlmSastScanner(
 
     const fullPath = path.join(ctx.workDir, filePath);
     const ext = path.extname(filePath).toLowerCase();
+    const fileName = path.basename(filePath);
 
     if (BINARY_EXTENSIONS.has(ext)) continue;
     if (!FILE_EXTENSIONS[ext]) continue;
 
     const parts = filePath.split(path.sep);
     if (parts.some((p) => SKIP_DIRECTORIES.has(p))) continue;
+
+    // Exclude config, data, and lock files from SAST
+    if (SAST_EXCLUDED_EXTENSIONS.has(ext)) continue;
+    if (DEPENDENCY_MANIFEST_FILES.has(fileName)) continue;
 
     try {
       const stat = fs.statSync(fullPath);
@@ -618,7 +663,7 @@ async function analyzeChunk(
       findings: [],
     });
 
-    const pass1Floor = 0.65;
+    const pass1Floor = 0.75; // Tightened from 0.65 to reduce false positives
 
     const allFindings = (parsed.findings || []).filter(
       (f) => f.title && f.severity,
@@ -661,6 +706,16 @@ async function analyzeChunk(
         meta.sink = null;
       }
 
+      const exploitabilityScore = calculateExploitabilityScore(
+        f.confidence ?? pass1Floor,
+        f.severity,
+        f.metadata,
+      );
+
+      const owaspCategory = getOwasp2024Category(f.cweId);
+      const owaspApiCategory = getOwaspApiCategory(f.cweId);
+      const owaspLlmCategory = getOwaspLlmCategory(f.cweId);
+
       let base: RawFinding = applySeverityCalibration({
         scanner: "SAST_LLM" as const,
         severity: parseSeverity(f.severity),
@@ -676,7 +731,21 @@ async function analyzeChunk(
         ruleId: isPolicy
           ? `POLICY-${matchedPolicy || "CUSTOM"}`
           : `LLM-${f.cweId || "GENERIC"}`,
-        metadata: meta,
+        metadata: {
+          ...meta,
+          owasp2024: owaspCategory,
+          owaspApi: owaspApiCategory,
+          owaspLlm: owaspLlmCategory,
+          exploitability: {
+            score: exploitabilityScore.score,
+            label: getExploitabilityLabel(exploitabilityScore.score),
+            attackVector: exploitabilityScore.attackVector,
+            attackComplexity: exploitabilityScore.attackComplexity,
+            privilegesRequired: exploitabilityScore.privilegesRequired,
+            userInteraction: exploitabilityScore.userInteraction,
+            scope: exploitabilityScore.scope,
+          },
+        },
       });
 
       if (passPhase === 2) {

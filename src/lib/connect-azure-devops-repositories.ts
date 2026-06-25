@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { ScanJobData } from "@/lib/queue";
 import {
   getOrgAzureDevOpsAuthOrThrow,
   AzureDevOpsCredentialsInvalidError,
@@ -15,6 +16,7 @@ export async function connectAzureDevOpsRepositories(params: {
   organizationId: string;
   userId: string;
   repoIds: string[];
+  scanType?: ScanJobData["scanType"];
 }): Promise<ConnectAzureDevOpsRepoResult> {
   const auth = await getOrgAzureDevOpsAuthOrThrow(params.organizationId);
 
@@ -74,6 +76,7 @@ export async function connectAzureDevOpsRepositories(params: {
       defaultBranch: repo.defaultBranch,
       connectedViaAzure: true,
       queueInitialScan: true,
+      scanType: params.scanType,
     });
 
     connected.push({

@@ -477,6 +477,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
             severity: "CRITICAL",
             title: `Known malicious package: ${dep.name}@${dep.version} (${hit.id})`,
             description: `${hit.summary || hit.details || "This package has been flagged as malicious by the OpenSSF Malicious Packages database."}\n\nAdvisory: ${hit.id}\nPackage: ${dep.name}@${dep.version} (${dep.ecosystem})\n\nRecommendation: Remove this package immediately and audit any systems where it was installed.`,
+            filePath: (dep as any).sourceFile || undefined,
             ruleId: hit.id,
             cweId: "CWE-506",
             confidence: 1.0,
@@ -611,6 +612,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
             description: f.recommendation
               ? `${f.description}\n\nRecommendation: ${f.recommendation}`
               : f.description,
+            filePath: batch.find((d) => d.name === f.packageName && (d as any).sourceFile) ? ((batch.find((d) => d.name === f.packageName) as any)?.sourceFile || undefined) : undefined,
             ruleId: `MAL-${f.type || "PKG"}`,
             cweId: f.type === "TYPOSQUAT" ? "CWE-506" : "CWE-829",
             confidence:
@@ -671,6 +673,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
               description: f.recommendation
                 ? `${f.description}\n\nRecommendation: ${f.recommendation}`
                 : f.description,
+              filePath: (dep as any).sourceFile || undefined,
               ruleId: `MAL-SCRIPT-${f.scriptKey || "INSTALL"}`,
               cweId: "CWE-506",
               confidence:

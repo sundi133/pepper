@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { ScanJobData } from "@/lib/queue";
 import { createProjectWithBuildGate } from "@/lib/create-project-with-build-gate";
 import { queueProjectScan } from "@/lib/queue-project-scan";
 import { azureDevOpsHttpsCloneUrl } from "@/lib/parse-azure-devops-repo-input";
@@ -23,6 +24,7 @@ export async function connectAzureDevOpsRepositoryRecord(params: {
   connectedViaAzure: boolean;
   branch?: string;
   queueInitialScan?: boolean;
+  scanType?: ScanJobData["scanType"];
 }): Promise<ConnectAzureDevOpsRepoRecord> {
   const fullName = `${params.azureProjectName}/${params.azureRepoName}`;
   const cloneUrl =
@@ -63,6 +65,7 @@ export async function connectAzureDevOpsRepositoryRecord(params: {
         userId: params.userId,
         branch: params.branch?.trim() || params.defaultBranch,
         useOrgAzureDevOpsToken: true,
+        scanType: params.scanType,
       });
       scanId = queued.scanId;
     }
@@ -101,6 +104,7 @@ export async function connectAzureDevOpsRepositoryRecord(params: {
       userId: params.userId,
       branch: params.branch?.trim() || params.defaultBranch,
       useOrgAzureDevOpsToken: true,
+      scanType: params.scanType,
     });
     scanId = queued.scanId;
   }

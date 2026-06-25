@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { ScanJobData } from "@/lib/queue";
 import {
   getOrgBitbucketAuthOrThrow,
   BitbucketCredentialsInvalidError,
@@ -25,6 +26,7 @@ export async function connectManualBitbucketRepository(params: {
   userId: string;
   repoInput: string;
   branch?: string;
+  scanType?: ScanJobData["scanType"];
 }) {
   const parsed = parseBitbucketRepoInput(params.repoInput);
   if (!parsed) {
@@ -95,6 +97,7 @@ export async function connectManualBitbucketRepository(params: {
     connectedViaBitbucket: true,
     branch: params.branch,
     queueInitialScan: !existing,
+    scanType: params.scanType,
   });
 
   return record;

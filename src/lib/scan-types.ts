@@ -53,6 +53,7 @@ export const MANUAL_SCAN_TYPE_OPTIONS: ReadonlyArray<{
   },
 ] as const;
 
+
 export const API_CREATE_SCAN_TYPES = [
   "FULL",
   "INCREMENTAL",

@@ -223,6 +223,129 @@ function SecretFindingReport({ finding }: { finding: Finding }) {
   );
 }
 
+function SastFindingReport({ finding }: { finding: Finding }) {
+  const report = buildStoredFindingReport(finding);
+
+  // Extract curl command from steps if present
+  const curlCommand = report.stepsToReproduce
+    .map(step => {
+      const curlMatch = step.match(/curl\s+[^\n]+/i);
+      return curlMatch ? curlMatch[0] : null;
+    })
+    .find(cmd => cmd !== null);
+
+  const handleCopyCurl = () => {
+    if (curlCommand) {
+      navigator.clipboard.writeText(curlCommand);
+      toast.success("Curl command copied to clipboard");
+    }
+  };
+
+  return (
+    <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
+      <ReportBlock title="Summary" icon="📋">
+        <ReportSummaryText text={report.summary} />
+      </ReportBlock>
+
+      {report.stepsToReproduce.length > 0 && (
+        <div className="border-t border-border/40 pt-4">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
+              <span>🔧</span>
+              Steps to Reproduce
+            </h3>
+            {curlCommand && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCopyCurl}
+                className="h-7 gap-1"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                Copy curl
+              </Button>
+            )}
+          </div>
+          <ReportPlainList items={report.stepsToReproduce} />
+        </div>
+      )}
+
+      <div className="border-t border-border/40 pt-4">
+        <ReportBlock title="Impact" icon="⚠️">
+          <ReportRichText text={report.impact} />
+        </ReportBlock>
+      </div>
+
+      <div className="border-t border-border/40 pt-4">
+        <ReportBlock title="Remediation" icon="🔒">
+          <div className="space-y-3">
+            {report.remediation.map((step, idx) => (
+              <div key={idx} className="text-sm text-muted-foreground leading-relaxed">
+                <ReportRichText text={step} />
+              </div>
+            ))}
+          </div>
+        </ReportBlock>
+      </div>
+    </section>
+  );
+}
+
+function MaliciousPkgFindingReport({ finding }: { finding: Finding }) {
+  const report = buildStoredFindingReport(finding);
+  const summaryLines = report.summary.split("\n\n");
+  const whatIsWrong = summaryLines.find(l => l.includes("What is wrong:"))?.replace(/^What is wrong:\s*/i, "") || "";
+  const whyExploitable = summaryLines.find(l => l.includes("Why it is exploitable:"))?.replace(/^Why it is exploitable:\s*/i, "") || "";
+
+  return (
+    <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
+      <ReportBlock title="Issue" icon={<span className="text-lg">ℹ️</span>}>
+        <p className="text-sm font-semibold text-foreground">{stripReportMarkdown(report.vulnerabilityName)}</p>
+        {finding.ruleId && (
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Package Rule</p>
+              <code className="text-sm font-mono text-foreground">{finding.ruleId}</code>
+            </div>
+            {finding.filePath && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Location</p>
+                <code className="text-sm font-mono text-foreground">{finding.filePath}</code>
+              </div>
+            )}
+          </div>
+        )}
+        {whatIsWrong && (
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">What is wrong</p>
+            <ReportRichText text={whatIsWrong} />
+          </div>
+        )}
+      </ReportBlock>
+
+      <div className="border-t border-border/40 pt-4">
+        <ReportBlock title="Why it is Exploitable" icon={<span className="text-lg">⚠️</span>}>
+          <ReportRichText text={whyExploitable || report.summary.split("\n\n")[0] || ""} />
+        </ReportBlock>
+      </div>
+
+      <div className="border-t border-border/40 pt-4">
+        <ReportBlock title="Impact" icon={<span className="text-lg">👥</span>}>
+          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+            <ReportRichText text={report.impact} />
+          </div>
+        </ReportBlock>
+      </div>
+
+      <div className="border-t border-border/40 pt-4">
+        <ReportBlock title="Remediation" icon={<span className="text-lg">🔧</span>}>
+          <ReportPlainList items={report.remediation} />
+        </ReportBlock>
+      </div>
+    </section>
+  );
+}
+
 function ScaFindingReport({ finding }: { finding: Finding }) {
   const report = buildStoredFindingReport(finding);
   const metadata = finding.metadata as Record<string, unknown> | undefined;
@@ -653,9 +776,19 @@ function FindingReportSections({ finding, sourceContext }: { finding: Finding; s
     return <SecretFindingReport finding={finding} />;
   }
 
+  const isSast = finding.scanner === "SAST_LLM";
+  if (isSast) {
+    return <SastFindingReport finding={finding} />;
+  }
+
   const isSca = finding.scanner === "SCA";
   if (isSca) {
     return <ScaFindingReport finding={finding} />;
+  }
+
+  const isMaliciousPkg = finding.scanner === "MALICIOUS_PKG";
+  if (isMaliciousPkg) {
+    return <MaliciousPkgFindingReport finding={finding} />;
   }
 
   const isIac = finding.scanner === "IAC";

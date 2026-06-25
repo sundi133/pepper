@@ -283,7 +283,7 @@ async function analyzeSecretChunk(
             "Rotate or revoke the credential and verify that it no longer appears in repository history scans",
         });
       })
-      .filter(Boolean);
+      .filter((f): f is RawFinding => f !== null);
   } catch (err) {
     logger.error({ err, file: chunk.filePath }, "Secrets AI chunk failed");
     return [];

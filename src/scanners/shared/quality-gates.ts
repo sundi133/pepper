@@ -56,8 +56,13 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
     if (f.severity === "INFO") return false;
     if (FAILURE_RULE_IDS.has(f.ruleId || "")) return false;
 
-    const floor = confidenceFloor(f.scanner);
-    if ((f.confidence ?? 0) < floor) return false;
+    // SCA findings are database-confirmed from OSV (confidence=1.0) and are
+    // not LLM-generated — skip the LLM confidence floor so triaged findings
+    // whose confidence was adjusted by the AI triage are never silently dropped.
+    if (f.scanner !== "SCA") {
+      const floor = confidenceFloor(f.scanner);
+      if ((f.confidence ?? 0) < floor) return false;
+    }
 
     // Remediation is required for most findings, but ZERO_DAY and high-confidence
     // SAST_LLM findings with a valid CWE are exempt — business logic, race

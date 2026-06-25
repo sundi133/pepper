@@ -201,12 +201,16 @@ export const scaScanner: ScannerPlugin = {
 
     if (findings.length > 0 && ctx.orgSettings.enableLlmSast) {
       ctx.onProgress?.(`SCA: AI triaging ${findings.length} CVE findings...`);
-      findings = await triageScaFindings(findings, {
-        provider: ctx.orgSettings.llmProvider,
-        baseUrl: ctx.orgSettings.llmBaseUrl,
-        apiKey: ctx.orgSettings.llmApiKey,
-        model: ctx.orgSettings.llmModel,
-      });
+      findings = await triageScaFindings(
+        findings,
+        {
+          provider: ctx.orgSettings.llmProvider,
+          baseUrl: ctx.orgSettings.llmBaseUrl,
+          apiKey: ctx.orgSettings.llmApiKey,
+          model: ctx.orgSettings.llmModel,
+        },
+        { workDir: ctx.workDir, fileList: ctx.fileList },
+      );
     }
 
     ctx.onProgress?.(`SCA: ${findings.length} actionable vulnerabilities`);

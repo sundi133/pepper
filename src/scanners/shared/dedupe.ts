@@ -82,6 +82,25 @@ export function areRootCauseDuplicates(a: RawFinding, b: RawFinding): boolean {
         return true;
       }
     }
+
+    // SCA ↔ CONTAINER: same CVE for the same package is the same root cause.
+    // SCA discovers it from lockfiles/manifests; Container finds it via Trivy
+    // inside the built image. Keeping both is pure noise.
+    const scaContainerPair =
+      (a.scanner === "SCA" && b.scanner === "CONTAINER") ||
+      (a.scanner === "CONTAINER" && b.scanner === "SCA");
+    if (scaContainerPair) {
+      const aMeta = a.metadata || {};
+      const bMeta = b.metadata || {};
+      const sameCve = a.cveId && b.cveId && a.cveId === b.cveId;
+      const samePkg =
+        ((aMeta.packageName as string) || "") ===
+          ((bMeta.packageName as string) || "") &&
+        (aMeta.packageName as string);
+      if (sameCve || samePkg) {
+        return true;
+      }
+    }
   }
 
   return false;

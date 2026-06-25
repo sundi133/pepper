@@ -29,6 +29,16 @@ import {
 
 const execFileP = promisify(execFile);
 
+const PEPPER_IGNORE = /pepper:ignore/i;
+
+function isInlineSuppressed(lines: string[], startLine?: number): boolean {
+  if (!startLine || startLine < 1 || lines.length === 0) return false;
+  const idx = startLine - 1;
+  if (idx < lines.length && PEPPER_IGNORE.test(lines[idx])) return true;
+  if (idx > 0 && PEPPER_IGNORE.test(lines[idx - 1])) return true;
+  return false;
+}
+
 const DOCKERFILE_NAMES = new Set(["Dockerfile", "dockerfile", "Containerfile"]);
 const COMPOSE_NAMES = new Set([
   "docker-compose.yml",
@@ -72,6 +82,28 @@ function mapSeverity(sev?: string): SeverityLevel {
   }
 }
 
+/** Trivy Target strings from OS package managers (base image layer). */
+const OS_PKG_TARGETS =
+  /\b(?:alpine|debian|ubuntu|centos|rhel|fedora|oracle|amazon|photon|wolfi|chainguard|suse|opensuse|mariner|cbl-mariner|rocky|alma)\b/i;
+
+type ContainerLayer = "base-image-os" | "app-layer";
+
+function classifyTarget(target?: string): ContainerLayer {
+  if (!target) return "app-layer";
+  // Trivy formats OS targets like "Alpine Linux 3.18" or "debian 11.8"
+  // and language targets like "Node.js", "Python", "Go", "Rust", "Java",
+  // "gobinary", "gomod", "pip", "npm", "yarn", "cargo", etc.
+  if (OS_PKG_TARGETS.test(target)) return "base-image-os";
+  return "app-layer";
+}
+
+const SEVERITY_DOWNGRADE: Record<string, SeverityLevel> = {
+  CRITICAL: "HIGH",
+  HIGH: "MEDIUM",
+  MEDIUM: "LOW",
+  LOW: "LOW",
+};
+
 async function trivyAvailable(): Promise<boolean> {
   try {
     await execFileP("trivy", ["--version"], { timeout: 5000 });
@@ -100,7 +132,8 @@ async function scanImageWithTrivy(image: string): Promise<TrivyOutput | null> {
       { timeout: 300_000, maxBuffer: 64 * 1024 * 1024 },
     );
     return JSON.parse(stdout) as TrivyOutput;
-  } catch {
+  } catch (err) {
+    logger.warn({ err, image }, "Trivy image scan failed");
     return null;
   }
 }
@@ -178,8 +211,10 @@ async function scanContainerConfig(
         raw,
         { findings: [] },
       );
+      const fileLines = file.content.split("\n");
       for (const f of parsed.findings || []) {
         if ((f.confidence ?? 0) < LLM_MIN_CONFIDENCE_DEFAULT) continue;
+        if (isInlineSuppressed(fileLines, f.startLine)) continue;
         findings.push(
           enrichFinding(
             {
@@ -296,10 +331,19 @@ export const containerScanner: ScannerPlugin = {
       }
 
       for (const result of trivyOutput.Results) {
+        const layer = classifyTarget(result.Target);
         for (const vuln of result.Vulnerabilities || []) {
+          let severity = mapSeverity(vuln.Severity);
+          // Base-image OS packages (glibc, openssl, etc.) are owned by the
+          // base image maintainer, not the app developer. Downgrade severity
+          // by one level so they don't drown out actionable app-layer CVEs.
+          if (layer === "base-image-os") {
+            severity = SEVERITY_DOWNGRADE[severity] || severity;
+          }
+
           const base: RawFinding = {
             scanner: "CONTAINER",
-            severity: mapSeverity(vuln.Severity),
+            severity,
             title: `${vuln.VulnerabilityID}: ${vuln.PkgName || "package"} in ${ref.image}`,
             description: "",
             filePath: ref.filePath,
@@ -309,7 +353,7 @@ export const containerScanner: ScannerPlugin = {
               ? vuln.VulnerabilityID
               : undefined,
             cweId: vuln.CweIDs?.[0],
-            confidence: 0.95,
+            confidence: layer === "base-image-os" ? 0.85 : 0.95,
             metadata: {
               image: ref.image,
               artifactKind: ref.kind,
@@ -318,6 +362,7 @@ export const containerScanner: ScannerPlugin = {
               fixedVersion: vuln.FixedVersion,
               target: result.Target,
               category: "CONTAINER_CVE",
+              containerLayer: layer,
             },
           };
           findings.push(
@@ -327,9 +372,12 @@ export const containerScanner: ScannerPlugin = {
               whyExploitable:
                 vuln.Description ||
                 `Vulnerable package ${vuln.PkgName}@${vuln.InstalledVersion} in runtime image.`,
-              fix: vuln.FixedVersion
-                ? `Upgrade ${vuln.PkgName} to ${vuln.FixedVersion} or rebuild base image.`
-                : "Rebuild image with patched base/packages per vendor advisory.",
+              fix:
+                layer === "base-image-os"
+                  ? `Rebuild with a patched base image or pin a newer tag that includes ${vuln.PkgName} >= ${vuln.FixedVersion || "patched version"}.`
+                  : vuln.FixedVersion
+                    ? `Upgrade ${vuln.PkgName} to ${vuln.FixedVersion} or later.`
+                    : "Rebuild image with patched base/packages per vendor advisory.",
               validation: `trivy image ${ref.image} — confirm ${vuln.VulnerabilityID} absent`,
             }),
           );

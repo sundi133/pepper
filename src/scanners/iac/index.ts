@@ -158,7 +158,8 @@ async function analyzeStack(
           f.title &&
           f.severity &&
           f.filePath &&
-          (f.confidence ?? 0) >= IAC_MIN_CONFIDENCE_DEFAULT,
+          (f.confidence ?? 0) >= IAC_MIN_CONFIDENCE_DEFAULT &&
+          !isInlineSuppressed(lineMaps.get(f.filePath) || [], f.startLine),
       )
       .map((f) => {
         const lines = lineMaps.get(f.filePath) || [];
@@ -227,4 +228,27 @@ function buildSnippet(
     .slice(start, end)
     .map((line, index) => `${start + index + 1}: ${line}`)
     .join("\n");
+}
+
+/**
+ * Check whether the source lines around a finding contain a `pepper:ignore`
+ * suppression comment.  Supports common IaC comment styles:
+ *   # pepper:ignore          (YAML, HCL, Dockerfile, Python)
+ *   // pepper:ignore         (HCL/Jsonnet)
+ *   /* pepper:ignore *​/      (JSON-with-comments)
+ *
+ * We check the finding line itself and the line immediately above it (the
+ * standard placement for inline suppression comments).
+ */
+const PEPPER_IGNORE = /pepper:ignore/i;
+
+function isInlineSuppressed(
+  lines: string[],
+  startLine?: number,
+): boolean {
+  if (!startLine || startLine < 1 || lines.length === 0) return false;
+  const idx = startLine - 1; // 0-based
+  if (idx < lines.length && PEPPER_IGNORE.test(lines[idx])) return true;
+  if (idx > 0 && PEPPER_IGNORE.test(lines[idx - 1])) return true;
+  return false;
 }

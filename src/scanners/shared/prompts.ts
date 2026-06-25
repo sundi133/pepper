@@ -91,6 +91,11 @@ export const SCA_TRIAGE_PROMPT = `Triage OSV CVE findings. Do NOT invent CVEs. G
 For each kept finding add: directDependency (bool), reachable (bool), exploitPreconditions, prioritized fixVersion, remediation.
 Suppress dev-only/test-only unless CRITICAL and reachable.
 
+Each vulnerability includes an "importEvidence" field showing actual import/require lines found in
+the codebase (or "no imports found" if absent). Use this to judge reachability:
+- If no imports found AND severity < CRITICAL, set keep=false with reason "package not imported in source".
+- If imports exist, assess whether the vulnerable function/module is likely reachable from those call sites.
+
 Return JSON: { "triaged": [{ "osvId", "keep": true|false, "reason", "metadata": {...} }] }`;
 
 export const MALICIOUS_VALIDATION_PROMPT = `Validate supply-chain risk from EVIDENCE only (metadata, install scripts, typosquat signals, OSV MAL-*).

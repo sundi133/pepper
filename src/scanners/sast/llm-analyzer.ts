@@ -663,48 +663,95 @@ async function analyzeChunk(
       findings: [],
     });
 
-    const pass1Floor = 0.75; // Tightened from 0.65 to reduce false positives
+    const pass1Floor = 0.75; // Conservative threshold; confidence 0.65-0.75 candidates filtered for pass-2 validation
 
     const allFindings = (parsed.findings || []).filter(
       (f) => f.title && f.severity,
     );
-    const filtered = allFindings.filter(
-      (f) => (f.confidence ?? 0) >= pass1Floor,
-    );
+    const filtered = allFindings
+      .filter((f) => {
+        const confidence = f.confidence ?? 0;
+        // Log near-threshold findings for visibility
+        if (confidence >= 0.65 && confidence < pass1Floor) {
+          logger.debug(
+            {
+              filePath: chunk.filePath,
+              title: f.title,
+              confidence,
+            },
+            "Filtered near-threshold finding (confidence 0.65-0.75 requires pass-2 validation)",
+          );
+        }
+        return confidence >= pass1Floor;
+      })
+      .filter((f) => {
+        // Reject findings with non-application-code layer metadata
+        // (manifest-dependencies, container-build, ci-or-deploy-config should not be SAST)
+        const layer = (f.metadata?.findingLayer as string | null | undefined);
+        if (
+          layer === "manifest-dependencies" ||
+          layer === "container-build" ||
+          layer === "ci-or-deploy-config"
+        ) {
+          logger.warn(
+            {
+              filePath: chunk.filePath,
+              title: f.title,
+              layer,
+            },
+            "Rejecting finding with non-SAST layer classification",
+          );
+          return false;
+        }
+        return true;
+      });
 
-    return filtered.map((f) => {
-      const titleLower = f.title.toLowerCase();
-      const isPolicy =
-        titleLower.includes("policy") || titleLower.includes("policy:");
-      const matchedPolicy = policyNames.find((name) =>
-        titleLower.includes(name.toLowerCase()),
-      );
-      const isCredential =
-        f.cweId === "CWE-798" ||
-        /hardcoded|embedded secret|plaintext (?:password|secret|token)/i.test(
-          f.title,
-        ) ||
-        (f.metadata?.weaknessClass as string | undefined)
+    return filtered
+      .filter((f) => {
+        // SAST must NOT report CWE-798 (hardcoded credentials)
+        // Those are exclusively handled by SECRETS_LLM scanner
+        const isCwe798 = f.cweId === "CWE-798";
+        const isCredentialByTitle =
+          /hardcoded|embedded secret|plaintext (?:password|secret|token)/i.test(
+            f.title,
+          );
+        const isCredentialByMeta = (f.metadata?.weaknessClass as string | undefined)
           ?.toLowerCase()
           .includes("credential");
 
-      const passPhase =
-        (f.confidence ?? 0) >= LLM_MIN_CONFIDENCE_DEFAULT ? 2 : 1;
-      const meta: Record<string, unknown> = {
-        ...(f.metadata || {}),
-        passPhase,
-        remediation:
-          f.recommendation ||
-          (f.metadata?.remediation as string | undefined),
-        ...(matchedPolicy
-          ? { policyName: matchedPolicy, type: "policy-violation" }
-          : {}),
-      };
-      if (isCredential) {
-        meta.weaknessClass = "Hardcoded Credential";
-        meta.parameter = null;
-        meta.sink = null;
-      }
+        if (isCwe798 || isCredentialByTitle || isCredentialByMeta) {
+          logger.debug(
+            {
+              filePath: chunk.filePath,
+              title: f.title,
+              cweId: f.cweId,
+            },
+            "Filtering CWE-798 (hardcoded credential) from SAST — exclusive to SECRETS scanner",
+          );
+          return false;
+        }
+        return true;
+      })
+      .map((f) => {
+        const titleLower = f.title.toLowerCase();
+        const isPolicy =
+          titleLower.includes("policy") || titleLower.includes("policy:");
+        const matchedPolicy = policyNames.find((name) =>
+          titleLower.includes(name.toLowerCase()),
+        );
+
+        const passPhase =
+          (f.confidence ?? 0) >= LLM_MIN_CONFIDENCE_DEFAULT ? 2 : 1;
+        const meta: Record<string, unknown> = {
+          ...(f.metadata || {}),
+          passPhase,
+          remediation:
+            f.recommendation ||
+            (f.metadata?.remediation as string | undefined),
+          ...(matchedPolicy
+            ? { policyName: matchedPolicy, type: "policy-violation" }
+            : {}),
+        };
 
       const exploitabilityScore = calculateExploitabilityScore(
         f.confidence ?? pass1Floor,
@@ -749,33 +796,16 @@ async function analyzeChunk(
       });
 
       if (passPhase === 2) {
-        const exposedRaw = f.metadata?.exposedValue;
-        const exposed =
-          typeof exposedRaw === "string" && exposedRaw.trim()
-            ? exposedRaw.trim()
-            : undefined;
         return enrichFinding(base, base.metadata as Record<string, unknown>, {
-          whatIsWrong: isCredential
-            ? exposed
-              ? `Hardcoded credential in source: ${exposed}`
-              : `Hardcoded credential: ${f.title}`
-            : f.title,
+          whatIsWrong: f.title,
           where: `${chunk.filePath}:${f.startLine}-${f.endLine}`,
-          whyExploitable: isCredential
-            ? (f.metadata?.impact as string) ||
-              f.description.split("\n")[0] ||
-              "The literal secret in source can be reused by anyone with repository access until rotated."
-            : (f.metadata?.attackPath as string) ||
-              f.description.split("\n")[0],
-          impact: isCredential
-            ? (f.metadata?.impact as string | undefined)
-            : undefined,
+          whyExploitable: (f.metadata?.attackPath as string) ||
+            f.description.split("\n")[0],
+          impact: f.metadata?.impact as string | undefined,
           fix:
             f.recommendation ||
             (f.metadata?.remediation as string) ||
-            (isCredential
-              ? "Move the secret to a secret manager, rotate it, and remove it from git history."
-              : "Remediate per recommendation."),
+            "Remediate per recommendation.",
         });
       }
       return base;

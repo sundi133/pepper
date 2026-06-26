@@ -16,6 +16,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
+import {
   ScanStatusBadge,
   GateResultBadge,
 } from "@/components/scans/scan-status-badge";
@@ -46,7 +52,7 @@ import { ScanTriageChat } from "@/components/scans/scan-triage-chat";
 
 /** Stronger scan toolbar outline buttons (readable while a scan is running). */
 const scanToolbarOutlineClass =
-  "font-semibold text-foreground shadow-sm border-2 border-border bg-background hover:bg-muted/80 dark:border-border/80 dark:hover:bg-muted/50";
+  "text-xs sm:text-sm h-9 sm:h-10 px-3 sm:px-4 text-foreground border border-border/60 bg-background hover:bg-primary/5 dark:border-border/40 dark:hover:bg-primary/10 hover:border-primary/40 dark:hover:border-primary/50 transition-colors whitespace-nowrap";
 
 type Finding = {
   id: string;
@@ -129,6 +135,7 @@ export default function ScanDetailPage() {
   const [resuming, setResuming] = useState(false);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [activeSection, setActiveSection] = useState<string>("");
 
   const orgRole = session?.user?.memberships?.[0]?.role;
   const canRescan = orgRole && ["ADMIN", "SECURITY", "DEVELOPER"].includes(orgRole);
@@ -161,6 +168,12 @@ export default function ScanDetailPage() {
     }, 150);
     return () => window.clearTimeout(t);
   }, [scanId, scan?.status, findings]);
+
+  // Auto-select first section tab when findings change
+  useEffect(() => {
+    const sections = groupFindingsBySection(findings as Finding[]);
+    setActiveSection(sections[0]?.id ?? "");
+  }, [findings]);
 
   useEffect(() => {
     if (typeof window === "undefined" || isLoading || !scan) return;
@@ -395,12 +408,14 @@ export default function ScanDetailPage() {
           {canDelete && (
             <Button
               variant="destructive"
-              className="font-semibold shadow-sm"
+              className="text-xs sm:text-sm h-9 sm:h-10 px-3 sm:px-4 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 transition-colors whitespace-nowrap"
               disabled={deleting || isRunning || isPaused}
               onClick={handleDelete}
+              title="Delete this scan and all findings"
             >
               <Trash2 className="mr-2 h-4 w-4" />
-              Delete
+              <span className="hidden sm:inline">Delete</span>
+              <span className="sm:hidden">Del</span>
             </Button>
           )}
           {canRescan && (
@@ -411,7 +426,7 @@ export default function ScanDetailPage() {
               onClick={handleRescan}
             >
               <RotateCcw className="mr-2 h-4 w-4" />
-              Rescan
+              {rescanning ? "Rescanning..." : "Rescan"}
             </Button>
           )}
           {canManageScan && isRunning && (
@@ -496,7 +511,7 @@ export default function ScanDetailPage() {
               {scan.status === "COMPLETED" && (
                 <Button
                   variant="default"
-                  className="font-semibold shadow-sm"
+                  className="font-semibold shadow-md hover:shadow-lg bg-primary hover:bg-primary/90 dark:bg-primary dark:hover:bg-primary/80 transition-all duration-200"
                   onClick={() => router.push(`/scans/${scanId}/compliance`)}
                 >
                   <BookOpen className="mr-2 h-4 w-4" />
@@ -615,50 +630,45 @@ export default function ScanDetailPage() {
 
       {/* Summary Cards */}
       {(hasReportableFindings || isActive) && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-red-600" />
-                <span className="text-sm text-muted-foreground">Critical</span>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-3">
+          <Card className="border-0 bg-gradient-to-br from-red-50 to-red-50/50 dark:from-red-950/30 dark:to-red-950/10 shadow-sm hover:shadow-md transition-shadow">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-3 w-3 rounded-full bg-red-600 shadow-lg shadow-red-600/20" />
+                <span className="text-xs font-semibold text-red-700 dark:text-red-400 uppercase tracking-wider">Critical</span>
               </div>
-              <p className="text-2xl font-bold mt-1">{scan.criticalCount}</p>
+              <p className="text-3xl font-bold text-red-700 dark:text-red-400">{scan.criticalCount}</p>
+              <div className="mt-1.5 h-0.5 w-10 bg-gradient-to-r from-red-600 to-red-400 rounded-full"></div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-orange-500" />
-                <span className="text-sm text-muted-foreground">High</span>
+          <Card className="border-0 bg-gradient-to-br from-orange-50 to-orange-50/50 dark:from-orange-950/30 dark:to-orange-950/10 shadow-sm hover:shadow-md transition-shadow">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-3 w-3 rounded-full bg-orange-500 shadow-lg shadow-orange-500/20" />
+                <span className="text-xs font-semibold text-orange-700 dark:text-orange-400 uppercase tracking-wider">High</span>
               </div>
-              <p className="text-2xl font-bold mt-1">{scan.highCount}</p>
+              <p className="text-3xl font-bold text-orange-700 dark:text-orange-400">{scan.highCount}</p>
+              <div className="mt-1.5 h-0.5 w-10 bg-gradient-to-r from-orange-500 to-orange-400 rounded-full"></div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-yellow-500" />
-                <span className="text-sm text-muted-foreground">Medium</span>
+          <Card className="border-0 bg-gradient-to-br from-yellow-50 to-yellow-50/50 dark:from-yellow-950/30 dark:to-yellow-950/10 shadow-sm hover:shadow-md transition-shadow">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-3 w-3 rounded-full bg-yellow-500 shadow-lg shadow-yellow-500/20" />
+                <span className="text-xs font-semibold text-yellow-700 dark:text-yellow-400 uppercase tracking-wider">Medium</span>
               </div>
-              <p className="text-2xl font-bold mt-1">{scan.mediumCount}</p>
+              <p className="text-3xl font-bold text-yellow-700 dark:text-yellow-400">{scan.mediumCount}</p>
+              <div className="mt-1.5 h-0.5 w-10 bg-gradient-to-r from-yellow-500 to-yellow-400 rounded-full"></div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-blue-400" />
-                <span className="text-sm text-muted-foreground">Low</span>
+          <Card className="border-0 bg-gradient-to-br from-blue-50 to-blue-50/50 dark:from-blue-950/30 dark:to-blue-950/10 shadow-sm hover:shadow-md transition-shadow">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-3 w-3 rounded-full bg-blue-500 shadow-lg shadow-blue-500/20" />
+                <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wider">Low</span>
               </div>
-              <p className="text-2xl font-bold mt-1">{scan.lowCount}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-gray-400" />
-                <span className="text-sm text-muted-foreground">Info</span>
-              </div>
-              <p className="text-2xl font-bold mt-1">{scan.infoCount}</p>
+              <p className="text-3xl font-bold text-blue-700 dark:text-blue-400">{scan.lowCount}</p>
+              <div className="mt-1.5 h-0.5 w-10 bg-gradient-to-r from-blue-500 to-blue-400 rounded-full"></div>
             </CardContent>
           </Card>
         </div>
@@ -679,15 +689,15 @@ export default function ScanDetailPage() {
 
       {/* Findings */}
       {(hasReportableFindings || isActive) && (
-        <Card
+        <div
           id="scan-findings"
           tabIndex={-1}
-          className="scroll-mt-24 outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+          className="scroll-mt-24 outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring min-w-0 w-full"
         >
-          <CardHeader>
+          <div className="space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
               <div className="flex items-center gap-2 flex-wrap">
-                <CardTitle>Findings ({visibleFindingCount})</CardTitle>
+                <h2 className="text-2xl font-bold">Findings ({visibleFindingCount})</h2>
                 {scan.status === "COMPLETED" && (scan as { newFindingCount?: number }).newFindingCount ? (
                   <button
                     type="button"
@@ -748,8 +758,32 @@ export default function ScanDetailPage() {
                 </Select>
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="min-w-0 overflow-hidden">
+            {findingSections.length > 0 && (
+              <Tabs
+                value={activeSection}
+                onValueChange={setActiveSection}
+              >
+                <TabsList
+                  variant="line"
+                  className="w-full justify-start border-b border-border rounded-none h-auto p-0 gap-0"
+                >
+                  {findingSections.map(({ id, title, findings }) => (
+                    <TabsTrigger
+                      key={id}
+                      value={id}
+                      className="rounded-none pb-2.5 pr-2"
+                    >
+                      {title}
+                      <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums">
+                        {findings.length}
+                      </span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            )}
+          </div>
+          <div className="min-w-0 w-full overflow-hidden mt-6">
             {findingSections.length === 0 ? (
               <FindingsTable
                 findings={visibleFindings}
@@ -780,20 +814,9 @@ export default function ScanDetailPage() {
                 )}
               />
             ) : (
-              <div className="space-y-6">
+              <Tabs value={activeSection} onValueChange={setActiveSection}>
                 {findingSections.map((section) => (
-                  <div key={section.id} className="space-y-3">
-                    <div className="flex items-center justify-between border-b pb-2">
-                      <div>
-                        <h3 className="font-semibold">{section.title}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {section.description}
-                        </p>
-                      </div>
-                      <Badge variant="outline">
-                        {section.findings.length} findings
-                      </Badge>
-                    </div>
+                  <TabsContent key={section.id} value={section.id}>
                     <FindingsTable
                       findings={section.findings}
                       fixPrSource={fixPrSource}
@@ -825,12 +848,12 @@ export default function ScanDetailPage() {
                         />
                       )}
                     />
-                  </div>
+                  </TabsContent>
                 ))}
-              </div>
+              </Tabs>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Error / stop details */}

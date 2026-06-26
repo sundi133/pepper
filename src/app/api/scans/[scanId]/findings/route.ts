@@ -48,6 +48,12 @@ export async function GET(
   if (isNewParam === "true") where.isNew = true;
   else if (isNewParam === "false") where.isNew = false;
 
+  // Exclude INFO severity findings from UI (INFO is internal categorization only)
+  // Valid UI severities: CRITICAL, HIGH, MEDIUM, LOW
+  if (!severity) {
+    where.severity = { notIn: ["INFO"] };
+  }
+
   const orderBy: Record<string, string> = {};
   if (sort === "risk") {
     orderBy.riskScore = "desc"; // highest risk first

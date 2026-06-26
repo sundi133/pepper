@@ -157,14 +157,23 @@
         transparent 45%
       );
   }
-  h1,
-  h2,
-  h3,
+  h1 {
+    @apply text-foreground tracking-tight font-bold text-3xl leading-tight;
+  }
+  h2 {
+    @apply text-foreground tracking-tight font-bold text-2xl leading-snug;
+  }
+  h3 {
+    @apply text-foreground tracking-tight font-semibold text-xl leading-snug;
+  }
   h4 {
-    @apply text-foreground tracking-tight;
+    @apply text-foreground tracking-tight font-semibold text-lg leading-snug;
   }
   p {
-    @apply leading-relaxed;
+    @apply leading-relaxed text-sm text-foreground/90;
+  }
+  body {
+    @apply font-sans;
   }
   code:not(pre code) {
     @apply rounded-md bg-muted px-1.5 py-0.5 text-[0.9em] font-medium text-foreground;
@@ -178,6 +187,35 @@
 }
 
 @layer utilities {
+  /* Enterprise Typography */
+  .text-title-xl {
+    @apply text-3xl font-bold leading-tight tracking-tight;
+  }
+  .text-title-lg {
+    @apply text-2xl font-bold leading-snug tracking-tight;
+  }
+  .text-title-md {
+    @apply text-xl font-bold leading-snug tracking-tight;
+  }
+  .text-title-sm {
+    @apply text-lg font-semibold leading-snug tracking-tight;
+  }
+  .text-body-lg {
+    @apply text-base font-normal leading-relaxed text-foreground/90;
+  }
+  .text-body-md {
+    @apply text-sm font-normal leading-relaxed text-foreground/85;
+  }
+  .text-body-sm {
+    @apply text-xs font-normal leading-relaxed text-foreground/75;
+  }
+  .text-label {
+    @apply text-xs font-semibold uppercase tracking-wider text-muted-foreground;
+  }
+  .text-help {
+    @apply text-xs font-normal text-muted-foreground;
+  }
+
   .page-shell {
     @apply mx-auto w-full max-w-[90rem];
   }

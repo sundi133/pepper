@@ -71,6 +71,25 @@ export function areRootCauseDuplicates(a: RawFinding, b: RawFinding): boolean {
   }
 
   if (scannerFamily(a.scanner) !== scannerFamily(b.scanner)) {
+    // SAST ↔ SECRETS: hardcoded credentials (CWE-798) found by both scanners
+    // are the same root cause. SAST finds it in app code, SECRETS finds it via patterns.
+    // Keep only the SECRETS finding as it has more redaction/masking capability.
+    const sastSecretsPair =
+      (a.scanner === "SAST_LLM" && b.scanner === "SECRETS_LLM") ||
+      (a.scanner === "SECRETS_LLM" && b.scanner === "SAST_LLM");
+    if (sastSecretsPair) {
+      const aIsCred = a.cweId === "CWE-798" || ((a.metadata?.weaknessClass as string) === "Hardcoded Credential");
+      const bIsCred = b.cweId === "CWE-798" || ((b.metadata?.weaknessClass as string) === "Hardcoded Credential");
+      if (aIsCred && bIsCred) {
+        if (
+          (a.filePath || "") === (b.filePath || "") &&
+          lineBucket(a.startLine) === lineBucket(b.startLine)
+        ) {
+          return true;
+        }
+      }
+    }
+
     if (
       (a.scanner === "SECRETS_LLM" && b.scanner === "IAC") ||
       (a.scanner === "IAC" && b.scanner === "SECRETS_LLM")

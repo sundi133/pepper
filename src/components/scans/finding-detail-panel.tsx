@@ -165,12 +165,50 @@ function githubCodeUrl(
   });
 }
 
-function SecretFindingReport({ finding }: { finding: Finding }) {
+function SecretFindingReport({ finding, sourceContext }: { finding: Finding; sourceContext?: FindingScanSourceContext }) {
+  const [generatedDetails, setGeneratedDetails] = useState<{
+    summary: string;
+    vulnerabilityDetails: string;
+    stepsToReproduce: string[];
+    impact: string;
+    remediation: string[];
+  } | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
+  useEffect(() => {
+    const metadata = finding.metadata as Record<string, unknown> | undefined;
+    const cachedDetails = (metadata?.generatedDetails as typeof generatedDetails | undefined);
+    if (cachedDetails) {
+      setGeneratedDetails(cachedDetails);
+    } else {
+      loadGeneratedDetailsForSecret();
+    }
+  }, [finding.id]);
+
+  const loadGeneratedDetailsForSecret = async () => {
+    setLoadingDetails(true);
+    try {
+      const response = await fetch(
+        `/api/findings/${finding.id}/generate-details`,
+        { method: "POST" }
+      );
+      if (response.ok) {
+        const details = await response.json();
+        setGeneratedDetails(details);
+      }
+    } catch (error) {
+      console.error("Failed to load generated details:", error);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
   const metadata = finding.metadata as Record<string, unknown> | undefined;
   const secretType = typeof metadata?.secretType === "string"
     ? metadata.secretType
     : (finding.title.split(":")[0] || "Secret");
   const report = buildStoredFindingReport(finding);
+  const githubUrl = githubCodeUrl(sourceContext, finding);
 
   return (
     <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
@@ -192,10 +230,23 @@ function SecretFindingReport({ finding }: { finding: Finding }) {
               </div>
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Location</p>
-                <p className="text-sm text-foreground">
-                  {finding.filePath}
-                  {finding.startLine ? `:${finding.startLine}` : ""}
-                </p>
+                {githubUrl ? (
+                  <a
+                    href={githubUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                  >
+                    {finding.filePath}
+                    {finding.startLine ? `:${finding.startLine}` : ""}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                ) : (
+                  <p className="text-sm text-foreground">
+                    {finding.filePath}
+                    {finding.startLine ? `:${finding.startLine}` : ""}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -212,22 +263,74 @@ function SecretFindingReport({ finding }: { finding: Finding }) {
 
       {/* Risk Section */}
       <ReportBlock title="Risk" icon={<span className="text-lg">🛡️</span>}>
-        <ReportRichText text={report.impact} />
+        {loadingDetails ? (
+          <span className="text-muted-foreground italic text-sm">Generating risk analysis...</span>
+        ) : (
+          <ReportRichText text={generatedDetails?.impact || report.impact} />
+        )}
       </ReportBlock>
 
       {/* Recommendations Section */}
       <ReportBlock title="Recommendations" icon={<span className="text-lg">✅</span>}>
-        <ReportPlainList items={report.remediation} />
+        {loadingDetails ? (
+          <span className="text-muted-foreground italic text-sm">Generating recommendations...</span>
+        ) : (
+          <ReportPlainList items={generatedDetails?.remediation || report.remediation} />
+        )}
       </ReportBlock>
     </section>
   );
 }
 
-function SastFindingReport({ finding }: { finding: Finding }) {
+function SastFindingReport({ finding, sourceContext }: { finding: Finding; sourceContext?: FindingScanSourceContext }) {
+  const [generatedDetails, setGeneratedDetails] = useState<{
+    summary: string;
+    vulnerabilityDetails: string;
+    stepsToReproduce: string[];
+    impact: string;
+    remediation: string[];
+  } | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
   const report = buildStoredFindingReport(finding);
+  const metadata = finding.metadata as Record<string, unknown> | undefined;
+
+  // Load AI-generated details on mount
+  useEffect(() => {
+    const cachedDetails = (metadata?.generatedDetails as typeof generatedDetails | undefined);
+    if (cachedDetails) {
+      setGeneratedDetails(cachedDetails);
+    } else {
+      loadGeneratedDetails();
+    }
+  }, [finding.id]);
+
+  const loadGeneratedDetails = async () => {
+    setLoadingDetails(true);
+    try {
+      const response = await fetch(
+        `/api/findings/${finding.id}/generate-details`,
+        { method: "POST" }
+      );
+      if (response.ok) {
+        const details = await response.json();
+        setGeneratedDetails(details);
+      }
+    } catch (error) {
+      console.error("Failed to load generated details:", error);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  // Extract title and CWE for heading
+  const title = finding.title || report.vulnerabilityName;
+  const cwe = finding.cweId ? `(${finding.cweId})` : '';
+  const heading = `${title} ${cwe}`.trim();
 
   // Extract curl command from steps if present
-  const curlCommand = report.stepsToReproduce
+  const stepsToUse = generatedDetails?.stepsToReproduce || report.stepsToReproduce;
+  const curlCommand = stepsToUse
     .map(step => {
       const curlMatch = step.match(/curl\s+[^\n]+/i);
       return curlMatch ? curlMatch[0] : null;
@@ -242,193 +345,706 @@ function SastFindingReport({ finding }: { finding: Finding }) {
   };
 
   return (
-    <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
-      <ReportBlock title="Summary" icon="📋">
-        <ReportSummaryText text={report.summary} />
-      </ReportBlock>
+    <section className="finding-detail-report min-w-0 w-full overflow-hidden p-3 sm:p-4 space-y-3 sm:space-y-4 text-sm sm:text-base">
+      {/* Main Heading */}
+      <div className="space-y-2 pb-2 border-b border-border/40">
+        <h1 className="text-base sm:text-lg font-bold text-foreground break-words">{heading}</h1>
+        <div className="flex items-center gap-4">
+          {finding.severity && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Severity:</span>
+              <SeverityBadge severity={finding.severity} />
+            </div>
+          )}
+          {(() => {
+            const conf = (metadata?.confidence as number | undefined) ?? (finding.confidence as number | undefined) ?? 0;
+            return conf > 0 ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Confidence:</span>
+                <span className="text-xs font-semibold">{Math.round(conf * 100)}%</span>
+              </div>
+            ) : null;
+          })()}
+        </div>
+      </div>
 
-      {report.stepsToReproduce.length > 0 && (
-        <div className="border-t border-border/40 pt-4">
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
-              <span>🔧</span>
-              Steps to Reproduce
-            </h3>
-            {curlCommand && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleCopyCurl}
-                className="h-7 gap-1"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                Copy curl
-              </Button>
+      {/* Summary Section */}
+      <div className="space-y-2">
+        <h2 className="text-xs sm:text-sm font-semibold text-foreground">Summary</h2>
+        <p className="text-xs sm:text-sm leading-relaxed text-foreground">
+          {loadingDetails ? (
+            <span className="text-muted-foreground italic">Generating summary...</span>
+          ) : generatedDetails?.summary ? (
+            generatedDetails.summary
+          ) : (
+            (() => {
+              const lines = report.summary.split('\n\n');
+              const lead = lines[0] || report.summary;
+              const cleanLead = lead
+                .split('\n')
+                .filter(line => !line.match(/^(What is wrong|Where|Why it is exploitable|How to validate|Severity):/))
+                .join('\n')
+                .trim();
+              return cleanLead || report.summary;
+            })()
+          )}
+        </p>
+      </div>
+
+      {/* Affected File */}
+      <div className="space-y-2 border-t border-border/40 pt-4">
+        <h2 className="text-sm font-semibold text-foreground">Affected File</h2>
+        <div className="text-xs space-y-2">
+          {(() => {
+            const fileUrl = sourceContext && finding.filePath && finding.startLine
+              ? githubBlobLineUrl({
+                  repoUrl: sourceContext?.repoUrl,
+                  commitSha: sourceContext?.commitSha,
+                  branch: sourceContext?.branch,
+                  defaultBranch: sourceContext?.defaultBranch,
+                  filePath: finding.filePath,
+                  startLine: finding.startLine,
+                })
+              : null;
+
+            return (
+              <div>
+                <p className="text-muted-foreground mb-1"><strong>File:</strong></p>
+                {fileUrl ? (
+                  <a
+                    href={fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline font-mono text-xs flex items-center gap-1 break-all"
+                  >
+                    {finding.filePath}
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                ) : (
+                  <code className="bg-muted px-1.5 py-0.5 rounded block break-all text-foreground">
+                    {finding.filePath || "Unknown"}
+                  </code>
+                )}
+              </div>
+            );
+          })()}
+
+          {finding.startLine && (
+            <div>
+              <p className="text-muted-foreground mb-1"><strong>Location:</strong></p>
+              <code className="bg-muted px-1.5 py-0.5 rounded text-foreground">
+                Line {finding.startLine}
+                {finding.endLine && finding.endLine !== finding.startLine && `-${finding.endLine}`}
+              </code>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Vulnerability Details */}
+      {(generatedDetails?.vulnerabilityDetails || finding.description) && (
+        <div className="space-y-2 border-t border-border/40 pt-4">
+          <h2 className="text-sm font-semibold text-foreground">Details</h2>
+          <p className="text-xs sm:text-sm leading-relaxed text-foreground line-clamp-2">
+            {loadingDetails ? (
+              <span className="text-muted-foreground italic">Generating details...</span>
+            ) : generatedDetails?.vulnerabilityDetails ? (
+              generatedDetails.vulnerabilityDetails
+            ) : (
+              finding.description || "No details available"
             )}
-          </div>
-          <ReportPlainList items={report.stepsToReproduce} />
+          </p>
         </div>
       )}
 
-      <div className="border-t border-border/40 pt-4">
-        <ReportBlock title="Impact" icon="⚠️">
-          <ReportRichText text={report.impact} />
-        </ReportBlock>
-      </div>
-
-      <div className="border-t border-border/40 pt-4">
-        <ReportBlock title="Remediation" icon="🔒">
-          <div className="space-y-3">
-            {report.remediation.map((step, idx) => (
-              <div key={idx} className="text-sm text-muted-foreground leading-relaxed">
-                <ReportRichText text={step} />
-              </div>
-            ))}
-          </div>
-        </ReportBlock>
-      </div>
-    </section>
-  );
-}
-
-function MaliciousPkgFindingReport({ finding }: { finding: Finding }) {
-  const report = buildStoredFindingReport(finding);
-  const summaryLines = report.summary.split("\n\n");
-  const whatIsWrong = summaryLines.find(l => l.includes("What is wrong:"))?.replace(/^What is wrong:\s*/i, "") || "";
-  const whyExploitable = summaryLines.find(l => l.includes("Why it is exploitable:"))?.replace(/^Why it is exploitable:\s*/i, "") || "";
-
-  return (
-    <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
-      <ReportBlock title="Issue" icon={<span className="text-lg">ℹ️</span>}>
-        <p className="text-sm font-semibold text-foreground">{stripReportMarkdown(report.vulnerabilityName)}</p>
-        {finding.ruleId && (
-          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Package Rule</p>
-              <code className="text-sm font-mono text-foreground">{finding.ruleId}</code>
-            </div>
-            {finding.filePath && (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Location</p>
-                <code className="text-sm font-mono text-foreground">{finding.filePath}</code>
-              </div>
+      {/* Steps to Reproduce */}
+      {(generatedDetails?.stepsToReproduce?.length || stepsToUse.length > 0 || loadingDetails) && (
+        <div className="space-y-2 border-t border-border/40 pt-4">
+          <h2 className="text-sm font-semibold text-foreground">Steps to Reproduce</h2>
+          <div className="text-xs sm:text-sm space-y-1.5 text-foreground">
+            {loadingDetails ? (
+              <span className="text-muted-foreground italic">Generating steps...</span>
+            ) : (
+              (generatedDetails?.stepsToReproduce || stepsToUse)
+                .filter(step => step && step.trim().length > 0)
+                .map((step, idx) => (
+                  <div key={idx} className="leading-relaxed text-xs">
+                    <span className="font-semibold">{idx + 1}.</span> {step}
+                  </div>
+                ))
             )}
           </div>
-        )}
-        {whatIsWrong && (
-          <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
-            <p className="text-xs font-medium text-muted-foreground mb-2">What is wrong</p>
-            <ReportRichText text={whatIsWrong} />
+        </div>
+      )}
+
+      {/* Impact */}
+      {(generatedDetails?.impact || report.impact) && (
+        <div className="space-y-2 border-t border-border/40 pt-4">
+          <h2 className="text-sm font-semibold text-foreground">Impact</h2>
+          <p className="text-xs sm:text-sm leading-relaxed text-foreground line-clamp-2">
+            {loadingDetails ? (
+              <span className="text-muted-foreground italic">Generating impact...</span>
+            ) : generatedDetails?.impact ? (
+              generatedDetails.impact
+            ) : (
+              report.impact
+            )}
+          </p>
+        </div>
+      )}
+
+      {/* Remediation */}
+      {(generatedDetails?.remediation?.length || report.remediation?.length) ? (
+        <div className="space-y-2 border-t border-border/40 pt-4">
+          <h2 className="text-sm font-semibold text-foreground">Remediation</h2>
+          <div className="text-xs sm:text-sm space-y-1.5 text-foreground">
+            {loadingDetails ? (
+              <span className="text-muted-foreground italic">Generating remediation...</span>
+            ) : (
+              (generatedDetails?.remediation || report.remediation)
+                .filter(step => stripReportMarkdown(step).trim().length > 0)
+                .slice(0, 3)
+                .map((step, idx) => (
+                  <div key={idx} className="leading-relaxed text-xs">
+                    <span className="font-semibold">{idx + 1}.</span> {stripReportMarkdown(step)}
+                  </div>
+                ))
+            )}
           </div>
-        )}
-      </ReportBlock>
-
-      <div className="border-t border-border/40 pt-4">
-        <ReportBlock title="Why it is Exploitable" icon={<span className="text-lg">⚠️</span>}>
-          <ReportRichText text={whyExploitable || report.summary.split("\n\n")[0] || ""} />
-        </ReportBlock>
-      </div>
-
-      <div className="border-t border-border/40 pt-4">
-        <ReportBlock title="Impact" icon={<span className="text-lg">👥</span>}>
-          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
-            <ReportRichText text={report.impact} />
-          </div>
-        </ReportBlock>
-      </div>
-
-      <div className="border-t border-border/40 pt-4">
-        <ReportBlock title="Remediation" icon={<span className="text-lg">🔧</span>}>
-          <ReportPlainList items={report.remediation} />
-        </ReportBlock>
-      </div>
+        </div>
+      ) : null}
     </section>
   );
 }
 
-function ScaFindingReport({ finding }: { finding: Finding }) {
+function MaliciousPkgFindingReport({ finding, sourceContext }: { finding: Finding; sourceContext?: FindingScanSourceContext }) {
+  const [generatedDetails, setGeneratedDetails] = useState<{
+    summary: string;
+    vulnerabilityDetails: string;
+    stepsToReproduce: string[];
+    impact: string;
+    remediation: string[];
+  } | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
+  useEffect(() => {
+    const metadata = finding.metadata as Record<string, unknown> | undefined;
+    const cachedDetails = (metadata?.generatedDetails as typeof generatedDetails | undefined);
+    if (cachedDetails) {
+      setGeneratedDetails(cachedDetails);
+    } else {
+      loadGeneratedDetailsForMalicious();
+    }
+  }, [finding.id]);
+
+  const loadGeneratedDetailsForMalicious = async () => {
+    setLoadingDetails(true);
+    try {
+      const response = await fetch(
+        `/api/findings/${finding.id}/generate-details`,
+        { method: "POST" }
+      );
+      if (response.ok) {
+        const details = await response.json();
+        setGeneratedDetails(details);
+      }
+    } catch (error) {
+      console.error("Failed to load generated details:", error);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
   const report = buildStoredFindingReport(finding);
   const metadata = finding.metadata as Record<string, unknown> | undefined;
-  const fixVersion = typeof metadata?.fixVersion === "string" ? metadata.fixVersion : undefined;
-
-  // Extract structured fields from summary
-  const summaryLines = report.summary.split("\n\n");
-  const whatIsWrong = summaryLines.find(line => line.includes("What is wrong:"))?.replace(/^What is wrong:\s*/i, "") || "";
-  const whereInfo = summaryLines.find(line => line.includes("Where:"))?.replace(/^Where:\s*/i, "") || "";
+  const vulnData = metadata?.aiAnalysis as { description?: string; impact?: string; remediation?: string[] } | undefined;
 
   return (
-    <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
-      {/* Issue Section */}
-      <ReportBlock title="Issue" icon={<span className="text-lg">ℹ️</span>}>
+    <section className="finding-detail-report min-w-0 max-w-full overflow-hidden">
+      <div className="grid grid-cols-4 gap-3 p-4">
+        {/* LEFT COLUMN - Package Info */}
         <div className="space-y-3">
-          <p className="text-sm font-semibold text-foreground">
-            {stripReportMarkdown(report.vulnerabilityName)}
-          </p>
-          {finding.ruleId && (
-            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+          <div className="surface-card rounded-lg p-3 space-y-2">
+            <h3 className="font-semibold text-xs flex items-center gap-2">
+              <span>⚠️</span> Package Details
+            </h3>
+            <div className="space-y-2 text-xs">
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Vulnerable Dependency</p>
-                <code className="text-sm font-mono text-foreground">{finding.ruleId}</code>
+                <p className="text-xs font-medium text-muted-foreground">Package Name</p>
+                <code className="text-xs font-mono text-foreground mt-1 block break-all">{finding.ruleId || "Unknown"}</code>
               </div>
-              {fixVersion && (
+              {finding.filePath && (
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground">Fixed in Version</p>
-                  <code className="text-sm font-mono text-foreground">{fixVersion}</code>
+                  <p className="text-xs font-medium text-muted-foreground">Found In</p>
+                  {sourceContext && githubCodeUrl(sourceContext, finding) ? (
+                    <a
+                      href={githubCodeUrl(sourceContext, finding) || "#"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline text-xs flex items-center gap-1 mt-1 break-all"
+                    >
+                      {finding.filePath}
+                      {finding.startLine && <span className="font-semibold">:{finding.startLine}</span>}
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                    </a>
+                  ) : (
+                    <code className="text-xs font-mono text-foreground mt-1 block break-all">
+                      {finding.filePath}
+                      {finding.startLine && <span className="font-semibold">:{finding.startLine}</span>}
+                    </code>
+                  )}
                 </div>
               )}
-              {whereInfo && (
+              {finding.severity && (
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground">Location</p>
-                  <code className="text-sm font-mono text-foreground">{whereInfo}</code>
+                  <p className="text-xs font-medium text-muted-foreground">Severity</p>
+                  <Badge className="mt-1 bg-red-950 text-red-400 dark:bg-red-900 dark:text-red-300 text-xs border border-red-500/30">{finding.severity}</Badge>
                 </div>
               )}
             </div>
-          )}
-          {whatIsWrong && (
-            <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-2">What is wrong</p>
-              <p className="text-sm leading-relaxed text-foreground">
-                <ReportRichText text={whatIsWrong} />
-              </p>
+          </div>
+        </div>
+
+        {/* MIDDLE COLUMN - Threat Details */}
+        <div className="space-y-3 col-span-2">
+          <div className="surface-card rounded-lg p-3">
+            <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
+              <span>🚨</span> What's the Threat?
+            </h3>
+            <div className="space-y-2 text-xs">
+              {vulnData?.description ? (
+                <p className="text-foreground leading-relaxed">
+                  <ReportRichText text={vulnData.description} />
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Threat</p>
+                    <p className="text-foreground leading-relaxed">
+                      {stripReportMarkdown(report.vulnerabilityName || "")}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Details</p>
+                    <p className="text-foreground leading-relaxed whitespace-pre-wrap break-words">
+                      {stripReportMarkdown(stripGeneratedSections(finding.description) || report.summary)}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {finding.snippet && (
+            <div className="surface-card rounded-lg p-3">
+              <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
+                <span>📋</span> Detection Evidence
+              </h3>
+              <pre className="bg-muted/50 p-2 rounded text-xs font-mono overflow-x-auto max-h-32 border border-border/60">
+                {finding.snippet}
+              </pre>
             </div>
           )}
         </div>
-      </ReportBlock>
 
-      {/* Why It Matters Section */}
-      <div className="border-t border-border/40 pt-4">
-        <ReportBlock title="Why it Matters" icon={<span className="text-lg">⚠️</span>}>
+        {/* RIGHT COLUMN - Risk & Action */}
+        <div className="space-y-3">
+          <div className="surface-card rounded-lg p-3">
+            <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
+              <span>📊</span> Impact
+            </h3>
+            <div className="space-y-2 text-xs text-foreground leading-relaxed">
+              {vulnData?.impact ? (
+                <p>{vulnData.impact}</p>
+              ) : (
+                <ReportRichText text={report.impact || "This malicious package poses a critical security risk."} />
+              )}
+            </div>
+          </div>
+
           <div className="space-y-2">
-            <p className="text-sm leading-relaxed text-foreground font-medium">
-              {stripReportMarkdown(report.summary.split("\n\n")[0] || "A vulnerable dependency was identified.")}
-            </p>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              This package is no longer receiving security updates and may contain exploitable vulnerabilities. Attackers can target known weaknesses in older versions.
-            </p>
+            <div className="rounded-lg border border-red-500/30 bg-red-950/20 dark:bg-red-950/40 p-2">
+              <h3 className="font-semibold text-xs text-red-500 dark:text-red-400 mb-1">🔴 CRITICAL</h3>
+              <p className="text-xs text-red-600 dark:text-red-300 leading-tight">
+                Remove immediately
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-orange-500/30 bg-orange-950/20 dark:bg-orange-950/40 p-2">
+              <h3 className="font-semibold text-xs text-orange-500 dark:text-orange-400 mb-1">⚡ Action</h3>
+              <p className="text-xs text-orange-600 dark:text-orange-300 leading-tight">
+                Remove dependency now
+              </p>
+            </div>
           </div>
-        </ReportBlock>
+        </div>
       </div>
 
-      {/* Customer Impact Section */}
-      <div className="border-t border-border/40 pt-4">
-        <ReportBlock title="Customer Impact" icon={<span className="text-lg">👥</span>}>
-          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
-            <ReportRichText text={report.impact} />
+      {/* Remediation - Full Width */}
+      <div className="border-t border-border/40 p-4">
+        <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
+          <span>🔒</span> How to Remove
+        </h3>
+
+        <div className="rounded-lg border border-red-500/30 bg-red-950/20 dark:bg-red-950/40 p-3 mb-3">
+          <p className="text-xs font-semibold text-red-500 dark:text-red-400 mb-2">Removal Command</p>
+          <pre className="bg-background border border-border/60 p-2 rounded text-xs font-mono overflow-x-auto text-foreground">
+            npm uninstall {finding.ruleId}
+          </pre>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground">Steps</p>
+          {vulnData?.remediation && vulnData.remediation.length > 0 ? (
+            <ol className="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
+              {vulnData.remediation.map((step, i) => (
+                <li key={i} className="leading-tight">
+                  {step}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <ol className="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
+              {report.remediation.slice(0, 4).map((step, i) => (
+                <li key={i} className="leading-tight">
+                  {stripReportMarkdown(step).substring(0, 70)}...
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-blue-500/30 bg-blue-950/20 dark:bg-blue-950/40 p-3 mt-3">
+          <p className="text-xs font-semibold text-blue-500 dark:text-blue-400 mb-1">⚠️ After Removal</p>
+          <ul className="space-y-1 text-xs text-blue-600 dark:text-blue-300">
+            <li>• Audit your project: <code className="bg-blue-100 px-1 rounded">npm audit</code></li>
+            <li>• Run tests to ensure stability</li>
+            <li>• Check commit history for compromises</li>
+            <li>• Update credentials if exposed</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ScaFindingReport({ finding, sourceContext }: { finding: Finding; sourceContext?: FindingScanSourceContext }) {
+  const [generatedDetails, setGeneratedDetails] = useState<{
+    summary: string;
+    vulnerabilityDetails: string;
+    stepsToReproduce: string[];
+    impact: string;
+    remediation: string[];
+  } | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
+  useEffect(() => {
+    const metadata = finding.metadata as Record<string, unknown> | undefined;
+    const cachedDetails = (metadata?.generatedDetails as typeof generatedDetails | undefined);
+    if (cachedDetails) {
+      setGeneratedDetails(cachedDetails);
+    } else {
+      loadGeneratedDetailsForSca();
+    }
+  }, [finding.id]);
+
+  const loadGeneratedDetailsForSca = async () => {
+    setLoadingDetails(true);
+    try {
+      const response = await fetch(
+        `/api/findings/${finding.id}/generate-details`,
+        { method: "POST" }
+      );
+      if (response.ok) {
+        const details = await response.json();
+        setGeneratedDetails(details);
+      }
+    } catch (error) {
+      console.error("Failed to load generated details:", error);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  const report = buildStoredFindingReport(finding);
+  const metadata = finding.metadata as Record<string, unknown> | undefined;
+  const fixVersion = typeof metadata?.fixVersion === "string" ? metadata.fixVersion : undefined;
+  const currentVersion = typeof metadata?.currentVersion === "string" ? metadata.currentVersion : undefined;
+  const cveId = finding.cveId || (Array.isArray(metadata?.cves) ? metadata.cves[0] : undefined);
+
+  // Get AI-analyzed vulnerability data from finding metadata (analyzed during scan)
+  const vulnData = metadata?.aiAnalysis as { description?: string; impact?: string; remediation?: string[] } | undefined;
+
+  return (
+    <section className="finding-detail-report min-w-0 max-w-full overflow-hidden">
+      <div className="grid grid-cols-4 gap-3 p-4">
+        {/* LEFT COLUMN - Dependency Info */}
+        <div className="space-y-3">
+          <div className="surface-card rounded-lg p-3 space-y-2">
+            <h3 className="font-semibold text-xs flex items-center gap-2">
+              <span>📦</span> Dependency Details
+            </h3>
+            <div className="space-y-2 text-xs">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Package Name</p>
+                <code className="text-sm font-mono text-foreground mt-1 block break-all">{finding.ruleId || "Unknown"}</code>
+              </div>
+              {currentVersion && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Current Version</p>
+                  <p className="text-foreground font-semibold mt-1">{currentVersion}</p>
+                </div>
+              )}
+              {fixVersion && (
+                <div className="rounded-lg bg-green-50 dark:bg-green-900/20 p-2">
+                  <p className="text-xs font-medium text-green-800 dark:text-green-300">Fix Available</p>
+                  <p className="text-sm font-semibold text-green-700 dark:text-green-400 mt-1">{fixVersion}</p>
+                </div>
+              )}
+              {finding.filePath && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Found In</p>
+                  {sourceContext && githubCodeUrl(sourceContext, finding) ? (
+                    <a
+                      href={githubCodeUrl(sourceContext, finding) || "#"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline text-sm flex items-center gap-1 mt-1 break-all"
+                    >
+                      {finding.filePath}
+                      {finding.startLine && <span className="font-semibold">:{finding.startLine}</span>}
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                    </a>
+                  ) : (
+                    <code className="text-sm font-mono text-foreground mt-1 block break-all">
+                      {finding.filePath}
+                      {finding.startLine && <span className="font-semibold">:{finding.startLine}</span>}
+                    </code>
+                  )}
+                </div>
+              )}
+              {finding.severity && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Severity</p>
+                  <Badge className="mt-1 bg-red-100 text-red-800">{finding.severity}</Badge>
+                </div>
+              )}
+            </div>
           </div>
-        </ReportBlock>
+        </div>
+
+        {/* MIDDLE COLUMN - Vulnerability Details */}
+        <div className="space-y-3 col-span-2">
+          {/* What's the issue - DETAILED */}
+          <div className="surface-card rounded-lg p-3">
+            <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
+              <span>⚠️</span> What's the Issue?
+            </h3>
+            <div className="space-y-2 text-xs">
+              {vulnData?.description ? (
+                <div className="text-foreground leading-relaxed">
+                  <ReportRichText text={vulnData.description} />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Extract detailed issue from report */}
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Vulnerability</p>
+                    <p className="text-foreground leading-relaxed">
+                      {stripReportMarkdown(report.vulnerabilityName || "")}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Description</p>
+                    <p className="text-foreground leading-relaxed whitespace-pre-wrap break-words">
+                      {stripReportMarkdown(stripGeneratedSections(finding.description) || report.summary)}
+                    </p>
+                  </div>
+
+                  {/* Extract Why It's Exploitable */}
+                  {report.summary.includes("Why it is exploitable") && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground mb-1">Why It's Exploitable</p>
+                      <p className="text-foreground leading-relaxed whitespace-pre-wrap break-words">
+                        {stripReportMarkdown(
+                          report.summary
+                            .split("Why it is exploitable:")[1]
+                            ?.split("\n\n")[0]
+                            ?.trim() || ""
+                        )}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Attack Vector */}
+                  {report.stepsToReproduce.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground mb-1">Attack Vector</p>
+                      <ol className="space-y-1 list-decimal pl-5 text-foreground leading-relaxed">
+                        {report.stepsToReproduce.slice(0, 3).map((step, i) => (
+                          <li key={i} className="text-xs">
+                            {stripReportMarkdown(step)}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CVE & References */}
+              <div className="space-y-2">
+                {cveId && (
+                  <div className="rounded-lg border border-border/60 bg-muted/30 p-2">
+                    <p className="text-xs font-medium text-muted-foreground">CVE Reference</p>
+                    <a
+                      href={getCveUrl(cveId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline text-sm flex items-center gap-1 mt-1"
+                    >
+                      {cveId}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
+                {finding.ruleId && (
+                  <div className="rounded-lg border border-border/60 bg-muted/30 p-2">
+                    <p className="text-xs font-medium text-muted-foreground">CWE/Reference</p>
+                    <code className="text-xs font-mono text-foreground">{finding.ruleId}</code>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Code Evidence - DETAILED */}
+          {finding.snippet && (
+            <div className="surface-card rounded-lg p-3">
+              <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
+                <span>🔍</span> Where It's Used
+              </h3>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  Location:
+                </p>
+                {finding.filePath && (
+                  <div className="rounded-lg bg-muted/30 p-2 border border-border/60">
+                    <p className="text-xs font-mono text-foreground break-all">
+                      {finding.filePath}
+                      {finding.startLine && <span className="font-semibold">:{finding.startLine}</span>}
+                    </p>
+                  </div>
+                )}
+                <pre className="bg-muted/50 p-2 rounded text-xs font-mono overflow-x-auto max-h-32 border border-border/60">
+                  {finding.snippet}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT COLUMN - Impact & Fix */}
+        <div className="space-y-3">
+          {/* Business Impact - DETAILED */}
+          <div className="surface-card rounded-lg p-3">
+            <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
+              <span>📊</span> Impact
+            </h3>
+            <div className="space-y-2 text-xs text-foreground leading-relaxed">
+              {vulnData?.impact ? (
+                <p>{vulnData.impact}</p>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Risk Summary</p>
+                    <ReportRichText text={report.impact || "This vulnerable dependency poses a security risk to your application and users."} />
+                  </div>
+
+                  {/* Detailed consequences */}
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Potential Consequences</p>
+                    <ul className="space-y-1 list-disc pl-4 text-muted-foreground">
+                      <li className="text-xs">Unauthorized data access or data breach</li>
+                      <li className="text-xs">Application downtime or service disruption</li>
+                      <li className="text-xs">Performance degradation and system slowdown</li>
+                      <li className="text-xs">Legal/compliance violations (GDPR, SOC 2, etc.)</li>
+                      <li className="text-xs">Reputation damage and customer trust loss</li>
+                    </ul>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Severity & Risk */}
+          <div className="space-y-2">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-2">
+              <h3 className="font-semibold text-xs text-red-900 mb-1">🔴 {finding.severity || "HIGH"}</h3>
+              <p className="text-xs text-red-800 leading-tight">
+                Known vulnerability. Exploit is likely.
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-green-200 bg-green-50 p-2">
+              <h3 className="font-semibold text-xs text-green-900 mb-1">✓ Fix Available</h3>
+              <p className="text-xs text-green-800 leading-tight font-mono">
+                {fixVersion ? `v${fixVersion}` : "Latest"}
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Fix */}
+          {fixVersion && (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+              <h3 className="font-semibold text-sm text-green-900 mb-2">✓ Quick Fix Available</h3>
+              <p className="text-xs text-green-800 mb-2">Upgrade to version {fixVersion}</p>
+              <code className="text-xs font-mono bg-green-100 px-2 py-1 rounded block">
+                npm install {finding.ruleId}@{fixVersion}
+              </code>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Remediation Section */}
-      <div className="border-t border-border/40 pt-4">
-        <ReportBlock title="Remediation" icon={<span className="text-lg">🔧</span>}>
-          <ol className="space-y-3 list-decimal pl-5">
-            {report.remediation.map((step, i) => (
-              <li key={i} className="text-sm text-muted-foreground leading-relaxed">
-                <ReportRichText text={step} />
-              </li>
-            ))}
-          </ol>
-        </ReportBlock>
+      {/* Remediation - Full Width DETAILED */}
+      <div className="border-t border-border/40 p-4">
+        <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
+          <span>🔧</span> How to Fix
+        </h3>
+
+        {/* Fix Instructions */}
+        {fixVersion && (
+          <div className="rounded-lg border border-green-200 bg-green-50 p-3 mb-3">
+            <p className="text-xs font-semibold text-green-900 mb-2">Upgrade Command</p>
+            <pre className="bg-white p-2 rounded border border-green-200 text-xs font-mono overflow-x-auto">
+              npm install {finding.ruleId}@{fixVersion}
+            </pre>
+          </div>
+        )}
+
+        {/* Remediation steps */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground">Steps</p>
+          {vulnData?.remediation && vulnData.remediation.length > 0 ? (
+            <ol className="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
+              {vulnData.remediation.map((step, i) => (
+                <li key={i} className="leading-tight">
+                  {step.split("\n")[0]}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <ol className="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
+              {report.remediation.slice(0, 3).map((step, i) => (
+                <li key={i} className="leading-tight">
+                  {stripReportMarkdown(step).substring(0, 60)}...
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -437,108 +1053,225 @@ function ScaFindingReport({ finding }: { finding: Finding }) {
 function IacFindingReport({
   finding,
   scanId,
+  sourceContext,
 }: {
   finding: Finding;
   scanId: string;
+  sourceContext?: FindingScanSourceContext;
 }) {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<AiSuggestFixResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [generatedDetails, setGeneratedDetails] = useState<{
+    summary: string;
+    vulnerabilityDetails: string;
+    stepsToReproduce: string[];
+    impact: string;
+    remediation: string[];
+  } | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   useEffect(() => {
-    async function fetchAiOutput() {
-      try {
-        const res = await fetch(
-          `/api/scans/${scanId}/findings/${finding.id}/suggest-fix`,
-          { method: "POST" },
-        );
-        const json = (await res.json()) as AiSuggestFixResponse & { error?: string };
-        if (!res.ok) {
-          throw new Error(json.error || "Failed to generate AI output");
-        }
-        setData(json);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to fetch AI output");
-      } finally {
-        setLoading(false);
-      }
+    const metadata = finding.metadata as Record<string, unknown> | undefined;
+    const cachedDetails = (metadata?.generatedDetails as typeof generatedDetails | undefined);
+    if (cachedDetails) {
+      setGeneratedDetails(cachedDetails);
+    } else {
+      loadGeneratedDetailsForIac();
     }
+  }, [finding.id]);
 
-    fetchAiOutput();
-  }, [finding.id, scanId]);
+  const loadGeneratedDetailsForIac = async () => {
+    setLoadingDetails(true);
+    try {
+      const response = await fetch(
+        `/api/findings/${finding.id}/generate-details`,
+        { method: "POST" }
+      );
+      if (response.ok) {
+        const details = await response.json();
+        setGeneratedDetails(details);
+      }
+    } catch (error) {
+      console.error("Failed to load generated details:", error);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
 
   const report = buildStoredFindingReport(finding);
+  const metadata = finding.metadata as Record<string, unknown> | undefined;
+
+  // Get AI-analyzed data from finding metadata (analyzed during scan)
+  const data = metadata?.aiAnalysis as {
+    summary?: string;
+    developerFix?: string;
+    verificationSteps?: string[];
+    optionalUnifiedDiff?: string | null;
+  } | null;
 
   return (
-    <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
-      {loading ? (
-        <ReportBlock title="AI Analysis" icon={<span className="text-lg">✨</span>}>
-          <div className="flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-            <p className="text-sm text-muted-foreground">Analyzing with AI...</p>
-          </div>
-        </ReportBlock>
-      ) : error ? (
-        <ReportBlock title="AI Analysis" icon={<span className="text-lg">⚠️</span>}>
-          <p className="text-sm text-red-600">{error}</p>
-        </ReportBlock>
-      ) : data ? (
-        <>
-          {/* Issue Section */}
-          <ReportBlock title="Issue" icon={<span className="text-lg">ℹ️</span>}>
-            <div className="space-y-2">
-              <ReportRichText text={data.summary} />
+    <section className="finding-detail-report min-w-0 max-w-full overflow-hidden">
+      <div className="grid grid-cols-4 gap-3 p-4">
+        {/* LEFT COLUMN - Resource Info */}
+        <div className="space-y-3">
+          <div className="surface-card rounded-lg p-3 space-y-2">
+            <h3 className="font-semibold text-xs flex items-center gap-2">
+              <span>🏗️</span> Resource
+            </h3>
+            <div className="space-y-2 text-xs">
+              {finding.filePath && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">File</p>
+                  {sourceContext && githubCodeUrl(sourceContext, finding) ? (
+                    <a
+                      href={githubCodeUrl(sourceContext, finding) || "#"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline text-xs flex items-center gap-1 mt-1 break-all"
+                    >
+                      {finding.filePath}
+                      {finding.startLine && <span className="font-semibold">:{finding.startLine}</span>}
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                    </a>
+                  ) : (
+                    <code className="text-xs font-mono text-foreground mt-1 block break-all">
+                      {finding.filePath}
+                      {finding.startLine && <span className="font-semibold">:{finding.startLine}</span>}
+                    </code>
+                  )}
+                </div>
+              )}
+              {finding.ruleId && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Rule/Check</p>
+                  <code className="text-xs font-mono text-foreground mt-1 block">{finding.ruleId}</code>
+                </div>
+              )}
+              {finding.severity && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Severity</p>
+                  <Badge className="mt-1 bg-red-950 text-red-400 dark:bg-red-900 dark:text-red-300 text-xs border border-red-500/30">{finding.severity}</Badge>
+                </div>
+              )}
             </div>
-          </ReportBlock>
+          </div>
+        </div>
 
-          {/* Why It Matters Section */}
-          <div className="border-t border-border/40 pt-4">
-            <ReportBlock title="Why it Matters" icon={<span className="text-lg">⚠️</span>}>
-              <div className="flex gap-2">
-                <span className="text-lg">🔴</span>
+        {/* MIDDLE COLUMN - Problem Details */}
+        <div className="space-y-3 col-span-2">
+          <div className="surface-card rounded-lg p-3">
+            <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
+              <span>⚠️</span> What's the Problem?
+            </h3>
+            <div className="space-y-2 text-xs">
+              {data?.summary ? (
+                <p className="text-foreground leading-relaxed">
+                  <ReportRichText text={data.summary} />
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-foreground leading-relaxed">
+                    {stripReportMarkdown(report.summary.split("\n\n")[0] || "Infrastructure misconfiguration detected")}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {finding.snippet && (
+            <div className="surface-card rounded-lg p-3">
+              <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
+                <span>📝</span> Configuration
+              </h3>
+              <pre className="bg-muted/50 p-2 rounded text-xs font-mono overflow-x-auto max-h-32 border border-border/60">
+                {finding.snippet}
+              </pre>
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT COLUMN - Impact & Fix */}
+        <div className="space-y-3">
+          <div className="surface-card rounded-lg p-3">
+            <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
+              <span>📊</span> Impact
+            </h3>
+            <div className="space-y-2 text-xs text-foreground leading-relaxed">
+              {data ? (
                 <ReportRichText text={report.impact} />
-              </div>
-            </ReportBlock>
+              ) : (
+                <p className="text-muted-foreground">{report.impact || "This misconfig poses security and operational risks."}</p>
+              )}
+            </div>
           </div>
 
-          {/* What to Change Section */}
-          <div className="border-t border-border/40 pt-4">
-            <ReportBlock title="What to Change" icon={<span className="text-lg">🔧</span>}>
+          <div className="space-y-2">
+            <div className="rounded-lg border border-red-500/30 bg-red-950/20 dark:bg-red-950/40 p-2">
+              <h3 className="font-semibold text-xs text-red-500 dark:text-red-400 mb-1">🔴 {finding.severity || "HIGH"}</h3>
+              <p className="text-xs text-red-600 dark:text-red-300 leading-tight">
+                Fix required
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-blue-500/30 bg-blue-950/20 dark:bg-blue-950/40 p-2">
+              <h3 className="font-semibold text-xs text-blue-500 dark:text-blue-400 mb-1">✓ AI Fix Ready</h3>
+              <p className="text-xs text-blue-600 dark:text-blue-300 leading-tight">
+                See below
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Solution - Full Width */}
+      <div className="border-t border-border/40 p-4 space-y-3">
+        <h3 className="font-semibold text-sm flex items-center gap-2">
+          <span>🔧</span> How to Fix
+        </h3>
+
+        {/* What to change */}
+        {data?.developerFix ? (
+          <div className="surface-card rounded-lg p-3">
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Changes Required</p>
+            <div className="text-xs text-foreground leading-relaxed">
               <ReportRichText text={data.developerFix} />
-            </ReportBlock>
+            </div>
           </div>
+        ) : (
+          <div className="surface-card rounded-lg p-3">
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Remediation</p>
+            <ol className="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
+              {report.remediation.slice(0, 3).map((step, i) => (
+                <li key={i} className="leading-tight">
+                  {stripReportMarkdown(step).substring(0, 70)}...
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
 
-          {/* Verification Section */}
-          {data.verificationSteps.length > 0 && (
-            <div className="border-t border-border/40 pt-4">
-              <ReportBlock title="How to Validate" icon={<span className="text-lg">✓</span>}>
-                <ol className="space-y-2 list-decimal pl-5">
-                  {data.verificationSteps.map((step, i) => (
-                    <li key={i} className="text-sm text-muted-foreground">
-                      <ReportRichText text={step} />
-                    </li>
-                  ))}
-                </ol>
-              </ReportBlock>
-            </div>
-          )}
+        {/* Verification steps */}
+        {data?.verificationSteps && data.verificationSteps.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground">Validation</p>
+            <ol className="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
+              {data.verificationSteps.slice(0, 4).map((step, i) => (
+                <li key={i} className="leading-tight">
+                  {stripReportMarkdown(step).substring(0, 80)}...
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
 
-          {/* Suggested Patch Section */}
-          {data.optionalUnifiedDiff && (
-            <div className="border-t border-border/40 pt-4">
-              <ReportBlock title="Suggested Patch (Diff)" icon={<span className="text-lg">📝</span>}>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono">
-                  {data.optionalUnifiedDiff}
-                </pre>
-              </ReportBlock>
-            </div>
-          )}
-        </>
-      ) : (
-        <ReportBlock title="Impact" icon={<span className="text-lg">⚠️</span>}>
-          <ReportRichText text={report.impact} />
-        </ReportBlock>
-      )}
+        {/* Suggested patch */}
+        {data?.optionalUnifiedDiff && (
+          <div className="rounded-lg border border-green-500/30 bg-green-950/20 dark:bg-green-950/40 p-3">
+            <p className="text-xs font-semibold text-green-500 dark:text-green-400 mb-2">Suggested Patch</p>
+            <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded border border-border/60 bg-background p-2 text-xs font-mono text-foreground">
+              {data.optionalUnifiedDiff}
+            </pre>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -773,27 +1506,27 @@ function FindingReportSections({ finding, sourceContext }: { finding: Finding; s
 
   const isSecret = finding.scanner?.startsWith("SECRETS");
   if (isSecret) {
-    return <SecretFindingReport finding={finding} />;
+    return <SecretFindingReport finding={finding} sourceContext={sourceContext} />;
   }
 
   const isSast = finding.scanner === "SAST_LLM";
   if (isSast) {
-    return <SastFindingReport finding={finding} />;
+    return <SastFindingReport finding={finding} sourceContext={sourceContext} />;
   }
 
   const isSca = finding.scanner === "SCA";
   if (isSca) {
-    return <ScaFindingReport finding={finding} />;
+    return <ScaFindingReport finding={finding} sourceContext={sourceContext} />;
   }
 
   const isMaliciousPkg = finding.scanner === "MALICIOUS_PKG";
   if (isMaliciousPkg) {
-    return <MaliciousPkgFindingReport finding={finding} />;
+    return <MaliciousPkgFindingReport finding={finding} sourceContext={sourceContext} />;
   }
 
   const isIac = finding.scanner === "IAC";
   if (isIac && sourceContext?.scanId) {
-    return <IacFindingReport finding={finding} scanId={sourceContext.scanId} />;
+    return <IacFindingReport finding={finding} scanId={sourceContext.scanId} sourceContext={sourceContext} />;
   }
 
   const report = buildStoredFindingReport(finding);
@@ -1219,7 +1952,7 @@ function VerifyFpButton({
                 </div>
 
                 <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
-                  <p className="text-sm leading-relaxed text-foreground">
+                  <p className="text-xs sm:text-sm leading-relaxed text-foreground">
                     {data.reasoning}
                   </p>
                 </div>

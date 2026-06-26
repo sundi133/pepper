@@ -45,6 +45,7 @@ function hasRemediation(f: RawFinding): boolean {
   const meta = f.metadata || {};
   if (typeof meta.remediation === "string" && meta.remediation.trim()) return true;
   if (/\*\*Fix:\*\*/i.test(f.description)) return true;
+  if (/^Fix:/im.test(f.description)) return true;
   if (/recommendation:/i.test(f.description)) return true;
   if (/remediation:/i.test(f.description)) return true;
   return false;

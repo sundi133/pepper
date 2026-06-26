@@ -67,7 +67,7 @@ interface SecretLlmFinding {
   title: string;
   severity: string;
   credentialType: string;
-  maskedValue: string;
+  exposedValue: string;
   startLine: number;
   endLine: number;
   whyReal: string;
@@ -209,7 +209,7 @@ async function analyzeSecretChunk(
       .map((f) => {
         // Entropy-based validation to reduce false positives
         const entropy = validateSecretCandidate(
-          f.maskedValue || "****",
+          f.exposedValue || "****",
           f.credentialType,
           f.whyReal,
         );
@@ -235,7 +235,7 @@ async function analyzeSecretChunk(
           return null; // Will be filtered below
         }
 
-        const masked = maskSecretValue(f.maskedValue || "****");
+        const masked = maskSecretValue(f.exposedValue || "****");
         const base: RawFinding = applySeverityCalibration({
           scanner: "SECRETS_LLM",
           severity: f.severity?.toUpperCase() === "HIGH" ? "HIGH" : "CRITICAL",

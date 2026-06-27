@@ -32,6 +32,10 @@ export interface ScanContext {
     dastEndpoint?: string;
     dastApiKey?: string;
     dastConfigYaml?: string;
+    containerRegistryType?: string;
+    containerRegistryUsername?: string;
+    containerRegistryPassword?: string;
+    containerRegistryRegion?: string;
   };
   scanId?: string;
   signal?: AbortSignal;

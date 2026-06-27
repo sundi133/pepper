@@ -63,6 +63,7 @@ export type RiskScoreInput = {
   scanner: string;
   confidence?: number | null;
   filePath?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 /**
@@ -83,7 +84,19 @@ export function computeRiskScore(finding: RiskScoreInput): number {
     : 0.75;
   const pathMult = filePathMultiplier(finding.filePath);
 
-  const raw = base * scannerMult * confidenceMult * pathMult;
+  // EPSS / CISA KEV boost — findings with known exploits or high exploit
+  // probability get a risk score bump. Defaults to 1.0 when absent.
+  let epssKevMult = 1.0;
+  if (finding.metadata) {
+    const kevListed = finding.metadata.cisaKevListed as boolean | undefined;
+    const epssScore = finding.metadata.epssScore as number | undefined;
+    if (kevListed) epssKevMult *= 1.25;
+    if (typeof epssScore === "number" && epssScore > 0.1) {
+      epssKevMult *= 1.0 + Math.min(epssScore, 0.5);
+    }
+  }
+
+  const raw = base * scannerMult * confidenceMult * pathMult * epssKevMult;
   return Math.max(1, Math.min(100, Math.round(raw)));
 }
 

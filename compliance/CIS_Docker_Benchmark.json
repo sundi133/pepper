@@ -1,0 +1,414 @@
+{
+  "name": "CIS Docker Benchmark v1.6",
+  "fileName": "CIS_Docker_Benchmark.json",
+  "controls": [
+    {
+      "controlId": "2.1",
+      "chunkId": "CIS-DOCKER-2.1",
+      "type": "CIS_Benchmark",
+      "theme": "Docker Daemon Configuration",
+      "title": "Run the Docker daemon as a non-root user",
+      "summary": "The Docker daemon should run as a non-root user to reduce the attack surface of the host system in the event of a container escape.",
+      "implementationChecklist": [
+        "Enable rootless mode for Docker daemon",
+        "Verify daemon runs under a non-privileged user account",
+        "Ensure cgroup and namespace isolation is properly configured"
+      ],
+      "evidenceExamples": [
+        "ps -ef | grep dockerd output showing non-root user",
+        "Docker daemon configuration file (daemon.json)"
+      ]
+    },
+    {
+      "controlId": "2.2",
+      "chunkId": "CIS-DOCKER-2.2",
+      "type": "CIS_Benchmark",
+      "theme": "Docker Daemon Configuration",
+      "title": "Restrict network traffic between containers",
+      "summary": "By default, Docker allows unrestricted network traffic between containers on the same host. This should be restricted to reduce the attack surface.",
+      "implementationChecklist": [
+        "Set --icc=false on the Docker daemon",
+        "Use custom bridge networks with explicit container linking",
+        "Implement network policies for container-to-container communication"
+      ],
+      "evidenceExamples": [
+        "Docker daemon.json showing icc: false",
+        "docker network ls output showing custom networks"
+      ]
+    },
+    {
+      "controlId": "2.5",
+      "chunkId": "CIS-DOCKER-2.5",
+      "type": "CIS_Benchmark",
+      "theme": "Docker Daemon Configuration",
+      "title": "Enable Content Trust for image verification",
+      "summary": "Docker Content Trust provides digital signatures for data sent to and received from remote Docker registries, ensuring image integrity and publisher identity.",
+      "implementationChecklist": [
+        "Set DOCKER_CONTENT_TRUST=1 environment variable",
+        "Configure Notary server for private registries",
+        "Sign all images before pushing to registries"
+      ],
+      "evidenceExamples": [
+        "Environment variable DOCKER_CONTENT_TRUST=1 set in profiles",
+        "Notary server configuration"
+      ]
+    },
+    {
+      "controlId": "2.8",
+      "chunkId": "CIS-DOCKER-2.8",
+      "type": "CIS_Benchmark",
+      "theme": "Docker Daemon Configuration",
+      "title": "Enable user namespace support",
+      "summary": "User namespace remapping provides additional isolation by mapping container root to a non-privileged host user, reducing the impact of container breakout.",
+      "implementationChecklist": [
+        "Configure --userns-remap in daemon.json",
+        "Create subordinate UID/GID ranges for the remapped user",
+        "Verify containers run with remapped UIDs"
+      ],
+      "evidenceExamples": [
+        "daemon.json with userns-remap configured",
+        "cat /etc/subuid and /etc/subgid showing ranges"
+      ]
+    },
+    {
+      "controlId": "3.1",
+      "chunkId": "CIS-DOCKER-3.1",
+      "type": "CIS_Benchmark",
+      "theme": "Docker Daemon Configuration Files",
+      "title": "Set ownership and permissions on docker.service",
+      "summary": "The docker.service file controls the Docker daemon systemd configuration. It should be owned by root with restricted permissions to prevent unauthorized modification.",
+      "implementationChecklist": [
+        "Set ownership to root:root on docker.service",
+        "Set permissions to 644 or more restrictive",
+        "Audit file access periodically"
+      ],
+      "evidenceExamples": [
+        "stat /usr/lib/systemd/system/docker.service output",
+        "File permission audit logs"
+      ]
+    },
+    {
+      "controlId": "3.7",
+      "chunkId": "CIS-DOCKER-3.7",
+      "type": "CIS_Benchmark",
+      "theme": "Docker Daemon Configuration Files",
+      "title": "Set ownership and permissions on daemon.json",
+      "summary": "The daemon.json file contains Docker daemon configuration parameters. Access should be restricted to prevent unauthorized changes to daemon behavior.",
+      "implementationChecklist": [
+        "Set ownership to root:root on /etc/docker/daemon.json",
+        "Set permissions to 644 or more restrictive",
+        "Monitor file changes with integrity monitoring tools"
+      ],
+      "evidenceExamples": [
+        "stat /etc/docker/daemon.json output",
+        "AIDE or OSSEC change detection reports"
+      ]
+    },
+    {
+      "controlId": "4.1",
+      "chunkId": "CIS-DOCKER-4.1",
+      "type": "CIS_Benchmark",
+      "theme": "Container Images and Build File",
+      "title": "Create a user for the container",
+      "summary": "Containers should not run as root. Create a non-root user in the Dockerfile and switch to it using the USER directive to limit the impact of a container compromise.",
+      "implementationChecklist": [
+        "Add USER directive in Dockerfile after installing packages",
+        "Create a dedicated application user with minimal privileges",
+        "Verify running containers do not use root (docker inspect)"
+      ],
+      "evidenceExamples": [
+        "Dockerfile containing USER directive",
+        "docker inspect showing non-root user"
+      ]
+    },
+    {
+      "controlId": "4.2",
+      "chunkId": "CIS-DOCKER-4.2",
+      "type": "CIS_Benchmark",
+      "theme": "Container Images and Build File",
+      "title": "Use trusted base images",
+      "summary": "Only use trusted and verified base images from official or curated repositories. Scan base images for vulnerabilities before use.",
+      "implementationChecklist": [
+        "Use Docker Official Images or verified publisher images",
+        "Pin base images to specific digests (not :latest)",
+        "Scan base images with vulnerability scanners before use"
+      ],
+      "evidenceExamples": [
+        "Dockerfile FROM directives referencing official images with digests",
+        "Image scan reports for base images"
+      ]
+    },
+    {
+      "controlId": "4.3",
+      "chunkId": "CIS-DOCKER-4.3",
+      "type": "CIS_Benchmark",
+      "theme": "Container Images and Build File",
+      "title": "Do not install unnecessary packages",
+      "summary": "Minimize the attack surface by not installing unnecessary packages in containers. Each additional package increases the potential for vulnerabilities.",
+      "implementationChecklist": [
+        "Use --no-install-recommends for apt-get",
+        "Use multi-stage builds to separate build and runtime",
+        "Consider distroless or minimal base images"
+      ],
+      "evidenceExamples": [
+        "Dockerfile showing minimal package installation",
+        "Multi-stage build configuration"
+      ]
+    },
+    {
+      "controlId": "4.6",
+      "chunkId": "CIS-DOCKER-4.6",
+      "type": "CIS_Benchmark",
+      "theme": "Container Images and Build File",
+      "title": "Add HEALTHCHECK instruction",
+      "summary": "Include HEALTHCHECK in Dockerfiles to enable container health monitoring. This allows orchestrators to detect and replace unhealthy containers automatically.",
+      "implementationChecklist": [
+        "Add HEALTHCHECK instruction with appropriate check command",
+        "Set reasonable interval, timeout, and retries",
+        "Monitor health status in orchestration platform"
+      ],
+      "evidenceExamples": [
+        "Dockerfile HEALTHCHECK instruction",
+        "docker inspect showing health check configuration"
+      ]
+    },
+    {
+      "controlId": "4.9",
+      "chunkId": "CIS-DOCKER-4.9",
+      "type": "CIS_Benchmark",
+      "theme": "Container Images and Build File",
+      "title": "Use COPY instead of ADD",
+      "summary": "Prefer COPY over ADD in Dockerfiles. ADD has auto-extraction and remote URL features that can introduce security risks like arbitrary file inclusion.",
+      "implementationChecklist": [
+        "Replace ADD with COPY for local file operations",
+        "Only use ADD when tar auto-extraction is specifically needed",
+        "Never use ADD with remote URLs"
+      ],
+      "evidenceExamples": [
+        "Dockerfile using COPY instead of ADD",
+        "Static analysis scan results"
+      ]
+    },
+    {
+      "controlId": "4.10",
+      "chunkId": "CIS-DOCKER-4.10",
+      "type": "CIS_Benchmark",
+      "theme": "Container Images and Build File",
+      "title": "Do not store secrets in Dockerfiles",
+      "summary": "Secrets such as credentials, tokens, and keys should never be stored in Dockerfiles or image layers. Use build secrets, environment variables, or secret management tools.",
+      "implementationChecklist": [
+        "Use Docker BuildKit secrets (--secret) for build-time secrets",
+        "Use runtime secret management (Vault, AWS Secrets Manager)",
+        "Scan images and Dockerfiles for embedded secrets"
+      ],
+      "evidenceExamples": [
+        "Dockerfile free of hardcoded credentials",
+        "Secret scanning tool reports"
+      ]
+    },
+    {
+      "controlId": "5.1",
+      "chunkId": "CIS-DOCKER-5.1",
+      "type": "CIS_Benchmark",
+      "theme": "Container Runtime",
+      "title": "Do not disable AppArmor profile",
+      "summary": "AppArmor provides mandatory access control for containers. Do not run containers with --security-opt apparmor=unconfined as it removes important security restrictions.",
+      "implementationChecklist": [
+        "Ensure containers run with default or custom AppArmor profiles",
+        "Do not use apparmor=unconfined",
+        "Create custom profiles for applications requiring specific access"
+      ],
+      "evidenceExamples": [
+        "docker inspect showing AppArmor profile applied",
+        "Custom AppArmor profile files"
+      ]
+    },
+    {
+      "controlId": "5.2",
+      "chunkId": "CIS-DOCKER-5.2",
+      "type": "CIS_Benchmark",
+      "theme": "Container Runtime",
+      "title": "Do not disable SELinux",
+      "summary": "SELinux provides mandatory access control enforcement. Containers should not bypass SELinux using --security-opt label:disable.",
+      "implementationChecklist": [
+        "Verify SELinux is enabled and enforcing on the host",
+        "Do not use label:disable security option",
+        "Apply appropriate SELinux labels to containers"
+      ],
+      "evidenceExamples": [
+        "getenforce output showing Enforcing",
+        "docker inspect showing SELinux labels"
+      ]
+    },
+    {
+      "controlId": "5.4",
+      "chunkId": "CIS-DOCKER-5.4",
+      "type": "CIS_Benchmark",
+      "theme": "Container Runtime",
+      "title": "Do not run containers with privileged flag",
+      "summary": "Running a container with --privileged gives it full access to the host, including all devices and kernel capabilities. This defeats container isolation entirely.",
+      "implementationChecklist": [
+        "Never use --privileged flag in production",
+        "Use specific --cap-add for required capabilities instead",
+        "Audit running containers for privileged mode"
+      ],
+      "evidenceExamples": [
+        "docker inspect showing Privileged: false",
+        "Container orchestration policies preventing privileged mode"
+      ]
+    },
+    {
+      "controlId": "5.7",
+      "chunkId": "CIS-DOCKER-5.7",
+      "type": "CIS_Benchmark",
+      "theme": "Container Runtime",
+      "title": "Do not map privileged ports within containers",
+      "summary": "Do not map container ports to host privileged ports (below 1024). Privileged ports require root and increase the attack surface.",
+      "implementationChecklist": [
+        "Map container ports to non-privileged host ports (1024+)",
+        "Use reverse proxies for ports 80/443 instead of direct mapping",
+        "Audit port mappings in container configurations"
+      ],
+      "evidenceExamples": [
+        "docker port output showing non-privileged mappings",
+        "docker-compose.yml port configurations"
+      ]
+    },
+    {
+      "controlId": "5.9",
+      "chunkId": "CIS-DOCKER-5.9",
+      "type": "CIS_Benchmark",
+      "theme": "Container Runtime",
+      "title": "Do not share the host network namespace",
+      "summary": "Using --net=host gives the container full access to the host network stack, bypassing network isolation. Containers should use their own network namespace.",
+      "implementationChecklist": [
+        "Do not use --net=host in production containers",
+        "Use Docker bridge or overlay networks",
+        "Only use host networking for monitoring/infrastructure containers with documented justification"
+      ],
+      "evidenceExamples": [
+        "docker inspect showing NetworkMode is not host",
+        "Network configuration documentation"
+      ]
+    },
+    {
+      "controlId": "5.10",
+      "chunkId": "CIS-DOCKER-5.10",
+      "type": "CIS_Benchmark",
+      "theme": "Container Runtime",
+      "title": "Limit memory usage for containers",
+      "summary": "Set memory limits on containers to prevent a single container from exhausting all host memory, which could cause denial of service to other containers and the host.",
+      "implementationChecklist": [
+        "Set --memory flag on all production containers",
+        "Configure memory limits in orchestration manifests",
+        "Monitor container memory usage and set alerts"
+      ],
+      "evidenceExamples": [
+        "docker inspect showing Memory limits configured",
+        "Kubernetes resource limits in pod specs"
+      ]
+    },
+    {
+      "controlId": "5.11",
+      "chunkId": "CIS-DOCKER-5.11",
+      "type": "CIS_Benchmark",
+      "theme": "Container Runtime",
+      "title": "Set container CPU priority",
+      "summary": "Set CPU shares or limits on containers to prevent a single container from monopolizing host CPU resources.",
+      "implementationChecklist": [
+        "Set --cpu-shares or --cpus flag on containers",
+        "Configure CPU limits in orchestration manifests",
+        "Monitor container CPU usage"
+      ],
+      "evidenceExamples": [
+        "docker inspect showing CPU limits",
+        "Kubernetes CPU resource limits"
+      ]
+    },
+    {
+      "controlId": "5.12",
+      "chunkId": "CIS-DOCKER-5.12",
+      "type": "CIS_Benchmark",
+      "theme": "Container Runtime",
+      "title": "Mount container root filesystem as read-only",
+      "summary": "Mount the container root filesystem as read-only to prevent runtime modification of the container filesystem, reducing the impact of compromised containers.",
+      "implementationChecklist": [
+        "Use --read-only flag when running containers",
+        "Use tmpfs mounts for directories requiring write access",
+        "Verify application works correctly with read-only root"
+      ],
+      "evidenceExamples": [
+        "docker inspect showing ReadonlyRootfs: true",
+        "Container startup scripts or documentation"
+      ]
+    },
+    {
+      "controlId": "5.15",
+      "chunkId": "CIS-DOCKER-5.15",
+      "type": "CIS_Benchmark",
+      "theme": "Container Runtime",
+      "title": "Do not share the host PID namespace",
+      "summary": "Using --pid=host gives the container visibility into all host processes. This breaks process isolation and can expose sensitive information.",
+      "implementationChecklist": [
+        "Do not use --pid=host for application containers",
+        "Use separate PID namespaces (default behavior)",
+        "Document and justify any exceptions"
+      ],
+      "evidenceExamples": [
+        "docker inspect showing PidMode is not host",
+        "Container security policy documentation"
+      ]
+    },
+    {
+      "controlId": "5.25",
+      "chunkId": "CIS-DOCKER-5.25",
+      "type": "CIS_Benchmark",
+      "theme": "Container Runtime",
+      "title": "Restrict container from acquiring additional privileges",
+      "summary": "Set --security-opt=no-new-privileges to prevent container processes from gaining additional privileges via setuid or setgid binaries.",
+      "implementationChecklist": [
+        "Use --security-opt=no-new-privileges on all containers",
+        "Configure in orchestration security contexts",
+        "Audit running containers for this setting"
+      ],
+      "evidenceExamples": [
+        "docker inspect showing no-new-privileges security option",
+        "Kubernetes SecurityContext with allowPrivilegeEscalation: false"
+      ]
+    },
+    {
+      "controlId": "5.28",
+      "chunkId": "CIS-DOCKER-5.28",
+      "type": "CIS_Benchmark",
+      "theme": "Container Runtime",
+      "title": "Use PIDs cgroup limit",
+      "summary": "Limit the number of processes a container can create using the --pids-limit flag to prevent fork bomb attacks.",
+      "implementationChecklist": [
+        "Set --pids-limit to a reasonable value for each container",
+        "Monitor process counts inside containers",
+        "Set alerts for containers approaching PID limits"
+      ],
+      "evidenceExamples": [
+        "docker inspect showing PidsLimit configured",
+        "Container monitoring dashboard"
+      ]
+    },
+    {
+      "controlId": "5.31",
+      "chunkId": "CIS-DOCKER-5.31",
+      "type": "CIS_Benchmark",
+      "theme": "Container Runtime",
+      "title": "Do not mount the Docker socket inside containers",
+      "summary": "Mounting /var/run/docker.sock inside a container gives it full control over the Docker daemon, equivalent to root access on the host.",
+      "implementationChecklist": [
+        "Never mount docker.sock in production containers",
+        "Use Docker API over TLS with client certificates if remote access needed",
+        "Audit volume mounts for docker.sock references"
+      ],
+      "evidenceExamples": [
+        "docker inspect showing no docker.sock mount",
+        "docker-compose.yml without docker.sock volume"
+      ]
+    }
+  ]
+}

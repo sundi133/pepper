@@ -31,6 +31,7 @@ import { mixLockParser } from "./parsers/mix-lock";
 import { swiftPackageResolvedParser } from "./parsers/swift-package";
 import { queryOsvBatch } from "./osv-client";
 import { triageScaFindings } from "./triage";
+import { enrichFindingsWithEpssKev } from "@/lib/epss-kev-enrichment";
 import { enhanceSCAFindingWithRiskScore } from "./supply-chain-scorer";
 
 const ALL_PARSERS: DependencyParser[] = [
@@ -192,6 +193,10 @@ export const scaScanner: ScannerPlugin = {
       ctx.orgSettings.osvApiUrl,
       { workDir: ctx.workDir, fileList: ctx.fileList },
     );
+
+    // EPSS + CISA KEV enrichment (additive metadata, graceful degradation)
+    ctx.onProgress?.(`SCA: enriching ${findings.length} findings with EPSS/KEV data...`);
+    findings = await enrichFindingsWithEpssKev(findings);
 
     // Enhance findings with supply-chain risk scoring
     ctx.onProgress?.(`SCA: scoring supply-chain risk for ${findings.length} vulnerabilities...`);

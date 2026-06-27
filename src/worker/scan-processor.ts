@@ -420,6 +420,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
                 scanner: f.scanner,
                 confidence: f.confidence,
                 filePath: f.filePath,
+                metadata: f.metadata as Record<string, unknown>,
               }),
             };
           }),
@@ -452,6 +453,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
                 scanner: f.scanner,
                 confidence: f.confidence,
                 filePath: f.filePath,
+                metadata: f.metadata as Record<string, unknown>,
               }),
               status: "FALSE_POSITIVE",
               statusNote: "Auto-suppressed by learned rule",

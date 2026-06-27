@@ -472,6 +472,12 @@ model OrgSettings {
   codeSigningKeyEnc  String? @db.Text
   codeSigningIdentity String?
 
+  // Container registry authentication (encrypted)
+  containerRegistryType        String?          // "dockerhub" | "ecr" | "gcr" | "ghcr" | "custom"
+  containerRegistryUsernameEnc String? @db.Text
+  containerRegistryPasswordEnc String? @db.Text
+  containerRegistryRegion      String?          // AWS region for ECR (e.g., "us-east-1")
+
   // Inbound VCS webhook secrets (encrypted); configure in Settings → Integrations
   githubWebhookSecretEnc     String? @db.Text
   gitlabWebhookSecretEnc     String? @db.Text

@@ -14,6 +14,10 @@ type RawOrgSettings = {
   dastEndpoint?: string | null;
   dastApiKeyEnc?: string | null;
   dastConfigYamlEnc?: string | null;
+  containerRegistryType?: string | null;
+  containerRegistryUsernameEnc?: string | null;
+  containerRegistryPasswordEnc?: string | null;
+  containerRegistryRegion?: string | null;
 } | null;
 
 /**
@@ -41,6 +45,27 @@ export function buildOrgSettingsForJob(
     }
   }
 
+  let containerRegistryUsername: string | undefined;
+  if (orgSettings?.containerRegistryUsernameEnc) {
+    try {
+      containerRegistryUsername = decryptSecret(
+        orgSettings.containerRegistryUsernameEnc,
+      );
+    } catch {
+      containerRegistryUsername = undefined;
+    }
+  }
+  let containerRegistryPassword: string | undefined;
+  if (orgSettings?.containerRegistryPasswordEnc) {
+    try {
+      containerRegistryPassword = decryptSecret(
+        orgSettings.containerRegistryPasswordEnc,
+      );
+    } catch {
+      containerRegistryPassword = undefined;
+    }
+  }
+
   return {
     llmProvider: orgSettings?.llmProvider || "openai",
     llmBaseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",
@@ -58,5 +83,9 @@ export function buildOrgSettingsForJob(
     dastEndpoint: orgSettings?.dastEndpoint || undefined,
     dastApiKey,
     dastConfigYaml,
+    containerRegistryType: orgSettings?.containerRegistryType || undefined,
+    containerRegistryUsername,
+    containerRegistryPassword,
+    containerRegistryRegion: orgSettings?.containerRegistryRegion || undefined,
   };
 }

@@ -1,0 +1,348 @@
+{
+  "name": "SOC 2 Type II",
+  "fileName": "SOC2.json",
+  "controls": [
+    {
+      "controlId": "CC1.1",
+      "chunkId": "SOC2-CC1.1",
+      "type": "SOC2_TSC",
+      "theme": "Control Environment",
+      "title": "Demonstrate commitment to integrity and ethical values",
+      "summary": "The organization demonstrates a commitment to integrity and ethical values through its security policies, code of conduct, and management oversight.",
+      "implementationChecklist": [
+        "Establish and communicate a code of conduct",
+        "Define security policies and ensure management review",
+        "Implement whistleblower and ethics reporting mechanisms"
+      ],
+      "evidenceExamples": [
+        "Security policy documentation",
+        "Code of conduct acknowledgements",
+        "Ethics training completion records"
+      ]
+    },
+    {
+      "controlId": "CC2.1",
+      "chunkId": "SOC2-CC2.1",
+      "type": "SOC2_TSC",
+      "theme": "Communication and Information",
+      "title": "Communicate security objectives internally",
+      "summary": "The organization communicates its security objectives, policies, and standards to internal personnel to support the functioning of internal controls.",
+      "implementationChecklist": [
+        "Distribute security policies to all employees",
+        "Conduct regular security awareness training",
+        "Maintain internal security communication channels"
+      ],
+      "evidenceExamples": [
+        "Security awareness training completion records",
+        "Policy distribution acknowledgements",
+        "Internal security newsletters or bulletins"
+      ]
+    },
+    {
+      "controlId": "CC3.1",
+      "chunkId": "SOC2-CC3.1",
+      "type": "SOC2_TSC",
+      "theme": "Risk Assessment",
+      "title": "Identify and assess risks to security objectives",
+      "summary": "The organization specifies objectives with sufficient clarity to enable the identification and assessment of risks relating to its security commitments.",
+      "implementationChecklist": [
+        "Conduct annual risk assessments",
+        "Maintain a risk register with identified threats and vulnerabilities",
+        "Assess likelihood and impact of identified risks",
+        "Document risk treatment decisions"
+      ],
+      "evidenceExamples": [
+        "Risk assessment reports",
+        "Risk register with risk ratings",
+        "Risk treatment plans"
+      ]
+    },
+    {
+      "controlId": "CC3.2",
+      "chunkId": "SOC2-CC3.2",
+      "type": "SOC2_TSC",
+      "theme": "Risk Assessment",
+      "title": "Assess fraud risk",
+      "summary": "The organization considers the potential for fraud when assessing risks, including unauthorized access, manipulation of data, and misuse of assets.",
+      "implementationChecklist": [
+        "Include fraud scenarios in risk assessments",
+        "Implement separation of duties for critical functions",
+        "Monitor for indicators of fraudulent activity"
+      ],
+      "evidenceExamples": [
+        "Fraud risk assessment documentation",
+        "Separation of duties matrix",
+        "Fraud monitoring tool configurations"
+      ]
+    },
+    {
+      "controlId": "CC5.1",
+      "chunkId": "SOC2-CC5.1",
+      "type": "SOC2_TSC",
+      "theme": "Control Activities",
+      "title": "Select and develop control activities",
+      "summary": "The organization selects and develops control activities that contribute to the mitigation of risks to the achievement of security objectives.",
+      "implementationChecklist": [
+        "Map controls to identified risks",
+        "Implement detective, preventive, and corrective controls",
+        "Document control procedures and responsibilities"
+      ],
+      "evidenceExamples": [
+        "Control matrix mapping controls to risks",
+        "Control procedure documentation",
+        "Control testing results"
+      ]
+    },
+    {
+      "controlId": "CC6.1",
+      "chunkId": "SOC2-CC6.1",
+      "type": "SOC2_TSC",
+      "theme": "Logical and Physical Access Controls",
+      "title": "Implement logical access security",
+      "summary": "The organization implements logical access security software, infrastructure, and architectures to protect information assets against unauthorized access.",
+      "implementationChecklist": [
+        "Implement role-based access control (RBAC)",
+        "Enforce multi-factor authentication for privileged access",
+        "Use network segmentation and firewalls",
+        "Encrypt data at rest and in transit"
+      ],
+      "evidenceExamples": [
+        "Access control policy and RBAC configuration",
+        "MFA enrollment records",
+        "Network architecture diagrams",
+        "Encryption configuration evidence"
+      ]
+    },
+    {
+      "controlId": "CC6.2",
+      "chunkId": "SOC2-CC6.2",
+      "type": "SOC2_TSC",
+      "theme": "Logical and Physical Access Controls",
+      "title": "Manage credentials and authentication",
+      "summary": "The organization manages credentials for infrastructure and software, implementing password policies, key management, and credential rotation.",
+      "implementationChecklist": [
+        "Enforce strong password policies",
+        "Implement credential rotation schedules",
+        "Use secrets management tools (Vault, AWS Secrets Manager)",
+        "Disable default and shared accounts"
+      ],
+      "evidenceExamples": [
+        "Password policy configuration",
+        "Credential rotation logs",
+        "Secrets management tool configuration"
+      ]
+    },
+    {
+      "controlId": "CC6.3",
+      "chunkId": "SOC2-CC6.3",
+      "type": "SOC2_TSC",
+      "theme": "Logical and Physical Access Controls",
+      "title": "Authorize and manage access based on least privilege",
+      "summary": "The organization authorizes, modifies, and removes access to data and resources based on the principle of least privilege and role-based requirements.",
+      "implementationChecklist": [
+        "Implement least privilege access policies",
+        "Conduct quarterly access reviews",
+        "Implement automated deprovisioning on termination",
+        "Log and monitor access changes"
+      ],
+      "evidenceExamples": [
+        "Access review reports",
+        "User provisioning and deprovisioning records",
+        "Access change audit logs"
+      ]
+    },
+    {
+      "controlId": "CC6.6",
+      "chunkId": "SOC2-CC6.6",
+      "type": "SOC2_TSC",
+      "theme": "Logical and Physical Access Controls",
+      "title": "Restrict access to system boundaries",
+      "summary": "The organization restricts access at system boundaries, including network perimeters, DMZs, and API gateways, to authorized connections only.",
+      "implementationChecklist": [
+        "Configure firewalls and security groups",
+        "Implement API gateway authentication and rate limiting",
+        "Use web application firewalls (WAF)",
+        "Monitor and log boundary traffic"
+      ],
+      "evidenceExamples": [
+        "Firewall rule configurations",
+        "API gateway access policies",
+        "WAF configuration and block logs"
+      ]
+    },
+    {
+      "controlId": "CC6.8",
+      "chunkId": "SOC2-CC6.8",
+      "type": "SOC2_TSC",
+      "theme": "Logical and Physical Access Controls",
+      "title": "Prevent and detect unauthorized software",
+      "summary": "The organization implements controls to prevent or detect and act upon the introduction of unauthorized or malicious software.",
+      "implementationChecklist": [
+        "Deploy endpoint protection and anti-malware solutions",
+        "Implement application whitelisting where feasible",
+        "Scan dependencies for known vulnerabilities",
+        "Monitor for unauthorized software installations"
+      ],
+      "evidenceExamples": [
+        "Endpoint protection deployment records",
+        "SCA scan reports",
+        "Software inventory and approval records"
+      ]
+    },
+    {
+      "controlId": "CC7.1",
+      "chunkId": "SOC2-CC7.1",
+      "type": "SOC2_TSC",
+      "theme": "System Operations",
+      "title": "Detect and monitor security events",
+      "summary": "The organization uses detection and monitoring procedures to identify anomalies and security events that could indicate security incidents.",
+      "implementationChecklist": [
+        "Deploy SIEM or centralized logging",
+        "Configure alerts for security-relevant events",
+        "Implement intrusion detection systems",
+        "Monitor infrastructure and application logs"
+      ],
+      "evidenceExamples": [
+        "SIEM configuration and alert rules",
+        "IDS deployment records",
+        "Monitoring dashboard screenshots"
+      ]
+    },
+    {
+      "controlId": "CC7.2",
+      "chunkId": "SOC2-CC7.2",
+      "type": "SOC2_TSC",
+      "theme": "System Operations",
+      "title": "Monitor system components for anomalies",
+      "summary": "The organization monitors system components and the operation of those components for anomalies that are indicative of malicious acts or system failures.",
+      "implementationChecklist": [
+        "Implement infrastructure monitoring (CPU, memory, disk, network)",
+        "Configure application performance monitoring",
+        "Set baseline metrics and anomaly detection thresholds",
+        "Review monitoring alerts and escalate appropriately"
+      ],
+      "evidenceExamples": [
+        "Monitoring tool configuration",
+        "Anomaly detection alert history",
+        "Incident response escalation records"
+      ]
+    },
+    {
+      "controlId": "CC7.3",
+      "chunkId": "SOC2-CC7.3",
+      "type": "SOC2_TSC",
+      "theme": "System Operations",
+      "title": "Evaluate and respond to security events",
+      "summary": "The organization evaluates detected security events and determines whether they constitute security incidents requiring response.",
+      "implementationChecklist": [
+        "Define incident classification and severity levels",
+        "Establish incident response procedures and playbooks",
+        "Conduct incident response drills",
+        "Document and review incident response actions"
+      ],
+      "evidenceExamples": [
+        "Incident response plan",
+        "Incident response drill records",
+        "Post-incident review reports"
+      ]
+    },
+    {
+      "controlId": "CC8.1",
+      "chunkId": "SOC2-CC8.1",
+      "type": "SOC2_TSC",
+      "theme": "Change Management",
+      "title": "Manage changes to infrastructure and software",
+      "summary": "The organization authorizes, designs, develops, configures, documents, tests, approves, and implements changes to infrastructure and software.",
+      "implementationChecklist": [
+        "Implement change management process with approvals",
+        "Require code reviews for all production changes",
+        "Maintain separate development, staging, and production environments",
+        "Test changes before production deployment"
+      ],
+      "evidenceExamples": [
+        "Change management tickets and approvals",
+        "Code review records (pull request history)",
+        "Deployment pipeline configuration",
+        "Environment separation documentation"
+      ]
+    },
+    {
+      "controlId": "CC9.1",
+      "chunkId": "SOC2-CC9.1",
+      "type": "SOC2_TSC",
+      "theme": "Risk Mitigation",
+      "title": "Identify and manage vendor risk",
+      "summary": "The organization identifies, selects, and manages risks associated with vendors and business partners who have access to the organization's systems or data.",
+      "implementationChecklist": [
+        "Maintain a vendor inventory with risk classifications",
+        "Review vendor SOC 2 reports annually",
+        "Include security requirements in vendor contracts",
+        "Monitor vendor security posture"
+      ],
+      "evidenceExamples": [
+        "Vendor inventory and risk assessments",
+        "Vendor SOC 2 report reviews",
+        "Vendor contract security clauses"
+      ]
+    },
+    {
+      "controlId": "A1.1",
+      "chunkId": "SOC2-A1.1",
+      "type": "SOC2_TSC",
+      "theme": "Availability",
+      "title": "Maintain system availability commitments",
+      "summary": "The organization maintains, monitors, and evaluates current processing capacity and use of system components to manage capacity demand and enable the implementation of additional capacity.",
+      "implementationChecklist": [
+        "Define availability SLAs and SLOs",
+        "Implement auto-scaling for critical services",
+        "Conduct capacity planning reviews",
+        "Monitor uptime and availability metrics"
+      ],
+      "evidenceExamples": [
+        "SLA documentation",
+        "Uptime monitoring reports",
+        "Capacity planning documentation",
+        "Auto-scaling configuration"
+      ]
+    },
+    {
+      "controlId": "A1.2",
+      "chunkId": "SOC2-A1.2",
+      "type": "SOC2_TSC",
+      "theme": "Availability",
+      "title": "Implement disaster recovery and business continuity",
+      "summary": "The organization implements backup, recovery, and business continuity procedures to ensure system availability in the event of disruptions.",
+      "implementationChecklist": [
+        "Implement automated backup procedures",
+        "Test backup restoration regularly",
+        "Maintain a business continuity plan",
+        "Conduct disaster recovery drills annually"
+      ],
+      "evidenceExamples": [
+        "Backup configuration and schedules",
+        "Backup restoration test results",
+        "Business continuity plan",
+        "DR drill reports"
+      ]
+    },
+    {
+      "controlId": "PI1.1",
+      "chunkId": "SOC2-PI1.1",
+      "type": "SOC2_TSC",
+      "theme": "Processing Integrity",
+      "title": "Ensure processing completeness and accuracy",
+      "summary": "The organization implements policies and procedures over system processing to ensure completeness, validity, accuracy, and timeliness of outputs.",
+      "implementationChecklist": [
+        "Implement input validation and data integrity checks",
+        "Use checksums or hashes for data integrity verification",
+        "Monitor processing pipelines for errors",
+        "Implement reconciliation procedures"
+      ],
+      "evidenceExamples": [
+        "Data validation rules documentation",
+        "Processing error monitoring dashboards",
+        "Reconciliation reports"
+      ]
+    }
+  ]
+}

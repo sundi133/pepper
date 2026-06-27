@@ -113,7 +113,36 @@ async function trivyAvailable(): Promise<boolean> {
   }
 }
 
-async function scanImageWithTrivy(image: string): Promise<TrivyOutput | null> {
+function buildRegistryEnv(
+  orgSettings: ScanContext["orgSettings"],
+): Record<string, string> | undefined {
+  if (!orgSettings.containerRegistryType || !orgSettings.containerRegistryUsername) {
+    return undefined;
+  }
+  switch (orgSettings.containerRegistryType) {
+    case "ecr":
+      return {
+        AWS_ACCESS_KEY_ID: orgSettings.containerRegistryUsername,
+        AWS_SECRET_ACCESS_KEY: orgSettings.containerRegistryPassword || "",
+        ...(orgSettings.containerRegistryRegion
+          ? { AWS_DEFAULT_REGION: orgSettings.containerRegistryRegion }
+          : {}),
+      };
+    case "dockerhub":
+    case "ghcr":
+    case "custom":
+    default:
+      return {
+        TRIVY_USERNAME: orgSettings.containerRegistryUsername,
+        TRIVY_PASSWORD: orgSettings.containerRegistryPassword || "",
+      };
+  }
+}
+
+async function scanImageWithTrivy(
+  image: string,
+  registryEnv?: Record<string, string>,
+): Promise<TrivyOutput | null> {
   try {
     const { stdout } = await execFileP(
       "trivy",
@@ -129,7 +158,11 @@ async function scanImageWithTrivy(image: string): Promise<TrivyOutput | null> {
         "CRITICAL,HIGH,MEDIUM,LOW",
         image,
       ],
-      { timeout: 300_000, maxBuffer: 64 * 1024 * 1024 },
+      {
+        timeout: 300_000,
+        maxBuffer: 64 * 1024 * 1024,
+        env: registryEnv ? { ...process.env, ...registryEnv } : undefined,
+      },
     );
     return JSON.parse(stdout) as TrivyOutput;
   } catch (err) {
@@ -322,7 +355,8 @@ export const containerScanner: ScannerPlugin = {
       ctx.onProgress?.(
         `CONTAINER: Trivy scanning ${ref.kind} artifact ${ref.image}`,
       );
-      const trivyOutput = await scanImageWithTrivy(ref.image);
+      const registryEnv = buildRegistryEnv(ctx.orgSettings);
+      const trivyOutput = await scanImageWithTrivy(ref.image, registryEnv);
       if (!trivyOutput?.Results) {
         ctx.onProgress?.(
           `CONTAINER: could not scan ${ref.image} (private/unreachable) — logged only`,

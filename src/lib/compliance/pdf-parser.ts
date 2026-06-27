@@ -286,6 +286,40 @@ function collectOwaspSectionText(lines: string[], sectionName: string): string[]
 }
 
 /**
+ * Parse a compliance framework from a JSON file.
+ * Expects the file to match the ComplianceFramework interface directly.
+ */
+function parseComplianceJson(filePath: string): ComplianceFramework | null {
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const data = JSON.parse(raw) as ComplianceFramework;
+
+    if (!data.name || !Array.isArray(data.controls) || data.controls.length === 0) {
+      logger.warn({ filePath }, "Compliance JSON missing name or controls");
+      return null;
+    }
+
+    if (!data.controlCatalog) {
+      data.controlCatalog = data.controls
+        .map((c) => `${c.controlId} | ${c.title} | ${(c.summary || "").substring(0, 150)}`)
+        .join("\n");
+    }
+
+    data.fileName = data.fileName || path.basename(filePath);
+
+    logger.info(
+      { framework: data.name, controls: data.controls.length, filePath },
+      "Compliance framework loaded from JSON",
+    );
+
+    return data;
+  } catch (err) {
+    logger.error({ err, filePath }, "Failed to parse compliance JSON");
+    return null;
+  }
+}
+
+/**
  * Load all compliance frameworks from the compliance/ directory.
  * Call once at startup or first use; results are cached.
  */
@@ -302,11 +336,20 @@ export function loadAllFrameworks(): ComplianceFramework[] {
     return [];
   }
 
-  const pdfs = fs.readdirSync(dir).filter((f) => f.endsWith(".pdf"));
+  const files = fs.readdirSync(dir);
+  const pdfs = files.filter((f) => f.endsWith(".pdf"));
+  const jsons = files.filter((f) => f.endsWith(".json"));
   const frameworks: ComplianceFramework[] = [];
 
   for (const pdf of pdfs) {
     const fw = parseCompliancePdf(path.join(dir, pdf));
+    if (fw && fw.controls.length > 0) {
+      frameworks.push(fw);
+    }
+  }
+
+  for (const jsonFile of jsons) {
+    const fw = parseComplianceJson(path.join(dir, jsonFile));
     if (fw && fw.controls.length > 0) {
       frameworks.push(fw);
     }

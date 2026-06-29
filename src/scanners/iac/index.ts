@@ -9,6 +9,7 @@ import { RawFinding, ScanContext, ScannerPlugin } from "../types";
 import { groupIacStacks } from "./stacks";
 import { enrichFinding } from "../shared/finding-normalize";
 import { buildDeepRepoContext } from "../shared/repo-context";
+import { applySeverityCalibration } from "@/lib/severity-calibration";
 import {
   SKIP_DIRECTORIES,
   LLM_MAX_FILE_SIZE_BYTES,
@@ -21,16 +22,53 @@ import { logger } from "@/lib/logger";
 
 const IAC_STACK_PROMPT = `You are an expert IaC security auditor performing STACK-LEVEL analysis.
 Analyze ALL files in the stack together (Dockerfile+compose, Terraform module+vars, K8s+Helm, CI+deploy configs).
-Do NOT report hardcoded secrets that are only credential material — those belong to the secrets scanner.
-For each finding include: exact misconfiguration, exposed asset, attack path, environment if visible, concrete fix, validation command/step.
+Do NOT report hardcoded secrets — those belong to the secrets scanner.
+For each finding include: exact misconfiguration, exposed asset, attack path, environment if visible, concrete fix, validation step.
 Confidence >= 0.80 only.
+
+COVERAGE MATRIX — check every stack for:
+
+**DOCKER & CONTAINER:**
+- Running as root (USER not set or USER root), privileged:true, allowPrivilegeEscalation:true
+- host network/pid/ipc mode, docker.sock mounted, dangerous capabilities (SYS_ADMIN, NET_ADMIN, ALL)
+- :latest tags without digest pin, no HEALTHCHECK, writable root filesystem (readOnlyRootFilesystem missing)
+- Secrets in ENV or ARG (use --build-secret or runtime inject instead), COPY of .env or credential files into image
+- Sensitive files copied into image that should be .dockerignore'd
+
+**TERRAFORM / CLOUD IaC:**
+- Public S3 buckets (acl=public-read/write, block_public_acls=false), missing bucket versioning or encryption
+- Overly permissive IAM (Action:* or Resource:* or Principal:*), allow all ingress from 0.0.0.0/0 on non-80/443 ports
+- Unencrypted RDS/DynamoDB/EBS/S3, missing deletion_protection, missing backup retention
+- Hardcoded provider credentials (aws_access_key/secret_key inline), missing required_providers version pin
+- Unsafe remote state without encryption or state lock
+
+**KUBERNETES:**
+- Missing resources.limits (CPU/mem), missing NetworkPolicy (allow all pod-to-pod traffic)
+- ServiceAccount with automountServiceAccountToken:true when not needed, default service account used
+- Overly permissive RBAC: ClusterRoleBinding to default SA, verbs:["*"] or resources:["*"]
+- hostPath volumes, secrets stored in ConfigMap instead of Secret resource
+- Missing securityContext.runAsNonRoot, missing securityContext.readOnlyRootFilesystem
+
+**CI/CD (GitHub Actions, GitLab CI):**
+- pull_request_target workflow with code checkout from fork (allows fork code to run with secrets access)
+- Unpinned action references (uses: owner/action@v4 instead of pinned SHA)
+- GITHUB_TOKEN with write permissions broader than needed
+- Secrets exposed via echo, run: env, or set-output without masking
+- Self-hosted runner on public repository (allows RCE from untrusted fork PRs)
+
+**HELM:**
+- Hard-coded credentials in values.yaml, missing .helmignore for secret files
+- Permissive ingress without TLS, missing pod security context in chart templates
 
 Return JSON:
 {
   "findings": [{
-    "title", "severity", "description", "filePath", "startLine", "endLine",
-    "cweId", "confidence", "recommendation",
-    "metadata": { "exposedAsset", "attackPath", "environment", "validationSteps": [], "remediation": "..." }
+    "title": "string", "severity": "CRITICAL|HIGH|MEDIUM|LOW",
+    "description": "string", "filePath": "string",
+    "startLine": <int>, "endLine": <int>,
+    "cweId": "CWE-XXX", "confidence": <0.80-1.0>,
+    "recommendation": "string",
+    "metadata": { "exposedAsset": "string", "attackPath": "string", "environment": "string", "validationSteps": ["string"], "remediation": "string" }
   }]
 }`;
 
@@ -71,7 +109,21 @@ export const iacScanner: ScannerPlugin = {
     if (stacks.length === 0) return [];
 
     const repoContext = buildDeepRepoContext(ctx.workDir, ctx.fileList);
-    ctx.onProgress?.(`IaC: analyzing ${stacks.length} configuration stack(s)...`);
+
+    // Count total lines in all IaC files
+    let totalIacLoc = 0;
+    for (const stack of stacks) {
+      for (const { filePath } of stack.files) {
+        try {
+          const content = fs.readFileSync(path.join(ctx.workDir, filePath), "utf-8");
+          totalIacLoc += content.split("\n").length;
+        } catch {
+          // ignore read errors
+        }
+      }
+    }
+
+    ctx.onProgress?.(`IaC: analyzing ${stacks.length} configuration stack(s) (${totalIacLoc} LOC)...`);
 
     const findings: RawFinding[] = [];
     const maxConcurrency = MAX_LLM_CONCURRENCY;
@@ -123,10 +175,9 @@ async function analyzeStack(
   for (const { filePath, iacType } of stack.files) {
     try {
       const fullPath = path.join(ctx.workDir, filePath);
-      const stat = fs.statSync(fullPath);
-      if (stat.size > LLM_MAX_FILE_SIZE_BYTES) continue;
       const content = fs.readFileSync(fullPath, "utf-8");
       if (!content.trim()) continue;
+      if (Buffer.byteLength(content, "utf8") > LLM_MAX_FILE_SIZE_BYTES) continue;
       lineMaps.set(filePath, content.split("\n"));
       parts.push(
         `### ${filePath} (${iacType})\n\`\`\`\n${content}\n\`\`\``,
@@ -163,7 +214,7 @@ async function analyzeStack(
       )
       .map((f) => {
         const lines = lineMaps.get(f.filePath) || [];
-        const base: RawFinding = {
+        const raw: RawFinding = {
           scanner: "IAC",
           severity: normalizeSeverity(f.severity),
           title: f.title,
@@ -186,6 +237,7 @@ async function analyzeStack(
             category: "IaC",
           },
         };
+        const base = applySeverityCalibration(raw);
         return enrichFinding(base, base.metadata as Record<string, unknown>, {
           whatIsWrong: f.title,
           where: `${f.filePath}:${f.startLine}`,

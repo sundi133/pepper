@@ -31,7 +31,6 @@ import { Progress } from "@/components/ui/progress";
 import {
   Download,
   Ban,
-  FileText,
   AlertTriangle,
   BookOpen,
   RotateCcw,
@@ -481,19 +480,6 @@ export default function ScanDetailPage() {
               >
                 <Download className="mr-2 h-4 w-4" />
                 Findings CSV
-              </Button>
-              <Button
-                variant="outline"
-                className={scanToolbarOutlineClass}
-                onClick={() =>
-                  window.open(
-                    `/api/scans/${scanId}/findings/export?format=html`,
-                    "_blank",
-                  )
-                }
-              >
-                <FileText className="mr-2 h-4 w-4" />
-                HTML Report
               </Button>
               <Button
                 variant="outline"

@@ -483,6 +483,8 @@ export const maliciousPkgScanner: ScannerPlugin = {
             confidence: 1.0,
             metadata: {
               ecosystem: dep.ecosystem,
+              packageName: dep.name,
+              packageVersion: dep.version,
               version: dep.version,
               osvId: hit.id,
               source: "osv-malware-db",
@@ -845,10 +847,19 @@ export const maliciousPkgScanner: ScannerPlugin = {
       }
     }
 
+    const seen = new Set<string>();
+    const dedupedFindings = findings.filter((f) => {
+      const meta = (f.metadata || {}) as Record<string, unknown>;
+      const key = `${meta.ecosystem ?? ""}:${meta.packageName ?? f.title}:${f.ruleId ?? ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     ctx.onProgress?.(
-      `Supply Chain: ${findings.length} validated issues (${phase1Count} from OSV malware DB)`,
+      `Supply Chain: ${dedupedFindings.length} validated issues (${phase1Count} from OSV malware DB)`,
     );
-    return findings;
+    return dedupedFindings;
   },
 };
 

@@ -9,7 +9,7 @@ import { RawFinding, ScanContext, ScannerPlugin } from "../types";
 import { buildDeepRepoContext } from "../shared/repo-context";
 import { enrichFinding } from "../shared/finding-normalize";
 import { applySeverityCalibration } from "@/lib/severity-calibration";
-import { ZERO_DAY_VALIDATION_PROMPT } from "../shared/prompts";
+import { ZERO_DAY_SYSTEM_PROMPT } from "./prompts";
 import { selectZeroDayFiles } from "./file-prioritizer";
 import {
   FILE_EXTENSIONS,
@@ -32,6 +32,8 @@ interface ZeroDayLlmFinding {
   endLine: number;
   cweId?: string;
   confidence?: number;
+  attackVector?: string;
+  stepsToReproduce?: string[];
   metadata?: Record<string, unknown>;
   recommendation?: string;
 }
@@ -90,7 +92,7 @@ export const zeroDayScanner: ScannerPlugin = {
       const raw = await analyzeWithLlm(
         client,
         ctx.orgSettings.llmModel,
-        ZERO_DAY_VALIDATION_PROMPT,
+        ZERO_DAY_SYSTEM_PROMPT,
         userContent,
         { maxTokens: maxResponseTokens },
       );
@@ -100,12 +102,14 @@ export const zeroDayScanner: ScannerPlugin = {
         { findings: [] },
       );
 
+      const sentFilePaths = new Set(targetFiles.slice(0, 48));
       const findings = (parsed.findings || [])
         .filter(
           (f) =>
             f.title &&
             f.severity &&
             f.filePath &&
+            sentFilePaths.has(f.filePath) &&
             (f.confidence ?? 0) >= ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
         )
         .map((f) => {
@@ -129,8 +133,9 @@ export const zeroDayScanner: ScannerPlugin = {
           return enrichFinding(base, base.metadata as Record<string, unknown>, {
             whatIsWrong: f.title,
             where: `${f.filePath}:${f.startLine}`,
-            whyExploitable: f.description,
-            attackPath: f.metadata?.attackPath as string,
+            whyExploitable: f.attackVector || f.description,
+            attackPath: f.attackVector,
+            stepsToReproduce: f.stepsToReproduce,
             fix:
               f.recommendation ||
               (f.metadata?.remediation as string) ||

@@ -4,38 +4,6 @@ import { SEVERITY_CALIBRATION_PROMPT } from "@/lib/severity-calibration";
 
 export { SEVERITY_CALIBRATION_PROMPT };
 
-export const SAST_PASS1_PROMPT = `You are performing PASS 1 (candidate discovery) of a deep security code audit.
-Report only credible vulnerability CANDIDATES with concrete evidence from the chunk.
-Confidence 0.65-0.79 = candidate for pass-2 validation; 0.80+ only if exploit path is fully visible in chunk.
-
-Return JSON:
-{
-  "candidates": [
-    {
-      "title": "...",
-      "severity": "CRITICAL|HIGH|MEDIUM|LOW",
-      "description": "what/where/why in 2-4 sentences",
-      "startLine": <int>,
-      "endLine": <int>,
-      "cweId": "CWE-XXX",
-      "confidence": <0.65-1.0>,
-      "weaknessClass": "e.g. IDOR, SQLi, SSRF",
-      "metadata": {
-        "route": null,
-        "method": null,
-        "parameter": null,
-        "sink": null,
-        "attackPath": "...",
-        "impact": "...",
-        "remediation": "...",
-        "stepsToReproduce": ["..."],
-        "validationSteps": ["..."]
-      }
-    }
-  ]
-}
-If none: {"candidates": []}`;
-
 export const SAST_PASS2_PROMPT = `You are performing PASS 2 (cross-file validation) of a security audit.
 Given repository context (routes, auth boundaries, sinks) and candidate findings, validate each candidate.
 Only confirm findings where the exploit path holds with available context. Reject duplicates of generic lint noise.
@@ -55,9 +23,17 @@ Return JSON:
       "confidence": <0.80-1.0>,
       "weaknessClass": "...",
       "metadata": {
-        "route", "method", "parameter", "sink",
-        "attackPath", "impact", "remediation",
-        "stepsToReproduce", "validationSteps", "evidence", "confidenceReason"
+        "route": "HTTP route or null",
+        "method": "GET|POST|PUT|PATCH|DELETE|null",
+        "parameter": "user input name or null",
+        "sink": "vulnerable function or null",
+        "attackPath": "how attacker reaches sink",
+        "impact": "business/technical impact",
+        "remediation": "code-level fix",
+        "stepsToReproduce": ["step 1", "step 2"],
+        "validationSteps": ["how to confirm fix"],
+        "evidence": "quoted code from chunk",
+        "confidenceReason": "why this confidence level"
       }
     }
   ]
@@ -96,7 +72,15 @@ the codebase (or "no imports found" if absent). Use this to judge reachability:
 - If no imports found AND severity < CRITICAL, set keep=false with reason "package not imported in source".
 - If imports exist, assess whether the vulnerable function/module is likely reachable from those call sites.
 
-Return JSON: { "triaged": [{ "osvId", "keep": true|false, "reason", "metadata": {...} }] }`;
+SEVERITY GUIDANCE:
+- CRITICAL CVEs: keep=true unless package demonstrably unused
+- HIGH CVEs: keep=true if imported; reachable=true only if vulnerable function path is plausible
+- MEDIUM/LOW CVEs: keep=false if no imports found OR if attack requires attacker-controlled file/memory access
+- Dev-only packages: keep=false unless CRITICAL
+
+EXPLOITPRECONDITIONS: describe exact conditions required (e.g. "requires authenticated user to upload file", "only reachable if Node < 18").
+
+Return JSON: { "triaged": [{ "osvId", "keep": true|false, "reason", "metadata": { "directDependency": bool, "reachable": bool, "exploitPreconditions": "...", "fixVersion": "...", "remediation": "..." } }] }`;
 
 export const MALICIOUS_VALIDATION_PROMPT = `Validate supply-chain risk from EVIDENCE only (metadata, install scripts, typosquat signals, OSV MAL-*).
 Do NOT emit findings for "new package" or "no repository" alone.

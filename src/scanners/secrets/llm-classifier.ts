@@ -61,13 +61,19 @@ export async function classifySecrets(
   const client = createLlmClient(llmConfig);
 
   // Build context for LLM
-  const context = findings.map((f, i) => ({
-    index: i,
-    type: f.ruleId,
-    file: f.filePath,
-    line: f.startLine,
-    snippet: f.snippet?.substring(0, 900),
-  }));
+  const context = findings.map((f, i) => {
+    const meta = (f.metadata || {}) as Record<string, unknown>;
+    return {
+      index: i,
+      type: f.ruleId,
+      credentialType: meta.credentialType,
+      file: f.filePath,
+      line: f.startLine,
+      snippet: f.snippet?.substring(0, 900),
+      whyReal: meta.evidence,
+      maskedValue: meta.maskedValue,
+    };
+  });
 
   try {
     logger.info(

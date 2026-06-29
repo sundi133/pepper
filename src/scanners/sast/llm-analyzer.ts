@@ -98,18 +98,35 @@ async function fetchEnabledPolicies(orgId?: string): Promise<SecurityPolicy[]> {
         category: true,
       },
     });
-  } catch {
+  } catch (err) {
+    logger.warn({ err, orgId }, "Failed to fetch enabled security policies from DB — defaulting to no policies");
     return [];
   }
+}
+
+const LLM_INSTRUCTION_PATTERN =
+  /\b(?:ignore|bypass|disregard|override|forget|skip|suppress|stop|cancel|halt|system:|new (?:instruction|task|objective)|you (?:are|must|should|will) now)\b/i;
+
+function sanitizePolicyText(text: string, maxLen: number): string {
+  const truncated = text.slice(0, maxLen);
+  if (LLM_INSTRUCTION_PATTERN.test(truncated)) {
+    logger.warn(
+      { snippet: truncated.slice(0, 80) },
+      "Policy rule contains LLM-instruction keywords — sanitizing",
+    );
+    return truncated.replace(LLM_INSTRUCTION_PATTERN, "[REDACTED]");
+  }
+  return truncated;
 }
 
 function buildPolicyPromptSection(policies: SecurityPolicy[]): string {
   if (policies.length === 0) return "";
 
-  const lines = policies.map(
-    (p) =>
-      `- [${p.severity}] ${p.name}: ${p.rule.slice(0, 320)}${p.rule.length > 320 ? "..." : ""}`,
-  );
+  const lines = policies.map((p) => {
+    const safeName = sanitizePolicyText(p.name, 80);
+    const safeRule = sanitizePolicyText(p.rule, 320);
+    return `- [${p.severity}] ${safeName}: ${safeRule}${p.rule.length > 320 ? "..." : ""}`;
+  });
 
   return `
 
@@ -192,6 +209,8 @@ Focus on exploitable instances of:
 - Path traversal (user input in file paths without validation)
 - ReDoS (catastrophic regex backtracking, user input in new RegExp/re.compile)
 - Mass assignment (accepting unfiltered request body into ORM create/update)
+- GraphQL injection: user-controlled field arguments reaching resolvers without input validation; alias-based query batching for rate-limit bypass; introspection enabled in production exposing schema
+- ORM unsafe raw: Prisma.$queryRawUnsafe(string + userInput) vs $queryRaw with template literals — only the Unsafe variant is exploitable; flag only when user input is concatenated into the string argument
 
 **AUTH & ACCESS CONTROL:**
 - Authentication bypass (missing auth checks on sensitive endpoints)
@@ -201,6 +220,7 @@ Focus on exploitable instances of:
 - OAuth/OIDC flaws (missing state param, no PKCE, open redirect in callback URL, token leakage via Referer)
 - Session management flaws (weak entropy, missing invalidation on privilege change, excessive timeouts)
 - Missing cookie security attributes (Secure, HttpOnly, SameSite)
+- WebAuthn/FIDO2 bypass: credential ID not re-validated against the authenticated user's registered credentials before completing the ceremony
 
 **DATA EXPOSURE & CRYPTO:**
 - Hardcoded credentials (actual passwords/keys/tokens in source, NOT env var references)
@@ -290,9 +310,23 @@ export async function runLlmSastScanner(
   // additional batches get policy-only passes to keep prompts bounded.
   const MAX_INLINE_POLICIES = 14;
   const ADDITIONAL_POLICY_BATCH_SIZE = 8;
+  const MAX_ADDITIONAL_POLICY_BATCHES = 5; // Cap at 5 × 8 = 40 additional policies max
   const allPolicies = await fetchEnabledPolicies(ctx.orgSettings.orgId);
   const inlinePolicies = allPolicies.slice(0, MAX_INLINE_POLICIES);
-  const additionalPolicies = allPolicies.slice(MAX_INLINE_POLICIES);
+  const additionalPolicies = allPolicies.slice(
+    MAX_INLINE_POLICIES,
+    MAX_INLINE_POLICIES + MAX_ADDITIONAL_POLICY_BATCHES * ADDITIONAL_POLICY_BATCH_SIZE,
+  );
+
+  if (allPolicies.length > MAX_INLINE_POLICIES + additionalPolicies.length) {
+    logger.warn(
+      {
+        total: allPolicies.length,
+        processed: MAX_INLINE_POLICIES + additionalPolicies.length,
+      },
+      "Policy list truncated to prevent unbounded re-scan",
+    );
+  }
   const policyPromptSection = buildPolicyPromptSection(inlinePolicies);
 
   if (allPolicies.length > 0) {
@@ -326,6 +360,8 @@ export async function runLlmSastScanner(
   const findings: RawFinding[] = [];
   const maxConcurrency = MAX_LLM_CONCURRENCY;
   const chunks: Chunk[] = [];
+  // Maps "filePath:startLine-endLine" → chunk.content for pass-2 validation context
+  const chunkContentMap = new Map<string, string>();
 
   // Pick chunk size and response limit based on provider
   const isOllama = ctx.orgSettings.llmProvider.toLowerCase() === "ollama";
@@ -362,19 +398,21 @@ export async function runLlmSastScanner(
     if (DEPENDENCY_MANIFEST_FILES.has(fileName)) continue;
 
     try {
-      const stat = fs.statSync(fullPath);
-      if (stat.size > LLM_MAX_FILE_SIZE_BYTES) continue;
-
       const content = fs.readFileSync(fullPath, "utf-8");
+      if (Buffer.byteLength(content, "utf8") > LLM_MAX_FILE_SIZE_BYTES) continue;
       if (content.trim().length === 0) continue;
 
-      chunks.push(...chunkFile(content, filePath, chunkTokens, overlapTokens));
+      const fileChunks = chunkFile(content, filePath, chunkTokens, overlapTokens);
+      for (const c of fileChunks) {
+        chunkContentMap.set(`${c.filePath}:${c.startLine}-${c.endLine}`, c.content);
+      }
+      chunks.push(...fileChunks);
     } catch {
       continue;
     }
   }
 
-  // Count unique files across all chunks for progress tracking
+  // Count unique files and total lines of code across all chunks
   const totalFiles = new Set(chunks.map((c) => c.filePath)).size;
   const completedFiles = new Set<string>();
 
@@ -530,6 +568,7 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
       pass1Candidates,
       repoContextBlock,
       maxResponseTokens,
+      chunkContentMap,
     );
     validated = [...validated, ...pass2];
     if (pass2.length > 0 && ctx.onBatchFindings) {
@@ -544,14 +583,26 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
       failed,
       pass1: findings.length,
       pass2: validated.length,
+      filesScanned: totalFiles,
       additionalPolicyPasses: Math.ceil(
         additionalPolicies.length / ADDITIONAL_POLICY_BATCH_SIZE,
       ),
     },
     "LLM SAST analysis complete",
   );
+
+  if (validated.length > 0) {
+    ctx.onProgress?.(`LLM SAST: ${validated.length} findings across ${totalFiles} files`);
+  }
+
+  if (ctx.onScannerComplete) {
+    await ctx.onScannerComplete("SAST_LLM", validated);
+  }
+
   return validated;
 }
+
+const PASS2_OUTPUT_MIN = 0.75; // Pass-2 confirms candidates; output must reach high confidence
 
 async function validateCandidatesPass2(
   client: ReturnType<typeof createLlmClient>,
@@ -559,23 +610,32 @@ async function validateCandidatesPass2(
   candidates: RawFinding[],
   repoContextBlock: string,
   maxResponseTokens: number,
+  chunkContentMap: Map<string, string> = new Map(),
 ): Promise<RawFinding[]> {
   const BATCH = 12;
   const validated: RawFinding[] = [];
 
   for (let i = 0; i < candidates.length; i += BATCH) {
     const batch = candidates.slice(i, i + BATCH);
-    const payload = batch.map((c, idx) => ({
-      index: idx,
-      title: c.title,
-      filePath: c.filePath,
-      startLine: c.startLine,
-      endLine: c.endLine,
-      cweId: c.cweId,
-      confidence: c.confidence,
-      description: c.description?.slice(0, 600),
-      metadata: c.metadata,
-    }));
+    const payload = batch.map((c, idx) => {
+      const chunkKey = `${c.filePath}:${c.startLine}-${c.endLine}`;
+      const codeSnippet = chunkContentMap.get(chunkKey);
+      return {
+        index: idx,
+        title: c.title,
+        filePath: c.filePath,
+        startLine: c.startLine,
+        endLine: c.endLine,
+        cweId: c.cweId,
+        confidence: c.confidence,
+        description: c.description?.slice(0, 600),
+        metadata: c.metadata,
+        // Include original code so the validator can re-examine it
+        codeSnippet: codeSnippet
+          ? codeSnippet.slice(0, 2000) // cap to ~500 tokens per candidate
+          : undefined,
+      };
+    });
 
     try {
       const raw = await analyzeWithLlm(
@@ -591,8 +651,14 @@ async function validateCandidatesPass2(
 
       for (let fi = 0; fi < (parsed.findings || []).length; fi++) {
         const f = parsed.findings![fi];
-        if (!f.title || (f.confidence ?? 0) < LLM_MIN_CONFIDENCE_DEFAULT) continue;
-        const src = batch[fi] || batch[0];
+        if (!f.title) continue; // Pass-2 SAST_PASS2_PROMPT already requires >= 0.80
+
+        // Match LLM response findings to source candidates by stable key (title + filePath)
+        let src = batch[fi]; // default to index match
+        if (!src || src.title?.toLowerCase() !== f.title?.toLowerCase()) {
+          // Try to find by title match within the batch
+          src = batch.find(c => c.title?.toLowerCase() === f.title?.toLowerCase()) || batch[0];
+        }
 
         const base: RawFinding = applySeverityCalibration({
           scanner: "SAST_LLM",
@@ -663,7 +729,7 @@ async function analyzeChunk(
       findings: [],
     });
 
-    const pass1Floor = 0.75; // Conservative threshold; confidence 0.65-0.75 candidates filtered for pass-2 validation
+    const pass1Floor = 0.65; // Minimum threshold; findings 0.65-0.74 are pass-1 candidates for pass-2 validation
 
     const allFindings = (parsed.findings || []).filter(
       (f) => f.title && f.severity,
@@ -712,7 +778,7 @@ async function analyzeChunk(
         // Those are exclusively handled by SECRETS_LLM scanner
         const isCwe798 = f.cweId === "CWE-798";
         const isCredentialByTitle =
-          /hardcoded|embedded secret|plaintext (?:password|secret|token)/i.test(
+          /hardcoded|embedded\s+secret|plaintext\s+(?:password|secret|token)|static\s+(?:api\s+key|secret|credential)|exposed\s+credential|stored\s+(?:bearer|token|secret)|leaked?\s+(?:key|token|secret|credential)/i.test(
             f.title,
           );
         const isCredentialByMeta = (f.metadata?.weaknessClass as string | undefined)
@@ -767,9 +833,7 @@ async function analyzeChunk(
         scanner: "SAST_LLM" as const,
         severity: parseSeverity(f.severity),
         title: f.title,
-        description: f.recommendation
-          ? `${f.description}\n\nRecommendation: ${f.recommendation}`
-          : f.description,
+        description: f.description,
         filePath: chunk.filePath,
         startLine: f.startLine,
         endLine: f.endLine,

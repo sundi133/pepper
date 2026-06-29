@@ -81,10 +81,13 @@ const ROUTE_PATTERNS: Array<{
 const SINK_PATTERNS: Array<{ kind: string; re: RegExp }> = [
   { kind: "sql", re: /\b(?:query|execute|raw)\s*\(/i },
   { kind: "exec", re: /\b(?:exec|spawn|system|popen|subprocess)\s*\(/i },
-  { kind: "eval", re: /\b(?:eval|Function\s*\(|pickle\.loads|yaml\.load\s*\()/i },
+  { kind: "eval", re: /\b(?:eval|Function\s*\(|pickle\.loads|yaml\.load\s*\(|vm\.runIn(?:Context|NewContext|ThisContext))\s*\(/i },
   { kind: "file", re: /\b(?:readFile|writeFile|open|send_file|read_bytes)\s*\(/i },
   { kind: "http", re: /\b(?:fetch|axios|request|http\.get|urllib)\s*\(/i },
   { kind: "deserialize", re: /\b(?:deserialize|unserialize|JSON\.parse|marshal\.loads)\s*\(/i },
+  { kind: "dom-xss", re: /\.(?:innerHTML|outerHTML|insertAdjacentHTML)\s*[=(]|dangerouslySetInnerHTML\s*=\s*\{/i },
+  { kind: "template", re: /\b(?:render|compile|template)\s*\(|\.render\s*\(/i },
+  { kind: "nosql", re: /\$where\s*:|collection\.find\s*\(\s*\{[^}]*\$where/i },
 ];
 
 const AUTH_PATTERNS: Array<{ kind: AuthBoundary["kind"]; re: RegExp }> = [
@@ -93,6 +96,9 @@ const AUTH_PATTERNS: Array<{ kind: AuthBoundary["kind"]; re: RegExp }> = [
   { kind: "guard", re: /@(?:UseGuards|PreAuthorize|login_required|authenticated)/i },
   { kind: "middleware", re: /\b(?:middleware|interceptor)\b/i },
 ];
+
+const TEST_PATH =
+  /(?:^|\/)(?:test|tests|spec|specs|__tests__|fixtures?|mocks?|examples?|demo|sample)(?:\/|$)|\.(?:test|spec)\.[jt]sx?$/i;
 
 function classifyFileRole(filePath: string): FileRole {
   const lower = filePath.toLowerCase();
@@ -106,9 +112,6 @@ function classifyFileRole(filePath: string): FileRole {
   if (/(?:config|settings|env)/.test(lower)) return "config";
   return "unknown";
 }
-
-const TEST_PATH =
-  /(?:^|\/)(?:test|tests|spec|specs|__tests__|fixtures?|mocks?|examples?|demo|sample)(?:\/|$)|\.(?:test|spec)\.[jt]sx?$/i;
 
 function detectFrameworks(fileList: string[], contents: Map<string, string>): string[] {
   const frameworks = new Set<string>();
@@ -145,7 +148,7 @@ function extractImports(content: string): string[] {
 export function buildDeepRepoContext(
   workDir: string,
   fileList: string[],
-  maxFiles = 120,
+  maxFiles = 300,
 ): RepoAnalysisContext {
   const routes: RouteEntry[] = [];
   const authBoundaries: AuthBoundary[] = [];
@@ -192,6 +195,7 @@ export function buildDeepRepoContext(
         }
 
         for (const sp of SINK_PATTERNS) {
+          sp.re.lastIndex = 0;
           if (sp.re.test(line)) {
             sinkCandidates.push({
               kind: sp.kind,
@@ -203,6 +207,7 @@ export function buildDeepRepoContext(
         }
 
         for (const ap of AUTH_PATTERNS) {
+          ap.re.lastIndex = 0;
           if (ap.re.test(line)) {
             authBoundaries.push({
               filePath,

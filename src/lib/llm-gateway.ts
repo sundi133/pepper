@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { Ollama } from "ollama";
+import { logger } from "@/lib/logger";
 
 export interface LlmConfig {
   provider: string;
@@ -251,7 +252,15 @@ export function parseLlmJsonResponse<T>(raw: string, fallback: T): T {
       cleaned = cleaned.slice(0, -3);
     }
     return JSON.parse(cleaned.trim()) as T;
-  } catch {
+  } catch (err) {
+    logger.warn(
+      {
+        err,
+        rawLength: raw?.length,
+        rawPrefix: raw?.slice(0, 120),
+      },
+      "parseLlmJsonResponse: failed to parse LLM JSON response — returning fallback",
+    );
     return fallback;
   }
 }

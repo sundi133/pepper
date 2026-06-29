@@ -14,6 +14,7 @@ import { applySeverityCalibration } from "@/lib/severity-calibration";
 import { buildDeepRepoContext } from "../shared/repo-context";
 import { buildRepoContextSummary } from "@/lib/llm-repo-context";
 import { validateSecretCandidate, getEntropyLabel } from "./entropy-validator";
+import { classifySecrets } from "./llm-classifier";
 import {
   FILE_EXTENSIONS,
   SKIP_DIRECTORIES,
@@ -57,10 +58,15 @@ const CONFIG_BASENAMES = new Set([
   ".env",
   ".env.local",
   ".env.production",
+  ".env.test",
+  ".env.staging",
+  ".env.ci",
+  ".env.production.local",
   "credentials.json",
   "secrets.json",
   "config.json",
   "appsettings.json",
+  "serviceAccountKey.json",
 ]);
 
 interface SecretLlmFinding {
@@ -118,10 +124,9 @@ export const secretsLlmScanner: ScannerPlugin = {
 
       const fullPath = path.join(ctx.workDir, filePath);
       try {
-        const stat = fs.statSync(fullPath);
-        if (stat.size > LLM_MAX_FILE_SIZE_BYTES) continue;
         const content = fs.readFileSync(fullPath, "utf-8");
         if (!content.trim()) continue;
+        if (Buffer.byteLength(content, "utf8") > LLM_MAX_FILE_SIZE_BYTES) continue;
         chunks.push(
           ...chunkFile(content, filePath, MAX_CHUNK_TOKENS, CHUNK_OVERLAP_TOKENS),
         );
@@ -168,7 +173,25 @@ export const secretsLlmScanner: ScannerPlugin = {
       }
     }
 
+    if (findings.length > 0 && ctx.orgSettings.enableLlmSecrets) {
+      ctx.onProgress?.(`Secrets AI: classifying ${findings.length} candidate(s)...`);
+      const classified = await classifySecrets(findings, {
+        provider: ctx.orgSettings.llmProvider,
+        baseUrl: ctx.orgSettings.llmBaseUrl,
+        apiKey: ctx.orgSettings.llmApiKey,
+        model: ctx.orgSettings.llmModel,
+      });
+      ctx.onProgress?.(`Secrets AI: ${classified.length} confirmed secret(s) after classification`);
+      if (ctx.onScannerComplete) {
+        await ctx.onScannerComplete("SECRETS_LLM", classified);
+      }
+      return classified;
+    }
+
     ctx.onProgress?.(`Secrets AI: ${findings.length} confirmed secret(s)`);
+    if (ctx.onScannerComplete) {
+      await ctx.onScannerComplete("SECRETS_LLM", findings);
+    }
     return findings;
   },
 };

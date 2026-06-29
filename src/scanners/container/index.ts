@@ -15,6 +15,7 @@ import {
 } from "../types";
 import { enrichFinding } from "../shared/finding-normalize";
 import { CONTAINER_CONFIG_PROMPT } from "../shared/prompts";
+import { applySeverityCalibration } from "@/lib/severity-calibration";
 import {
   LLM_MAX_RESPONSE_TOKENS,
   OLLAMA_MAX_RESPONSE_TOKENS,
@@ -248,26 +249,28 @@ async function scanContainerConfig(
       for (const f of parsed.findings || []) {
         if ((f.confidence ?? 0) < LLM_MIN_CONFIDENCE_DEFAULT) continue;
         if (isInlineSuppressed(fileLines, f.startLine)) continue;
+        const raw: RawFinding = {
+          scanner: "CONTAINER",
+          severity: mapSeverity(f.severity),
+          title: f.title,
+          description: f.description,
+          filePath: file.path,
+          startLine: f.startLine,
+          endLine: (f.endLine && f.endLine > 0) ? f.endLine : f.startLine,
+          cweId: f.cweId,
+          confidence: f.confidence,
+          ruleId: `CONTAINER-CONFIG-${f.cweId || "MISC"}`,
+          metadata: {
+            category: "CONTAINER_CONFIG",
+            remediation: f.remediation,
+            validationSteps: f.validationSteps,
+          },
+        };
+        const calibrated = applySeverityCalibration(raw);
         findings.push(
           enrichFinding(
-            {
-              scanner: "CONTAINER",
-              severity: mapSeverity(f.severity),
-              title: f.title,
-              description: f.description,
-              filePath: file.path,
-              startLine: f.startLine,
-              endLine: f.endLine || f.startLine,
-              cweId: f.cweId,
-              confidence: f.confidence,
-              ruleId: `CONTAINER-CONFIG-${f.cweId || "MISC"}`,
-              metadata: {
-                category: "CONTAINER_CONFIG",
-                remediation: f.remediation,
-                validationSteps: f.validationSteps,
-              },
-            },
-            { category: "CONTAINER_CONFIG", remediation: f.remediation },
+            calibrated,
+            calibrated.metadata as Record<string, unknown>,
             {
               whatIsWrong: f.title,
               where: `${file.path}:${f.startLine}`,

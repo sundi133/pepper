@@ -209,7 +209,7 @@ export const MAX_CHUNK_TOKENS = parseInt(
   process.env.LLM_CHUNK_TOKENS || "4800",
 );
 export const CHUNK_OVERLAP_TOKENS = parseInt(
-  process.env.LLM_CHUNK_OVERLAP_TOKENS || "360",
+  process.env.LLM_CHUNK_OVERLAP_TOKENS || "800",
 );
 export const LLM_MAX_RESPONSE_TOKENS = parseInt(
   process.env.LLM_MAX_RESPONSE_TOKENS || "8192",
@@ -220,7 +220,7 @@ export const OLLAMA_MAX_CHUNK_TOKENS = parseInt(
   process.env.OLLAMA_CHUNK_TOKENS || "2400",
 );
 export const OLLAMA_CHUNK_OVERLAP_TOKENS = parseInt(
-  process.env.OLLAMA_CHUNK_OVERLAP_TOKENS || "200",
+  process.env.OLLAMA_CHUNK_OVERLAP_TOKENS || "400",
 );
 export const OLLAMA_MAX_RESPONSE_TOKENS = parseInt(
   process.env.OLLAMA_MAX_RESPONSE_TOKENS || "6144",

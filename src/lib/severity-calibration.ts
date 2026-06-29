@@ -22,6 +22,7 @@ const RANK: Record<SeverityLevel, number> = {
 const CWE_BASELINE: Record<string, SeverityLevel> = {
   "CWE-20": "MEDIUM",
   "CWE-22": "HIGH",
+  "CWE-77": "CRITICAL",
   "CWE-78": "CRITICAL",
   "CWE-79": "HIGH",
   "CWE-89": "CRITICAL",
@@ -40,11 +41,15 @@ const CWE_BASELINE: Record<string, SeverityLevel> = {
   "CWE-352": "MEDIUM",
   "CWE-400": "MEDIUM",
   "CWE-502": "CRITICAL",
+  "CWE-601": "MEDIUM",
   "CWE-611": "HIGH",
   "CWE-639": "HIGH",
+  "CWE-732": "HIGH",
   "CWE-798": "CRITICAL",
-  "CWE-918": "HIGH",
+  "CWE-862": "HIGH",
+  "CWE-863": "HIGH",
   "CWE-917": "HIGH",
+  "CWE-918": "HIGH",
   "CWE-1333": "MEDIUM",
 };
 
@@ -79,6 +84,17 @@ const WEAKNESS_BASELINE: Record<string, SeverityLevel> = {
   "missing security header": "LOW",
   "rate limiting": "MEDIUM",
   "policy violation": "HIGH",
+  "race condition": "HIGH",
+  "double-spend": "HIGH",
+  "double spend": "HIGH",
+  "business logic": "HIGH",
+  "workflow bypass": "HIGH",
+  "privilege escalation": "HIGH",
+  "multi-tenant": "HIGH",
+  "tenant isolation": "HIGH",
+  "trust boundary": "HIGH",
+  "parameter tampering": "MEDIUM",
+  "mass assignment": "HIGH",
 };
 
 const TEST_PATH =

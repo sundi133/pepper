@@ -223,25 +223,6 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:max-w-md sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:max-w-none lg:shrink-0">
-          {canCreateScan && (
-            <CreateScanDialog
-              triggerLabel="New Scan"
-              triggerClassName="w-full bg-primary font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 sm:w-auto"
-              onScanCreated={() => {
-                void refreshStats();
-              }}
-            />
-          )}
-          <Button
-            variant="outline"
-            className="w-full border-border/80 sm:w-auto"
-            asChild
-          >
-            <Link href="/projects">
-              View All Projects
-              <ChevronRight className="ml-1 h-4 w-4 shrink-0" />
-            </Link>
-          </Button>
         </div>
       </section>
 

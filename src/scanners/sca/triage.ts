@@ -36,7 +36,7 @@ function collectImportEvidence(
     p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
   );
   const pattern = new RegExp(
-    `(?:import\\s.*?|require\\s*\\(\\s*['"])(?:${escaped.join("|")})`,
+    `(?:from\\s+['"]|require\\s*\\(\\s*['"]|import\\s+['"])(?:${escaped.join("|")})`,
   );
 
   const SOURCE_EXT = new Set([

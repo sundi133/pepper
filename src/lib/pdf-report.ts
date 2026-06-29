@@ -146,21 +146,30 @@ const CWE_CATEGORY_MAP: Record<string, string> = {
   "CWE-400": "DoS",
   "CWE-770": "DoS",
   "CWE-1333": "ReDoS",
+  "CWE-434": "File Upload",
+  "CWE-601": "URL Redirect",
+  "CWE-1021": "Improper UI Restriction",
+  "CWE-1229": "Resource Creation",
+  "CWE-338": "Use of Weak PRNG",
+  "CWE-691": "Insufficient Control of Network Message",
+  "CWE-74": "Improper Neutralization of Special Elements",
 };
 
-// CWE → OWASP Top 10 2021
+// CWE → OWASP Top 10 2025
 const CWE_OWASP_MAP: Record<string, string> = {
-  "CWE-89": "A03:2021", "CWE-78": "A03:2021", "CWE-77": "A03:2021",
-  "CWE-94": "A03:2021", "CWE-917": "A03:2021",
-  "CWE-79": "A03:2021", "CWE-80": "A03:2021",
-  "CWE-22": "A01:2021", "CWE-862": "A01:2021", "CWE-863": "A01:2021",
-  "CWE-639": "A01:2021", "CWE-284": "A01:2021",
-  "CWE-287": "A07:2021", "CWE-306": "A07:2021", "CWE-307": "A07:2021",
-  "CWE-327": "A02:2021", "CWE-328": "A02:2021", "CWE-916": "A02:2021",
-  "CWE-798": "A07:2021", "CWE-312": "A02:2021",
-  "CWE-611": "A05:2021", "CWE-918": "A10:2021",
-  "CWE-502": "A08:2021", "CWE-200": "A01:2021",
-  "CWE-352": "A01:2021",
+  "CWE-89": "A03:2025", "CWE-78": "A03:2025", "CWE-77": "A03:2025",
+  "CWE-94": "A03:2025", "CWE-917": "A03:2025",
+  "CWE-79": "A03:2025", "CWE-80": "A03:2025",
+  "CWE-22": "A01:2025", "CWE-862": "A01:2025", "CWE-863": "A01:2025",
+  "CWE-639": "A01:2025", "CWE-284": "A01:2025",
+  "CWE-287": "A07:2025", "CWE-306": "A07:2025", "CWE-307": "A07:2025",
+  "CWE-327": "A02:2025", "CWE-328": "A02:2025", "CWE-916": "A02:2025",
+  "CWE-798": "A07:2025", "CWE-312": "A02:2025",
+  "CWE-611": "A05:2025", "CWE-918": "A10:2025",
+  "CWE-502": "A08:2025", "CWE-200": "A01:2025",
+  "CWE-352": "A01:2025", "CWE-434": "A04:2025",
+  "CWE-601": "A01:2025", "CWE-338": "A02:2025",
+  "CWE-1021": "A04:2025", "CWE-1229": "A06:2025",
 };
 
 function findingCategory(f: FindingData): string {
@@ -357,19 +366,29 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
     y = drawSectionHeader(doc, "TOP FINDINGS", marginL, y, contentW);
     y += 10;
 
+    // Sort by severity (CRITICAL, HIGH, MEDIUM, LOW, INFO)
+    const severityOrder: Record<string, number> = {
+      CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4,
+    };
+    const sortedFindings = [...findings].sort((a, b) => {
+      const aOrder = severityOrder[a.severity.toUpperCase()] ?? 999;
+      const bOrder = severityOrder[b.severity.toUpperCase()] ?? 999;
+      return aOrder - bOrder;
+    });
+
     // Table header
-    const cols = [30, 120, 90, 70, 70, 70];
+    const cols = [30, 110, 85, 65, 65, 65];
     const colX = [marginL];
     for (let i = 1; i < cols.length; i++) colX.push(colX[i - 1] + cols[i - 1]);
 
     doc.rect(marginL, y, contentW, 20).fill(COLORS.headerBg);
     doc.fontSize(7).fillColor(COLORS.white);
-    ["#", "FINDING", "CATEGORY", "SEVERITY", "SCANNER", "STATUS"]
+    ["#", "FINDING", "CATEGORY", "SEVERITY", "OWASP", "STATUS"]
       .forEach((h, i) => doc.text(h, colX[i] + 4, y + 6, { width: cols[i] - 8 }));
     y += 20;
 
-    // Table rows (top 20)
-    const topFindings = findings.slice(0, 20);
+    // Table rows (top 20 sorted)
+    const topFindings = sortedFindings.slice(0, 20);
     for (let idx = 0; idx < topFindings.length; idx++) {
       if (y > 750) { doc.addPage(); y = 50; }
       const f = topFindings[idx];
@@ -378,7 +397,7 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
 
       doc.fontSize(8).fillColor(COLORS.textPrimary);
       doc.text(String(idx + 1), colX[0] + 4, y + 6, { width: cols[0] - 8 });
-      doc.text(truncate(f.title, 30), colX[1] + 4, y + 6, { width: cols[1] - 8 });
+      doc.text(truncate(f.title, 28), colX[1] + 4, y + 6, { width: cols[1] - 8 });
       doc.text(findingCategory(f), colX[2] + 4, y + 6, { width: cols[2] - 8 });
 
       // Severity badge
@@ -389,9 +408,23 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
       doc.fontSize(7).fillColor(COLORS.white)
         .text(sevLabel, sevBadgeX + 3, y + 6, { width: sevBadgeW - 6 });
 
+      // OWASP mapping
+      const owaspLabel = findingOwasp(f) || "-";
       doc.fontSize(8).fillColor(COLORS.textPrimary);
-      doc.text(scannerLabel(f.scanner), colX[4] + 4, y + 6, { width: cols[4] - 8 });
-      doc.text((f.status || "Open").replace(/_/g, " "), colX[5] + 4, y + 6, { width: cols[5] - 8 });
+      doc.text(owaspLabel, colX[4] + 4, y + 6, { width: cols[4] - 8 });
+
+      // Status with color coding
+      const statusText = f.status || "OPEN";
+      const statusUpper = statusText.toUpperCase().replace(/_/g, " ");
+      let statusColor: string = COLORS.info;
+      if (statusUpper === "OPEN") statusColor = COLORS.critical;
+      else if (statusUpper === "FALSE_POSITIVE" || statusUpper === "FALSE POSITIVE") statusColor = COLORS.medium;
+      else if (statusUpper === "CLOSED") statusColor = COLORS.green;
+      const statusBadgeW = statusUpper.length * 5.5 + 12;
+      doc.roundedRect(colX[5] + 4, y + 3, Math.min(statusBadgeW, cols[5] - 12), 14, 3)
+        .fill(statusColor as string);
+      doc.fontSize(6.5).fillColor(COLORS.white)
+        .text(statusUpper, colX[5] + 6, y + 6, { width: cols[5] - 12 });
 
       y += 20;
     }
@@ -622,10 +655,11 @@ function drawFindingCard(
     .text(truncate(report.vulnerabilityName || f.title, 80), x, y, { width: w });
   y = doc.y + 6;
 
-  // Tags: CWE, OWASP, Category, Scanner
+  // Tags: CWE, CVE, OWASP, Category, Scanner
   let tagX = x;
   const tags: string[] = [];
   if (f.cweId) tags.push(f.cweId);
+  if (f.cveId) tags.push(f.cveId);
   const owasp = findingOwasp(f);
   if (owasp) tags.push(`OWASP ${owasp}`);
   tags.push(findingCategory(f));
@@ -656,6 +690,72 @@ function drawFindingCard(
     doc.fontSize(8).fillColor(COLORS.high)
       .text(truncate(report.impact, 200), x + 8, y + 6, { width: w - 16 });
     y += 32;
+  }
+
+  // Scanner-Specific Details
+  const scannerDetails: string[] = [];
+
+  if (f.scanner.includes("SCA")) {
+    const pkgName = getMetaField(f.metadata, "packageName");
+    const pkgVersion = getMetaField(f.metadata, "packageVersion");
+    const fixedVersion = getMetaField(f.metadata, "fixedVersion");
+    if (pkgName) scannerDetails.push(`Package: ${pkgName}`);
+    if (pkgVersion) scannerDetails.push(`Vulnerable: ${pkgVersion}`);
+    if (fixedVersion) scannerDetails.push(`Fixed: ${fixedVersion}`);
+  }
+
+  if (f.scanner.includes("SECRET")) {
+    const credType = getMetaField(f.metadata, "credentialType");
+    const provider = getMetaField(f.metadata, "provider");
+    if (credType) scannerDetails.push(`Type: ${credType}`);
+    if (provider) scannerDetails.push(`Provider: ${provider}`);
+  }
+
+  if (f.scanner === "IAC") {
+    const exposedAsset = getMetaField(f.metadata, "exposedAsset");
+    const environment = getMetaField(f.metadata, "environment");
+    if (exposedAsset) scannerDetails.push(`Asset: ${exposedAsset}`);
+    if (environment) scannerDetails.push(`Environment: ${environment}`);
+  }
+
+  if (f.scanner === "CONTAINER") {
+    const image = getMetaField(f.metadata, "image");
+    const layer = getMetaField(f.metadata, "findingLayer");
+    if (image) scannerDetails.push(`Image: ${image}`);
+    if (layer) scannerDetails.push(`Layer: ${layer}`);
+  }
+
+  if (scannerDetails.length > 0) {
+    if (y > 700) { doc.addPage(); y = 50; }
+    doc.fontSize(8).fillColor(COLORS.high).text("SCANNER DETAILS", x, y);
+    y += 12;
+    const detailsText = scannerDetails.join(" • ");
+    doc.fontSize(7).fillColor(COLORS.textSecondary)
+      .text(detailsText, x, y, { width: w });
+    y = doc.y + 8;
+  }
+
+  // Steps to Reproduce
+  if (report.stepsToReproduce.length > 0) {
+    if (y > 700) { doc.addPage(); y = 50; }
+    doc.fontSize(8).fillColor(COLORS.high).text("STEPS TO REPRODUCE", x, y);
+    y += 12;
+    let stepY = y;
+    for (let i = 0; i < report.stepsToReproduce.length; i++) {
+      if (stepY > 730) { doc.addPage(); stepY = 50; }
+      const step = truncate(report.stepsToReproduce[i], 200);
+      doc.fontSize(7).fillColor(COLORS.textSecondary)
+        .text(`${i + 1}. ${step}`, x, stepY, { width: w });
+      stepY = doc.y + 4;
+    }
+    y = stepY + 4;
+  } else if (f.scanner.includes("SECRET")) {
+    if (y > 700) { doc.addPage(); y = 50; }
+    doc.fontSize(8).fillColor(COLORS.high).text("IMMEDIATE ACTION", x, y);
+    y += 12;
+    doc.fontSize(7).fillColor(COLORS.critical)
+      .text("Rotate and revoke this credential immediately. Do not require reproduction steps.", x, y, { width: w });
+    y = doc.y + 8;
   }
 
   // Affected Location
@@ -691,6 +791,27 @@ function drawFindingCard(
     doc.fontSize(8).fillColor(COLORS.textSecondary)
       .text(remText, x + 8, y + 6, { width: w - 16 });
     y += remH + 8;
+  }
+
+  // Confidence Analysis
+  if (f.confidence !== null && f.confidence !== undefined) {
+    if (y > 700) { doc.addPage(); y = 50; }
+    const confPct = Math.round(f.confidence * 100);
+    let confLabel = "CONFIDENCE";
+    let confColor: string = COLORS.medium;
+    if (confPct >= 95) { confColor = COLORS.critical; confLabel += " (VERY HIGH)"; }
+    else if (confPct >= 80) { confColor = COLORS.high; confLabel += " (HIGH)"; }
+    else if (confPct >= 60) { confColor = COLORS.medium; confLabel += " (MEDIUM)"; }
+    else { confColor = COLORS.low; confLabel += " (LOW)"; }
+
+    doc.fontSize(8).fillColor(confColor as string).text(confLabel, x, y);
+    y += 12;
+
+    const confBar = Math.max(10, (confPct / 100) * (w - 60));
+    doc.roundedRect(x, y, w - 60, 12, 2).fillAndStroke(COLORS.lightGray, COLORS.border);
+    doc.roundedRect(x, y, confBar, 12, 2).fill(confColor as string);
+    doc.fontSize(7).fillColor(COLORS.textPrimary).text(`${confPct}%`, x + w - 45, y + 2);
+    y += 18;
   }
 
   // Separator

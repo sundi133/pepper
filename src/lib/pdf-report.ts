@@ -704,8 +704,8 @@ function drawFindingCard(
     y += snippetH + 8;
   }
 
-  // Steps to Reproduce
-  if (report.stepsToReproduce.length > 0) {
+  // Steps to Reproduce (only for SAST and Zero-Day)
+  if ((f.scanner === "SAST_LLM" || f.scanner === "ZERO_DAY") && report.stepsToReproduce.length > 0) {
     if (y > 700) { doc.addPage(); y = 50; }
     doc.fontSize(8).fillColor(COLORS.high).text("STEPS TO REPRODUCE", x, y);
     y += 12;
@@ -718,13 +718,6 @@ function drawFindingCard(
       stepY = doc.y + 4;
     }
     y = stepY + 4;
-  } else if (f.scanner.includes("SECRET")) {
-    if (y > 700) { doc.addPage(); y = 50; }
-    doc.fontSize(8).fillColor(COLORS.high).text("IMMEDIATE ACTION", x, y);
-    y += 12;
-    doc.fontSize(7).fillColor(COLORS.critical)
-      .text("Rotate and revoke this credential immediately. Do not require reproduction steps.", x, y, { width: w });
-    y = doc.y + 8;
   }
 
   // Remediation

@@ -704,6 +704,29 @@ function drawFindingCard(
     y += snippetH + 8;
   }
 
+  // Steps to Reproduce
+  if (report.stepsToReproduce.length > 0) {
+    if (y > 700) { doc.addPage(); y = 50; }
+    doc.fontSize(8).fillColor(COLORS.high).text("STEPS TO REPRODUCE", x, y);
+    y += 12;
+    let stepY = y;
+    for (let i = 0; i < report.stepsToReproduce.length; i++) {
+      if (stepY > 730) { doc.addPage(); stepY = 50; }
+      const step = truncate(report.stepsToReproduce[i], 200);
+      doc.fontSize(7).fillColor(COLORS.textSecondary)
+        .text(`${i + 1}. ${step}`, x, stepY, { width: w });
+      stepY = doc.y + 4;
+    }
+    y = stepY + 4;
+  } else if (f.scanner.includes("SECRET")) {
+    if (y > 700) { doc.addPage(); y = 50; }
+    doc.fontSize(8).fillColor(COLORS.high).text("IMMEDIATE ACTION", x, y);
+    y += 12;
+    doc.fontSize(7).fillColor(COLORS.critical)
+      .text("Rotate and revoke this credential immediately. Do not require reproduction steps.", x, y, { width: w });
+    y = doc.y + 8;
+  }
+
   // Remediation
   if (report.remediation.length > 0) {
     if (y > 700) { doc.addPage(); y = 50; }

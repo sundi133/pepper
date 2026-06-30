@@ -13,7 +13,7 @@ export interface SupplyChainRiskScore {
   };
 }
 
-export function scoreSupplyChainRisk(
+function scoreSupplyChainRisk(
   finding: RawFinding,
   directDependencies: Set<string>,
 ): SupplyChainRiskScore {
@@ -183,9 +183,3 @@ export function enhanceSCAFindingWithRiskScore(
   };
 }
 
-export function getRiskScoreLabel(score: number): string {
-  if (score >= 85) return "CRITICAL - Urgent action required";
-  if (score >= 65) return "HIGH - Plan mitigation";
-  if (score >= 40) return "MEDIUM - Schedule remediation";
-  return "LOW - Monitor and review";
-}

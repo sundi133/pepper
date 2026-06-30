@@ -77,8 +77,8 @@ export function parseTerraformImages(content: string, filePath: string): ImageRe
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const ami =
-      line.match(/^\s*(?:ami|image_id)\s*=\s*["']?(ami-[a-f0-9]+)/i) ||
-      line.match(/^\s*image\s*=\s*["']?(ami-[a-f0-9]+)/i);
+      line.match(/^\s*(?:ami|image_id)\s*=\s*["']?(ami-[0-9a-f]{17})/i) ||
+      line.match(/^\s*image\s*=\s*["']?(ami-[0-9a-f]{17})/i);
     if (ami) pushRef(refs, ami[1], filePath, i + 1, "vm");
 
     const uri = line.match(
@@ -112,7 +112,7 @@ export function parsePacker(content: string, filePath: string): ImageRef[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const ami = line.match(
-      /^\s*(?:source_ami|ami_filter|image_id)\s*=\s*["']?(ami-[a-f0-9]+)/i,
+      /^\s*(?:source_ami|ami_filter|image_id)\s*=\s*["']?(ami-[0-9a-f]{17})/i,
     );
     if (ami) pushRef(refs, ami[1], filePath, i + 1, "vm");
     const image = line.match(/^\s*image\s*=\s*["']([^"']+)["']/i);
@@ -185,5 +185,5 @@ export function discoverArtifactImages(
 }
 
 export function isVmAmiRef(ref: ImageRef): boolean {
-  return ref.kind === "vm" && /^ami-[a-f0-9]+$/i.test(ref.image);
+  return ref.kind === "vm" && /^ami-[0-9a-f]{17}$/i.test(ref.image);
 }

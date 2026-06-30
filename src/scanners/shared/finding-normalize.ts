@@ -3,7 +3,7 @@ import type { RawFinding } from "../types";
 import type { FindingMetadata } from "./finding-metadata";
 import { mergeMetadata } from "./finding-metadata";
 
-export interface StructuredFindingFields {
+interface StructuredFindingFields {
   whatIsWrong: string;
   where: string;
   whyExploitable: string;
@@ -14,8 +14,7 @@ export interface StructuredFindingFields {
   validation?: string;
 }
 
-/** Build developer-ready description from structured sections. */
-export function buildStructuredDescription(
+function buildStructuredDescription(
   fields: StructuredFindingFields,
 ): string {
   const parts: string[] = [

@@ -1,7 +1,7 @@
 // Entropy-based secret validation to reduce false positives
 // Uses Shannon entropy and known credential format patterns
 
-export interface EntropyAnalysis {
+interface EntropyAnalysis {
   shannonEntropy: number; // 0-8 (bits per character)
   isHighEntropy: boolean; // > 4.0
   matchesKnownFormat: boolean;
@@ -58,7 +58,7 @@ const CREDENTIAL_PATTERNS: Record<string, RegExp[]> = {
   ],
 };
 
-export function calculateShannonEntropy(str: string): number {
+function calculateShannonEntropy(str: string): number {
   if (!str || str.length === 0) return 0;
 
   // Count frequency of each character
@@ -77,7 +77,7 @@ export function calculateShannonEntropy(str: string): number {
   return entropy;
 }
 
-export function detectCredentialFormat(
+function detectCredentialFormat(
   value: string,
 ): { type: string | null; matches: boolean } {
   for (const [type, patterns] of Object.entries(CREDENTIAL_PATTERNS)) {
@@ -90,7 +90,7 @@ export function detectCredentialFormat(
   return { type: null, matches: false };
 }
 
-export function isCommonHash(value: string): boolean {
+function isCommonHash(value: string): boolean {
   const trimmed = value.trim();
 
   // Common hash lengths

@@ -304,16 +304,9 @@ export const containerScanner: ScannerPlugin = {
       `CONTAINER: ${artifactSummary(images)} artifact image(s); Trivy when available`,
     );
 
-    const hasTrivy = await trivyAvailable();
-    if (!hasTrivy) {
-      ctx.onProgress?.(
-        "CONTAINER: Trivy not installed — skipping CVE scan (no findings emitted)",
-      );
-      return configFindings;
-    }
-
     const findings: RawFinding[] = [...configFindings];
 
+    // First pass: record VM AMI references (always, regardless of Trivy availability)
     for (const ref of images) {
       await ctx.waitIfPaused?.();
       if (isVmAmiRef(ref)) {
@@ -352,7 +345,22 @@ export const containerScanner: ScannerPlugin = {
             },
           ),
         );
-        continue;
+      }
+    }
+
+    const hasTrivy = await trivyAvailable();
+    if (!hasTrivy) {
+      ctx.onProgress?.(
+        "CONTAINER: Trivy not installed — skipping CVE scan (no findings emitted)",
+      );
+      return findings;
+    }
+
+    // Second pass: Trivy scans for container/serverless images only
+    for (const ref of images) {
+      await ctx.waitIfPaused?.();
+      if (isVmAmiRef(ref)) {
+        continue; // Already processed in first pass
       }
 
       ctx.onProgress?.(

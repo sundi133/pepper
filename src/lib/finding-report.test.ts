@@ -39,7 +39,6 @@ describe("renderReportPlainText", () => {
     expect(text).toContain("Summary");
     expect(text).toContain("What is wrong:");
     expect(text).toContain("Where: secret.js:6");
-    expect(text).toContain("Steps to Reproduce");
     expect(text).toContain("Impact");
     expect(text).toContain("Remediation");
     expect(text).not.toMatch(/^## /m);

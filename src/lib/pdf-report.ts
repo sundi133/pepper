@@ -357,19 +357,29 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
     y = drawSectionHeader(doc, "TOP FINDINGS", marginL, y, contentW);
     y += 10;
 
+    // Sort by severity (CRITICAL, HIGH, MEDIUM, LOW, INFO)
+    const severityOrder: Record<string, number> = {
+      CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4,
+    };
+    const sortedFindings = [...findings].sort((a, b) => {
+      const aOrder = severityOrder[a.severity.toUpperCase()] ?? 999;
+      const bOrder = severityOrder[b.severity.toUpperCase()] ?? 999;
+      return aOrder - bOrder;
+    });
+
     // Table header
-    const cols = [30, 120, 90, 70, 70, 70];
+    const cols = [30, 110, 85, 65, 65, 65];
     const colX = [marginL];
     for (let i = 1; i < cols.length; i++) colX.push(colX[i - 1] + cols[i - 1]);
 
     doc.rect(marginL, y, contentW, 20).fill(COLORS.headerBg);
     doc.fontSize(7).fillColor(COLORS.white);
-    ["#", "FINDING", "CATEGORY", "SEVERITY", "SCANNER", "STATUS"]
+    ["#", "FINDING", "CATEGORY", "SEVERITY", "OWASP", "STATUS"]
       .forEach((h, i) => doc.text(h, colX[i] + 4, y + 6, { width: cols[i] - 8 }));
     y += 20;
 
-    // Table rows (top 20)
-    const topFindings = findings.slice(0, 20);
+    // Table rows (top 20 sorted)
+    const topFindings = sortedFindings.slice(0, 20);
     for (let idx = 0; idx < topFindings.length; idx++) {
       if (y > 750) { doc.addPage(); y = 50; }
       const f = topFindings[idx];
@@ -378,7 +388,7 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
 
       doc.fontSize(8).fillColor(COLORS.textPrimary);
       doc.text(String(idx + 1), colX[0] + 4, y + 6, { width: cols[0] - 8 });
-      doc.text(truncate(f.title, 30), colX[1] + 4, y + 6, { width: cols[1] - 8 });
+      doc.text(truncate(f.title, 28), colX[1] + 4, y + 6, { width: cols[1] - 8 });
       doc.text(findingCategory(f), colX[2] + 4, y + 6, { width: cols[2] - 8 });
 
       // Severity badge
@@ -389,9 +399,23 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
       doc.fontSize(7).fillColor(COLORS.white)
         .text(sevLabel, sevBadgeX + 3, y + 6, { width: sevBadgeW - 6 });
 
+      // OWASP mapping
+      const owaspLabel = findingOwasp(f) || "-";
       doc.fontSize(8).fillColor(COLORS.textPrimary);
-      doc.text(scannerLabel(f.scanner), colX[4] + 4, y + 6, { width: cols[4] - 8 });
-      doc.text((f.status || "Open").replace(/_/g, " "), colX[5] + 4, y + 6, { width: cols[5] - 8 });
+      doc.text(owaspLabel, colX[4] + 4, y + 6, { width: cols[4] - 8 });
+
+      // Status with color coding
+      const statusText = f.status || "OPEN";
+      const statusUpper = statusText.toUpperCase().replace(/_/g, " ");
+      let statusColor: string = COLORS.info;
+      if (statusUpper === "OPEN") statusColor = COLORS.critical;
+      else if (statusUpper === "FALSE_POSITIVE" || statusUpper === "FALSE POSITIVE") statusColor = COLORS.medium;
+      else if (statusUpper === "CLOSED") statusColor = COLORS.green;
+      const statusBadgeW = statusUpper.length * 5.5 + 12;
+      doc.roundedRect(colX[5] + 4, y + 3, Math.min(statusBadgeW, cols[5] - 12), 14, 3)
+        .fill(statusColor as string);
+      doc.fontSize(6.5).fillColor(COLORS.white)
+        .text(statusUpper, colX[5] + 6, y + 6, { width: cols[5] - 12 });
 
       y += 20;
     }
@@ -680,6 +704,22 @@ function drawFindingCard(
     y += snippetH + 8;
   }
 
+  // Steps to Reproduce (only for SAST and Zero-Day)
+  if ((f.scanner === "SAST_LLM" || f.scanner === "ZERO_DAY") && report.stepsToReproduce.length > 0) {
+    if (y > 700) { doc.addPage(); y = 50; }
+    doc.fontSize(8).fillColor(COLORS.high).text("STEPS TO REPRODUCE", x, y);
+    y += 12;
+    let stepY = y;
+    for (let i = 0; i < report.stepsToReproduce.length; i++) {
+      if (stepY > 730) { doc.addPage(); stepY = 50; }
+      const step = truncate(report.stepsToReproduce[i], 200);
+      doc.fontSize(7).fillColor(COLORS.textSecondary)
+        .text(`${i + 1}. ${step}`, x, stepY, { width: w });
+      stepY = doc.y + 4;
+    }
+    y = stepY + 4;
+  }
+
   // Remediation
   if (report.remediation.length > 0) {
     if (y > 700) { doc.addPage(); y = 50; }
@@ -691,6 +731,27 @@ function drawFindingCard(
     doc.fontSize(8).fillColor(COLORS.textSecondary)
       .text(remText, x + 8, y + 6, { width: w - 16 });
     y += remH + 8;
+  }
+
+  // Confidence Analysis
+  if (f.confidence !== null && f.confidence !== undefined) {
+    if (y > 700) { doc.addPage(); y = 50; }
+    const confPct = Math.round(f.confidence * 100);
+    let confLabel = "CONFIDENCE";
+    let confColor: string = COLORS.medium;
+    if (confPct >= 95) { confColor = COLORS.critical; confLabel += " (VERY HIGH)"; }
+    else if (confPct >= 80) { confColor = COLORS.high; confLabel += " (HIGH)"; }
+    else if (confPct >= 60) { confColor = COLORS.medium; confLabel += " (MEDIUM)"; }
+    else { confColor = COLORS.low; confLabel += " (LOW)"; }
+
+    doc.fontSize(8).fillColor(confColor as string).text(confLabel, x, y);
+    y += 12;
+
+    const confBar = Math.max(10, (confPct / 100) * (w - 60));
+    doc.roundedRect(x, y, w - 60, 12, 2).fillAndStroke(COLORS.lightGray, COLORS.border);
+    doc.roundedRect(x, y, confBar, 12, 2).fill(confColor as string);
+    doc.fontSize(7).fillColor(COLORS.textPrimary).text(`${confPct}%`, x + w - 45, y + 2);
+    y += 18;
   }
 
   // Separator

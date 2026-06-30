@@ -91,7 +91,3 @@ Return JSON: { "findings": [{ "packageName", "version", "title", "severity", "su
 export const CONTAINER_CONFIG_PROMPT = `Review Dockerfile/compose for dangerous container CONFIG (not CVEs).
 Check: root user, privileged, host network/pid/ipc, docker.sock, dangerous caps, :latest tags, no digest, no resource limits, writable root FS.
 Return JSON findings with remediation and validationSteps. Category CONTAINER_CONFIG. Confidence >= 0.80.`;
-
-export const ZERO_DAY_VALIDATION_PROMPT = `Cross-file exploit-chain analysis for NOVEL business-logic or chain bugs NOT already covered by standard CWE patterns.
-Use route map, authz map, data-flow, high-risk workflows, AI/agent boundaries.
-Confidence >= 0.80. Do not duplicate obvious injection/authz already reported in pass-1 SAST candidates.`;

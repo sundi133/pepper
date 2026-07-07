@@ -65,6 +65,21 @@ function escapeMd(s: string): string {
   return s.replace(/[<>]/g, (c) => (c === "<" ? "&lt;" : "&gt;"));
 }
 
+function severityDot(severity: string): string {
+  switch (severity.toUpperCase()) {
+    case "CRITICAL":
+      return "🔴";
+    case "HIGH":
+      return "🟠";
+    case "MEDIUM":
+      return "🟡";
+    case "LOW":
+      return "🟢";
+    default:
+      return "⚪";
+  }
+}
+
 export function renderPrSummary(
   input: PrSummaryInput,
   marker: string,
@@ -106,19 +121,19 @@ export function renderPrSummary(
   lines.push("");
   lines.push(`| Severity | Count |`);
   lines.push(`| --- | ---: |`);
-  lines.push(`| Critical | ${input.counts.critical} |`);
-  lines.push(`| High | ${input.counts.high} |`);
-  lines.push(`| Medium | ${input.counts.medium} |`);
-  lines.push(`| Low | ${input.counts.low} |`);
-  lines.push(`| Info | ${input.counts.info} |`);
+  lines.push(`| 🔴 Critical | ${input.counts.critical} |`);
+  lines.push(`| 🟠 High | ${input.counts.high} |`);
+  lines.push(`| 🟡 Medium | ${input.counts.medium} |`);
+  lines.push(`| 🟢 Low | ${input.counts.low} |`);
+  lines.push(`| ⚪ Info | ${input.counts.info} |`);
   lines.push("");
 
   const gateLabel =
     input.gateResult === "PASSED"
-      ? "Passed"
+      ? "✅ Passed"
       : input.gateResult === "FAILED"
-        ? "Failed"
-        : "Not evaluated";
+        ? "❌ Failed"
+        : "⚪ Not evaluated";
   lines.push(`**Build gate:** ${gateLabel}`);
   lines.push("");
 
@@ -130,8 +145,9 @@ export function renderPrSummary(
         ? `\`${f.filePath}${f.startLine ? `:${f.startLine}` : ""}\``
         : "";
       const rule = f.ruleId ? ` _(${f.ruleId})_` : "";
+      const dot = severityDot(f.severity);
       lines.push(
-        `- **${f.severity}** — ${escapeMd(f.title)}${loc ? ` in ${loc}` : ""}${rule}`,
+        `- ${dot} **${f.severity}** — ${escapeMd(f.title)}${loc ? ` in ${loc}` : ""}${rule}`,
       );
     }
     lines.push("");

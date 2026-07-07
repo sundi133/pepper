@@ -604,7 +604,7 @@ async function validateCandidatesPass2(
           endLine: f.endLine,
           cweId: f.cweId,
           confidence: f.confidence,
-          ruleId: `LLM-${f.cweId || "VALIDATED"}`,
+          ruleId: f.cweId || "CWE-UNKNOWN",
           metadata: {
             ...(f.metadata || {}),
             passPhase: 2,
@@ -777,7 +777,7 @@ async function analyzeChunk(
         confidence: f.confidence ?? pass1Floor,
         ruleId: isPolicy
           ? `POLICY-${matchedPolicy || "CUSTOM"}`
-          : `LLM-${f.cweId || "GENERIC"}`,
+          : f.cweId || "CWE-UNKNOWN",
         metadata: {
           ...meta,
           owasp2024: owaspCategory,

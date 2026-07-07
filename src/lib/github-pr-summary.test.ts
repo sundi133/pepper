@@ -87,9 +87,9 @@ describe("renderPrSummary - completed scan", () => {
       },
       marker,
     );
-    expect(body).toContain("| Critical | 2 |");
-    expect(body).toContain("| High | 5 |");
-    expect(body).toContain("**Build gate:** Failed");
+    expect(body).toContain("| 🔴 Critical | 2 |");
+    expect(body).toContain("| 🟠 High | 5 |");
+    expect(body).toContain("**Build gate:** ❌ Failed");
     expect(body).toContain("found **11** issues");
   });
 

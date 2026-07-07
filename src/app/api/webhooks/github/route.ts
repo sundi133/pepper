@@ -7,6 +7,7 @@ import {
   mainBranchWebhookScanType,
   queueGithubWebhookScan,
 } from "@/lib/github-webhook-scan";
+import { postPrScanQueuedStatus } from "@/lib/github-pr-comment";
 
 export async function POST(req: NextRequest) {
   const signature = req.headers.get("x-hub-signature-256");
@@ -59,6 +60,11 @@ export async function POST(req: NextRequest) {
         baseSha: pr.base?.sha,
         prNumber: pr.number,
       });
+      // Mark the required check as in-progress so it doesn't read as an
+      // indefinite "Expected" while the scan runs.
+      if (result.status === "QUEUED") {
+        await postPrScanQueuedStatus(result.scanId);
+      }
       return NextResponse.json({
         scanId: result.scanId,
         status: result.status,

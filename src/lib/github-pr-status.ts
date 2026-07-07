@@ -71,6 +71,40 @@ export async function postCommitStatus(input: {
   }
 }
 
+/**
+ * Post a `pending` commit status when a scan is queued, so the required
+ * check shows "in progress" instead of an indefinite "Expected — waiting
+ * for status to be reported" for the whole duration of the scan. Replaced
+ * by the terminal status from {@link postCommitStatus} once the scan ends.
+ */
+export async function postPendingCommitStatus(input: {
+  token: string;
+  owner: string;
+  repo: string;
+  sha: string;
+  reviewUrl: string | null;
+}): Promise<void> {
+  const { token, owner, repo, sha, reviewUrl } = input;
+
+  const r = await githubPost<{ message?: string }>(
+    token,
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/statuses/${encodeURIComponent(sha)}`,
+    {
+      state: "pending",
+      context: STATUS_CONTEXT,
+      description: "Security scan in progress…",
+      target_url: reviewUrl ?? undefined,
+    },
+  );
+
+  if (!r.ok) {
+    log.warn(
+      { owner, repo, sha, status: r.status, msg: r.data?.message || r.raw?.slice(0, 200) },
+      "Failed to post pending commit status",
+    );
+  }
+}
+
 function describeCounts(prefix: string, c: SeverityCountsLite): string {
   const parts: string[] = [];
   if (c.critical) parts.push(`${c.critical} critical`);

@@ -8,7 +8,7 @@ import {
   renderPrSummary,
 } from "./github-pr-summary";
 import { postInlineReview } from "./github-pr-inline";
-import { postCommitStatus } from "./github-pr-status";
+import { postCommitStatus, postPendingCommitStatus } from "./github-pr-status";
 
 const log = logger.child({ module: "github-pr-comment" });
 
@@ -32,6 +32,50 @@ function buildReviewUrl(scanId: string): string | null {
     process.env.NEXT_PUBLIC_APP_URL;
   if (!base) return null;
   return `${base.replace(/\/+$/, "")}/scans/${scanId}`;
+}
+
+/**
+ * Post a `pending` commit status for a freshly-queued webhook PR scan, so
+ * the required `pepper/security` check reads "in progress" while the scan
+ * runs instead of an indefinite "Expected". Best-effort and non-blocking.
+ */
+export async function postPrScanQueuedStatus(scanId: string): Promise<void> {
+  const scan = await prisma.scan.findUnique({
+    where: { id: scanId },
+    select: {
+      commitSha: true,
+      prNumber: true,
+      sourceType: true,
+      project: {
+        select: {
+          organizationId: true,
+          githubOwner: true,
+          githubRepoName: true,
+        },
+      },
+    },
+  });
+
+  if (!scan?.project) return;
+  if (scan.sourceType !== "WEBHOOK") return;
+  if (scan.prNumber == null || !scan.commitSha) return;
+  const { githubOwner, githubRepoName, organizationId } = scan.project;
+  if (!githubOwner || !githubRepoName) return;
+
+  const token = await getOrgGithubAccessToken(organizationId);
+  if (!token) return;
+
+  try {
+    await postPendingCommitStatus({
+      token,
+      owner: githubOwner,
+      repo: githubRepoName,
+      sha: scan.commitSha,
+      reviewUrl: buildReviewUrl(scanId),
+    });
+  } catch (e) {
+    log.warn({ scanId, e }, "Pending commit status post failed (non-blocking)");
+  }
 }
 
 async function listIssueComments(

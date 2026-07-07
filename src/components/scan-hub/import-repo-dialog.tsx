@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -19,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, RefreshCw, Shield } from "lucide-react";
+import { Loader2, RefreshCw, Search, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 type ImportItem = {
   key: string;
@@ -71,8 +73,14 @@ export function ImportRepoDialog({
   emptyMessage,
   emptyHint,
 }: ImportRepoDialogProps) {
+  const [query, setQuery] = useState("");
   const importable = items.filter((i) => !i.alreadyConnected);
   const selectedCount = importable.filter((i) => selectedKeys.has(i.key)).length;
+
+  const q = query.trim().toLowerCase();
+  const visibleItems = q
+    ? items.filter((i) => i.fullName.toLowerCase().includes(q))
+    : items;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -104,9 +112,25 @@ export function ImportRepoDialog({
             </Button>
           </div>
         ) : (
-          <ScrollArea className="max-h-[min(50vh,360px)] pr-3">
-            <ul className="space-y-2">
-              {items.map((repo) => (
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search repositories…"
+                className="pl-9"
+                aria-label="Search repositories"
+              />
+            </div>
+            {visibleItems.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No repositories match “{query.trim()}”.
+              </p>
+            ) : (
+              <ScrollArea className="max-h-[min(50vh,360px)] pr-3">
+                <ul className="space-y-2">
+                  {visibleItems.map((repo) => (
                 <li
                   key={repo.key}
                   className={cn(
@@ -166,9 +190,11 @@ export function ImportRepoDialog({
                     ) : null}
                   </div>
                 </li>
-              ))}
-            </ul>
-          </ScrollArea>
+                  ))}
+                </ul>
+              </ScrollArea>
+            )}
+          </div>
         )}
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>

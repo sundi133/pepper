@@ -91,12 +91,12 @@ export async function GET(
     model: orgSettings?.llmModel || "gpt-4o-mini",
   };
 
-  // Map findings to each framework using LLM
-  const reports = [];
-
-  for (const framework of frameworks) {
-    const mappingResults: FindingComplianceResult[] =
-      await mapFindingsToControls(
+  // Map findings to each framework using the LLM. Frameworks are independent,
+  // so map them concurrently instead of one-after-another (major speedup).
+  const reports = await Promise.all(
+    frameworks.map(async (framework) => {
+      const mappingResults: FindingComplianceResult[] =
+        await mapFindingsToControls(
         findings.map((f) => ({
           id: f.id,
           title: f.title,
@@ -166,7 +166,7 @@ export async function GET(
       acceptedRisk: findings.filter((f) => f.status === "ACCEPTED_RISK").length,
     };
 
-    reports.push({
+      return {
       framework: framework.name,
       fileName: framework.fileName,
       totalControls: framework.controls.length,
@@ -187,8 +187,9 @@ export async function GET(
           controls: r.controls,
         };
       }),
-    });
-  }
+      };
+    }),
+  );
 
   const report = {
     scanId,

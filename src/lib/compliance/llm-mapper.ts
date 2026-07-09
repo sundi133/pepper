@@ -60,9 +60,16 @@ MAPPING RULES:
 
 IMPORTANT: Only map to controls that exist in the provided catalog. Use the exact ControlID from the catalog.`;
 
+const BATCH_SIZE = 15; // 15 findings per batch — balances accuracy vs. API calls
+// Max batches sent to the LLM in parallel per framework. Bounds load so we
+// don't overwhelm rate-limited cloud APIs or a single local Ollama instance,
+// while still turning the previously sequential batches into concurrent work.
+const BATCH_CONCURRENCY = 4;
+
 /**
- * Map a batch of findings to compliance controls using LLM.
- * Processes in batches of 10 findings per LLM call.
+ * Map findings to compliance controls using the LLM.
+ * Findings are split into batches and the batches run concurrently (bounded by
+ * BATCH_CONCURRENCY) instead of strictly sequentially.
  */
 export async function mapFindingsToControls(
   findings: FindingForMapping[],
@@ -72,36 +79,41 @@ export async function mapFindingsToControls(
 ): Promise<FindingComplianceResult[]> {
   const client = createLlmClient(llmConfig);
   const results: FindingComplianceResult[] = [];
-  const BATCH_SIZE = 15; // 15 findings per batch — balances accuracy vs. API calls
 
   onProgress?.(
     `Mapping ${findings.length} findings to ${framework.name} controls...`,
   );
 
+  // Build the list of batches up front.
+  const batches: FindingForMapping[][] = [];
   for (let i = 0; i < findings.length; i += BATCH_SIZE) {
-    const batch = findings.slice(i, i + BATCH_SIZE);
-    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    const totalBatches = Math.ceil(findings.length / BATCH_SIZE);
+    batches.push(findings.slice(i, i + BATCH_SIZE));
+  }
+  const totalBatches = batches.length;
+  let completedBatches = 0;
 
-    onProgress?.(
-      `Compliance mapping: batch ${batchNum}/${totalBatches} (${batch.length} findings)...`,
+  // Process batches in waves of BATCH_CONCURRENCY.
+  for (let i = 0; i < batches.length; i += BATCH_CONCURRENCY) {
+    const wave = batches.slice(i, i + BATCH_CONCURRENCY);
+    const waveResults = await Promise.all(
+      wave.map(async (batch, waveIdx) => {
+        const batchNum = i + waveIdx + 1;
+        try {
+          return await mapBatch(client, llmConfig.model, batch, framework);
+        } catch (err) {
+          logger.error({ err, batchNum }, "Compliance mapping batch failed");
+          // Preserve findings with empty results so we don't lose them.
+          return batch.map((f) => ({ findingId: f.id, controls: [] }));
+        }
+      }),
     );
-
-    try {
-      const batchResults = await mapBatch(
-        client,
-        llmConfig.model,
-        batch,
-        framework,
-      );
+    for (const batchResults of waveResults) {
       results.push(...batchResults);
-    } catch (err) {
-      logger.error({ err, batchNum }, "Compliance mapping batch failed");
-      // Add empty results for failed findings so we don't lose them
-      for (const f of batch) {
-        results.push({ findingId: f.id, controls: [] });
-      }
     }
+    completedBatches += wave.length;
+    onProgress?.(
+      `Compliance mapping: ${completedBatches}/${totalBatches} batches done (${framework.name})...`,
+    );
   }
 
   onProgress?.(

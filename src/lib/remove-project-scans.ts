@@ -6,8 +6,16 @@ import { deleteObject } from "@/lib/minio";
  * Deletes every scan for a project (findings & artifacts cascade),
  * removes queued Bull jobs, and best-effort deletes MinIO objects.
  * Used so each project keeps at most one active scan record.
+ *
+ * `preserveObjectKeys` lists MinIO objects that must NOT be deleted — used by
+ * rescan so the uploaded source archive that the new scan re-references stays
+ * intact (otherwise the worker's downloadObject would 404).
  */
-export async function removeAllScansForProject(projectId: string): Promise<void> {
+export async function removeAllScansForProject(
+  projectId: string,
+  options: { preserveObjectKeys?: Set<string> } = {},
+): Promise<void> {
+  const preserve = options.preserveObjectKeys ?? new Set<string>();
   const scans = await prisma.scan.findMany({
     where: { projectId },
     select: {
@@ -24,12 +32,13 @@ export async function removeAllScansForProject(projectId: string): Promise<void>
   const objectKeys = new Set<string>();
   for (const s of scans) {
     for (const a of s.artifacts) {
-      if (a.objectKey) objectKeys.add(a.objectKey);
+      if (a.objectKey && !preserve.has(a.objectKey)) objectKeys.add(a.objectKey);
     }
     if (
       s.sourceType === "UPLOAD" &&
       s.sourceRef &&
-      s.sourceRef.startsWith("scans/")
+      s.sourceRef.startsWith("scans/") &&
+      !preserve.has(s.sourceRef)
     ) {
       objectKeys.add(s.sourceRef);
     }

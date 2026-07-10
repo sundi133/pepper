@@ -42,26 +42,55 @@ No code changes are required.
 
 ---
 
-## Option A — Full stack in Docker (matches customer on-prem)
+## Option A — Full stack in Docker (recommended for customer on-prem)
 
-This is the turnkey path. The API container auto-runs `prisma migrate deploy`,
-`prisma db push`, and the seed on boot (`scripts/docker-entrypoint-api.sh`).
+The turnkey path: one command builds the image and runs Postgres + Redis +
+MinIO + the API + the worker. The API container auto-runs `prisma migrate
+deploy`, `prisma db push`, and the seed on boot
+(`scripts/docker-entrypoint-api.sh`) — no manual DB steps.
+
+### A1 — Hardened (use this for a real customer deployment) ✅ validated
+
+Use **`docker-compose.onprem.yml`**. Compared with the dev compose it:
+
+- publishes **only** the app on port 3000 — Postgres/Redis/MinIO have no host
+  ports and are reachable only on the internal network (artifacts are proxied
+  through the API, so MinIO never needs to be browser-reachable);
+- sets `restart: unless-stopped` on every service;
+- has **no insecure default secrets** — required vars must be present in `.env`
+  or `docker compose` fails immediately with a clear message.
 
 ```bash
-cp .env.example .env          # then edit secrets (NEXTAUTH_SECRET, ADMIN_*, LLM_*)
-docker compose up -d --build  # postgres + redis + minio + sast-api + sast-worker
+cp .env.example .env
+# Set at minimum (compose refuses to start otherwise):
+#   POSTGRES_PASSWORD, NEXTAUTH_SECRET, NEXTAUTH_URL,
+#   ADMIN_EMAIL, ADMIN_PASSWORD, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
+#   (NEXTAUTH_SECRET: openssl rand -base64 32)
+docker compose -f docker-compose.onprem.yml up -d --build
 ```
 
-- App: <http://localhost:3000>  (login with `ADMIN_EMAIL` / `ADMIN_PASSWORD`)
-- MinIO console: <http://localhost:9001>
+All other config (`LLM_*`, `SMTP_*`, `GITHUB_*`, `OLLAMA_HOST`,
+`WORKER_CONCURRENCY`, …) is passed through from `.env` automatically — no
+compose edits needed. To reach the MinIO admin console, uncomment the `ports:`
+block under the `minio` service.
 
-> **Port note:** `docker-compose.yml` binds host port **5432**. If another
-> Postgres already occupies 5432, either stop it or change the published port
-> (`ports: ["5433:5432"]`) — the internal container-to-container URL is
-> unaffected because services talk over the compose network.
+Tear down (keep data): `docker compose -f docker-compose.onprem.yml down`
+Tear down (wipe data):  `docker compose -f docker-compose.onprem.yml down -v`
 
-Tear down (keep data): `docker compose down`
-Tear down (wipe data):  `docker compose down -v`
+### A2 — Quick eval (dev-flavoured)
+
+`docker-compose.yml` is the same stack but with host ports exposed and
+dev-default secrets — handy for a throwaway local eval, **not** for a customer
+box.
+
+```bash
+cp .env.example .env
+docker compose up -d --build   # app :3000, postgres :5432, minio console :9001
+```
+
+> **Port note:** this file binds host port **5432**. If another Postgres already
+> occupies 5432, change the published port (`ports: ["5433:5432"]`) — the
+> internal container-to-container URL is unaffected.
 
 ---
 

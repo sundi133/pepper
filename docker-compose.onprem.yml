@@ -1,0 +1,140 @@
+# Pepper — hardened on-prem deployment (single command).
+#
+#   docker compose -f docker-compose.onprem.yml up -d --build
+#
+# Differences vs the dev-flavoured docker-compose.yml:
+#   - Only the app (port 3000) is published. Postgres, Redis and MinIO have NO
+#     host ports — they are reachable only on the internal compose network.
+#     (Artifacts are proxied through the API via downloadObject, so MinIO never
+#     needs to be browser-reachable.)
+#   - restart: unless-stopped on every service (survives reboots/crashes).
+#   - No insecure default secrets: POSTGRES_PASSWORD, NEXTAUTH_SECRET,
+#     ADMIN_PASSWORD and the MinIO credentials are REQUIRED. Compose fails fast
+#     with a clear message if any is missing from your .env.
+#
+# Required in .env (compose reads .env automatically for interpolation):
+#   POSTGRES_PASSWORD, NEXTAUTH_SECRET, NEXTAUTH_URL,
+#   ADMIN_EMAIL, ADMIN_PASSWORD, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
+# Everything else (LLM_*, SMTP_*, GITHUB_*, OLLAMA_HOST, WORKER_CONCURRENCY …)
+# is passed through from .env via env_file below — no compose edit needed.
+name: pepper
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pepper
+      POSTGRES_USER: pepper
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pepper"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required in .env}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      retries: 5
+    # To reach the MinIO admin console from the host, uncomment:
+    # ports:
+    #   - "127.0.0.1:9001:9001"
+
+  sast-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      # Internal wiring — these override anything in .env (service DNS names).
+      DATABASE_URL: postgresql://pepper:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in .env}@postgres:5432/pepper
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required in .env}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required in .env}
+      MINIO_USE_SSL: "false"
+      MINIO_BUCKET: pepper-artifacts
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required in .env}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL is required in .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL is required in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required in .env}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  sast-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://pepper:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in .env}@postgres:5432/pepper
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required in .env}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required in .env}
+      MINIO_USE_SSL: "false"
+      MINIO_BUCKET: pepper-artifacts
+      NODE_ENV: production
+    deploy:
+      replicas: 1
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

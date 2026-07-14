@@ -75,6 +75,69 @@ const CWE_TO_OWASP_MAP: Record<string, { owasp2024: string; owaspApi?: string; o
   "CWE-1427": { owasp2024: "A03:2021 Injection", owaspLlm: "LLM01:2025 Prompt Injection" },
 };
 
+// CWE → short human-readable weakness category (for compact UI/PDF labels).
+// Single source of truth — do not re-declare this elsewhere.
+const CWE_CATEGORY_MAP: Record<string, string> = {
+  "CWE-79": "XSS",
+  "CWE-80": "XSS",
+  "CWE-87": "XSS",
+  "CWE-89": "Injection",
+  "CWE-90": "Injection",
+  "CWE-91": "Injection",
+  "CWE-94": "Injection",
+  "CWE-95": "Injection",
+  "CWE-78": "Injection",
+  "CWE-77": "Injection",
+  "CWE-76": "Injection",
+  "CWE-917": "Injection",
+  "CWE-22": "Path Traversal",
+  "CWE-23": "Path Traversal",
+  "CWE-36": "Path Traversal",
+  "CWE-73": "Path Traversal",
+  "CWE-200": "Info Disclosure",
+  "CWE-209": "Info Disclosure",
+  "CWE-532": "Info Disclosure",
+  "CWE-312": "Secrets",
+  "CWE-321": "Secrets",
+  "CWE-798": "Secrets",
+  "CWE-259": "Secrets",
+  "CWE-287": "Authentication",
+  "CWE-306": "Authentication",
+  "CWE-307": "Authentication",
+  "CWE-862": "Authorization",
+  "CWE-863": "Authorization",
+  "CWE-639": "Authorization",
+  "CWE-284": "Authorization",
+  "CWE-352": "CSRF",
+  "CWE-918": "SSRF",
+  "CWE-611": "XXE",
+  "CWE-502": "Deserialization",
+  "CWE-327": "Cryptography",
+  "CWE-328": "Cryptography",
+  "CWE-330": "Cryptography",
+  "CWE-916": "Cryptography",
+  "CWE-1321": "Prototype Pollution",
+  "CWE-400": "DoS",
+  "CWE-770": "DoS",
+  "CWE-1333": "ReDoS",
+};
+
+/** Short human-readable weakness category for a CWE (e.g. "Injection"). */
+export function getCweCategory(cweId?: string | null): string | null {
+  if (!cweId) return null;
+  return CWE_CATEGORY_MAP[cweId] || null;
+}
+
+/**
+ * OWASP Top 10 (2021) code only, e.g. "A03:2021" without the category name.
+ * Derived from the authoritative CWE_TO_OWASP_MAP so it never drifts from
+ * getOwasp2024Category().
+ */
+export function getOwasp2024Code(cweId?: string | null): string | null {
+  const full = getOwasp2024Category(cweId || undefined);
+  return full ? full.split(" ")[0] : null;
+}
+
 interface ExploitabilityScore {
   score: number; // 0-10
   attackVector: "network" | "adjacent" | "local" | "physical";

@@ -36,6 +36,12 @@ export interface ControlMapping {
   theme: string;
   relevance: "direct" | "supporting" | "related";
   reasoning: string;
+  /** 0–1 confidence from the agentic mapper's reasoning + verification steps. */
+  confidence?: number;
+  /** Whether the adversarial verify pass upheld this mapping. */
+  verified?: boolean;
+  /** Short note from the verifier (e.g. why downgraded or rejected). */
+  verificationNote?: string;
 }
 
 export interface FindingComplianceResult {

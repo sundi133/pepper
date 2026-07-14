@@ -70,6 +70,9 @@ interface ControlMapping {
   theme: string;
   relevance: string;
   reasoning: string;
+  confidence?: number;
+  verified?: boolean;
+  verificationNote?: string;
 }
 
 interface FindingMapping {
@@ -93,11 +96,30 @@ interface ControlSummary {
   directCount: number;
 }
 
+interface CoverageBucketEntry {
+  controlId: string;
+  title: string;
+  theme: string;
+  coverage: string;
+  findingCount: number;
+  criticalHighCount: number;
+  reason?: string;
+}
+
 interface FrameworkReport {
   framework: string;
+  slug?: string;
+  version?: string | null;
+  mappingSource?: "agentic" | "crosswalk" | "llm";
   fileName: string;
   totalControls: number;
   impactedControls: number;
+  coverage?: { assessable: number; partial: number; notAssessable: number };
+  buckets?: {
+    gapsFound: CoverageBucketEntry[];
+    noIssuesDetected: CoverageBucketEntry[];
+    notCovered: CoverageBucketEntry[];
+  };
   controlSummary: ControlSummary[];
   statusCounts: Record<string, number>;
   findings: FindingMapping[];
@@ -111,8 +133,9 @@ function csvEscape(value: string | number | null | undefined): string {
 export default function ComplianceReportPage() {
   const params = useParams();
   const scanId = params.scanId as string;
+  const [mode, setMode] = useState<"deep" | "fast">("deep");
   const { data, isLoading, error, mutate } = useSWR(
-    `/api/scans/${scanId}/compliance`,
+    `/api/scans/${scanId}/compliance?mode=${mode}`,
     jsonFetcher,
   );
   const { data: scanMeta } = useSWR(`/api/scans/${scanId}`, jsonFetcher, {
@@ -320,6 +343,32 @@ export default function ComplianceReportPage() {
           )}
         </div>
         <div className="flex gap-2">
+          <div className="flex items-center rounded-md border p-0.5" role="group" aria-label="Mapping mode">
+            <button
+              type="button"
+              onClick={() => setMode("deep")}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                mode === "deep"
+                  ? "bg-purple-600 text-white"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Agentic AI mapping: grounded reasoning + self-verification (slower, higher accuracy)"
+            >
+              Agentic
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("fast")}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                mode === "fast"
+                  ? "bg-green-600 text-white"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Deterministic CWE crosswalk only (instant, reproducible, no LLM)"
+            >
+              Fast
+            </button>
+          </div>
           <Button variant="outline" size="sm" onClick={handleRegenerate}>
             <RefreshCw className="mr-2 h-3.5 w-3.5" />
             Regenerate
@@ -396,6 +445,29 @@ export default function ComplianceReportPage() {
               <CardContent className="pt-6">
                 <div className="text-sm text-muted-foreground">Framework</div>
                 <p className="text-lg font-bold">{report.framework}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  {report.version && (
+                    <Badge variant="outline" className="text-xs">
+                      {report.version}
+                    </Badge>
+                  )}
+                  {report.mappingSource && (
+                    <Badge
+                      variant="outline"
+                      className={
+                        report.mappingSource === "crosswalk"
+                          ? "text-xs bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-400 border-green-200"
+                          : "text-xs bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-400 border-purple-200"
+                      }
+                    >
+                      {report.mappingSource === "crosswalk"
+                        ? "Deterministic (CWE crosswalk)"
+                        : report.mappingSource === "agentic"
+                          ? "Agentic AI (grounded + verified)"
+                          : "AI-mapped"}
+                    </Badge>
+                  )}
+                </div>
               </CardContent>
             </Card>
             <Card>
@@ -434,6 +506,76 @@ export default function ComplianceReportPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Coverage — what SAST can and cannot attest */}
+          {report.buckets && report.coverage && (
+            <Card>
+              <CardHeader>
+                <CardTitle>SAST Coverage — {report.framework}</CardTitle>
+                <CardDescription>
+                  What this scan can attest. &ldquo;No issues detected&rdquo; is
+                  not the same as compliant, and controls SAST cannot assess need
+                  other evidence.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-red-200 dark:border-red-900 p-3">
+                    <div className="text-sm text-muted-foreground">
+                      Gaps found
+                    </div>
+                    <p className="text-2xl font-bold text-destructive">
+                      {report.buckets.gapsFound.length}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      controls with findings
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-green-200 dark:border-green-900 p-3">
+                    <div className="text-sm text-muted-foreground">
+                      No issues detected
+                    </div>
+                    <p className="text-2xl font-bold text-green-600">
+                      {report.buckets.noIssuesDetected.length}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      assessable, no findings
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-muted p-3">
+                    <div className="text-sm text-muted-foreground">
+                      Not covered by SAST
+                    </div>
+                    <p className="text-2xl font-bold text-muted-foreground">
+                      {report.buckets.notCovered.length}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      needs other evidence
+                    </p>
+                  </div>
+                </div>
+                {report.buckets.notCovered.length > 0 && (
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                      Show {report.buckets.notCovered.length} controls not
+                      assessable by SAST
+                    </summary>
+                    <ul className="mt-2 space-y-1 pl-4">
+                      {report.buckets.notCovered.map((c) => (
+                        <li key={c.controlId} className="text-muted-foreground">
+                          <span className="font-medium text-foreground">
+                            {c.controlId}
+                          </span>{" "}
+                          {c.title}
+                          {c.reason ? ` — ${c.reason}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Control Summary */}
           <Card>
@@ -558,6 +700,19 @@ export default function ComplianceReportPage() {
                                     className={`text-[10px] font-mono cursor-help ${RELEVANCE_COLORS[c.relevance] || ""}`}
                                   >
                                     {c.controlId}
+                                    {c.verified && (
+                                      <span
+                                        className="ml-1 text-green-600"
+                                        title="Verified"
+                                      >
+                                        ✓
+                                      </span>
+                                    )}
+                                    {typeof c.confidence === "number" && (
+                                      <span className="ml-1 opacity-70">
+                                        {Math.round(c.confidence * 100)}%
+                                      </span>
+                                    )}
                                   </Badge>
                                 </TooltipTrigger>
                                 <TooltipContent
@@ -570,6 +725,18 @@ export default function ComplianceReportPage() {
                                   <p className="text-xs mt-2 text-muted-foreground">
                                     [{c.relevance}] {c.reasoning}
                                   </p>
+                                  {(typeof c.confidence === "number" ||
+                                    c.verified !== undefined) && (
+                                    <p className="text-xs mt-1 text-muted-foreground">
+                                      {typeof c.confidence === "number" &&
+                                        `Confidence ${Math.round(c.confidence * 100)}%`}
+                                      {c.verified !== undefined &&
+                                        ` · ${c.verified ? "verified ✓" : "unverified"}`}
+                                      {c.verificationNote
+                                        ? ` — ${c.verificationNote}`
+                                        : ""}
+                                    </p>
+                                  )}
                                 </TooltipContent>
                               </Tooltip>
                             ))}

@@ -7,6 +7,9 @@ import * as path from "path";
 import { execFileSync } from "child_process";
 import { logger } from "@/lib/logger";
 
+/** Whether SAST can produce evidence toward a control. */
+export type Coverage = "assessable" | "partial" | "not-assessable";
+
 export interface ComplianceControl {
   controlId: string;
   chunkId: string;
@@ -18,10 +21,34 @@ export interface ComplianceControl {
   evidenceExamples: string[];
   clauseId?: string;
   subclause?: string;
+
+  /**
+   * Whether SAST/SCA findings can attest to this control at all. Drives the
+   * three-bucket report (gaps found / no issues detected / not covered by SAST).
+   * Defaults to "assessable" when a deterministic mapping exists, else "partial".
+   */
+  coverage?: Coverage;
+
+  /**
+   * Deterministic crosswalk: CWE ids that map DIRECTLY to this control
+   * (e.g. ["CWE-89","CWE-79"]). A finding carrying one of these CWEs is a
+   * direct gap for this control. Reproducible, no LLM required.
+   */
+  cweMapping?: string[];
+
+  /**
+   * Activity-level evidence: this control is supported by the mere existence
+   * of a finding from these scanners (empty/omitted `scanners` = any scanner).
+   * Models "a SAST finding is evidence toward 'identify vulnerabilities'
+   * controls" (PCI 6.3.1, NIST RV.1, SA-11, RA-5, SSDF PW.7/PW.8).
+   */
+  appliesTo?: { scanners?: string[] };
 }
 
 export interface ComplianceFramework {
   name: string;
+  /** Framework revision, stamped into every report (e.g. "4.0.1", "2021", "Rev 5"). */
+  version?: string;
   fileName: string;
   controls: ComplianceControl[];
   /** Full text catalog for LLM context — all controls as a compact reference */
@@ -355,16 +382,49 @@ export function loadAllFrameworks(): ComplianceFramework[] {
     }
   }
 
+  // Deduplicate frameworks that share a name/slug (e.g. an ISO PDF and an ISO
+  // JSON). Prefer the deterministic one (carries CWE crosswalk / appliesTo data)
+  // so a hand-authored JSON supersedes a PDF parsed for LLM mapping.
+  const isDeterministic = (f: ComplianceFramework) =>
+    f.controls.some(
+      (c) => (c.cweMapping && c.cweMapping.length > 0) || c.appliesTo,
+    );
+  const slugOf = (name: string) =>
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  const bySlug = new Map<string, ComplianceFramework>();
+  for (const f of frameworks) {
+    const slug = slugOf(f.name);
+    const existing = bySlug.get(slug);
+    if (!existing) {
+      bySlug.set(slug, f);
+    } else if (!isDeterministic(existing) && isDeterministic(f)) {
+      logger.info(
+        { framework: f.name, superseded: existing.fileName, winner: f.fileName },
+        "Compliance framework deduplicated (deterministic wins)",
+      );
+      bySlug.set(slug, f);
+    } else {
+      logger.info(
+        { framework: f.name, dropped: f.fileName, kept: existing.fileName },
+        "Compliance framework deduplicated (duplicate dropped)",
+      );
+    }
+  }
+  const deduped = Array.from(bySlug.values());
+
   logger.info(
     {
-      frameworks: frameworks.length,
-      totalControls: frameworks.reduce((a, f) => a + f.controls.length, 0),
+      frameworks: deduped.length,
+      totalControls: deduped.reduce((a, f) => a + f.controls.length, 0),
     },
     "Compliance frameworks loaded",
   );
 
-  _frameworkCache = frameworks;
-  return frameworks;
+  _frameworkCache = deduped;
+  return deduped;
 }
 
 /** Clear the framework cache (e.g., after uploading new PDFs) */

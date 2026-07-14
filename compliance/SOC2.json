@@ -1,348 +1,44 @@
 {
   "name": "SOC 2 Type II",
+  "version": "TSC 2017 (rev. 2022)",
   "fileName": "SOC2.json",
+  "scopeNote": "SOC 2 evaluates the design and operating effectiveness of controls against the Trust Services Criteria. Most Common Criteria (CC1–CC5, CC7.3–CC7.5, CC9) are governance, risk, and operational controls evidenced by policy and process, not code. SAST/SCA provides direct evidence primarily for the logical-access (CC6) and change/vulnerability-management (CC7.1, CC8.1) criteria.",
   "controls": [
-    {
-      "controlId": "CC1.1",
-      "chunkId": "SOC2-CC1.1",
-      "type": "SOC2_TSC",
-      "theme": "Control Environment",
-      "title": "Demonstrate commitment to integrity and ethical values",
-      "summary": "The organization demonstrates a commitment to integrity and ethical values through its security policies, code of conduct, and management oversight.",
-      "implementationChecklist": [
-        "Establish and communicate a code of conduct",
-        "Define security policies and ensure management review",
-        "Implement whistleblower and ethics reporting mechanisms"
-      ],
-      "evidenceExamples": [
-        "Security policy documentation",
-        "Code of conduct acknowledgements",
-        "Ethics training completion records"
-      ]
-    },
-    {
-      "controlId": "CC2.1",
-      "chunkId": "SOC2-CC2.1",
-      "type": "SOC2_TSC",
-      "theme": "Communication and Information",
-      "title": "Communicate security objectives internally",
-      "summary": "The organization communicates its security objectives, policies, and standards to internal personnel to support the functioning of internal controls.",
-      "implementationChecklist": [
-        "Distribute security policies to all employees",
-        "Conduct regular security awareness training",
-        "Maintain internal security communication channels"
-      ],
-      "evidenceExamples": [
-        "Security awareness training completion records",
-        "Policy distribution acknowledgements",
-        "Internal security newsletters or bulletins"
-      ]
-    },
-    {
-      "controlId": "CC3.1",
-      "chunkId": "SOC2-CC3.1",
-      "type": "SOC2_TSC",
-      "theme": "Risk Assessment",
-      "title": "Identify and assess risks to security objectives",
-      "summary": "The organization specifies objectives with sufficient clarity to enable the identification and assessment of risks relating to its security commitments.",
-      "implementationChecklist": [
-        "Conduct annual risk assessments",
-        "Maintain a risk register with identified threats and vulnerabilities",
-        "Assess likelihood and impact of identified risks",
-        "Document risk treatment decisions"
-      ],
-      "evidenceExamples": [
-        "Risk assessment reports",
-        "Risk register with risk ratings",
-        "Risk treatment plans"
-      ]
-    },
-    {
-      "controlId": "CC3.2",
-      "chunkId": "SOC2-CC3.2",
-      "type": "SOC2_TSC",
-      "theme": "Risk Assessment",
-      "title": "Assess fraud risk",
-      "summary": "The organization considers the potential for fraud when assessing risks, including unauthorized access, manipulation of data, and misuse of assets.",
-      "implementationChecklist": [
-        "Include fraud scenarios in risk assessments",
-        "Implement separation of duties for critical functions",
-        "Monitor for indicators of fraudulent activity"
-      ],
-      "evidenceExamples": [
-        "Fraud risk assessment documentation",
-        "Separation of duties matrix",
-        "Fraud monitoring tool configurations"
-      ]
-    },
-    {
-      "controlId": "CC5.1",
-      "chunkId": "SOC2-CC5.1",
-      "type": "SOC2_TSC",
-      "theme": "Control Activities",
-      "title": "Select and develop control activities",
-      "summary": "The organization selects and develops control activities that contribute to the mitigation of risks to the achievement of security objectives.",
-      "implementationChecklist": [
-        "Map controls to identified risks",
-        "Implement detective, preventive, and corrective controls",
-        "Document control procedures and responsibilities"
-      ],
-      "evidenceExamples": [
-        "Control matrix mapping controls to risks",
-        "Control procedure documentation",
-        "Control testing results"
-      ]
-    },
-    {
-      "controlId": "CC6.1",
-      "chunkId": "SOC2-CC6.1",
-      "type": "SOC2_TSC",
-      "theme": "Logical and Physical Access Controls",
-      "title": "Implement logical access security",
-      "summary": "The organization implements logical access security software, infrastructure, and architectures to protect information assets against unauthorized access.",
-      "implementationChecklist": [
-        "Implement role-based access control (RBAC)",
-        "Enforce multi-factor authentication for privileged access",
-        "Use network segmentation and firewalls",
-        "Encrypt data at rest and in transit"
-      ],
-      "evidenceExamples": [
-        "Access control policy and RBAC configuration",
-        "MFA enrollment records",
-        "Network architecture diagrams",
-        "Encryption configuration evidence"
-      ]
-    },
-    {
-      "controlId": "CC6.2",
-      "chunkId": "SOC2-CC6.2",
-      "type": "SOC2_TSC",
-      "theme": "Logical and Physical Access Controls",
-      "title": "Manage credentials and authentication",
-      "summary": "The organization manages credentials for infrastructure and software, implementing password policies, key management, and credential rotation.",
-      "implementationChecklist": [
-        "Enforce strong password policies",
-        "Implement credential rotation schedules",
-        "Use secrets management tools (Vault, AWS Secrets Manager)",
-        "Disable default and shared accounts"
-      ],
-      "evidenceExamples": [
-        "Password policy configuration",
-        "Credential rotation logs",
-        "Secrets management tool configuration"
-      ]
-    },
-    {
-      "controlId": "CC6.3",
-      "chunkId": "SOC2-CC6.3",
-      "type": "SOC2_TSC",
-      "theme": "Logical and Physical Access Controls",
-      "title": "Authorize and manage access based on least privilege",
-      "summary": "The organization authorizes, modifies, and removes access to data and resources based on the principle of least privilege and role-based requirements.",
-      "implementationChecklist": [
-        "Implement least privilege access policies",
-        "Conduct quarterly access reviews",
-        "Implement automated deprovisioning on termination",
-        "Log and monitor access changes"
-      ],
-      "evidenceExamples": [
-        "Access review reports",
-        "User provisioning and deprovisioning records",
-        "Access change audit logs"
-      ]
-    },
-    {
-      "controlId": "CC6.6",
-      "chunkId": "SOC2-CC6.6",
-      "type": "SOC2_TSC",
-      "theme": "Logical and Physical Access Controls",
-      "title": "Restrict access to system boundaries",
-      "summary": "The organization restricts access at system boundaries, including network perimeters, DMZs, and API gateways, to authorized connections only.",
-      "implementationChecklist": [
-        "Configure firewalls and security groups",
-        "Implement API gateway authentication and rate limiting",
-        "Use web application firewalls (WAF)",
-        "Monitor and log boundary traffic"
-      ],
-      "evidenceExamples": [
-        "Firewall rule configurations",
-        "API gateway access policies",
-        "WAF configuration and block logs"
-      ]
-    },
-    {
-      "controlId": "CC6.8",
-      "chunkId": "SOC2-CC6.8",
-      "type": "SOC2_TSC",
-      "theme": "Logical and Physical Access Controls",
-      "title": "Prevent and detect unauthorized software",
-      "summary": "The organization implements controls to prevent or detect and act upon the introduction of unauthorized or malicious software.",
-      "implementationChecklist": [
-        "Deploy endpoint protection and anti-malware solutions",
-        "Implement application whitelisting where feasible",
-        "Scan dependencies for known vulnerabilities",
-        "Monitor for unauthorized software installations"
-      ],
-      "evidenceExamples": [
-        "Endpoint protection deployment records",
-        "SCA scan reports",
-        "Software inventory and approval records"
-      ]
-    },
-    {
-      "controlId": "CC7.1",
-      "chunkId": "SOC2-CC7.1",
-      "type": "SOC2_TSC",
-      "theme": "System Operations",
-      "title": "Detect and monitor security events",
-      "summary": "The organization uses detection and monitoring procedures to identify anomalies and security events that could indicate security incidents.",
-      "implementationChecklist": [
-        "Deploy SIEM or centralized logging",
-        "Configure alerts for security-relevant events",
-        "Implement intrusion detection systems",
-        "Monitor infrastructure and application logs"
-      ],
-      "evidenceExamples": [
-        "SIEM configuration and alert rules",
-        "IDS deployment records",
-        "Monitoring dashboard screenshots"
-      ]
-    },
-    {
-      "controlId": "CC7.2",
-      "chunkId": "SOC2-CC7.2",
-      "type": "SOC2_TSC",
-      "theme": "System Operations",
-      "title": "Monitor system components for anomalies",
-      "summary": "The organization monitors system components and the operation of those components for anomalies that are indicative of malicious acts or system failures.",
-      "implementationChecklist": [
-        "Implement infrastructure monitoring (CPU, memory, disk, network)",
-        "Configure application performance monitoring",
-        "Set baseline metrics and anomaly detection thresholds",
-        "Review monitoring alerts and escalate appropriately"
-      ],
-      "evidenceExamples": [
-        "Monitoring tool configuration",
-        "Anomaly detection alert history",
-        "Incident response escalation records"
-      ]
-    },
-    {
-      "controlId": "CC7.3",
-      "chunkId": "SOC2-CC7.3",
-      "type": "SOC2_TSC",
-      "theme": "System Operations",
-      "title": "Evaluate and respond to security events",
-      "summary": "The organization evaluates detected security events and determines whether they constitute security incidents requiring response.",
-      "implementationChecklist": [
-        "Define incident classification and severity levels",
-        "Establish incident response procedures and playbooks",
-        "Conduct incident response drills",
-        "Document and review incident response actions"
-      ],
-      "evidenceExamples": [
-        "Incident response plan",
-        "Incident response drill records",
-        "Post-incident review reports"
-      ]
-    },
-    {
-      "controlId": "CC8.1",
-      "chunkId": "SOC2-CC8.1",
-      "type": "SOC2_TSC",
-      "theme": "Change Management",
-      "title": "Manage changes to infrastructure and software",
-      "summary": "The organization authorizes, designs, develops, configures, documents, tests, approves, and implements changes to infrastructure and software.",
-      "implementationChecklist": [
-        "Implement change management process with approvals",
-        "Require code reviews for all production changes",
-        "Maintain separate development, staging, and production environments",
-        "Test changes before production deployment"
-      ],
-      "evidenceExamples": [
-        "Change management tickets and approvals",
-        "Code review records (pull request history)",
-        "Deployment pipeline configuration",
-        "Environment separation documentation"
-      ]
-    },
-    {
-      "controlId": "CC9.1",
-      "chunkId": "SOC2-CC9.1",
-      "type": "SOC2_TSC",
-      "theme": "Risk Mitigation",
-      "title": "Identify and manage vendor risk",
-      "summary": "The organization identifies, selects, and manages risks associated with vendors and business partners who have access to the organization's systems or data.",
-      "implementationChecklist": [
-        "Maintain a vendor inventory with risk classifications",
-        "Review vendor SOC 2 reports annually",
-        "Include security requirements in vendor contracts",
-        "Monitor vendor security posture"
-      ],
-      "evidenceExamples": [
-        "Vendor inventory and risk assessments",
-        "Vendor SOC 2 report reviews",
-        "Vendor contract security clauses"
-      ]
-    },
-    {
-      "controlId": "A1.1",
-      "chunkId": "SOC2-A1.1",
-      "type": "SOC2_TSC",
-      "theme": "Availability",
-      "title": "Maintain system availability commitments",
-      "summary": "The organization maintains, monitors, and evaluates current processing capacity and use of system components to manage capacity demand and enable the implementation of additional capacity.",
-      "implementationChecklist": [
-        "Define availability SLAs and SLOs",
-        "Implement auto-scaling for critical services",
-        "Conduct capacity planning reviews",
-        "Monitor uptime and availability metrics"
-      ],
-      "evidenceExamples": [
-        "SLA documentation",
-        "Uptime monitoring reports",
-        "Capacity planning documentation",
-        "Auto-scaling configuration"
-      ]
-    },
-    {
-      "controlId": "A1.2",
-      "chunkId": "SOC2-A1.2",
-      "type": "SOC2_TSC",
-      "theme": "Availability",
-      "title": "Implement disaster recovery and business continuity",
-      "summary": "The organization implements backup, recovery, and business continuity procedures to ensure system availability in the event of disruptions.",
-      "implementationChecklist": [
-        "Implement automated backup procedures",
-        "Test backup restoration regularly",
-        "Maintain a business continuity plan",
-        "Conduct disaster recovery drills annually"
-      ],
-      "evidenceExamples": [
-        "Backup configuration and schedules",
-        "Backup restoration test results",
-        "Business continuity plan",
-        "DR drill reports"
-      ]
-    },
-    {
-      "controlId": "PI1.1",
-      "chunkId": "SOC2-PI1.1",
-      "type": "SOC2_TSC",
-      "theme": "Processing Integrity",
-      "title": "Ensure processing completeness and accuracy",
-      "summary": "The organization implements policies and procedures over system processing to ensure completeness, validity, accuracy, and timeliness of outputs.",
-      "implementationChecklist": [
-        "Implement input validation and data integrity checks",
-        "Use checksums or hashes for data integrity verification",
-        "Monitor processing pipelines for errors",
-        "Implement reconciliation procedures"
-      ],
-      "evidenceExamples": [
-        "Data validation rules documentation",
-        "Processing error monitoring dashboards",
-        "Reconciliation reports"
-      ]
-    }
+    { "controlId": "CC1.1", "chunkId": "SOC2-CC1.1", "type": "SOC2_TSC", "theme": "Control Environment", "title": "Demonstrate commitment to integrity and ethical values", "summary": "The entity demonstrates a commitment to integrity and ethical values.", "coverage": "not-assessable", "implementationChecklist": ["Code of conduct and ethics reporting"], "evidenceExamples": ["Policy documentation, not SAST"] },
+    { "controlId": "CC1.2", "chunkId": "SOC2-CC1.2", "type": "SOC2_TSC", "theme": "Control Environment", "title": "Board independence and oversight", "summary": "The board of directors exercises oversight of the development and performance of internal control.", "coverage": "not-assessable", "implementationChecklist": ["Board oversight"], "evidenceExamples": ["Governance evidence, not SAST"] },
+    { "controlId": "CC1.3", "chunkId": "SOC2-CC1.3", "type": "SOC2_TSC", "theme": "Control Environment", "title": "Establish structure, authority, and responsibility", "summary": "Management establishes structures, reporting lines, and appropriate authorities and responsibilities.", "coverage": "not-assessable", "implementationChecklist": ["Org structure and responsibilities"], "evidenceExamples": ["Org documentation, not SAST"] },
+    { "controlId": "CC1.4", "chunkId": "SOC2-CC1.4", "type": "SOC2_TSC", "theme": "Control Environment", "title": "Commitment to competence", "summary": "The entity demonstrates a commitment to attract, develop, and retain competent individuals.", "coverage": "not-assessable", "implementationChecklist": ["Hiring and training"], "evidenceExamples": ["HR evidence, not SAST"] },
+    { "controlId": "CC1.5", "chunkId": "SOC2-CC1.5", "type": "SOC2_TSC", "theme": "Control Environment", "title": "Enforce accountability", "summary": "The entity holds individuals accountable for their internal control responsibilities.", "coverage": "not-assessable", "implementationChecklist": ["Accountability mechanisms"], "evidenceExamples": ["HR/policy evidence, not SAST"] },
+    { "controlId": "CC2.1", "chunkId": "SOC2-CC2.1", "type": "SOC2_TSC", "theme": "Communication and Information", "title": "Use relevant, quality information", "summary": "The entity obtains or generates and uses relevant, quality information to support internal control.", "coverage": "not-assessable", "implementationChecklist": ["Information quality processes"], "evidenceExamples": ["Process evidence, not SAST"] },
+    { "controlId": "CC2.2", "chunkId": "SOC2-CC2.2", "type": "SOC2_TSC", "theme": "Communication and Information", "title": "Communicate internally", "summary": "The entity internally communicates information necessary to support internal control.", "coverage": "not-assessable", "implementationChecklist": ["Internal communication"], "evidenceExamples": ["Communication evidence, not SAST"] },
+    { "controlId": "CC2.3", "chunkId": "SOC2-CC2.3", "type": "SOC2_TSC", "theme": "Communication and Information", "title": "Communicate externally", "summary": "The entity communicates with external parties regarding matters affecting internal control.", "coverage": "not-assessable", "implementationChecklist": ["External communication"], "evidenceExamples": ["Communication evidence, not SAST"] },
+    { "controlId": "CC3.1", "chunkId": "SOC2-CC3.1", "type": "SOC2_TSC", "theme": "Risk Assessment", "title": "Specify objectives to identify and assess risk", "summary": "The entity specifies objectives with sufficient clarity to enable identification and assessment of risks.", "coverage": "not-assessable", "implementationChecklist": ["Define objectives"], "evidenceExamples": ["Risk documentation, not SAST"] },
+    { "controlId": "CC3.2", "chunkId": "SOC2-CC3.2", "type": "SOC2_TSC", "theme": "Risk Assessment", "title": "Identify and analyze risk, including vulnerabilities", "summary": "The entity identifies risks, including from vulnerabilities in systems, and analyzes them as a basis for management.", "coverage": "partial", "appliesTo": {}, "implementationChecklist": ["Identify vulnerabilities as risk input"], "evidenceExamples": ["Vulnerability findings feeding the risk assessment"] },
+    { "controlId": "CC3.3", "chunkId": "SOC2-CC3.3", "type": "SOC2_TSC", "theme": "Risk Assessment", "title": "Consider potential for fraud", "summary": "The entity considers the potential for fraud in assessing risks.", "coverage": "not-assessable", "implementationChecklist": ["Fraud risk assessment"], "evidenceExamples": ["Risk documentation, not SAST"] },
+    { "controlId": "CC3.4", "chunkId": "SOC2-CC3.4", "type": "SOC2_TSC", "theme": "Risk Assessment", "title": "Identify and assess changes", "summary": "The entity identifies and assesses changes that could significantly impact internal control.", "coverage": "not-assessable", "implementationChecklist": ["Change risk assessment"], "evidenceExamples": ["Change management records, not SAST"] },
+    { "controlId": "CC4.1", "chunkId": "SOC2-CC4.1", "type": "SOC2_TSC", "theme": "Monitoring Activities", "title": "Perform ongoing and separate evaluations", "summary": "The entity selects, develops, and performs ongoing and/or separate evaluations of internal control.", "coverage": "partial", "appliesTo": { "scanners": ["SAST_PATTERN", "SAST_LLM", "DAST", "SCA", "ZERO_DAY"] }, "implementationChecklist": ["Ongoing security evaluations via scanning"], "evidenceExamples": ["Recurring scan evidence"] },
+    { "controlId": "CC4.2", "chunkId": "SOC2-CC4.2", "type": "SOC2_TSC", "theme": "Monitoring Activities", "title": "Evaluate and communicate deficiencies", "summary": "The entity evaluates and communicates internal control deficiencies in a timely manner.", "coverage": "not-assessable", "implementationChecklist": ["Deficiency reporting"], "evidenceExamples": ["Remediation tracking process, not SAST"] },
+    { "controlId": "CC5.1", "chunkId": "SOC2-CC5.1", "type": "SOC2_TSC", "theme": "Control Activities", "title": "Select and develop control activities", "summary": "The entity selects and develops control activities that mitigate risks to acceptable levels.", "coverage": "not-assessable", "implementationChecklist": ["Design control activities"], "evidenceExamples": ["Control design evidence, not SAST"] },
+    { "controlId": "CC5.2", "chunkId": "SOC2-CC5.2", "type": "SOC2_TSC", "theme": "Control Activities", "title": "Select and develop technology controls", "summary": "The entity selects and develops general control activities over technology.", "coverage": "partial", "appliesTo": { "scanners": ["SAST_PATTERN", "SAST_LLM"] }, "implementationChecklist": ["Technology general controls"], "evidenceExamples": ["Automated security controls in the pipeline"] },
+    { "controlId": "CC5.3", "chunkId": "SOC2-CC5.3", "type": "SOC2_TSC", "theme": "Control Activities", "title": "Deploy controls through policies and procedures", "summary": "The entity deploys control activities through policies and procedures.", "coverage": "not-assessable", "implementationChecklist": ["Policies and procedures"], "evidenceExamples": ["Policy documentation, not SAST"] },
+    { "controlId": "CC6.1", "chunkId": "SOC2-CC6.1", "type": "SOC2_TSC", "theme": "Logical and Physical Access Controls", "title": "Implement logical access security", "summary": "The entity implements logical access security software, infrastructure, and architectures to protect information assets.", "coverage": "assessable", "cweMapping": ["CWE-22", "CWE-284", "CWE-285", "CWE-639", "CWE-732", "CWE-862", "CWE-863", "CWE-918"], "implementationChecklist": ["RBAC", "Encrypt data at rest and in transit"], "evidenceExamples": ["Broken access control findings"] },
+    { "controlId": "CC6.2", "chunkId": "SOC2-CC6.2", "type": "SOC2_TSC", "theme": "Logical and Physical Access Controls", "title": "Manage credentials and registration", "summary": "The entity registers and authorizes new users, and manages credentials and authentication.", "coverage": "assessable", "cweMapping": ["CWE-259", "CWE-287", "CWE-306", "CWE-307", "CWE-321", "CWE-521", "CWE-798"], "appliesTo": { "scanners": ["SECRETS_PATTERN", "SECRETS_LLM"] }, "implementationChecklist": ["Strong authentication", "Protect credentials"], "evidenceExamples": ["Authentication / hard-coded credential findings"] },
+    { "controlId": "CC6.3", "chunkId": "SOC2-CC6.3", "type": "SOC2_TSC", "theme": "Logical and Physical Access Controls", "title": "Authorize access based on least privilege", "summary": "The entity authorizes, modifies, or removes access based on roles and least privilege.", "coverage": "assessable", "cweMapping": ["CWE-250", "CWE-269", "CWE-284", "CWE-285", "CWE-862", "CWE-863"], "implementationChecklist": ["Least privilege", "Timely deprovisioning"], "evidenceExamples": ["Privilege / authorization findings"] },
+    { "controlId": "CC6.4", "chunkId": "SOC2-CC6.4", "type": "SOC2_TSC", "theme": "Logical and Physical Access Controls", "title": "Restrict physical access", "summary": "The entity restricts physical access to facilities and protected information assets.", "coverage": "not-assessable", "implementationChecklist": ["Physical access controls"], "evidenceExamples": ["Facility evidence, not SAST"] },
+    { "controlId": "CC6.5", "chunkId": "SOC2-CC6.5", "type": "SOC2_TSC", "theme": "Logical and Physical Access Controls", "title": "Protect against unauthorized disposal", "summary": "The entity discontinues logical and physical protections over assets only after data is removed.", "coverage": "not-assessable", "implementationChecklist": ["Secure data disposal"], "evidenceExamples": ["Media disposal evidence, not SAST"] },
+    { "controlId": "CC6.6", "chunkId": "SOC2-CC6.6", "type": "SOC2_TSC", "theme": "Logical and Physical Access Controls", "title": "Restrict access at system boundaries", "summary": "The entity implements controls to protect against threats from sources outside its system boundaries.", "coverage": "assessable", "cweMapping": ["CWE-295", "CWE-319", "CWE-326", "CWE-327", "CWE-601", "CWE-918"], "implementationChecklist": ["Boundary protection", "TLS on external interfaces"], "evidenceExamples": ["SSRF / cleartext transmission findings"] },
+    { "controlId": "CC6.7", "chunkId": "SOC2-CC6.7", "type": "SOC2_TSC", "theme": "Logical and Physical Access Controls", "title": "Protect information during transmission and movement", "summary": "The entity restricts the transmission, movement, and removal of information and protects it during transit.", "coverage": "assessable", "cweMapping": ["CWE-311", "CWE-319", "CWE-327"], "implementationChecklist": ["Encrypt information in transit"], "evidenceExamples": ["Cleartext transmission findings"] },
+    { "controlId": "CC6.8", "chunkId": "SOC2-CC6.8", "type": "SOC2_TSC", "theme": "Logical and Physical Access Controls", "title": "Prevent and detect unauthorized or malicious software", "summary": "The entity implements controls to prevent or detect and act upon unauthorized or malicious software.", "coverage": "assessable", "cweMapping": ["CWE-94", "CWE-502", "CWE-829", "CWE-494"], "appliesTo": { "scanners": ["SCA", "MALICIOUS_PKG", "CONTAINER"] }, "implementationChecklist": ["Detect malicious/unauthorized software"], "evidenceExamples": ["Malicious package / integrity findings"] },
+    { "controlId": "CC7.1", "chunkId": "SOC2-CC7.1", "type": "SOC2_TSC", "theme": "System Operations", "title": "Detect vulnerabilities and monitor configuration", "summary": "The entity uses detection and monitoring procedures to identify changes to configurations and susceptibilities to newly discovered vulnerabilities.", "coverage": "assessable", "appliesTo": {}, "implementationChecklist": ["Continuously detect vulnerabilities"], "evidenceExamples": ["Any scanner finding"] },
+    { "controlId": "CC7.2", "chunkId": "SOC2-CC7.2", "type": "SOC2_TSC", "theme": "System Operations", "title": "Monitor system components for anomalies", "summary": "The entity monitors system components and the operation of controls for anomalies indicative of security events.", "coverage": "partial", "cweMapping": ["CWE-223", "CWE-532", "CWE-778"], "implementationChecklist": ["Security event logging and monitoring"], "evidenceExamples": ["Insufficient logging findings"] },
+    { "controlId": "CC7.3", "chunkId": "SOC2-CC7.3", "type": "SOC2_TSC", "theme": "System Operations", "title": "Evaluate security events", "summary": "The entity evaluates security events to determine whether they could result in a failure to meet objectives.", "coverage": "not-assessable", "implementationChecklist": ["Security event evaluation"], "evidenceExamples": ["IR process evidence, not SAST"] },
+    { "controlId": "CC7.4", "chunkId": "SOC2-CC7.4", "type": "SOC2_TSC", "theme": "System Operations", "title": "Respond to security incidents", "summary": "The entity responds to identified security incidents by executing a defined incident-response program.", "coverage": "not-assessable", "implementationChecklist": ["Incident response program"], "evidenceExamples": ["IR evidence, not SAST"] },
+    { "controlId": "CC7.5", "chunkId": "SOC2-CC7.5", "type": "SOC2_TSC", "theme": "System Operations", "title": "Recover from security incidents", "summary": "The entity identifies, develops, and implements activities to recover from security incidents.", "coverage": "not-assessable", "implementationChecklist": ["Recovery procedures"], "evidenceExamples": ["Recovery evidence, not SAST"] },
+    { "controlId": "CC8.1", "chunkId": "SOC2-CC8.1", "type": "SOC2_TSC", "theme": "Change Management", "title": "Manage changes to infrastructure and software", "summary": "The entity authorizes, designs, develops, tests, approves, and implements changes to infrastructure, data, software, and procedures.", "coverage": "assessable", "appliesTo": { "scanners": ["SAST_PATTERN", "SAST_LLM", "ZERO_DAY", "IAC"] }, "implementationChecklist": ["Test changes for security before release"], "evidenceExamples": ["SAST scans on changes / PRs"] },
+    { "controlId": "CC9.1", "chunkId": "SOC2-CC9.1", "type": "SOC2_TSC", "theme": "Risk Mitigation", "title": "Identify and mitigate business risk", "summary": "The entity identifies, selects, and develops risk-mitigation activities for risks arising from potential disruptions.", "coverage": "not-assessable", "implementationChecklist": ["Business risk mitigation"], "evidenceExamples": ["Risk/BC evidence, not SAST"] },
+    { "controlId": "CC9.2", "chunkId": "SOC2-CC9.2", "type": "SOC2_TSC", "theme": "Risk Mitigation", "title": "Manage vendor and business partner risk", "summary": "The entity assesses and manages risks associated with vendors and business partners, including their software components.", "coverage": "partial", "appliesTo": { "scanners": ["SCA", "MALICIOUS_PKG", "CONTAINER"] }, "implementationChecklist": ["Assess third-party component risk"], "evidenceExamples": ["SCA findings for third-party components"] },
+    { "controlId": "A1.1", "chunkId": "SOC2-A1.1", "type": "SOC2_TSC", "theme": "Availability", "title": "Maintain and monitor capacity", "summary": "The entity maintains, monitors, and evaluates current processing capacity to manage availability.", "coverage": "not-assessable", "implementationChecklist": ["Capacity monitoring"], "evidenceExamples": ["Ops monitoring evidence, not SAST"] },
+    { "controlId": "A1.2", "chunkId": "SOC2-A1.2", "type": "SOC2_TSC", "theme": "Availability", "title": "Implement recovery and backup", "summary": "The entity authorizes, designs, and implements environmental protections, backup, and recovery to meet availability objectives.", "coverage": "not-assessable", "implementationChecklist": ["Backup and DR"], "evidenceExamples": ["DR evidence, not SAST"] },
+    { "controlId": "PI1.1", "chunkId": "SOC2-PI1.1", "type": "SOC2_TSC", "theme": "Processing Integrity", "title": "Ensure processing completeness and accuracy", "summary": "The entity implements controls over inputs, processing, and outputs to meet processing integrity objectives.", "coverage": "partial", "cweMapping": ["CWE-20", "CWE-345", "CWE-502"], "implementationChecklist": ["Validate inputs and outputs", "Verify data integrity"], "evidenceExamples": ["Input validation / integrity findings"] }
   ]
 }

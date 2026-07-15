@@ -194,30 +194,45 @@ export async function autoVerifyFalsePositives(
     }
   }
 
-  // Recount severity totals after marking FPs
+  // Recount severity totals after marking FPs (using risk score-based bucketing)
   if (totalMarked > 0) {
-    const counts = await prisma.finding.groupBy({
-      by: ["severity"],
+    const keptFindings = await prisma.finding.findMany({
       where: { scanId, status: { not: "FALSE_POSITIVE" } },
-      _count: true,
+      select: { severity: true, confidence: true },
     });
 
-    const countMap: Record<string, number> = {};
-    for (const c of counts) {
-      countMap[c.severity] = c._count;
+    const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
+    for (const f of keptFindings) {
+      const riskScore = computeRiskScore(f.severity, f.confidence);
+      const bucket = getRiskBucket(riskScore);
+      counts[bucket]++;
     }
 
     await prisma.scan.update({
       where: { id: scanId },
       data: {
-        criticalCount: countMap["CRITICAL"] ?? 0,
-        highCount: countMap["HIGH"] ?? 0,
-        mediumCount: countMap["MEDIUM"] ?? 0,
-        lowCount: countMap["LOW"] ?? 0,
-        infoCount: countMap["INFO"] ?? 0,
+        criticalCount: counts.CRITICAL,
+        highCount: counts.HIGH,
+        mediumCount: counts.MEDIUM,
+        lowCount: counts.LOW,
+        infoCount: counts.INFO,
       },
     });
   }
 
   return { analyzed: findings.length, marked: totalMarked };
+}
+
+function computeRiskScore(severity: string, confidence: number | null): number {
+  const baseSeverityScore = { CRITICAL: 10, HIGH: 7, MEDIUM: 4, LOW: 2, INFO: 1 }[severity] || 1;
+  const conf = confidence ?? 0.8;
+  return baseSeverityScore * conf;
+}
+
+function getRiskBucket(riskScore: number): "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO" {
+  if (riskScore >= 8) return "CRITICAL";
+  if (riskScore >= 5) return "HIGH";
+  if (riskScore >= 3) return "MEDIUM";
+  if (riskScore >= 1.5) return "LOW";
+  return "INFO";
 }

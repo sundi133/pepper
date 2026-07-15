@@ -1029,9 +1029,25 @@ function enumerateFiles(dir: string, prefix = ""): string[] {
 function countSeverities(findings: RawFinding[]) {
   const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
   for (const f of findings) {
-    counts[f.severity]++;
+    const riskScore = computeRiskScore(f);
+    const bucket = getRiskBucket(riskScore);
+    counts[bucket]++;
   }
   return counts;
+}
+
+function computeRiskScore(finding: RawFinding): number {
+  const baseSeverityScore = { CRITICAL: 10, HIGH: 7, MEDIUM: 4, LOW: 2, INFO: 1 }[finding.severity] || 1;
+  const confidence = finding.confidence ?? 0.8;
+  return baseSeverityScore * confidence;
+}
+
+function getRiskBucket(riskScore: number): "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO" {
+  if (riskScore >= 8) return "CRITICAL";
+  if (riskScore >= 5) return "HIGH";
+  if (riskScore >= 3) return "MEDIUM";
+  if (riskScore >= 1.5) return "LOW";
+  return "INFO";
 }
 
 async function scanHasNewFindings(

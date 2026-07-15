@@ -1,0 +1,128 @@
+{
+  "name": "OWASP Top 10",
+  "version": "2021",
+  "fileName": "OWASP_Top10_2021.json",
+  "controls": [
+    {
+      "controlId": "A01:2021",
+      "chunkId": "OWASP-A01-2021",
+      "type": "OWASP_Top10_Category",
+      "theme": "OWASP Top 10",
+      "title": "Broken Access Control",
+      "summary": "Restrictions on what authenticated users are allowed to do are not properly enforced, enabling access to unauthorized functionality or data.",
+      "coverage": "assessable",
+      "cweMapping": ["CWE-22", "CWE-23", "CWE-35", "CWE-59", "CWE-200", "CWE-201", "CWE-264", "CWE-275", "CWE-276", "CWE-284", "CWE-285", "CWE-352", "CWE-359", "CWE-377", "CWE-425", "CWE-434", "CWE-497", "CWE-538", "CWE-552", "CWE-566", "CWE-601", "CWE-639", "CWE-651", "CWE-668", "CWE-706", "CWE-732", "CWE-862", "CWE-863", "CWE-913", "CWE-922", "CWE-1021", "CWE-1275"],
+      "implementationChecklist": ["Deny by default except for public resources", "Enforce access control server-side", "Enforce record ownership on every request"],
+      "evidenceExamples": ["IDOR / missing authorization findings", "Path traversal findings", "CSRF findings"]
+    },
+    {
+      "controlId": "A02:2021",
+      "chunkId": "OWASP-A02-2021",
+      "type": "OWASP_Top10_Category",
+      "theme": "OWASP Top 10",
+      "title": "Cryptographic Failures",
+      "summary": "Failures related to cryptography (or its absence) that lead to exposure of sensitive data in transit or at rest.",
+      "coverage": "assessable",
+      "cweMapping": ["CWE-261", "CWE-296", "CWE-310", "CWE-319", "CWE-321", "CWE-322", "CWE-323", "CWE-324", "CWE-325", "CWE-326", "CWE-327", "CWE-328", "CWE-329", "CWE-330", "CWE-331", "CWE-335", "CWE-336", "CWE-337", "CWE-338", "CWE-340", "CWE-347", "CWE-523", "CWE-720", "CWE-757", "CWE-759", "CWE-760", "CWE-780", "CWE-798", "CWE-818", "CWE-916"],
+      "implementationChecklist": ["Encrypt sensitive data in transit and at rest", "Use strong, current algorithms and key sizes", "Do not hard-code keys or secrets"],
+      "evidenceExamples": ["Weak hash / cipher findings", "Cleartext transmission findings", "Hard-coded credential findings"]
+    },
+    {
+      "controlId": "A03:2021",
+      "chunkId": "OWASP-A03-2021",
+      "type": "OWASP_Top10_Category",
+      "theme": "OWASP Top 10",
+      "title": "Injection",
+      "summary": "User-supplied data is not validated, filtered, or sanitized, allowing hostile data to be interpreted as code or commands.",
+      "coverage": "assessable",
+      "cweMapping": ["CWE-20", "CWE-74", "CWE-75", "CWE-77", "CWE-78", "CWE-79", "CWE-80", "CWE-83", "CWE-87", "CWE-88", "CWE-89", "CWE-90", "CWE-91", "CWE-93", "CWE-94", "CWE-95", "CWE-96", "CWE-97", "CWE-98", "CWE-99", "CWE-100", "CWE-113", "CWE-116", "CWE-138", "CWE-184", "CWE-470", "CWE-471", "CWE-564", "CWE-610", "CWE-643", "CWE-644", "CWE-652", "CWE-917", "CWE-1236", "CWE-1427"],
+      "implementationChecklist": ["Use safe parameterized APIs", "Validate and sanitize all input server-side", "Escape output for the correct interpreter context"],
+      "evidenceExamples": ["SQL / command / template injection findings", "XSS findings"]
+    },
+    {
+      "controlId": "A04:2021",
+      "chunkId": "OWASP-A04-2021",
+      "type": "OWASP_Top10_Category",
+      "theme": "OWASP Top 10",
+      "title": "Insecure Design",
+      "summary": "Missing or ineffective security controls by design — flaws that cannot be fixed by a perfect implementation.",
+      "coverage": "partial",
+      "cweMapping": ["CWE-73", "CWE-183", "CWE-209", "CWE-213", "CWE-235", "CWE-256", "CWE-257", "CWE-266", "CWE-269", "CWE-280", "CWE-311", "CWE-312", "CWE-313", "CWE-316", "CWE-419", "CWE-430", "CWE-434", "CWE-444", "CWE-451", "CWE-472", "CWE-501", "CWE-522", "CWE-525", "CWE-539", "CWE-602", "CWE-611", "CWE-642", "CWE-646", "CWE-650", "CWE-653", "CWE-656", "CWE-657", "CWE-665", "CWE-799", "CWE-807", "CWE-840", "CWE-841", "CWE-927", "CWE-1021", "CWE-1173", "CWE-1333"],
+      "implementationChecklist": ["Establish and use a secure development lifecycle", "Use threat modeling for critical flows", "Write unit and integration tests for security controls"],
+      "evidenceExamples": ["Unrestricted file upload findings", "Missing rate-limit / ReDoS findings"]
+    },
+    {
+      "controlId": "A05:2021",
+      "chunkId": "OWASP-A05-2021",
+      "type": "OWASP_Top10_Category",
+      "theme": "OWASP Top 10",
+      "title": "Security Misconfiguration",
+      "summary": "Insecure default configurations, incomplete setups, verbose errors, or misconfigured permissions across the stack.",
+      "coverage": "assessable",
+      "cweMapping": ["CWE-2", "CWE-11", "CWE-13", "CWE-15", "CWE-16", "CWE-260", "CWE-315", "CWE-400", "CWE-520", "CWE-526", "CWE-537", "CWE-541", "CWE-547", "CWE-611", "CWE-614", "CWE-668", "CWE-756", "CWE-770", "CWE-776", "CWE-942", "CWE-1004", "CWE-1032", "CWE-1174"],
+      "implementationChecklist": ["Harden all environments consistently", "Remove unused features and defaults", "Disable verbose error output in production"],
+      "evidenceExamples": ["XXE findings", "Insecure cookie flag findings", "Misconfiguration (IaC) findings"]
+    },
+    {
+      "controlId": "A06:2021",
+      "chunkId": "OWASP-A06-2021",
+      "type": "OWASP_Top10_Category",
+      "theme": "OWASP Top 10",
+      "title": "Vulnerable and Outdated Components",
+      "summary": "Use of components with known vulnerabilities or that are unsupported / out of date.",
+      "coverage": "assessable",
+      "cweMapping": ["CWE-937", "CWE-1035", "CWE-1104"],
+      "appliesTo": { "scanners": ["SCA", "MALICIOUS_PKG", "CONTAINER"] },
+      "implementationChecklist": ["Maintain an inventory of components and versions", "Continuously monitor for known vulnerabilities", "Patch or remove unsupported components"],
+      "evidenceExamples": ["SCA findings for vulnerable dependencies", "Malicious package findings"]
+    },
+    {
+      "controlId": "A07:2021",
+      "chunkId": "OWASP-A07-2021",
+      "type": "OWASP_Top10_Category",
+      "theme": "OWASP Top 10",
+      "title": "Identification and Authentication Failures",
+      "summary": "Weaknesses in confirming user identity, authentication, and session management.",
+      "coverage": "assessable",
+      "cweMapping": ["CWE-255", "CWE-259", "CWE-287", "CWE-288", "CWE-290", "CWE-294", "CWE-295", "CWE-297", "CWE-300", "CWE-302", "CWE-304", "CWE-306", "CWE-307", "CWE-346", "CWE-384", "CWE-521", "CWE-522", "CWE-613", "CWE-620", "CWE-640", "CWE-798", "CWE-940", "CWE-1216"],
+      "implementationChecklist": ["Enforce strong authentication and MFA where possible", "Invalidate sessions on logout and timeout", "Protect against credential stuffing and brute force"],
+      "evidenceExamples": ["Missing authentication findings", "Weak session / fixation findings"]
+    },
+    {
+      "controlId": "A08:2021",
+      "chunkId": "OWASP-A08-2021",
+      "type": "OWASP_Top10_Category",
+      "theme": "OWASP Top 10",
+      "title": "Software and Data Integrity Failures",
+      "summary": "Code and infrastructure that does not protect against integrity violations, including insecure deserialization and untrusted updates.",
+      "coverage": "assessable",
+      "cweMapping": ["CWE-345", "CWE-353", "CWE-357", "CWE-426", "CWE-427", "CWE-494", "CWE-502", "CWE-565", "CWE-784", "CWE-829", "CWE-830", "CWE-915", "CWE-1025"],
+      "implementationChecklist": ["Verify integrity of components and updates via signatures", "Avoid insecure deserialization of untrusted data", "Secure the CI/CD pipeline"],
+      "evidenceExamples": ["Insecure deserialization findings", "Untrusted include / dependency confusion findings"]
+    },
+    {
+      "controlId": "A09:2021",
+      "chunkId": "OWASP-A09-2021",
+      "type": "OWASP_Top10_Category",
+      "theme": "OWASP Top 10",
+      "title": "Security Logging and Monitoring Failures",
+      "summary": "Insufficient logging, detection, monitoring, and active response allows breaches to go unnoticed.",
+      "coverage": "partial",
+      "cweMapping": ["CWE-117", "CWE-209", "CWE-223", "CWE-532", "CWE-778"],
+      "implementationChecklist": ["Log security-relevant events with sufficient context", "Avoid logging sensitive data", "Ensure logs feed monitoring and alerting"],
+      "evidenceExamples": ["Sensitive data in logs findings", "Log injection findings"]
+    },
+    {
+      "controlId": "A10:2021",
+      "chunkId": "OWASP-A10-2021",
+      "type": "OWASP_Top10_Category",
+      "theme": "OWASP Top 10",
+      "title": "Server-Side Request Forgery (SSRF)",
+      "summary": "The application fetches a remote resource without validating the user-supplied URL, enabling requests to unintended destinations.",
+      "coverage": "assessable",
+      "cweMapping": ["CWE-918"],
+      "implementationChecklist": ["Validate and allow-list outbound URLs and schemes", "Do not send raw responses to clients", "Segment and restrict outbound network access"],
+      "evidenceExamples": ["SSRF findings"]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import { SCANNER_LABELS } from "./constants";
+import { getCweCategory, getOwasp2024Code } from "@/scanners/sast/owasp-mapper";
 
 // ─── Types ──────────────────────────────────────────────────────────
 type ScanData = {
@@ -102,69 +103,12 @@ function severityBgColor(sev: string): string {
   }
 }
 
-// ─── CWE → Category mapping ────────────────────────────────────────
-const CWE_CATEGORY_MAP: Record<string, string> = {
-  "CWE-79": "XSS",
-  "CWE-80": "XSS",
-  "CWE-87": "XSS",
-  "CWE-89": "Injection",
-  "CWE-90": "Injection",
-  "CWE-91": "Injection",
-  "CWE-94": "Injection",
-  "CWE-95": "Injection",
-  "CWE-78": "Injection",
-  "CWE-77": "Injection",
-  "CWE-76": "Injection",
-  "CWE-917": "Injection",
-  "CWE-22": "Path Traversal",
-  "CWE-23": "Path Traversal",
-  "CWE-36": "Path Traversal",
-  "CWE-73": "Path Traversal",
-  "CWE-200": "Info Disclosure",
-  "CWE-209": "Info Disclosure",
-  "CWE-532": "Info Disclosure",
-  "CWE-312": "Secrets",
-  "CWE-321": "Secrets",
-  "CWE-798": "Secrets",
-  "CWE-259": "Secrets",
-  "CWE-287": "Authentication",
-  "CWE-306": "Authentication",
-  "CWE-307": "Authentication",
-  "CWE-862": "Authorization",
-  "CWE-863": "Authorization",
-  "CWE-639": "Authorization",
-  "CWE-284": "Authorization",
-  "CWE-352": "CSRF",
-  "CWE-918": "SSRF",
-  "CWE-611": "XXE",
-  "CWE-502": "Deserialization",
-  "CWE-327": "Cryptography",
-  "CWE-328": "Cryptography",
-  "CWE-330": "Cryptography",
-  "CWE-916": "Cryptography",
-  "CWE-1321": "Prototype Pollution",
-  "CWE-400": "DoS",
-  "CWE-770": "DoS",
-  "CWE-1333": "ReDoS",
-};
-
-// CWE → OWASP Top 10 2021
-const CWE_OWASP_MAP: Record<string, string> = {
-  "CWE-89": "A03:2021", "CWE-78": "A03:2021", "CWE-77": "A03:2021",
-  "CWE-94": "A03:2021", "CWE-917": "A03:2021",
-  "CWE-79": "A03:2021", "CWE-80": "A03:2021",
-  "CWE-22": "A01:2021", "CWE-862": "A01:2021", "CWE-863": "A01:2021",
-  "CWE-639": "A01:2021", "CWE-284": "A01:2021",
-  "CWE-287": "A07:2021", "CWE-306": "A07:2021", "CWE-307": "A07:2021",
-  "CWE-327": "A02:2021", "CWE-328": "A02:2021", "CWE-916": "A02:2021",
-  "CWE-798": "A07:2021", "CWE-312": "A02:2021",
-  "CWE-611": "A05:2021", "CWE-918": "A10:2021",
-  "CWE-502": "A08:2021", "CWE-200": "A01:2021",
-  "CWE-352": "A01:2021",
-};
+// CWE → category and CWE → OWASP mappings live in the single shared source of
+// truth at @/scanners/sast/owasp-mapper (getCweCategory / getOwasp2024Code).
 
 function findingCategory(f: FindingData): string {
-  if (f.cweId && CWE_CATEGORY_MAP[f.cweId]) return CWE_CATEGORY_MAP[f.cweId];
+  const cat = getCweCategory(f.cweId);
+  if (cat) return cat;
   const s = f.scanner.toUpperCase();
   if (s.includes("SECRET")) return "Secrets";
   if (s === "SCA" || s === "MALICIOUS_PKG") return "Dependencies";
@@ -175,8 +119,7 @@ function findingCategory(f: FindingData): string {
 }
 
 function findingOwasp(f: FindingData): string | null {
-  if (f.cweId && CWE_OWASP_MAP[f.cweId]) return CWE_OWASP_MAP[f.cweId];
-  return null;
+  return getOwasp2024Code(f.cweId);
 }
 
 function scannerLabel(scanner: string): string {

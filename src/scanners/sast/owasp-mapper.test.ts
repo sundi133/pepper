@@ -3,6 +3,8 @@ import {
   getOwasp2024Category,
   getOwaspApiCategory,
   getOwaspLlmCategory,
+  getOwasp2024Code,
+  getCweCategory,
 } from "./owasp-mapper";
 
 describe("getOwaspLlmCategory", () => {
@@ -54,5 +56,30 @@ describe("getOwaspApiCategory", () => {
       "A01:2023 Broken Object Level Authorization",
     );
     expect(getOwaspApiCategory("CWE-284")).toBeNull();
+  });
+});
+
+// Consolidated shared helpers (Phase 5): the PDF report and any other consumer
+// use these instead of maintaining their own CWE tables.
+describe("getOwasp2024Code", () => {
+  it("returns the bare OWASP 2021 code, derived from the full category", () => {
+    expect(getOwasp2024Code("CWE-89")).toBe("A03:2021");
+    expect(getOwasp2024Code("CWE-918")).toBe("A10:2021");
+    expect(getOwasp2024Code("CWE-9999")).toBeNull();
+    expect(getOwasp2024Code(null)).toBeNull();
+  });
+  it("stays consistent with getOwasp2024Category", () => {
+    const full = getOwasp2024Category("CWE-79");
+    expect(full?.startsWith(getOwasp2024Code("CWE-79")!)).toBe(true);
+  });
+});
+
+describe("getCweCategory", () => {
+  it("returns a short human category label", () => {
+    expect(getCweCategory("CWE-89")).toBe("Injection");
+    expect(getCweCategory("CWE-79")).toBe("XSS");
+    expect(getCweCategory("CWE-798")).toBe("Secrets");
+    expect(getCweCategory("CWE-9999")).toBeNull();
+    expect(getCweCategory(null)).toBeNull();
   });
 });

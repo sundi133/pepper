@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import {
@@ -39,7 +39,6 @@ import {
   Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import { toast } from "sonner";
 import { jsonFetcher } from "@/lib/fetcher";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 
@@ -125,6 +124,14 @@ interface FrameworkReport {
   findings: FindingMapping[];
 }
 
+interface AvailableFramework {
+  name: string;
+  slug: string;
+  version: string | null;
+  controls: number;
+  deterministic: boolean;
+}
+
 function csvEscape(value: string | number | null | undefined): string {
   const stringValue = value == null ? "" : String(value);
   return `"${stringValue.replace(/"/g, '""')}"`;
@@ -134,77 +141,141 @@ export default function ComplianceReportPage() {
   const params = useParams();
   const scanId = params.scanId as string;
   const [mode, setMode] = useState<"deep" | "fast">("deep");
-  const { data, isLoading, error, mutate } = useSWR(
-    `/api/scans/${scanId}/compliance?mode=${mode}`,
+  const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
+  const [committedSlugs, setCommittedSlugs] = useState<string[]>([]);
+
+  // Cheap framework catalog — lists frameworks WITHOUT running any mapping.
+  const { data: listData } = useSWR(
+    `/api/scans/${scanId}/compliance?list=1`,
     jsonFetcher,
+    { revalidateOnFocus: false },
   );
+  const availableFrameworks: AvailableFramework[] =
+    listData?.availableFrameworks || [];
+
   const { data: scanMeta } = useSWR(`/api/scans/${scanId}`, jsonFetcher, {
     revalidateOnFocus: false,
   });
-  const [selectedFrameworks, setSelectedFrameworks] = useState<string[]>([]);
-  const reports: FrameworkReport[] = data?.reports || [];
-  const frameworkNames = reports.map((report) => report.framework);
-  const activeFrameworks =
-    selectedFrameworks.length === 0
-      ? frameworkNames
-      : selectedFrameworks.filter((name) => frameworkNames.includes(name));
+
+  // Streaming state: the report is built live over Server-Sent Events so the
+  // user sees each agent action as it happens.
+  const [streaming, setStreaming] = useState(false);
+  const [progressLog, setProgressLog] = useState<
+    { framework?: string; message: string }[]
+  >([]);
+  const [streamedReports, setStreamedReports] = useState<FrameworkReport[]>([]);
+  const [streamMeta, setStreamMeta] = useState<{
+    mode?: string;
+    commitSha?: string | null;
+    generatedAt?: string;
+    totalFindings?: number;
+  } | null>(null);
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const esRef = useRef<EventSource | null>(null);
+  const logEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => () => esRef.current?.close(), []);
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ block: "end" });
+  }, [progressLog]);
+
+  function runStream(slugs: string[], m: "deep" | "fast") {
+    if (slugs.length === 0) return;
+    esRef.current?.close();
+    setStreaming(true);
+    setProgressLog([]);
+    setStreamedReports([]);
+    setStreamMeta(null);
+    setStreamError(null);
+    const es = new EventSource(
+      `/api/scans/${scanId}/compliance/stream?mode=${m}&frameworks=${slugs.join(",")}`,
+    );
+    esRef.current = es;
+    es.addEventListener("start", (e) => {
+      const d = JSON.parse((e as MessageEvent).data);
+      setProgressLog((l) => [
+        ...l,
+        {
+          message: `Assessing ${d.frameworks.length} framework(s) against ${d.totalFindings} findings…`,
+        },
+      ]);
+    });
+    es.addEventListener("progress", (e) => {
+      const d = JSON.parse((e as MessageEvent).data);
+      setProgressLog((l) => [...l, { framework: d.framework, message: d.message }]);
+    });
+    es.addEventListener("framework", (e) => {
+      const r = JSON.parse((e as MessageEvent).data) as FrameworkReport;
+      setStreamedReports((prev) => [...prev, r]);
+    });
+    es.addEventListener("done", (e) => {
+      setStreamMeta(JSON.parse((e as MessageEvent).data));
+      setStreaming(false);
+      es.close();
+      esRef.current = null;
+    });
+    es.addEventListener("error", (e) => {
+      const md = (e as MessageEvent).data;
+      let msg = "Connection lost";
+      if (md) {
+        try {
+          msg = JSON.parse(md).message || msg;
+        } catch {
+          /* keep default */
+        }
+      }
+      setStreamError(msg);
+      setStreaming(false);
+      es.close();
+      esRef.current = null;
+    });
+  }
 
   async function handleRegenerate() {
     try {
       await fetch(`/api/scans/${scanId}/compliance`, { method: "DELETE" });
-      toast.success("Cache cleared — regenerating report...");
-      mutate();
     } catch {
-      toast.error("Failed to regenerate");
+      /* cache clear is best-effort */
     }
+    runStream(committedSlugs, mode);
   }
 
-  const complianceShellCrumbs = [
-    { label: "Dashboard", href: "/dashboard" },
-    { label: "Projects", href: "/projects" },
-    { label: "Scan", href: `/scans/${scanId}` },
-    { label: "Compliance" },
-  ];
-
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <PageBreadcrumb items={complianceShellCrumbs} />
-        <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">
-            Generating compliance report using AI...
-          </p>
-          <p className="text-xs text-muted-foreground">
-            This may take 30-60 seconds for large scans
-          </p>
-        </div>
-      </div>
+  function toggleSlug(slug: string, checked: boolean) {
+    setSelectedSlugs((cur) =>
+      checked
+        ? Array.from(new Set([...cur, slug]))
+        : cur.filter((s) => s !== slug),
     );
   }
 
-  if (error || !data || data.error) {
-    return (
-      <div className="space-y-6">
-        <PageBreadcrumb items={complianceShellCrumbs} />
-        <div className="text-center py-12 space-y-4">
-          <p className="text-destructive">
-            {data?.error || "Failed to load compliance report"}
-          </p>
-          <Link href={`/scans/${scanId}`}>
-            <Button variant="outline">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Scan
-            </Button>
-          </Link>
-        </div>
-      </div>
-    );
+  function selectAllSlugs() {
+    setSelectedSlugs(availableFrameworks.map((f) => f.slug));
   }
 
-  const visibleReports = reports.filter((report) =>
-    activeFrameworks.includes(report.framework),
-  );
+  function handleGenerate() {
+    if (selectedSlugs.length === 0) return;
+    setCommittedSlugs(selectedSlugs);
+    runStream(selectedSlugs, mode);
+  }
+
+  function switchMode(m: "deep" | "fast") {
+    setMode(m);
+    if (committedSlugs.length > 0) runStream(committedSlugs, m);
+  }
+
+  // Derived view state, mirroring the previous SWR shape.
+  const data =
+    streamMeta || streamedReports.length
+      ? { ...(streamMeta || {}), reports: streamedReports }
+      : null;
+  const isLoading = streaming;
+  const error = streamError;
+  const reports: FrameworkReport[] = streamedReports;
+  const hasGenerated = committedSlugs.length > 0;
+
+  // With pick-then-run, the whole page never blocks on generation — the report
+  // section below switches between idle / loading / error / results.
+  const visibleReports = reports;
 
   const project = scanMeta?.project as
     | { id?: string; name?: string }
@@ -223,18 +294,6 @@ export default function ComplianceReportPage() {
     },
     { label: "Compliance" },
   ];
-
-  function toggleFramework(framework: string, checked: boolean) {
-    setSelectedFrameworks((current) => {
-      const selected = current.length === 0 ? frameworkNames : current;
-      if (checked) {
-        return selected.includes(framework) ? selected : [...selected, framework];
-      }
-
-      if (selected.length === 1) return selected;
-      return selected.filter((name) => name !== framework);
-    });
-  }
 
   function handleExportCsv() {
     const lines = [
@@ -336,7 +395,7 @@ export default function ComplianceReportPage() {
               Compliance Report
             </h1>
           </div>
-          {data.generatedAt && (
+          {data?.generatedAt && (
             <p className="text-xs text-muted-foreground ml-[72px]">
               Generated: {new Date(data.generatedAt).toLocaleString()}
             </p>
@@ -346,8 +405,9 @@ export default function ComplianceReportPage() {
           <div className="flex items-center rounded-md border p-0.5" role="group" aria-label="Mapping mode">
             <button
               type="button"
-              onClick={() => setMode("deep")}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+              onClick={() => switchMode("deep")}
+              disabled={streaming}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
                 mode === "deep"
                   ? "bg-purple-600 text-white"
                   : "text-muted-foreground hover:text-foreground"
@@ -358,8 +418,9 @@ export default function ComplianceReportPage() {
             </button>
             <button
               type="button"
-              onClick={() => setMode("fast")}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+              onClick={() => switchMode("fast")}
+              disabled={streaming}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
                 mode === "fast"
                   ? "bg-green-600 text-white"
                   : "text-muted-foreground hover:text-foreground"
@@ -369,73 +430,180 @@ export default function ComplianceReportPage() {
               Fast
             </button>
           </div>
-          <Button variant="outline" size="sm" onClick={handleRegenerate}>
-            <RefreshCw className="mr-2 h-3.5 w-3.5" />
-            Regenerate
-          </Button>
-          <Button variant="outline" onClick={handleExportCsv}>
-            <Download className="mr-2 h-4 w-4" />
-            Export CSV
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              const json = JSON.stringify(data, null, 2);
-              const blob = new Blob([json], { type: "application/json" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `compliance-${scanId.slice(0, 8)}.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Export JSON
-          </Button>
+          {data && !streaming && (
+            <>
+              <Button variant="outline" size="sm" onClick={handleRegenerate}>
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                Regenerate
+              </Button>
+              <Button variant="outline" onClick={handleExportCsv}>
+                <Download className="mr-2 h-4 w-4" />
+                Export CSV
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const json = JSON.stringify(data, null, 2);
+                  const blob = new Blob([json], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `compliance-${scanId.slice(0, 8)}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Export JSON
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Frameworks</CardTitle>
+          <CardTitle>Select frameworks to run</CardTitle>
           <CardDescription>
-            Select one or more frameworks to display in this report.
+            Pick which frameworks to assess this scan against. Only the selected
+            frameworks are mapped — nothing runs until you click Generate.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setSelectedFrameworks(frameworkNames)}
-              disabled={frameworkNames.length === activeFrameworks.length}
+              onClick={selectAllSlugs}
+              disabled={selectedSlugs.length === availableFrameworks.length}
             >
-              Select All
+              Select all
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedSlugs([])}
+              disabled={selectedSlugs.length === 0}
+            >
+              Clear
             </Button>
             <span className="text-sm text-muted-foreground self-center">
-              Showing {visibleReports.length} of {reports.length} frameworks
+              {selectedSlugs.length} selected
             </span>
           </div>
-          <div className="flex flex-wrap gap-4">
-            {reports.map((report) => (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {availableFrameworks.map((fw) => (
               <label
-                key={report.framework}
-                className="flex items-center gap-3 rounded-md border px-3 py-2 text-sm"
+                key={fw.slug}
+                className="flex items-start gap-3 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-accent/50"
               >
                 <Checkbox
-                  checked={activeFrameworks.includes(report.framework)}
+                  className="mt-0.5"
+                  checked={selectedSlugs.includes(fw.slug)}
                   onCheckedChange={(checked) =>
-                    toggleFramework(report.framework, checked === true)
+                    toggleSlug(fw.slug, checked === true)
                   }
                 />
-                <span className="font-medium">{report.framework}</span>
-                <Badge variant="outline">{report.impactedControls} impacted</Badge>
+                <span className="space-y-0.5">
+                  <span className="font-medium block">{fw.name}</span>
+                  <span className="flex flex-wrap items-center gap-1">
+                    {fw.version && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {fw.version}
+                      </Badge>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {fw.controls} controls
+                    </span>
+                  </span>
+                </span>
               </label>
             ))}
+            {availableFrameworks.length === 0 && (
+              <span className="text-sm text-muted-foreground">
+                Loading frameworks…
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 pt-1">
+            <Button
+              onClick={handleGenerate}
+              disabled={selectedSlugs.length === 0 || isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <ShieldCheck className="mr-2 h-4 w-4" />
+              )}
+              {hasGenerated ? "Regenerate for selection" : "Generate report"}
+              {selectedSlugs.length > 0 ? ` (${selectedSlugs.length})` : ""}
+            </Button>
+            {mode === "deep" && (
+              <span className="text-xs text-muted-foreground">
+                Agentic mode runs the LLM per framework — pick only what you need.
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>
+
+      {/* Result states */}
+      {!hasGenerated && (
+        <div className="text-center py-16 text-muted-foreground">
+          <ShieldCheck className="h-8 w-8 mx-auto mb-3 opacity-50" />
+          <p>Select one or more frameworks above and click Generate.</p>
+        </div>
+      )}
+      {/* Live agent activity log */}
+      {(streaming || progressLog.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              {streaming ? (
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              ) : (
+                <ShieldCheck className="h-4 w-4 text-green-600" />
+              )}
+              {streaming ? "Agents working…" : "Run complete"}
+            </CardTitle>
+            <CardDescription>
+              {mode === "deep"
+                ? "Grounding findings, reasoning about controls, and verifying each mapping."
+                : "Deterministic CWE crosswalk."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-56 overflow-y-auto rounded-md bg-muted/40 p-3 font-mono text-xs leading-relaxed">
+              {progressLog.map((entry, i) => (
+                <div key={i} className="flex gap-2">
+                  {entry.framework && (
+                    <span className="text-muted-foreground shrink-0">
+                      [{entry.framework}]
+                    </span>
+                  )}
+                  <span>{entry.message}</span>
+                </div>
+              ))}
+              <div ref={logEndRef} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {error && (
+        <div className="text-center py-12 space-y-3">
+          <p className="text-destructive">
+            {error || "Failed to generate compliance report"}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => runStream(committedSlugs, mode)}
+          >
+            <RefreshCw className="mr-2 h-3.5 w-3.5" />
+            Retry
+          </Button>
+        </div>
+      )}
 
       {visibleReports.map((report) => (
         <div key={report.framework} className="space-y-6">

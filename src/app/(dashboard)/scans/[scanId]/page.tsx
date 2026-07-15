@@ -496,8 +496,8 @@ export default function ScanDetailPage() {
               </Button>
               {scan.status === "COMPLETED" && (
                 <Button
-                  variant="default"
-                  className="font-semibold shadow-md hover:shadow-lg bg-primary hover:bg-primary/90 dark:bg-primary dark:hover:bg-primary/80 transition-all duration-200"
+                  variant="outline"
+                  className={scanToolbarOutlineClass}
                   onClick={() => router.push(`/scans/${scanId}/compliance`)}
                 >
                   <BookOpen className="mr-2 h-4 w-4" />

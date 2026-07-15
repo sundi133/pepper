@@ -82,7 +82,6 @@ export async function POST(req: NextRequest) {
       repoUrl,
       branch,
       orgSettings: buildOrgSettingsForJob(settings, project.organizationId),
-      dastTargetUrl: project.dastTargetUrl || undefined,
       buildGate: project.buildGate
         ? {
             maxCritical: project.buildGate.maxCritical,

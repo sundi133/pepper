@@ -18,7 +18,6 @@ export function getScanners(
   orgSettings: {
     enableLlmSast: boolean;
     enableLlmSecrets: boolean;
-    dastEnabled?: boolean;
   },
 ): ScannerPlugin[] {
   const scanners: ScannerPlugin[] = [];

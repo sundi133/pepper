@@ -114,7 +114,6 @@ function findingCategory(f: FindingData): string {
   if (s === "SCA" || s === "MALICIOUS_PKG") return "Dependencies";
   if (s === "IAC") return "IaC Misconfiguration";
   if (s === "CONTAINER") return "Container";
-  if (s === "DAST") return "DAST";
   return "Other";
 }
 

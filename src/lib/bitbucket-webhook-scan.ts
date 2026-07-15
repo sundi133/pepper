@@ -98,7 +98,6 @@ export async function queueBitbucketWebhookScan(params: {
       settings,
       params.project.organizationId,
     ),
-    dastTargetUrl: params.project.dastTargetUrl || undefined,
     buildGate: params.project.buildGate
       ? {
           maxCritical: params.project.buildGate.maxCritical,

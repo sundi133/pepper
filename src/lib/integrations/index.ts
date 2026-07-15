@@ -113,8 +113,6 @@ function defaultNameFor(data: IntegrationConfigData): string {
       return `Slack (${(data.config as SlackConfig).channel || "default"})`;
     case "SIEM":
       return `SIEM (${(data.config as SiemConfig).format.toUpperCase()})`;
-    case "DAST":
-      return `Dapper (${new URL((data.config as DapperIntegrationConfig).endpoint).host})`;
     case "WEBHOOK": {
       const wh = data.config as WebhookConfig;
       try {

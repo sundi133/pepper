@@ -7,7 +7,6 @@ const TYPE_TO_PATH: Record<string, string> = {
   SBOM_CYCLONEDX: "cyclonedx",
   SBOM_SPDX: "spdx",
   CONTAINER_REPORT: "container",
-  DAST_REPORT: "dast",
   SARIF: "sarif",
   SIGNATURE: "signature",
 };

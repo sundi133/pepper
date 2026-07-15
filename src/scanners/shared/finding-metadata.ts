@@ -32,8 +32,6 @@ export interface FindingMetadata {
   exposedAsset?: string;
   environment?: string;
   findingLayer?: string;
-  /** DAST */
-  url?: string;
   /** Dedupe helpers */
   duplicateGroup?: string;
   [key: string]: unknown;

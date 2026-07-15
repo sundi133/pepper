@@ -8,7 +8,6 @@ type ArtifactKind =
   | "SBOM_CYCLONEDX"
   | "SBOM_SPDX"
   | "CONTAINER_REPORT"
-  | "DAST_REPORT"
   | "SARIF"
   | "SIGNATURE";
 
@@ -45,11 +44,6 @@ const TYPE_MAP: Record<
     type: "CONTAINER_REPORT",
     contentType: "application/json",
     filename: "container-report.json",
-  },
-  dast: {
-    type: "DAST_REPORT",
-    contentType: "application/json",
-    filename: "dast-report.json",
   },
   sarif: {
     type: "SARIF",

@@ -2,7 +2,6 @@ export type IntegrationKind =
   | "JIRA"
   | "SLACK"
   | "SIEM"
-  | "DAST"
   | "CODE_SIGNING"
   | "WEBHOOK";
 
@@ -32,11 +31,6 @@ export interface SiemConfig {
   /** Either an HTTPS endpoint (will POST JSON) or a syslog target host:port. */
   endpoint: string;
   format: "cef" | "leef" | "json";
-  apiKey?: string;
-}
-
-export interface DapperIntegrationConfig {
-  endpoint: string;
   apiKey?: string;
 }
 
@@ -74,5 +68,4 @@ export type IntegrationConfigData =
   | { kind: "JIRA"; config: JiraConfig }
   | { kind: "SLACK"; config: SlackConfig }
   | { kind: "SIEM"; config: SiemConfig }
-  | { kind: "DAST"; config: DapperIntegrationConfig }
   | { kind: "WEBHOOK"; config: WebhookConfig };

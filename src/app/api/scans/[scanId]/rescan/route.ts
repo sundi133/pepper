@@ -124,7 +124,6 @@ export async function POST(
     svnUrl: sourceType === "SVN_CHECKOUT" ? originalScan.sourceRef : undefined,
     branch,
     orgSettings: buildOrgSettingsForJob(orgSettings, orgId),
-    dastTargetUrl: originalScan.project.dastTargetUrl || undefined,
     buildGate: originalScan.project.buildGate
       ? {
           maxCritical: originalScan.project.buildGate.maxCritical,

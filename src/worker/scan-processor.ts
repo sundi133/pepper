@@ -486,10 +486,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
       scaFileList,
       scanType,
       scanId,
-      orgSettings: {
-        ...orgSettings,
-        dastTargetUrl: job.data.dastTargetUrl || orgSettings.dastTargetUrl,
-      },
+      orgSettings,
       signal: abortController.signal,
       waitIfPaused: assertScanActive,
       onProgress: async (msg) => {
@@ -567,32 +564,6 @@ export async function processScanJob(job: Job<ScanJobData>) {
       { findings: result.findings.length, deps: result.depsScanned },
       "Scan complete",
     );
-
-    // Persist DAST report bundle if the scanner wrote one into the workDir.
-    try {
-      const dastReportPath = path.join(workDir, "deliverables", "dast-report.json");
-      if (fs.existsSync(dastReportPath)) {
-        const dastReport = fs.readFileSync(dastReportPath, "utf8");
-        const dastKey = `dast-reports/${scanId}/dast-report.json`;
-        await uploadObject(dastKey, dastReport, "application/json");
-        await prisma.scanArtifact.upsert({
-          where: { scanId_type: { scanId, type: "DAST_REPORT" } },
-          create: {
-            scanId,
-            type: "DAST_REPORT",
-            objectKey: dastKey,
-            size: Buffer.byteLength(dastReport),
-          },
-          update: {
-            objectKey: dastKey,
-            size: Buffer.byteLength(dastReport),
-          },
-        });
-        log.info({ dastKey }, "DAST report bundle uploaded");
-      }
-    } catch (dastReportErr) {
-      log.warn({ dastReportErr }, "DAST report upload failed (non-blocking)");
-    }
 
     // 5. Generate SBOMs (CycloneDX + SPDX) from parsed dependencies
     if (result.dependencies.length > 0) {

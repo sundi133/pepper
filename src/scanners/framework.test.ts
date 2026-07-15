@@ -146,7 +146,7 @@ describe("scanner framework", () => {
     expect(gated).toHaveLength(0);
   });
 
-  it("DAST evidence is redacted", () => {
+  it("HTTP evidence is redacted", () => {
     const raw =
       "Authorization: Bearer secret-token-12345\nCookie: session=abc";
     const redacted = redactSensitiveText(raw);

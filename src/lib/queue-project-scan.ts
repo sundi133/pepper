@@ -59,7 +59,6 @@ export async function queueProjectScan(params: {
     useOrgBitbucketToken: params.useOrgBitbucketToken ?? false,
     useOrgAzureDevOpsToken: params.useOrgAzureDevOpsToken ?? false,
     orgSettings: buildOrgSettingsForJob(orgSettings, params.organizationId),
-    dastTargetUrl: project.dastTargetUrl || undefined,
     buildGate: project.buildGate
       ? {
           maxCritical: project.buildGate.maxCritical,

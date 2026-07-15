@@ -10,6 +10,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -153,6 +160,16 @@ export default function ComplianceReportPage() {
   const availableFrameworks: AvailableFramework[] =
     listData?.availableFrameworks || [];
 
+  // Models available for the org's configured LLM provider (deep mode only).
+  const { data: modelsData } = useSWR(`/api/llm/models`, jsonFetcher, {
+    revalidateOnFocus: false,
+  });
+  const availableModels: string[] = modelsData?.models || [];
+  const providerDefaultModel: string | null = modelsData?.defaultModel || null;
+  // "" = user hasn't picked one → fall back to the provider default.
+  const [model, setModel] = useState<string>("");
+  const effectiveModel = model || providerDefaultModel || "";
+
   const { data: scanMeta } = useSWR(`/api/scans/${scanId}`, jsonFetcher, {
     revalidateOnFocus: false,
   });
@@ -179,7 +196,7 @@ export default function ComplianceReportPage() {
     logEndRef.current?.scrollIntoView({ block: "end" });
   }, [progressLog]);
 
-  function runStream(slugs: string[], m: "deep" | "fast") {
+  function runStream(slugs: string[], m: "deep" | "fast", mdl?: string) {
     if (slugs.length === 0) return;
     esRef.current?.close();
     setStreaming(true);
@@ -187,8 +204,11 @@ export default function ComplianceReportPage() {
     setStreamedReports([]);
     setStreamMeta(null);
     setStreamError(null);
+    // The model override only applies to agentic (deep) mode.
+    const modelParam =
+      m === "deep" && mdl ? `&model=${encodeURIComponent(mdl)}` : "";
     const es = new EventSource(
-      `/api/scans/${scanId}/compliance/stream?mode=${m}&frameworks=${slugs.join(",")}`,
+      `/api/scans/${scanId}/compliance/stream?mode=${m}&frameworks=${slugs.join(",")}${modelParam}`,
     );
     esRef.current = es;
     es.addEventListener("start", (e) => {
@@ -196,7 +216,10 @@ export default function ComplianceReportPage() {
       setProgressLog((l) => [
         ...l,
         {
-          message: `Assessing ${d.frameworks.length} framework(s) against ${d.totalFindings} findings…`,
+          message:
+            `Assessing ${d.frameworks.length} framework(s) against ${d.totalFindings} findings` +
+            (d.model ? ` using ${d.model}` : "") +
+            "…",
         },
       ]);
     });
@@ -237,7 +260,7 @@ export default function ComplianceReportPage() {
     } catch {
       /* cache clear is best-effort */
     }
-    runStream(committedSlugs, mode);
+    runStream(committedSlugs, mode, effectiveModel);
   }
 
   function toggleSlug(slug: string, checked: boolean) {
@@ -255,12 +278,18 @@ export default function ComplianceReportPage() {
   function handleGenerate() {
     if (selectedSlugs.length === 0) return;
     setCommittedSlugs(selectedSlugs);
-    runStream(selectedSlugs, mode);
+    runStream(selectedSlugs, mode, effectiveModel);
   }
 
   function switchMode(m: "deep" | "fast") {
     setMode(m);
-    if (committedSlugs.length > 0) runStream(committedSlugs, m);
+    if (committedSlugs.length > 0) runStream(committedSlugs, m, effectiveModel);
+  }
+
+  function switchModel(mdl: string) {
+    setModel(mdl);
+    if (committedSlugs.length > 0 && mode === "deep")
+      runStream(committedSlugs, mode, mdl);
   }
 
   // Derived view state, mirroring the previous SWR shape.
@@ -430,6 +459,24 @@ export default function ComplianceReportPage() {
               Fast
             </button>
           </div>
+          {mode === "deep" && availableModels.length > 0 && (
+            <Select value={effectiveModel} onValueChange={switchModel} disabled={streaming}>
+              <SelectTrigger
+                className="h-8 w-[190px] text-xs"
+                title="LLM model used for agentic compliance mapping"
+              >
+                <SelectValue placeholder="Model" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableModels.map((m) => (
+                  <SelectItem key={m} value={m} className="text-xs">
+                    {m}
+                    {m === providerDefaultModel ? " (default)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           {data && !streaming && (
             <>
               <Button variant="outline" size="sm" onClick={handleRegenerate}>
@@ -597,7 +644,7 @@ export default function ComplianceReportPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => runStream(committedSlugs, mode)}
+            onClick={() => runStream(committedSlugs, mode, effectiveModel)}
           >
             <RefreshCw className="mr-2 h-3.5 w-3.5" />
             Retry

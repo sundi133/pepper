@@ -1,174 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { loadAllFrameworks } from "@/lib/compliance/pdf-parser";
+import { hasDeterministicMapping } from "@/lib/compliance/crosswalk-mapper";
+import { FindingForMapping } from "@/lib/compliance/llm-mapper";
 import {
-  loadAllFrameworks,
-  ComplianceFramework,
-} from "@/lib/compliance/pdf-parser";
-import {
-  mapFindingsToControls,
-  FindingComplianceResult,
-  FindingForMapping,
-} from "@/lib/compliance/llm-mapper";
-import {
-  mapFindingsDeterministic,
-  hasDeterministicMapping,
-  controlCoverage,
-  summarizeCoverage,
-} from "@/lib/compliance/crosswalk-mapper";
-import { mapFindingsAgentic } from "@/lib/compliance/agentic-mapper";
-
-/** Stable slug for a framework, used in ?frameworks= selection and caching. */
-function frameworkSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-type FindingRow = {
-  id: string;
-  title: string;
-  description: string;
-  severity: string;
-  scanner: string;
-  cweId: string | null;
-  ruleId: string | null;
-  filePath: string | null;
-  startLine: number | null;
-  status: string;
-};
-
-/**
- * Build a single framework's report from its finding→control mappings.
- * Adds the three-bucket coverage view (gaps found / no issues detected /
- * not covered by SAST) on top of the legacy controlSummary shape.
- */
-function buildFrameworkReport(
-  framework: ComplianceFramework,
-  findings: FindingRow[],
-  mappingResults: FindingComplianceResult[],
-  source: "agentic" | "crosswalk" | "llm",
-) {
-  const findingsById = new Map(findings.map((f) => [f.id, f]));
-
-  // Per-control aggregation from the mappings.
-  type ControlAgg = {
-    controlId: string;
-    title: string;
-    theme: string;
-    findingCount: number;
-    criticalHighCount: number;
-    directCount: number;
-    findings: string[];
-  };
-  const controlCounts = new Map<string, ControlAgg>();
-
-  for (const result of mappingResults) {
-    const finding = findingsById.get(result.findingId);
-    for (const control of result.controls) {
-      const existing =
-        controlCounts.get(control.controlId) ||
-        ({
-          controlId: control.controlId,
-          title: control.title,
-          theme: control.theme,
-          findingCount: 0,
-          criticalHighCount: 0,
-          directCount: 0,
-          findings: [],
-        } satisfies ControlAgg);
-      existing.findingCount++;
-      if (finding?.severity === "CRITICAL" || finding?.severity === "HIGH") {
-        existing.criticalHighCount++;
-      }
-      if (control.relevance === "direct") existing.directCount++;
-      existing.findings.push(result.findingId);
-      controlCounts.set(control.controlId, existing);
-    }
-  }
-
-  const controlSummary = Array.from(controlCounts.values()).sort(
-    (a, b) =>
-      b.directCount - a.directCount ||
-      b.criticalHighCount - a.criticalHighCount ||
-      b.findingCount - a.findingCount,
-  );
-
-  // Three-bucket coverage view over the FULL control catalog (finding-independent
-  // scope statement — never infer "compliant" from "no findings").
-  const gapsFound = [];
-  const noIssuesDetected = [];
-  const notCovered = [];
-
-  for (const control of framework.controls) {
-    const coverage = controlCoverage(control);
-    const agg = controlCounts.get(control.controlId);
-    const findingCount = agg?.findingCount ?? 0;
-    const criticalHighCount = agg?.criticalHighCount ?? 0;
-    const entry = {
-      controlId: control.controlId,
-      title: control.title,
-      theme: control.theme,
-      coverage,
-      findingCount,
-      criticalHighCount,
-    };
-    if (findingCount > 0) {
-      gapsFound.push(entry);
-    } else if (coverage === "assessable") {
-      noIssuesDetected.push(entry);
-    } else {
-      notCovered.push({
-        ...entry,
-        reason:
-          coverage === "not-assessable"
-            ? "Not assessable by SAST — requires process, physical, or organizational evidence."
-            : "Partially assessable by SAST; no supporting evidence found in code.",
-      });
-    }
-  }
-
-  gapsFound.sort(
-    (a, b) => b.criticalHighCount - a.criticalHighCount || b.findingCount - a.findingCount,
-  );
-
-  const statusCounts = {
-    open: findings.filter((f) => f.status === "OPEN").length,
-    inProgress: findings.filter((f) => f.status === "IN_PROGRESS").length,
-    resolved: findings.filter((f) => f.status === "RESOLVED").length,
-    falsePositive: findings.filter((f) => f.status === "FALSE_POSITIVE").length,
-    acceptedRisk: findings.filter((f) => f.status === "ACCEPTED_RISK").length,
-  };
-
-  return {
-    framework: framework.name,
-    slug: frameworkSlug(framework.name),
-    version: framework.version || null,
-    fileName: framework.fileName,
-    mappingSource: source,
-    totalControls: framework.controls.length,
-    impactedControls: controlCounts.size,
-    coverage: summarizeCoverage(framework),
-    buckets: { gapsFound, noIssuesDetected, notCovered },
-    controlSummary,
-    statusCounts,
-    findings: mappingResults.map((r) => {
-      const f = findingsById.get(r.findingId);
-      return {
-        id: r.findingId,
-        title: f?.title,
-        severity: f?.severity,
-        scanner: f?.scanner,
-        cweId: f?.cweId,
-        filePath: f?.filePath,
-        startLine: f?.startLine,
-        status: f?.status,
-        controls: r.controls,
-      };
-    }),
-  };
-}
+  frameworkSlug,
+  runFrameworkMapping,
+  type FindingRow,
+} from "@/lib/compliance/report-run";
 
 /**
  * GET /api/scans/[scanId]/compliance
@@ -220,6 +60,20 @@ export async function GET(
       },
       { status: 404 },
     );
+  }
+
+  const available = allFrameworks.map((f) => ({
+    name: f.name,
+    slug: frameworkSlug(f.name),
+    version: f.version || null,
+    controls: f.controls.length,
+    deterministic: hasDeterministicMapping(f),
+  }));
+
+  // Lightweight listing: return the framework catalog without running any
+  // mapping. Powers the "pick then run" selector in the UI.
+  if (url.searchParams.get("list") === "1") {
+    return NextResponse.json({ scanId, availableFrameworks: available });
   }
 
   // Select the requested frameworks (default: all).
@@ -302,46 +156,14 @@ export async function GET(
         return { cacheKey, report: cache[cacheKey], cached: true };
       }
 
-      const deterministic = hasDeterministicMapping(framework);
-      let mappingResults: FindingComplianceResult[];
-      let source: "agentic" | "crosswalk" | "llm";
-
-      if (findings.length === 0) {
-        mappingResults = [];
-        source =
-          mode === "deep" && canUseLlm
-            ? "agentic"
-            : deterministic
-              ? "crosswalk"
-              : "llm";
-      } else if (mode === "deep" && canUseLlm) {
-        // Agentic engine: LLM-driven, grounded by the crosswalk, self-verifying.
-        const cfg = await getLlmConfig();
-        mappingResults = await mapFindingsAgentic(
-          findingsForMapping,
-          framework,
-          cfg,
-        );
-        source = "agentic";
-      } else if (deterministic) {
-        mappingResults = mapFindingsDeterministic(findingsForMapping, framework);
-        source = "crosswalk";
-      } else {
-        const cfg = await getLlmConfig();
-        mappingResults = await mapFindingsToControls(
-          findingsForMapping,
-          framework,
-          cfg,
-        );
-        source = "llm";
-      }
-
-      const report = buildFrameworkReport(
+      const { report } = await runFrameworkMapping({
         framework,
         findings,
-        mappingResults,
-        source,
-      );
+        findingsForMapping,
+        mode,
+        canUseLlm,
+        getLlmConfig,
+      });
       return { cacheKey, report, cached: false };
     }),
   );
@@ -362,11 +184,7 @@ export async function GET(
     mode,
     totalFindings: findings.length,
     generatedAt: new Date().toISOString(),
-    availableFrameworks: allFrameworks.map((f) => ({
-      name: f.name,
-      slug: frameworkSlug(f.name),
-      version: f.version || null,
-    })),
+    availableFrameworks: available,
     reports,
   };
 

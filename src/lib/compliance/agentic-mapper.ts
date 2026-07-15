@@ -121,7 +121,7 @@ export async function mapFindingsAgentic(
     const batchNum = Math.floor(i / REASON_BATCH) + 1;
     const totalBatches = Math.ceil(candidates.length / REASON_BATCH);
     onProgress?.(
-      `${framework.name}: reasoning batch ${batchNum}/${totalBatches}`,
+      `${framework.name}: reasoning about ${batch.length} findings (batch ${batchNum}/${totalBatches})`,
     );
 
     try {
@@ -133,6 +133,13 @@ export async function mapFindingsAgentic(
         catalogStr,
         framework.name,
       );
+      const proposed = Array.from(mapped.values()).reduce(
+        (n, c) => n + c.length,
+        0,
+      );
+      onProgress?.(
+        `${framework.name}: verifying ${proposed} proposed mapping(s) (batch ${batchNum}/${totalBatches})`,
+      );
       mapped = await verifyBatch(
         client,
         llmConfig.model,
@@ -142,12 +149,15 @@ export async function mapFindingsAgentic(
         framework.name,
       );
       // Validate against catalog and store.
+      let kept = 0;
       for (const [findingId, controls] of mapped) {
-        results.set(
-          findingId,
-          controls.filter((c) => validIds.has(c.controlId)),
-        );
+        const valid = controls.filter((c) => validIds.has(c.controlId));
+        kept += valid.length;
+        results.set(findingId, valid);
       }
+      onProgress?.(
+        `${framework.name}: kept ${kept} verified mapping(s) (batch ${batchNum}/${totalBatches})`,
+      );
     } catch (err) {
       logger.error(
         { err, framework: framework.name, batchNum },

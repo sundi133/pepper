@@ -280,65 +280,80 @@ export async function GET(
     return llmConfig;
   }
 
-  const reports = [];
-  const updatedCache: Record<string, unknown> = { ...cache };
-  let cacheDirty = false;
-
   // Decide once whether the org's configured LLM can actually be used for the
   // agentic ("deep") path. Local Ollama needs no key; hosted providers do.
+  // Pre-resolving here also warms getLlmConfig()'s memo before the concurrent
+  // map below, so the parallel framework tasks don't race on it.
   async function llmUsable(): Promise<boolean> {
     const cfg = await getLlmConfig();
     return cfg.provider === "ollama" || !!cfg.apiKey;
   }
   const canUseLlm = mode === "deep" ? await llmUsable() : false;
 
-  for (const framework of frameworks) {
-    const slug = frameworkSlug(framework.name);
-    const cacheKey = `${slug}::${mode}`;
+  // Frameworks are independent, so map them concurrently instead of
+  // one-after-another (major speedup). Each task returns its report plus the
+  // cache key; the shared cache is assembled afterwards to avoid races.
+  const perFramework = await Promise.all(
+    frameworks.map(async (framework) => {
+      const slug = frameworkSlug(framework.name);
+      const cacheKey = `${slug}::${mode}`;
 
-    if (!refresh && cache[cacheKey]) {
-      reports.push(cache[cacheKey]);
-      continue;
-    }
+      if (!refresh && cache[cacheKey]) {
+        return { cacheKey, report: cache[cacheKey], cached: true };
+      }
 
-    const deterministic = hasDeterministicMapping(framework);
-    let mappingResults: FindingComplianceResult[];
-    let source: "agentic" | "crosswalk" | "llm";
+      const deterministic = hasDeterministicMapping(framework);
+      let mappingResults: FindingComplianceResult[];
+      let source: "agentic" | "crosswalk" | "llm";
 
-    if (findings.length === 0) {
-      mappingResults = [];
-      source = mode === "deep" && canUseLlm ? "agentic" : deterministic ? "crosswalk" : "llm";
-    } else if (mode === "deep" && canUseLlm) {
-      // Agentic engine: LLM-driven, grounded by the crosswalk, self-verifying.
-      const cfg = await getLlmConfig();
-      mappingResults = await mapFindingsAgentic(
-        findingsForMapping,
+      if (findings.length === 0) {
+        mappingResults = [];
+        source =
+          mode === "deep" && canUseLlm
+            ? "agentic"
+            : deterministic
+              ? "crosswalk"
+              : "llm";
+      } else if (mode === "deep" && canUseLlm) {
+        // Agentic engine: LLM-driven, grounded by the crosswalk, self-verifying.
+        const cfg = await getLlmConfig();
+        mappingResults = await mapFindingsAgentic(
+          findingsForMapping,
+          framework,
+          cfg,
+        );
+        source = "agentic";
+      } else if (deterministic) {
+        mappingResults = mapFindingsDeterministic(findingsForMapping, framework);
+        source = "crosswalk";
+      } else {
+        const cfg = await getLlmConfig();
+        mappingResults = await mapFindingsToControls(
+          findingsForMapping,
+          framework,
+          cfg,
+        );
+        source = "llm";
+      }
+
+      const report = buildFrameworkReport(
         framework,
-        cfg,
+        findings,
+        mappingResults,
+        source,
       );
-      source = "agentic";
-    } else if (deterministic) {
-      mappingResults = mapFindingsDeterministic(findingsForMapping, framework);
-      source = "crosswalk";
-    } else {
-      const cfg = await getLlmConfig();
-      mappingResults = await mapFindingsToControls(
-        findingsForMapping,
-        framework,
-        cfg,
-      );
-      source = "llm";
-    }
+      return { cacheKey, report, cached: false };
+    }),
+  );
 
-    const report = buildFrameworkReport(
-      framework,
-      findings,
-      mappingResults,
-      source,
-    );
-    reports.push(report);
-    updatedCache[cacheKey] = report;
-    cacheDirty = true;
+  const reports = perFramework.map((r) => r.report);
+  const updatedCache: Record<string, unknown> = { ...cache };
+  let cacheDirty = false;
+  for (const r of perFramework) {
+    if (!r.cached) {
+      updatedCache[r.cacheKey] = r.report;
+      cacheDirty = true;
+    }
   }
 
   const response = {

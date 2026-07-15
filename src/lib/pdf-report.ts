@@ -610,7 +610,7 @@ function drawFindingCard(
   // Summary
   if (report.summary) {
     doc.fontSize(8).fillColor(COLORS.textPrimary).text("Summary. ", x, y, { continued: true });
-    doc.fillColor(COLORS.textSecondary).text(truncate(report.summary, 400), { width: w });
+    doc.fillColor(COLORS.textSecondary).text(truncate(report.summary, 700), { width: w });
     y = doc.y + 8;
   }
 
@@ -619,10 +619,14 @@ function drawFindingCard(
     if (y > 700) { doc.addPage(); y = 50; }
     doc.fontSize(8).fillColor(COLORS.high).text("BUSINESS IMPACT", x, y);
     y += 12;
-    doc.roundedRect(x, y, w, 24, 4).fillAndStroke(COLORS.impactBg, COLORS.impactBorder);
-    doc.fontSize(8).fillColor(COLORS.high)
-      .text(truncate(report.impact, 200), x + 8, y + 6, { width: w - 16 });
-    y += 32;
+    const impactText = truncate(report.impact, 600);
+    doc.fontSize(8);
+    const impactBoxH = doc.heightOfString(impactText, { width: w - 16 }) + 12;
+    if (y + impactBoxH > 770) { doc.addPage(); y = 50; }
+    doc.roundedRect(x, y, w, impactBoxH, 4).fillAndStroke(COLORS.impactBg, COLORS.impactBorder);
+    doc.fillColor(COLORS.high)
+      .text(impactText, x + 8, y + 6, { width: w - 16 });
+    y += impactBoxH + 8;
   }
 
   // Affected Location
@@ -639,10 +643,12 @@ function drawFindingCard(
     if (y > 680) { doc.addPage(); y = 50; }
     doc.fontSize(8).fillColor(COLORS.high).text("PROOF OF CONCEPT", x, y);
     y += 12;
-    const snippetText = truncate(f.snippet.trim(), 300);
-    const snippetH = Math.min(50, Math.max(22, Math.ceil(snippetText.length / 80) * 12 + 10));
+    const snippetText = truncate(f.snippet.trim(), 600);
+    doc.fontSize(7);
+    const snippetH = doc.heightOfString(snippetText, { width: w - 16 }) + 12;
+    if (y + snippetH > 770) { doc.addPage(); y = 50; }
     doc.roundedRect(x, y, w, snippetH, 4).fill(COLORS.pocBg);
-    doc.fontSize(7).fillColor(COLORS.pocText)
+    doc.fillColor(COLORS.pocText)
       .text(snippetText, x + 8, y + 6, { width: w - 16 });
     y += snippetH + 8;
   }
@@ -668,10 +674,16 @@ function drawFindingCard(
     if (y > 700) { doc.addPage(); y = 50; }
     doc.fontSize(8).fillColor(COLORS.high).text("REMEDIATION", x, y);
     y += 12;
-    const remText = report.remediation.map((r) => truncate(r, 180)).join(" ");
-    const remH = Math.min(60, Math.max(24, Math.ceil(remText.length / 85) * 12 + 10));
+    // Render each remediation step on its own line so multi-step guidance is
+    // readable instead of running together in a single paragraph.
+    const remText = report.remediation
+      .map((r) => `• ${truncate(r, 400)}`)
+      .join("\n");
+    doc.fontSize(8);
+    const remH = doc.heightOfString(remText, { width: w - 16 }) + 12;
+    if (y + remH > 770) { doc.addPage(); y = 50; }
     doc.roundedRect(x, y, w, remH, 4).fillAndStroke(COLORS.remedBg, COLORS.remedBorder);
-    doc.fontSize(8).fillColor(COLORS.textSecondary)
+    doc.fillColor(COLORS.textSecondary)
       .text(remText, x + 8, y + 6, { width: w - 16 });
     y += remH + 8;
   }

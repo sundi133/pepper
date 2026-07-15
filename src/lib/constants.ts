@@ -238,7 +238,7 @@ export const LLM_MIN_CONFIDENCE_DEFAULT = parseFloat(
 );
 
 export const IAC_MIN_CONFIDENCE_DEFAULT = parseFloat(
-  process.env.IAC_MIN_CONFIDENCE || "0.75",
+  process.env.IAC_MIN_CONFIDENCE || "0.85",
 );
 
 export const ZERO_DAY_MIN_CONFIDENCE_DEFAULT = parseFloat(

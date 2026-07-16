@@ -1,7 +1,7 @@
 import { RawFinding, ScanContext, ScannerPlugin, ScanResult } from "./types";
 import { sastLlmScanner } from "./sast";
 import { scaScanner, parseDependencies } from "./sca";
-import { secretsLlmScanner } from "./secrets";
+import { secretsPatternScanner, secretsLlmScanner } from "./secrets";
 import { iacScanner } from "./iac";
 import { maliciousPkgScanner } from "./sca/malicious-pkg";
 import { zeroDayScanner } from "./zero-day";
@@ -43,8 +43,13 @@ export function getScanners(
     scanners.push(maliciousPkgScanner);
   }
 
-  if (includeSecrets && orgSettings.enableLlmSecrets) {
-    scanners.push(secretsLlmScanner);
+  if (includeSecrets) {
+    // Always run pattern scanner for fast, high-confidence detections
+    scanners.push(secretsPatternScanner);
+    // Also run LLM scanner if enabled for deeper analysis
+    if (orgSettings.enableLlmSecrets) {
+      scanners.push(secretsLlmScanner);
+    }
   }
 
   if (includeIac && orgSettings.enableLlmSast) {

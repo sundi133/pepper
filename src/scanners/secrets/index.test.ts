@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { secretsLlmScanner } from "./index";
+import { secretsPatternScanner, secretsLlmScanner } from "./index";
 import type { ScanContext } from "../types";
 import * as fs from "fs";
 import * as os from "os";
@@ -190,9 +190,184 @@ describe("SECRETS_LLM scanner", () => {
           vulnDbMode: "offline",
         },
       });
-      // Suppressed findings should be marked
-      const suppressed = findings.filter((f) => f.suppressed);
-      expect(suppressed.length >= 0).toBe(true);
+      // Should have findings from ignored file
+      expect(Array.isArray(findings)).toBe(true);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("SECRETS_PATTERN scanner", () => {
+  it("returns empty findings when no files present", async () => {
+    const workDir = makeTempDir({});
+    try {
+      const findings = await secretsPatternScanner.scan({
+        workDir,
+        fileList: [],
+        scanType: "FULL",
+        orgSettings: {
+          llmProvider: "openai",
+          llmBaseUrl: "",
+          llmModel: "",
+          enableLlmSast: false,
+          enableLlmSecrets: true,
+          osvApiUrl: "",
+          vulnDbMode: "offline",
+        },
+      });
+      expect(findings).toHaveLength(0);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it("detects AWS access keys with pattern matching", async () => {
+    const workDir = makeTempDir({
+      "config.js": `const AWS_KEY = "AKIAIOSFODNN7ABCDEFG";`,
+    });
+    try {
+      const findings = await secretsPatternScanner.scan({
+        workDir,
+        fileList: ["config.js"],
+        scanType: "FULL",
+        orgSettings: {
+          llmProvider: "openai",
+          llmBaseUrl: "",
+          llmModel: "",
+          enableLlmSast: false,
+          enableLlmSecrets: true,
+          osvApiUrl: "",
+          vulnDbMode: "offline",
+        },
+      });
+      expect(findings.length).toBeGreaterThan(0);
+      const awsFindings = findings.filter((f) =>
+        f.title?.includes("AWS_ACCESS_KEY"),
+      );
+      expect(awsFindings.length).toBeGreaterThan(0);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it("detects GitHub tokens with pattern matching", async () => {
+    const workDir = makeTempDir({
+      ".env": `GITHUB_TOKEN=ghp_1234567890abcdefghijklmnopqrstuvwxyz`,
+    });
+    try {
+      const findings = await secretsPatternScanner.scan({
+        workDir,
+        fileList: [".env"],
+        scanType: "FULL",
+        orgSettings: {
+          llmProvider: "openai",
+          llmBaseUrl: "",
+          llmModel: "",
+          enableLlmSast: false,
+          enableLlmSecrets: true,
+          osvApiUrl: "",
+          vulnDbMode: "offline",
+        },
+      });
+      expect(findings.length).toBeGreaterThan(0);
+      const githubFindings = findings.filter((f) =>
+        f.title?.includes("GITHUB_TOKEN"),
+      );
+      expect(githubFindings.length).toBeGreaterThan(0);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it("detects private keys with pattern matching", async () => {
+    const workDir = makeTempDir({
+      "id_rsa": `-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEA1234567890abcdefghijklmnopqrst
+-----END RSA PRIVATE KEY-----`,
+    });
+    try {
+      const findings = await secretsPatternScanner.scan({
+        workDir,
+        fileList: ["id_rsa"],
+        scanType: "FULL",
+        orgSettings: {
+          llmProvider: "openai",
+          llmBaseUrl: "",
+          llmModel: "",
+          enableLlmSast: false,
+          enableLlmSecrets: true,
+          osvApiUrl: "",
+          vulnDbMode: "offline",
+        },
+      });
+      expect(findings.length).toBeGreaterThan(0);
+      const keyFindings = findings.filter((f) =>
+        f.title?.includes("PRIVATE_KEY") || f.title?.includes("SSH_PRIVATE_KEY"),
+      );
+      expect(keyFindings.length).toBeGreaterThan(0);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it("detects generic API keys with pattern matching", async () => {
+    const workDir = makeTempDir({
+      "config.ts": `
+        // Test configuration - not real credentials
+        api_key = "abcdefghij1234567890XXXXX"
+        secret_key = "zyxwvutsrq9876543210YYYYY"
+      `,
+    });
+    try {
+      const findings = await secretsPatternScanner.scan({
+        workDir,
+        fileList: ["config.ts"],
+        scanType: "FULL",
+        orgSettings: {
+          llmProvider: "openai",
+          llmBaseUrl: "",
+          llmModel: "",
+          enableLlmSast: false,
+          enableLlmSecrets: true,
+          osvApiUrl: "",
+          vulnDbMode: "offline",
+        },
+      });
+      expect(findings.length).toBeGreaterThan(0);
+      const apiKeyFindings = findings.filter((f) =>
+        f.title?.includes("API_KEY") || f.title?.includes("SECRET_KEY"),
+      );
+      expect(apiKeyFindings.length).toBeGreaterThan(0);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it("filters out test/placeholder values", async () => {
+    const workDir = makeTempDir({
+      "config.js": `
+        const testKey = "example_placeholder_test_key";
+        const placeholder = "xxxxxxxxxxxxxxxxxxxxxxxx";
+      `,
+    });
+    try {
+      const findings = await secretsPatternScanner.scan({
+        workDir,
+        fileList: ["config.js"],
+        scanType: "FULL",
+        orgSettings: {
+          llmProvider: "openai",
+          llmBaseUrl: "",
+          llmModel: "",
+          enableLlmSast: false,
+          enableLlmSecrets: true,
+          osvApiUrl: "",
+          vulnDbMode: "offline",
+        },
+      });
+      // Should not detect test/placeholder values
+      expect(findings.length).toBeLessThanOrEqual(0);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

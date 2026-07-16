@@ -203,9 +203,7 @@ export async function autoVerifyFalsePositives(
 
     const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
     for (const f of keptFindings) {
-      const riskScore = computeRiskScore(f.severity, f.confidence);
-      const bucket = getRiskBucket(riskScore);
-      counts[bucket]++;
+      counts[f.severity]++;
     }
 
     await prisma.scan.update({
@@ -221,18 +219,4 @@ export async function autoVerifyFalsePositives(
   }
 
   return { analyzed: findings.length, marked: totalMarked };
-}
-
-function computeRiskScore(severity: string, confidence: number | null): number {
-  const baseSeverityScore = { CRITICAL: 10, HIGH: 7, MEDIUM: 4, LOW: 2, INFO: 1 }[severity] || 1;
-  const conf = confidence ?? 0.8;
-  return baseSeverityScore * conf;
-}
-
-function getRiskBucket(riskScore: number): "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO" {
-  if (riskScore >= 8) return "CRITICAL";
-  if (riskScore >= 5) return "HIGH";
-  if (riskScore >= 3) return "MEDIUM";
-  if (riskScore >= 1.5) return "LOW";
-  return "INFO";
 }

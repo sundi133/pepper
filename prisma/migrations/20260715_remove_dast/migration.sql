@@ -50,6 +50,9 @@ ALTER TABLE "Scan" ALTER COLUMN "scanType" TYPE "ScanType" USING "scanType"::"te
 DROP TYPE "ScanType_old";
 
 -- Remove DAST from SourceType enum
+-- First, clean up any Scan records with DAST_TARGET sourceType (which no longer exists)
+DELETE FROM "Scan" WHERE "sourceType" = 'DAST_TARGET';
+
 ALTER TYPE "SourceType" RENAME TO "SourceType_old";
 
 CREATE TYPE "SourceType" AS ENUM (

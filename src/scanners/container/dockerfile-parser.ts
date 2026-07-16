@@ -185,22 +185,18 @@ export function parseDockerfile(content: string, filePath: string): DockerfileSt
 
 /**
  * Extract a Dockerfile directive and its arguments.
- * Returns null if line is not a directive.
+ * Handles line continuations (\). Returns null if line is not a directive.
  */
 function parseDirective(line: string): [string, string] | null {
-  // Handle line continuation (\)
-  let fullLine = line;
-  let idx = 0;
-  const lines: string[] = [line];
-
-  // In a real parser, we'd handle line continuations properly.
-  // For now, take the line as-is.
+  // Remove line continuation character and join with next logical line
+  // In Dockerfile, a backslash at end of line continues to next line
+  let fullLine = line.replace(/\\\s*$/, " ");
 
   const match = fullLine.match(/^([A-Z_]+)(?:\s+(.*))?$/i);
   if (!match) return null;
 
   const cmd = match[1].toUpperCase();
-  const args = match[2] || "";
+  const args = (match[2] || "").trim();
 
   if (!DOCKERFILE_DIRECTIVES.has(cmd)) return null;
 

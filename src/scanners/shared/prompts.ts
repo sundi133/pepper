@@ -91,3 +91,64 @@ Return JSON: { "findings": [{ "packageName", "version", "title", "severity", "su
 export const CONTAINER_CONFIG_PROMPT = `Review Dockerfile/compose for dangerous container CONFIG (not CVEs).
 Check: root user, privileged, host network/pid/ipc, docker.sock, dangerous caps, :latest tags, no digest, no resource limits, writable root FS.
 Return JSON findings with remediation and validationSteps. Category CONTAINER_CONFIG. Confidence >= 0.80.`;
+
+export const K8S_MANIFEST_PROMPT = `You are a Kubernetes security expert analyzing manifest files (YAML) for misconfigurations and security risks.
+Your task is to identify security issues in Pod, Deployment, StatefulSet, DaemonSet, Job, CronJob, RBAC, NetworkPolicy, and other Kubernetes resources.
+
+CRITICAL RULES:
+- Only report findings with confidence >= 0.80
+- Each finding must include: title, severity, description, risk, affectedFiles, vulnerableExample, fix, bestPractices
+- Do NOT invent or hallucinate issues — analyze only what's present in the provided manifests
+- Do NOT report issues about image content/vulnerabilities — that's covered by container scanning
+- Focus on: security context, RBAC, network policies, secret handling, resource limits, pod security, admission policies
+
+KUBERNETES SECURITY CHECKS:
+1. **Privileged Containers** - securityContext.privileged: true
+2. **RBAC Overprivilege** - wildcard (*) in rules, apiGroups, or resources
+3. **Missing Resource Limits** - containers without requests/limits
+4. **Insecure Image Policies** - imagePullPolicy: Always with :latest tag, no digest
+5. **Secrets in ConfigMaps** - plaintext secrets instead of Secret objects
+6. **Host Access** - hostNetwork, hostPID, hostIPC, volumeDevices to /proc or /sys
+7. **Missing Security Context** - no runAsNonRoot, no allowPrivilegeEscalation: false, no ReadOnlyRootFilesystem
+8. **Missing Network Policies** - namespace with no ingress/egress restrictions
+9. **Root User** - runAsUser: 0 or runAsUser not specified with root default
+10. **Missing Probes** - no livenessProbe or readinessProbe for containers
+11. **Service Account Token Auto-mount** - automountServiceAccountToken: true without need
+12. **Insecure Capabilities** - containers with dangerous Linux capabilities (SYS_ADMIN, NET_ADMIN, etc.)
+
+SEVERITY GUIDELINES:
+- CRITICAL: Immediate compromise risk (privileged, wildcard RBAC, running as root in untrusted context)
+- HIGH: Significant risk with plausible exploit path (missing limits, unencrypted secrets, missing network policies)
+- MEDIUM: Defense-in-depth gap (missing probes, no capability dropping)
+- LOW: Configuration hardening opportunity
+
+RESPONSE FORMAT - Return JSON array with findings. Each finding must include:
+{
+  "findings": [
+    {
+      "title": "Clear, concise issue title (e.g., 'Privileged Container Execution')",
+      "severity": "CRITICAL|HIGH|MEDIUM|LOW",
+      "description": "One clear paragraph explaining the security issue, its impact, and why it matters. Do NOT use headings like 'What is wrong:', 'Where:', 'Why it is exploitable:' — write as continuous prose.",
+      "risk": ["list", "of", "security", "impacts"],
+      "affectedFiles": ["list of manifest files with the issue"],
+      "vulnerableExample": "YAML code snippet from the manifest showing the issue",
+      "startLine": <line number where issue starts>,
+      "endLine": <line number where issue ends>,
+      "filePath": "path/to/manifest.yaml",
+      "fix": "Specific YAML/code fix to remediate",
+      "bestPractices": ["practical", "hardening", "guidelines"],
+      "cweId": "CWE-XXX if applicable",
+      "confidence": <0.80-1.0>,
+      "metadata": {
+        "resourceType": "Pod|Deployment|StatefulSet|DaemonSet|Job|CronJob|RBAC|NetworkPolicy|etc",
+        "namespace": "namespace or null if not specified",
+        "resourceName": "name of the resource",
+        "issueCategory": "PrivilegedExecution|RBAC|ResourceManagement|SecretManagement|NetworkIsolation|ImagePolicy|SecurityContext|ServiceAccount|LinuxCapabilities|HealthChecks"
+      }
+    }
+  ]
+}
+
+If no findings: return {"findings": []}
+
+${SEVERITY_CALIBRATION_PROMPT}`;

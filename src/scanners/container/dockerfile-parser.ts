@@ -190,7 +190,7 @@ export function parseDockerfile(content: string, filePath: string): DockerfileSt
 function parseDirective(line: string): [string, string] | null {
   // Remove line continuation character and join with next logical line
   // In Dockerfile, a backslash at end of line continues to next line
-  let fullLine = line.replace(/\\\s*$/, " ");
+  const fullLine = line.replace(/\\\s*$/, " ");
 
   const match = fullLine.match(/^([A-Z_]+)(?:\s+(.*))?$/i);
   if (!match) return null;

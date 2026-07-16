@@ -8,7 +8,8 @@ export type ScannerType =
   | "IAC"
   | "MALICIOUS_PKG"
   | "ZERO_DAY"
-  | "CONTAINER";
+  | "CONTAINER"
+  | "K8S";
 
 export interface ScanContext {
   workDir: string;

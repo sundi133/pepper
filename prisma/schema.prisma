@@ -295,6 +295,7 @@ enum ScanType {
   IAC_ONLY
   ZERO_DAY_ONLY
   CONTAINER_ONLY
+  K8S_ONLY
 }
 
 enum SourceType {
@@ -364,6 +365,7 @@ enum Scanner {
   MALICIOUS_PKG
   ZERO_DAY
   CONTAINER
+  K8S
 }
 
 enum Severity {

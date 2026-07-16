@@ -7,14 +7,15 @@ ALTER TABLE "OrgSettings" DROP COLUMN IF EXISTS "dastEndpoint";
 ALTER TABLE "OrgSettings" DROP COLUMN IF EXISTS "dastApiKeyEnc";
 ALTER TABLE "OrgSettings" DROP COLUMN IF EXISTS "dastConfigYamlEnc";
 
+-- Drop all defaults that depend on enums before dropping the types
+ALTER TABLE "Scan" ALTER COLUMN "scanType" DROP DEFAULT;
+ALTER TABLE "ScanSchedule" ALTER COLUMN "scanType" DROP DEFAULT;
+ALTER TABLE "Scan" ALTER COLUMN "sourceType" DROP DEFAULT;
+
 -- Remove DAST from Scanner enum
--- Note: This requires PostgreSQL migration that alters the enum type
--- First, we need to handle any existing DAST findings before removing the enum value
+ALTER TABLE "Finding" ALTER COLUMN scanner TYPE text;
 DELETE FROM "Finding" WHERE scanner = 'DAST';
-
--- Drop and recreate the Scanner enum without DAST
-ALTER TYPE "Scanner" RENAME TO "Scanner_old";
-
+DROP TYPE "Scanner";
 CREATE TYPE "Scanner" AS ENUM (
   'SAST_PATTERN',
   'SAST_LLM',
@@ -24,17 +25,16 @@ CREATE TYPE "Scanner" AS ENUM (
   'IAC',
   'MALICIOUS_PKG',
   'ZERO_DAY',
-  'CONTAINER'
+  'CONTAINER',
+  'K8S'
 );
-
-ALTER TABLE "Finding" ALTER COLUMN scanner TYPE "Scanner" USING scanner::"text"::"Scanner";
-DROP TYPE "Scanner_old";
+ALTER TABLE "Finding" ALTER COLUMN scanner TYPE "Scanner" USING (scanner::"Scanner");
 
 -- Remove DAST from ScanType enum
+ALTER TABLE "Scan" ALTER COLUMN "scanType" TYPE text;
+ALTER TABLE "ScanSchedule" ALTER COLUMN "scanType" TYPE text;
 DELETE FROM "Scan" WHERE "scanType" = 'DAST_ONLY';
-
-ALTER TYPE "ScanType" RENAME TO "ScanType_old";
-
+DROP TYPE "ScanType";
 CREATE TYPE "ScanType" AS ENUM (
   'FULL',
   'INCREMENTAL',
@@ -43,18 +43,18 @@ CREATE TYPE "ScanType" AS ENUM (
   'SECRETS_ONLY',
   'IAC_ONLY',
   'ZERO_DAY_ONLY',
-  'CONTAINER_ONLY'
+  'CONTAINER_ONLY',
+  'K8S_ONLY'
 );
-
-ALTER TABLE "Scan" ALTER COLUMN "scanType" TYPE "ScanType" USING "scanType"::"text"::"ScanType";
-DROP TYPE "ScanType_old";
+ALTER TABLE "Scan" ALTER COLUMN "scanType" TYPE "ScanType" USING ("scanType"::"ScanType");
+ALTER TABLE "Scan" ALTER COLUMN "scanType" SET DEFAULT 'FULL'::"ScanType";
+ALTER TABLE "ScanSchedule" ALTER COLUMN "scanType" TYPE "ScanType" USING ("scanType"::"ScanType");
+ALTER TABLE "ScanSchedule" ALTER COLUMN "scanType" SET DEFAULT 'FULL'::"ScanType";
 
 -- Remove DAST from SourceType enum
--- First, clean up any Scan records with DAST_TARGET sourceType (which no longer exists)
+ALTER TABLE "Scan" ALTER COLUMN "sourceType" TYPE text;
 DELETE FROM "Scan" WHERE "sourceType" = 'DAST_TARGET';
-
-ALTER TYPE "SourceType" RENAME TO "SourceType_old";
-
+DROP TYPE "SourceType";
 CREATE TYPE "SourceType" AS ENUM (
   'UPLOAD',
   'GIT_CLONE',
@@ -63,15 +63,13 @@ CREATE TYPE "SourceType" AS ENUM (
   'CONTAINER_IMAGE',
   'PRECOMMIT'
 );
-
-ALTER TABLE "Scan" ALTER COLUMN "sourceType" TYPE "SourceType" USING "sourceType"::"text"::"SourceType";
-DROP TYPE "SourceType_old";
+ALTER TABLE "Scan" ALTER COLUMN "sourceType" TYPE "SourceType" USING ("sourceType"::"SourceType");
+ALTER TABLE "Scan" ALTER COLUMN "sourceType" SET DEFAULT 'UPLOAD'::"SourceType";
 
 -- Remove DAST from ArtifactType enum
+ALTER TABLE "ScanArtifact" ALTER COLUMN type TYPE text;
 DELETE FROM "ScanArtifact" WHERE type = 'DAST_REPORT';
-
-ALTER TYPE "ArtifactType" RENAME TO "ArtifactType_old";
-
+DROP TYPE "ArtifactType";
 CREATE TYPE "ArtifactType" AS ENUM (
   'SARIF',
   'SBOM_CYCLONEDX',
@@ -80,15 +78,12 @@ CREATE TYPE "ArtifactType" AS ENUM (
   'CONTAINER_REPORT',
   'SIGNATURE'
 );
-
-ALTER TABLE "ScanArtifact" ALTER COLUMN type TYPE "ArtifactType" USING type::"text"::"ArtifactType";
-DROP TYPE "ArtifactType_old";
+ALTER TABLE "ScanArtifact" ALTER COLUMN type TYPE "ArtifactType" USING (type::"ArtifactType");
 
 -- Remove DAST from IntegrationKind enum
+ALTER TABLE "IntegrationConfig" ALTER COLUMN kind TYPE text;
 DELETE FROM "IntegrationConfig" WHERE kind = 'DAST';
-
-ALTER TYPE "IntegrationKind" RENAME TO "IntegrationKind_old";
-
+DROP TYPE "IntegrationKind";
 CREATE TYPE "IntegrationKind" AS ENUM (
   'JIRA',
   'SLACK',
@@ -96,6 +91,4 @@ CREATE TYPE "IntegrationKind" AS ENUM (
   'CODE_SIGNING',
   'WEBHOOK'
 );
-
-ALTER TABLE "IntegrationConfig" ALTER COLUMN kind TYPE "IntegrationKind" USING kind::"text"::"IntegrationKind";
-DROP TYPE "IntegrationKind_old";
+ALTER TABLE "IntegrationConfig" ALTER COLUMN kind TYPE "IntegrationKind" USING (kind::"IntegrationKind");

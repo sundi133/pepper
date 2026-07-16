@@ -49,7 +49,8 @@ export interface ScanJobData {
     | "SECRETS_ONLY"
     | "IAC_ONLY"
     | "ZERO_DAY_ONLY"
-    | "CONTAINER_ONLY";
+    | "CONTAINER_ONLY"
+    | "K8S_ONLY";
   baseSha?: string;
   commitSha?: string;
   prNumber?: number;

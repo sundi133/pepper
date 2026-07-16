@@ -21,7 +21,7 @@ export function projectNameFromGitUrl(url: string): string {
   try {
     const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     const u = new URL(normalized);
-    let path = u.pathname.replace(/\/+$/, "").replace(/\.git$/i, "");
+    const path = u.pathname.replace(/\/+$/, "").replace(/\.git$/i, "");
     const parts = path.split("/").filter(Boolean);
     if (parts.length >= 2) {
       return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`.slice(

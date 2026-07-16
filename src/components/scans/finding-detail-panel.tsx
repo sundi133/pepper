@@ -458,7 +458,7 @@ function SastFindingReport({ finding, sourceContext }: { finding: Finding; sourc
       )}
 
       {/* Steps to Reproduce */}
-      {(generatedDetails?.stepsToReproduce?.length || stepsToUse.length > 0 || loadingDetails) && (
+      {report.scanner !== "K8S" && (generatedDetails?.stepsToReproduce?.length || stepsToUse.length > 0 || loadingDetails) && (
         <div className="space-y-2 border-t border-border/40 pt-4">
           <h2 className="text-sm font-semibold text-foreground">Steps to Reproduce</h2>
           <div className="text-xs sm:text-sm space-y-1.5 text-foreground">

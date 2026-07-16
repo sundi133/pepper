@@ -6,6 +6,7 @@ import { iacScanner } from "./iac";
 import { maliciousPkgScanner } from "./sca/malicious-pkg";
 import { zeroDayScanner } from "./zero-day";
 import { containerScanner } from "./container";
+import { k8sScanner } from "./k8s";
 import {
   buildRootCauseKey,
   areRootCauseDuplicates,
@@ -31,6 +32,7 @@ export function getScanners(
   const includeIac = ["FULL", "IAC_ONLY"].includes(scanType);
   const includeZeroDay = ["FULL", "ZERO_DAY_ONLY", "INCREMENTAL"].includes(scanType);
   const includeContainer = ["FULL", "CONTAINER_ONLY"].includes(scanType);
+  const includeK8s = ["FULL", "K8S_ONLY"].includes(scanType);
 
   if (includeSast && orgSettings.enableLlmSast) {
     scanners.push(sastLlmScanner);
@@ -55,6 +57,10 @@ export function getScanners(
 
   if (includeContainer) {
     scanners.push(containerScanner);
+  }
+
+  if (includeK8s && orgSettings.enableLlmSast) {
+    scanners.push(k8sScanner);
   }
 
   return scanners;

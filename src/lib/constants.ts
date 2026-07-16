@@ -32,6 +32,7 @@ export const SCANNER_LABELS = {
   MALICIOUS_PKG: "Supply Chain",
   ZERO_DAY: "Zero-Day (AI)",
   CONTAINER: "Container",
+  K8S: "Kubernetes",
 } as const;
 
 export const SCAN_STATUS_LABELS = {
@@ -251,6 +252,10 @@ export const SECRETS_MIN_CONFIDENCE_DEFAULT = parseFloat(
 
 export const MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT = parseFloat(
   process.env.MALICIOUS_PKG_MIN_CONFIDENCE || "0.80",
+);
+
+export const K8S_MIN_CONFIDENCE_DEFAULT = parseFloat(
+  process.env.K8S_MIN_CONFIDENCE || "0.80",
 );
 
 /** Zero-day: max high-priority paths before adding broader files. */

@@ -65,6 +65,11 @@ const PROVIDER_DEFAULTS: Record<
     model: "meta-llama/Llama-3-8b",
     doc: "docs.vllm.ai",
   },
+  opencode: {
+    url: "https://opencode.ai/zen/v1",
+    model: "deepseek-v4-flash-free",
+    doc: "opencode.ai/docs/zen",
+  },
   custom: {
     url: "",
     model: "",
@@ -107,6 +112,16 @@ const PROVIDER_MODELS: Record<string, { top: string[]; budget: string[] }> = {
     top: ["meta-llama/Llama-3-70b", "mistralai/Mixtral-8x7B"],
     budget: ["meta-llama/Llama-3-8b", "mistralai/Mistral-7B"],
   },
+  opencode: {
+    top: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"],
+    budget: [
+      "deepseek-v4-flash-free",
+      "mimo-v2.5-free",
+      "north-mini-code-free",
+      "nemotron-3-ultra-free",
+      "big-pickle",
+    ],
+  },
 };
 
 const DEFAULT_SETTINGS = {
@@ -131,6 +146,7 @@ function ProviderIcon({ provider }: { provider: string }) {
     azure: "☁️",
     ollama: "🦙",
     vllm: "⚙️",
+    opencode: "🌀",
     custom: "🔌",
   };
   return <span className="mr-2">{icons[provider] || "🔌"}</span>;
@@ -248,7 +264,7 @@ export default function LlmSettingsPage() {
     setSettings((s) => ({ ...s, llmModel: value }));
   }
 
-  const needsKey = settings.llmProvider !== "ollama";
+  const needsKey = settings.llmProvider !== "ollama" && settings.llmProvider !== "opencode";
   const isCustomProvider = settings.llmProvider === "custom";
   const models = PROVIDER_MODELS[settings.llmProvider];
 
@@ -301,6 +317,7 @@ export default function LlmSettingsPage() {
                     {settings.llmProvider === "openrouter" && "OpenRouter (Multi-model)"}
                     {settings.llmProvider === "azure" && "Azure OpenAI"}
                     {settings.llmProvider === "vllm" && "vLLM"}
+                    {settings.llmProvider === "opencode" && "OpenCode Zen (Free)"}
                     {settings.llmProvider === "custom" && "Custom Endpoint"}
                   </span>
                 </SelectValue>
@@ -323,6 +340,9 @@ export default function LlmSettingsPage() {
                 </SelectItem>
                 <SelectItem value="vllm">
                   <ProviderIcon provider="vllm" />vLLM
+                </SelectItem>
+                <SelectItem value="opencode">
+                  <ProviderIcon provider="opencode" />OpenCode Zen (Free)
                 </SelectItem>
                 <SelectItem value="custom">
                   <ProviderIcon provider="custom" />Custom Endpoint
@@ -448,6 +468,22 @@ export default function LlmSettingsPage() {
               Ollama runs locally — no API key needed. The model will be pulled
               automatically on first scan. Make sure the Ollama service is
               running (included in Docker Compose).
+            </div>
+          )}
+
+          {settings.llmProvider === "opencode" && (
+            <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
+              OpenCode Zen offers free models — no API key needed. Get the full
+              model list at{" "}
+              <a
+                href="https://opencode.ai/docs/zen"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                opencode.ai/docs/zen
+              </a>
+              .
             </div>
           )}
 

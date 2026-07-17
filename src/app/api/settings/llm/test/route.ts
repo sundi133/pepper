@@ -4,7 +4,7 @@ import { createLlmClient } from "@/lib/llm-gateway";
 import { z } from "zod";
 
 const testSchema = z.object({
-  llmProvider: z.enum(["ollama", "openai", "anthropic", "openrouter", "azure", "vllm", "custom"]),
+  llmProvider: z.enum(["ollama", "openai", "anthropic", "openrouter", "azure", "vllm", "opencode", "custom"]),
   llmBaseUrl: z.string().url(),
   llmModel: z.string().min(1),
   llmApiKey: z.string().min(1, "API key cannot be empty").optional(),

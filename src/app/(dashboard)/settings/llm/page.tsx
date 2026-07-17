@@ -27,9 +27,19 @@ import {
   Shield,
   Sparkles,
   Database,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 const PROVIDER_DEFAULTS: Record<
   string,
@@ -161,6 +171,8 @@ export default function LlmSettingsPage() {
   const [testError, setTestError] = useState("");
   const [settings, setSettings] = useState<LlmSettings>(DEFAULT_SETTINGS);
   const [useCustomModel, setUseCustomModel] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const customRef = useRef({ url: "", model: "" });
 
   useEffect(() => {
@@ -188,6 +200,30 @@ export default function LlmSettingsPage() {
 
   async function handleSave() {
     await saveSettings(settings);
+  }
+
+  async function handleReset() {
+    setResetting(true);
+    try {
+      const res = await fetch("/api/settings/llm", { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to reset");
+      setSettings((s) => ({
+        ...s,
+        llmProvider: "openai",
+        llmBaseUrl: "https://api.openai.com/v1",
+        llmModel: "gpt-4o-mini",
+        llmApiKey: "",
+        hasApiKey: false,
+      }));
+      setUseCustomModel(false);
+      setTestResult("idle");
+      toast.success("Settings reset to defaults");
+    } catch {
+      toast.error("Failed to reset settings");
+    } finally {
+      setResetting(false);
+      setResetDialogOpen(false);
+    }
   }
 
   async function testConnection() {
@@ -609,6 +645,54 @@ export default function LlmSettingsPage() {
               placeholder="https://api.osv.dev"
             />
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-destructive/20">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+            <div>
+              <CardTitle>Reset Configuration</CardTitle>
+              <CardDescription>
+                Reset all LLM settings to their defaults
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="destructive" disabled={resetting}>
+                {resetting ? "Resetting..." : "Reset to defaults"}
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Reset LLM Configuration?</DialogTitle>
+                <DialogDescription>
+                  This will reset your provider, model, API key, and all LLM
+                  settings to their factory defaults. This action cannot be
+                  undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setResetDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleReset}
+                  disabled={resetting}
+                >
+                  {resetting ? "Resetting..." : "Reset"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
     </div>

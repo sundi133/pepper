@@ -98,4 +98,40 @@ export async function PUT(req: NextRequest) {
       { status: 500 },
     );
   }
+
+  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+}
+
+const DEFAULTS = {
+  llmProvider: "openai",
+  llmBaseUrl: "https://api.openai.com/v1",
+  llmModel: "gpt-4o-mini",
+  llmApiKey: null,
+  enableLlmSast: true,
+  enableLlmSecrets: true,
+  osvApiUrl: "https://api.osv.dev",
+  vulnDbMode: "online",
+};
+
+export async function DELETE() {
+  const auth = await requireAuth();
+  if ("error" in auth) return auth.error;
+
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId)
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
+
+  try {
+    await prisma.orgSettings.upsert({
+      where: { organizationId: orgId },
+      update: DEFAULTS,
+      create: { organizationId: orgId, ...DEFAULTS },
+    });
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json(
+      { error: "Failed to reset settings" },
+      { status: 500 },
+    );
+  }
 }

@@ -30,7 +30,26 @@ import {
   resolveGithubRepoForFixPr,
 } from "@/lib/open-fix-pr-client";
 import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
-import { ExternalLink, Sparkles, GitPullRequest, Copy, ShieldCheck } from "lucide-react";
+import {
+  ExternalLink,
+  Sparkles,
+  GitPullRequest,
+  Copy,
+  ShieldCheck,
+  Bug,
+  FileCode,
+  ListChecks,
+  AlertTriangle,
+  Shield,
+  Terminal,
+  Code2,
+  ScrollText,
+  FileSearch,
+  CheckCircle2,
+  Siren,
+  Braces,
+  MousePointerClick,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -283,23 +302,16 @@ function SecretFindingReport({ finding, sourceContext }: { finding: Finding; sou
 }
 
 function SastFindingReport({ finding, sourceContext }: { finding: Finding; sourceContext?: FindingScanSourceContext }) {
-  const [generatedDetails, setGeneratedDetails] = useState<{
-    summary: string;
-    vulnerabilityDetails: string;
-    stepsToReproduce: string[];
-    impact: string;
-    remediation: string[];
-  } | null>(null);
+  const [generatedDetails, setGeneratedDetails] = useState<Record<string, unknown> | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
   const report = buildStoredFindingReport(finding);
   const metadata = finding.metadata as Record<string, unknown> | undefined;
 
-  // Load AI-generated details on mount
   useEffect(() => {
-    const cachedDetails = (metadata?.generatedDetails as typeof generatedDetails | undefined);
-    if (cachedDetails) {
-      setGeneratedDetails(cachedDetails);
+    const cached = (metadata?.generatedDetails as Record<string, unknown> | undefined);
+    if (cached) {
+      setGeneratedDetails(cached);
     } else {
       loadGeneratedDetails();
     }
@@ -308,211 +320,175 @@ function SastFindingReport({ finding, sourceContext }: { finding: Finding; sourc
   const loadGeneratedDetails = async () => {
     setLoadingDetails(true);
     try {
-      const response = await fetch(
-        `/api/findings/${finding.id}/generate-details`,
-        { method: "POST" }
-      );
-      if (response.ok) {
-        const details = await response.json();
-        setGeneratedDetails(details);
-      }
-    } catch (error) {
-      console.error("Failed to load generated details:", error);
-    } finally {
+      const res = await fetch(`/api/findings/${finding.id}/generate-details`, { method: "POST" });
+      if (res.ok) setGeneratedDetails(await res.json());
+    } catch { /* silent */ } finally {
       setLoadingDetails(false);
     }
   };
 
-  // Extract title and CWE for heading
+  const g = (key: string) => generatedDetails?.[key];
+  const gStr = (key: string) => { const v = g(key); return typeof v === "string" ? v : ""; };
+  const gArr = (key: string) => { const v = g(key); return Array.isArray(v) ? v as string[] : []; };
+
   const title = finding.title || report.vulnerabilityName;
-  const cwe = finding.cweId ? `(${finding.cweId})` : '';
-  const heading = `${title} ${cwe}`.trim();
+  const conf = (metadata?.confidence as number | undefined) ?? (finding.confidence as number | undefined) ?? 0;
 
-  // Extract curl command from steps if present
-  const stepsToUse = generatedDetails?.stepsToReproduce || report.stepsToReproduce;
-  const curlCommand = stepsToUse
-    .map(step => {
-      const curlMatch = step.match(/curl\s+[^\n]+/i);
-      return curlMatch ? curlMatch[0] : null;
-    })
-    .find(cmd => cmd !== null);
+  const stepsAsStr = gStr("stepsToReproduce");
+  const stepsAsArr = gArr("stepsToReproduce").length > 0 ? gArr("stepsToReproduce") : report.stepsToReproduce;
+  const hasSteps = !!stepsAsStr || stepsAsArr.length > 0;
 
-  const handleCopyCurl = () => {
-    if (curlCommand) {
-      navigator.clipboard.writeText(curlCommand);
-      toast.success("Curl command copied to clipboard");
-    }
-  };
+  const remAsStr = gStr("remediation");
+  const remAsArr = gArr("remediation").length > 0 ? gArr("remediation") : report.remediation;
+  const hasRem = !!remAsStr || remAsArr.length > 0;
+
+  const hasRefs = gStr("references") || finding.cweId || finding.cveId;
 
   return (
-    <section className="finding-detail-report min-w-0 w-full overflow-hidden p-3 sm:p-4 space-y-3 sm:space-y-4 text-sm sm:text-base">
-      {/* Main Heading */}
-      <div className="space-y-2 pb-2 border-b border-border/40">
-        <h1 className="text-base sm:text-lg font-bold text-foreground break-words">{heading}</h1>
-        <div className="flex items-center gap-4">
-          {finding.severity && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Severity:</span>
+    <section className="finding-detail-report min-w-0 w-full overflow-hidden">
+      <div className="space-y-6">
+
+        <div className="space-y-2">
+          <h2 className="text-xl font-bold text-foreground tracking-tight">{title}</h2>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            <span className="flex items-center gap-1.5">
+              <span className="font-semibold text-foreground">Severity:</span>
               <SeverityBadge severity={finding.severity} />
-            </div>
-          )}
-          {(() => {
-            const conf = (metadata?.confidence as number | undefined) ?? (finding.confidence as number | undefined) ?? 0;
-            return conf > 0 ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Confidence:</span>
-                <span className="text-xs font-semibold">{Math.round(conf * 100)}%</span>
-              </div>
-            ) : null;
-          })()}
+            </span>
+            {finding.cweId && (
+              <span className="flex items-center gap-1.5">
+                <span className="font-semibold text-foreground">CWE:</span>
+                <a
+                  href={getCweUrl(finding.cweId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
+                >
+                  {finding.cweId} – {finding.title}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </span>
+            )}
+            {conf > 0 && (
+              <span className="flex items-center gap-1.5">
+                <span className="font-semibold text-foreground">Confidence:</span>
+                <span>{Math.round(conf * 100)}%</span>
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            {finding.filePath && (
+              <span className="inline-flex items-center gap-1 font-mono text-xs">
+                <Code2 className="h-3.5 w-3.5" />
+                {finding.filePath}{finding.startLine ? `:${finding.startLine}` : ""}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Summary Section */}
-      <div className="space-y-2">
-        <h2 className="text-xs sm:text-sm font-semibold text-foreground">Summary</h2>
-        <p className="text-xs sm:text-sm leading-relaxed text-foreground">
-          {loadingDetails ? (
-            <span className="text-muted-foreground italic">Generating summary...</span>
-          ) : generatedDetails?.summary ? (
-            generatedDetails.summary
-          ) : (
-            (() => {
-              const lines = report.summary.split('\n\n');
-              const lead = lines[0] || report.summary;
-              const cleanLead = lead
-                .split('\n')
-                .filter(line => !line.match(/^(What is wrong|Where|Why it is exploitable|How to validate|Severity):/))
-                .join('\n')
-                .trim();
-              return cleanLead || report.summary;
-            })()
-          )}
-        </p>
-      </div>
+        {(gStr("summary") || report.summary) && (
+          <div>
+            <h3 className="text-base font-bold mb-1.5">Summary</h3>
+            {loadingDetails ? (
+              <p className="text-sm text-muted-foreground italic">Generating summary...</p>
+            ) : (
+              <ReportSummaryText text={gStr("summary") || report.summary} />
+            )}
+          </div>
+        )}
 
-      {/* Affected File */}
-      <div className="space-y-2 border-t border-border/40 pt-4">
-        <h2 className="text-sm font-semibold text-foreground">Affected File</h2>
-        <div className="text-xs space-y-2">
-          {(() => {
-            const fileUrl = sourceContext && finding.filePath && finding.startLine
-              ? githubBlobLineUrl({
-                  repoUrl: sourceContext?.repoUrl,
-                  commitSha: sourceContext?.commitSha,
-                  branch: sourceContext?.branch,
-                  defaultBranch: sourceContext?.defaultBranch,
-                  filePath: finding.filePath,
-                  startLine: finding.startLine,
-                })
-              : null;
+        {hasSteps && (
+          <div>
+            <h3 className="text-base font-bold mb-1.5">Steps to Reproduce</h3>
+            {loadingDetails ? (
+              <p className="text-sm text-muted-foreground italic">Generating steps...</p>
+            ) : stepsAsStr ? (
+              <ReportRichText text={stepsAsStr} />
+            ) : (
+              <div className="space-y-3">
+                {stepsAsArr.filter(s => s && s.trim()).map((step, idx) => {
+                  const curlMatch = step.match(/```(?:bash)?\s*\n([\s\S]*?)```/);
+                  if (curlMatch) {
+                    const before = step.replace(/```(?:bash)?\s*\n[\s\S]*?```/, "").trim();
+                    return (
+                      <div key={idx}>
+                        {before && <p className="text-sm leading-6 text-muted-foreground mb-1">{before}</p>}
+                        <pre className="overflow-x-auto rounded-lg bg-muted/80 border border-border/60 p-3 text-xs font-mono leading-relaxed text-foreground mb-2">
+                          <code>{curlMatch[1]}</code>
+                        </pre>
+                      </div>
+                    );
+                  }
+                  if (step.startsWith("http") || step.startsWith("curl")) {
+                    return (
+                      <pre key={idx} className="overflow-x-auto rounded-lg bg-muted/80 border border-border/60 p-3 text-xs font-mono leading-relaxed text-foreground mb-2">
+                        <code>{step}</code>
+                      </pre>
+                    );
+                  }
+                  return (
+                    <p key={idx} className="text-sm leading-6 text-muted-foreground">
+                      <strong className="text-foreground mr-1">{idx + 1}.</strong>
+                      {step}
+                    </p>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
-            return (
-              <div>
-                <p className="text-muted-foreground mb-1"><strong>File:</strong></p>
-                {fileUrl ? (
-                  <a
-                    href={fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline font-mono text-xs flex items-center gap-1 break-all"
-                  >
-                    {finding.filePath}
-                    <ExternalLink className="h-3 w-3 shrink-0" />
-                  </a>
-                ) : (
-                  <code className="bg-muted px-1.5 py-0.5 rounded block break-all text-foreground">
-                    {finding.filePath || "Unknown"}
-                  </code>
+        {(gStr("impact") || report.impact) && (
+          <div>
+            <h3 className="text-base font-bold mb-1.5">Impact</h3>
+            {loadingDetails ? (
+              <p className="text-sm text-muted-foreground italic">Generating impact...</p>
+            ) : (
+              <ReportRichText text={gStr("impact") || report.impact} />
+            )}
+          </div>
+        )}
+
+        {hasRem && (
+          <div>
+            <h3 className="text-base font-bold mb-1.5">Remediation</h3>
+            {loadingDetails ? (
+              <p className="text-sm text-muted-foreground italic">Generating recommendations...</p>
+            ) : remAsStr ? (
+              <ReportRichText text={remAsStr} />
+            ) : (
+              <ReportPlainList items={remAsArr} />
+            )}
+          </div>
+        )}
+
+        {hasRefs && (
+          <div>
+            <h3 className="text-base font-bold mb-1.5">References</h3>
+            {gStr("references") ? (
+              <ReportRichText text={gStr("references")} />
+            ) : (
+              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                {finding.cweId && (
+                  <li>
+                    <a href={getCweUrl(finding.cweId)} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                      {finding.cweId} – {finding.title}
+                    </a>
+                  </li>
                 )}
-              </div>
-            );
-          })()}
+                {finding.cveId && (
+                  <li>
+                    <a href={getCveUrl(finding.cveId)} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                      {finding.cveId}
+                    </a>
+                  </li>
+                )}
+              </ul>
+            )}
+          </div>
+        )}
 
-          {finding.startLine && (
-            <div>
-              <p className="text-muted-foreground mb-1"><strong>Location:</strong></p>
-              <code className="bg-muted px-1.5 py-0.5 rounded text-foreground">
-                Line {finding.startLine}
-                {finding.endLine && finding.endLine !== finding.startLine && `-${finding.endLine}`}
-              </code>
-            </div>
-          )}
-        </div>
       </div>
-
-      {/* Vulnerability Details */}
-      {(generatedDetails?.vulnerabilityDetails || finding.description) && (
-        <div className="space-y-2 border-t border-border/40 pt-4">
-          <h2 className="text-sm font-semibold text-foreground">Details</h2>
-          <p className="text-xs sm:text-sm leading-relaxed text-foreground line-clamp-2">
-            {loadingDetails ? (
-              <span className="text-muted-foreground italic">Generating details...</span>
-            ) : generatedDetails?.vulnerabilityDetails ? (
-              generatedDetails.vulnerabilityDetails
-            ) : (
-              finding.description || "No details available"
-            )}
-          </p>
-        </div>
-      )}
-
-      {/* Steps to Reproduce */}
-      {finding.scanner !== "K8S" && (generatedDetails?.stepsToReproduce?.length || stepsToUse.length > 0 || loadingDetails) && (
-        <div className="space-y-2 border-t border-border/40 pt-4">
-          <h2 className="text-sm font-semibold text-foreground">Steps to Reproduce</h2>
-          <div className="text-xs sm:text-sm space-y-1.5 text-foreground">
-            {loadingDetails ? (
-              <span className="text-muted-foreground italic">Generating steps...</span>
-            ) : (
-              (generatedDetails?.stepsToReproduce || stepsToUse)
-                .filter(step => step && step.trim().length > 0)
-                .map((step, idx) => (
-                  <div key={idx} className="leading-relaxed text-xs">
-                    <span className="font-semibold">{idx + 1}.</span> {step}
-                  </div>
-                ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Impact */}
-      {(generatedDetails?.impact || report.impact) && (
-        <div className="space-y-2 border-t border-border/40 pt-4">
-          <h2 className="text-sm font-semibold text-foreground">Impact</h2>
-          <p className="text-xs sm:text-sm leading-relaxed text-foreground line-clamp-2">
-            {loadingDetails ? (
-              <span className="text-muted-foreground italic">Generating impact...</span>
-            ) : generatedDetails?.impact ? (
-              generatedDetails.impact
-            ) : (
-              report.impact
-            )}
-          </p>
-        </div>
-      )}
-
-      {/* Remediation */}
-      {(generatedDetails?.remediation?.length || report.remediation?.length) ? (
-        <div className="space-y-2 border-t border-border/40 pt-4">
-          <h2 className="text-sm font-semibold text-foreground">Remediation</h2>
-          <div className="text-xs sm:text-sm space-y-1.5 text-foreground">
-            {loadingDetails ? (
-              <span className="text-muted-foreground italic">Generating remediation...</span>
-            ) : (
-              (generatedDetails?.remediation || report.remediation)
-                .filter(step => stripReportMarkdown(step).trim().length > 0)
-                .slice(0, 3)
-                .map((step, idx) => (
-                  <div key={idx} className="leading-relaxed text-xs">
-                    <span className="font-semibold">{idx + 1}.</span> {stripReportMarkdown(step)}
-                  </div>
-                ))
-            )}
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -1303,99 +1279,213 @@ function PatternMatchReport({ finding }: { finding: Finding }) {
   );
 }
 
-function InlineBackticks({ text }: { text: string }) {
-  const parts = text.split(/(`[^`]+`)/g);
-  return (
-    <>
-      {parts.map((part, index) =>
-        part.startsWith("`") && part.endsWith("`") ? (
-          <code
-            key={index}
-            className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground"
-          >
-            {part.slice(1, -1)}
-          </code>
-        ) : (
-          <span key={index}>{part}</span>
-        ),
-      )}
-    </>
+function stripReportLabels(text: string): string {
+  return text.replace(
+    /^(?:What is wrong|Where|Why it is exploitable|How to validate the fix|Attack path|Fix|Impact|Steps to reproduce safely|Recommendation|Severity):\s*/i,
+    "",
   );
 }
 
-const REPORT_SUMMARY_LABELS =
-  "What is wrong|Where|Why it is exploitable|How to validate the fix|Attack path|Fix";
-
-/** Summary with bold inline field labels (What is wrong, Where, …). */
+/** Renders summary paragraphs with inline markdown support, labels stripped. */
 function ReportSummaryText({ text }: { text: string }) {
-  const clean = stripReportMarkdown(text);
-  const paragraphs = clean.split(/\n\n+/).filter(Boolean);
-
+  const blocks = splitMarkdownBlocks(text);
   return (
     <div className="space-y-3">
-      {paragraphs.map((para, i) => {
-        const labelMatch = para.match(
-          new RegExp(
-            `^(${REPORT_SUMMARY_LABELS}):\\s*([\\s\\S]*)$`,
-            "i",
-          ),
-        );
-        if (labelMatch) {
+      {blocks.map((block, i) => {
+        if (block.type === "paragraph") {
           return (
-            <p
-              key={i}
-              className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground"
-            >
-              <span className="font-bold text-foreground">{labelMatch[1]}:</span>{" "}
-              <InlineBackticks text={labelMatch[2].trim()} />
+            <p key={i} className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">
+              <InlineMarkdown text={stripReportLabels(block.content)} />
             </p>
           );
         }
-        return (
-          <p
-            key={i}
-            className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground"
-          >
-            <InlineBackticks text={para} />
-          </p>
-        );
+        if (block.type === "list") {
+          return (
+            <ul key={i} className="space-y-1 list-none">
+              {block.items.map((item, j) => (
+                <li key={j} className="text-sm leading-6 text-muted-foreground flex gap-2">
+                  <span className="text-foreground/40 mt-0.5 shrink-0">•</span>
+                  <span className="min-w-0"><InlineMarkdown text={stripReportLabels(item)} /></span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        return null;
       })}
     </div>
   );
 }
 
-/** Renders report text (plain; strips stray markdown markers). */
+/** Renders markdown-like report text with proper formatting, labels stripped. */
 function ReportRichText({ text }: { text: string }) {
-  const clean = stripReportMarkdown(text);
-  const segments = clean.split(/(```[\w-]*\n[\s\S]*?```)/g);
+  const blocks = splitMarkdownBlocks(text);
   return (
-    <div className="space-y-2">
-      {segments.map((seg, i) => {
-        if (seg.startsWith("```")) {
-          const cleaned = seg
-            .replace(/^```[\w-]*\n?/, "")
-            .replace(/\n?```\s*$/u, "");
+    <div className="space-y-3">
+      {blocks.map((block, i) => {
+        if (block.type === "code") {
           return (
             <pre
               key={i}
               className="max-w-full overflow-x-auto rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono leading-relaxed text-foreground"
             >
-              {cleaned}
+              {block.content}
             </pre>
           );
         }
-        if (!seg) return null;
+        if (block.type === "orderedList") {
+          return (
+            <ul key={i} className="space-y-2 list-none">
+              {block.items.map((item, j) => {
+                const codeMatch = item.match(/```[\w-]*\n?([\s\S]*?)```/);
+                const textPart = codeMatch ? item.replace(/```[\w-]*\n?[\s\S]*?```/, "").trim() : item;
+                return (
+                  <li key={j} className="flex gap-2">
+                    <span className="text-foreground/40 mt-0.5 shrink-0">•</span>
+                    <div className="min-w-0 space-y-2">
+                      {textPart && <span className="text-sm leading-6 text-muted-foreground"><InlineMarkdown text={stripReportLabels(textPart)} /></span>}
+                      {codeMatch && (
+                        <pre className="overflow-x-auto rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono leading-relaxed text-foreground">
+                          {codeMatch[1].trim()}
+                        </pre>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          );
+        }
+        if (block.type === "list") {
+          return (
+            <ul key={i} className="space-y-1.5 list-none">
+              {block.items.map((item, j) => (
+                <li key={j} className="text-sm leading-6 text-muted-foreground flex gap-2">
+                  <span className="text-foreground/40 mt-0.5 shrink-0">•</span>
+                  <span className="min-w-0"><InlineMarkdown text={stripReportLabels(item)} /></span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        if (block.type === "heading") {
+          return <h4 key={i} className="text-sm font-semibold text-foreground">{stripReportLabels(block.content)}</h4>;
+        }
         return (
-          <p
-            key={i}
-            className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground"
-          >
-            <InlineBackticks text={seg} />
+          <p key={i} className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">
+            <InlineMarkdown text={stripReportLabels(block.content)} />
           </p>
         );
       })}
     </div>
   );
+}
+
+function InlineMarkdown({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={i} className="font-semibold text-foreground">{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith("`") && part.endsWith("`")) {
+          return (
+            <code key={i} className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+              {part.slice(1, -1)}
+            </code>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
+type MarkdownBlock =
+  | { type: "paragraph"; content: string }
+  | { type: "code"; content: string }
+  | { type: "list"; items: string[] }
+  | { type: "orderedList"; items: string[] }
+  | { type: "heading"; content: string };
+
+function splitMarkdownBlocks(text: string): MarkdownBlock[] {
+  const blocks: MarkdownBlock[] = [];
+  const rawBlocks = text.split(/\n\n+/);
+
+  for (const raw of rawBlocks) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+
+    // Code block
+    const codeMatch = trimmed.match(/^```[\w-]*\n?([\s\S]*?)```\s*$/);
+    if (codeMatch) {
+      blocks.push({ type: "code", content: codeMatch[1].trim() });
+      continue;
+    }
+
+    // Heading
+    const headingMatch = trimmed.match(/^#{1,4}\s+(.+)$/m);
+    if (headingMatch) {
+      blocks.push({ type: "heading", content: headingMatch[1].trim() });
+      continue;
+    }
+
+    // Ordered list (supports multi-line items with embedded code blocks)
+    const lines = trimmed.split("\n");
+    if (lines.some(l => /^\s*\d+\.\s+/.test(l))) {
+      const items: string[] = [];
+      let current: string[] = [];
+      for (const line of lines) {
+        const match = line.match(/^\s*\d+\.\s+(.*)$/);
+        if (match) {
+          if (current.length > 0) items.push(current.join("\n").trim());
+          current = [match[1]];
+        } else if (current.length > 0) {
+          current.push(line);
+        }
+      }
+      if (current.length > 0) items.push(current.join("\n").trim());
+      blocks.push({ type: "orderedList", items });
+      continue;
+    }
+
+    // Bullet list
+    if (lines.some(l => /^\s*[-*+]\s+/.test(l))) {
+      const items = lines
+        .filter(l => /^\s*[-*+]\s+/.test(l))
+        .map(l => l.replace(/^\s*[-*+]\s+/, "").trim());
+      blocks.push({ type: "list", items });
+      continue;
+    }
+
+    blocks.push({ type: "paragraph", content: trimmed });
+  }
+
+  // Merge orphaned blocks into preceding ordered list items,
+  // then merge any following orderedList as a continuation.
+  for (let i = blocks.length - 1; i > 0; i--) {
+    const prev = blocks[i - 1];
+    const curr = blocks[i];
+    if (prev.type === "orderedList" && (curr.type === "paragraph")) {
+      prev.items[prev.items.length - 1] += "\n\n" + curr.content;
+      blocks.splice(i, 1);
+    }
+    if (prev.type === "orderedList" && curr.type === "code") {
+      prev.items[prev.items.length - 1] += "\n\n```\n" + curr.content + "\n```";
+      blocks.splice(i, 1);
+    }
+  }
+  for (let i = blocks.length - 1; i > 0; i--) {
+    const prev = blocks[i - 1];
+    const curr = blocks[i];
+    if (prev.type === "orderedList" && curr.type === "orderedList") {
+      prev.items.push(...curr.items);
+      blocks.splice(i, 1);
+    }
+  }
+
+  return blocks;
 }
 
 function ReportPlainList({ items }: { items: string[] }) {
@@ -1407,7 +1497,7 @@ function ReportPlainList({ items }: { items: string[] }) {
             {index + 1}
           </span>
           <div className="pt-0.5 min-w-0">
-            <ReportRichText text={step} />
+            <InlineMarkdown text={step} />
           </div>
         </li>
       ))}
@@ -1635,10 +1725,18 @@ function ReportBlock({
   icon?: React.ReactNode;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="finding-section space-y-3">
       <div className="flex items-center gap-2">
-        {icon && <span className="text-lg">{icon}</span>}
-        <h3 className="text-base font-bold text-foreground">{title}</h3>
+        {icon && (
+          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10">
+            {typeof icon === "string" ? (
+              <span className="text-sm">{icon}</span>
+            ) : (
+              <div className="text-primary">{icon}</div>
+            )}
+          </div>
+        )}
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       </div>
       <div className="min-w-0">{children}</div>
     </div>

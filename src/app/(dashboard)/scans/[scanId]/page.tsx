@@ -40,6 +40,9 @@ import {
   Check,
   Clock,
   Timer,
+  Siren,
+  Shield,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -617,43 +620,51 @@ export default function ScanDetailPage() {
       {/* Summary Cards */}
       {(hasReportableFindings || isActive) && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-3">
-          <Card className="border-0 bg-gradient-to-br from-red-50 to-red-50/50 dark:from-red-950/30 dark:to-red-950/10 shadow-sm hover:shadow-md transition-shadow">
+          <Card className="border-0 bg-gradient-to-br from-red-50 to-red-50/50 dark:from-red-950/30 dark:to-red-950/10 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
             <CardContent className="pt-4 pb-4">
               <div className="flex items-center gap-2 mb-2">
-                <div className="h-3 w-3 rounded-full bg-red-600 shadow-lg shadow-red-600/20" />
+                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-red-100 dark:bg-red-900/40">
+                  <Siren className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                </div>
                 <span className="text-xs font-semibold text-red-700 dark:text-red-400 uppercase tracking-wider">Critical</span>
               </div>
-              <p className="text-3xl font-bold text-red-700 dark:text-red-400">{scan.criticalCount}</p>
+              <p className="text-3xl font-bold text-red-700 dark:text-red-400 tabular-nums">{scan.criticalCount}</p>
               <div className="mt-1.5 h-0.5 w-10 bg-gradient-to-r from-red-600 to-red-400 rounded-full"></div>
             </CardContent>
           </Card>
-          <Card className="border-0 bg-gradient-to-br from-orange-50 to-orange-50/50 dark:from-orange-950/30 dark:to-orange-950/10 shadow-sm hover:shadow-md transition-shadow">
+          <Card className="border-0 bg-gradient-to-br from-orange-50 to-orange-50/50 dark:from-orange-950/30 dark:to-orange-950/10 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
             <CardContent className="pt-4 pb-4">
               <div className="flex items-center gap-2 mb-2">
-                <div className="h-3 w-3 rounded-full bg-orange-500 shadow-lg shadow-orange-500/20" />
+                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-orange-100 dark:bg-orange-900/40">
+                  <AlertTriangle className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
+                </div>
                 <span className="text-xs font-semibold text-orange-700 dark:text-orange-400 uppercase tracking-wider">High</span>
               </div>
-              <p className="text-3xl font-bold text-orange-700 dark:text-orange-400">{scan.highCount}</p>
+              <p className="text-3xl font-bold text-orange-700 dark:text-orange-400 tabular-nums">{scan.highCount}</p>
               <div className="mt-1.5 h-0.5 w-10 bg-gradient-to-r from-orange-500 to-orange-400 rounded-full"></div>
             </CardContent>
           </Card>
-          <Card className="border-0 bg-gradient-to-br from-yellow-50 to-yellow-50/50 dark:from-yellow-950/30 dark:to-yellow-950/10 shadow-sm hover:shadow-md transition-shadow">
+          <Card className="border-0 bg-gradient-to-br from-yellow-50 to-yellow-50/50 dark:from-yellow-950/30 dark:to-yellow-950/10 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
             <CardContent className="pt-4 pb-4">
               <div className="flex items-center gap-2 mb-2">
-                <div className="h-3 w-3 rounded-full bg-yellow-500 shadow-lg shadow-yellow-500/20" />
+                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-yellow-100 dark:bg-yellow-900/40">
+                  <Shield className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
+                </div>
                 <span className="text-xs font-semibold text-yellow-700 dark:text-yellow-400 uppercase tracking-wider">Medium</span>
               </div>
-              <p className="text-3xl font-bold text-yellow-700 dark:text-yellow-400">{scan.mediumCount}</p>
+              <p className="text-3xl font-bold text-yellow-700 dark:text-yellow-400 tabular-nums">{scan.mediumCount}</p>
               <div className="mt-1.5 h-0.5 w-10 bg-gradient-to-r from-yellow-500 to-yellow-400 rounded-full"></div>
             </CardContent>
           </Card>
-          <Card className="border-0 bg-gradient-to-br from-blue-50 to-blue-50/50 dark:from-blue-950/30 dark:to-blue-950/10 shadow-sm hover:shadow-md transition-shadow">
+          <Card className="border-0 bg-gradient-to-br from-blue-50 to-blue-50/50 dark:from-blue-950/30 dark:to-blue-950/10 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
             <CardContent className="pt-4 pb-4">
               <div className="flex items-center gap-2 mb-2">
-                <div className="h-3 w-3 rounded-full bg-blue-500 shadow-lg shadow-blue-500/20" />
+                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-100 dark:bg-blue-900/40">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                </div>
                 <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wider">Low</span>
               </div>
-              <p className="text-3xl font-bold text-blue-700 dark:text-blue-400">{scan.lowCount}</p>
+              <p className="text-3xl font-bold text-blue-700 dark:text-blue-400 tabular-nums">{scan.lowCount}</p>
               <div className="mt-1.5 h-0.5 w-10 bg-gradient-to-r from-blue-500 to-blue-400 rounded-full"></div>
             </CardContent>
           </Card>
@@ -683,7 +694,7 @@ export default function ScanDetailPage() {
           <div className="space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-2xl font-bold">Findings ({visibleFindingCount})</h2>
+                <h2 className="text-2xl font-bold tracking-tight">Findings <span className="text-muted-foreground font-normal">({visibleFindingCount})</span></h2>
                 {scan.status === "COMPLETED" && (scan as { newFindingCount?: number }).newFindingCount ? (
                   <button
                     type="button"

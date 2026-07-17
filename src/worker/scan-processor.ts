@@ -10,7 +10,17 @@ import { ScanContext, RawFinding } from "@/scanners/types";
 import { createScanLogger } from "@/lib/logger";
 import { sendScanCompleteEmail } from "@/lib/email";
 import { extractArchive } from "@/lib/extract-archive";
-import { enrichFindingWithReport } from "@/lib/finding-report";
+import {
+  enrichFindingWithReport,
+  renderReportPlainText,
+  CURRENT_REPORT_VERSION,
+  type StoredFindingReport,
+} from "@/lib/finding-report";
+import {
+  createLlmClient,
+  analyzeWithLlm,
+  parseLlmJsonResponse,
+} from "@/lib/llm-gateway";
 import { uploadObject } from "@/lib/minio";
 import {
   generateCycloneDx,
@@ -366,10 +376,99 @@ export async function processScanJob(job: Job<ScanJobData>) {
       log.info({ fileCount: allFiles.length }, "Files enumerated");
     }
 
+    // AI enrichment: generate contextual report content via LLM for unique finding types
+    async function enrichFindingsWithAi(
+      findings: RawFinding[],
+    ): Promise<void> {
+      const llmApiKey = orgSettings.llmApiKey?.trim();
+      if (!llmApiKey && orgSettings.llmProvider !== "ollama") return;
+
+      const groups = new Map<string, RawFinding[]>();
+      for (const f of findings) {
+        const key = `${f.scanner}:${f.ruleId || "unknown"}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(f);
+      }
+
+      const client = createLlmClient({
+        provider: orgSettings.llmProvider,
+        baseUrl: orgSettings.llmBaseUrl,
+        apiKey: llmApiKey,
+        model: orgSettings.llmModel,
+      });
+
+      const systemPrompt = `You are a security engineer. Generate a structured vulnerability report as JSON only — no markdown, no explanation, no code fences.
+
+Schema:
+{
+  "vulnerabilityName": "concise descriptive name",
+  "summary": "what the issue is (2-3 sentences, specific to the finding)",
+  "stepsToReproduce": ["step 1", "step 2"],
+  "impact": "security impact specific to this vulnerability (2-3 sentences)",
+  "remediation": ["actionable fix step 1", "actionable fix step 2"]
+}`;
+
+      const tasks: Promise<void>[] = [];
+      for (const group of groups.values()) {
+        const rep = group[0];
+        tasks.push(
+          (async () => {
+            try {
+              const raw = await analyzeWithLlm(
+                client,
+                orgSettings.llmModel,
+                systemPrompt,
+                JSON.stringify({
+                  title: rep.title,
+                  description: rep.description,
+                  severity: rep.severity,
+                  scanner: rep.scanner,
+                  filePath: rep.filePath,
+                  snippet: rep.snippet,
+                  ruleId: rep.ruleId,
+                  cweId: rep.cweId,
+                }),
+                { temperature: 0.1, maxTokens: 1024 },
+              );
+              const report = parseLlmJsonResponse<StoredFindingReport | null>(
+                raw,
+                null,
+              );
+              if (!report) return;
+              const markdown = renderReportPlainText(report);
+              for (const f of group) {
+                const md = (
+                  f.metadata &&
+                  typeof f.metadata === "object" &&
+                  !Array.isArray(f.metadata)
+                    ? f.metadata
+                    : {}
+                ) as Record<string, unknown>;
+                md.reportVersion = CURRENT_REPORT_VERSION;
+                md.reportSections = report;
+                md.reportMarkdown = markdown;
+                f.metadata = md;
+              }
+            } catch (err) {
+              log.warn(
+                { err, key: `${rep.scanner}:${rep.ruleId}` },
+                "AI enrichment failed — falling back to template-based report",
+              );
+            }
+          })(),
+        );
+      }
+
+      await Promise.all(tasks);
+    }
+
     // Helper: insert findings into DB and increment severity counts
     async function insertFindings(findings: RawFinding[]) {
       if (findings.length === 0) return;
       await assertScanActive();
+
+      // AI enrichment: generate contextual report content for unique finding types
+      await enrichFindingsWithAi(findings);
 
       // Check findings against org suppression rules
       let keptFindings = findings;

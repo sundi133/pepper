@@ -24,7 +24,7 @@ export interface StoredFindingReport {
   remediation: string[];
 }
 
-const CURRENT_REPORT_VERSION = 9;
+export const CURRENT_REPORT_VERSION = 9;
 
 export function enrichFindingWithReport<T extends FindingReportInput>(
   finding: T,

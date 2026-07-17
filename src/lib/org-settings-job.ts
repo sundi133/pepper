@@ -45,11 +45,24 @@ export function buildOrgSettingsForJob(
     }
   }
 
+  function decryptLlmApiKey(stored: string | null | undefined): string | undefined {
+    if (!stored) return undefined;
+    if (stored.startsWith("enc:")) {
+      try {
+        return decryptSecret(stored.slice(4));
+      } catch {
+        return undefined;
+      }
+    }
+    // Legacy plaintext value — still usable
+    return stored;
+  }
+
   return {
     llmProvider: orgSettings?.llmProvider || "openai",
     llmBaseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",
     llmModel: orgSettings?.llmModel || "gpt-4o-mini",
-    llmApiKey: orgSettings?.llmApiKey || undefined,
+    llmApiKey: decryptLlmApiKey(orgSettings?.llmApiKey),
     enableLlmSast: orgSettings?.enableLlmSast ?? true,
     enableLlmSecrets: orgSettings?.enableLlmSecrets ?? true,
     osvApiUrl: orgSettings?.osvApiUrl || "https://api.osv.dev",

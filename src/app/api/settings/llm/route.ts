@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { encryptSecret } from "@/lib/token-encryption";
 import { z } from "zod";
 
 export async function GET() {
@@ -46,7 +47,7 @@ const updateSchema = z.object({
     .optional(),
   llmBaseUrl: z.string().url().optional(),
   llmModel: z.string().min(1).optional(),
-  llmApiKey: z.string().optional(),
+  llmApiKey: z.string().min(1, "API key cannot be empty").optional(),
   enableLlmSast: z.boolean().optional(),
   enableLlmSecrets: z.boolean().optional(),
   osvApiUrl: z.string().url().optional(),
@@ -67,7 +68,13 @@ export async function PUT(req: NextRequest) {
 
     // Don't update llmApiKey if empty string (means "keep existing")
     const updateData: Record<string, unknown> = { ...data };
-    if (data.llmApiKey === "") delete updateData.llmApiKey;
+    if (data.llmApiKey === "") {
+      delete updateData.llmApiKey;
+    } else if (data.llmApiKey) {
+      // Encrypt before storing — use "enc:" prefix so readers can distinguish
+      // encrypted keys from legacy plaintext values still in the database.
+      updateData.llmApiKey = "enc:" + encryptSecret(data.llmApiKey);
+    }
 
     await prisma.orgSettings.upsert({
       where: { organizationId: orgId },

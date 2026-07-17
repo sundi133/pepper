@@ -81,7 +81,10 @@ export function createLlmClient(config: LlmConfig): LlmClient {
   if (provider === "anthropic") {
     return {
       type: "anthropic",
-      client: new Anthropic({ apiKey: config.apiKey || "" }),
+      client: new Anthropic({
+        apiKey: config.apiKey || "",
+        ...(config.baseUrl ? { baseURL: config.baseUrl } : {}),
+      }),
       model: config.model,
     };
   }

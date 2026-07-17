@@ -28,6 +28,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  FolderGit2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -118,10 +119,10 @@ export function RepositoryInventory({
       type="button"
       onClick={() => onProviderFilterChange(value)}
       className={cn(
-        "rounded-full border px-3 py-1 text-xs font-medium transition-all",
+        "rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
         providerFilter === value
-          ? "border-slate-800 bg-slate-900 text-white dark:border-slate-200 dark:bg-slate-100 dark:text-slate-900"
-          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400",
+          ? "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-700/60 dark:bg-indigo-950/30 dark:text-indigo-300"
+          : "border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:bg-indigo-50/50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400",
       )}
     >
       {label}
@@ -131,24 +132,29 @@ export function RepositoryInventory({
   const withFindingsCount = stats.withIssues;
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-      <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <div className="border-b border-slate-100 px-6 py-4 dark:border-slate-800">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-slate-50">
-              Repository Inventory
-            </h2>
-            <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-              Monitored repositories and latest scan results
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+              <FolderGit2 className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">
+                Repositories
+              </h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Connected repositories and scan status
+              </p>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center rounded-full border border-teal-200/80 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-800 dark:border-teal-900/50 dark:bg-teal-950/40 dark:text-teal-200">
-              {stats.total} Connected
+            <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              {stats.total} connected
             </span>
             {withFindingsCount > 0 && (
-              <span className="inline-flex items-center rounded-full border border-red-200/80 bg-red-50 px-3 py-1 text-xs font-medium text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
-                {withFindingsCount} with Findings
+              <span className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+                {withFindingsCount} with findings
               </span>
             )}
           </div>
@@ -168,13 +174,13 @@ export function RepositoryInventory({
                 placeholder="Search repositories"
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="h-9 border-slate-200 bg-slate-50/50 pl-9 dark:border-slate-700 dark:bg-slate-900/50"
+                className="h-9 border-slate-300 bg-white pl-9 dark:border-slate-600 dark:bg-slate-900"
               />
             </div>
             <Button
               variant="outline"
               size="sm"
-              className="h-9 shrink-0 gap-1.5 border-slate-200"
+              className="h-9 shrink-0 gap-1.5 border-slate-300"
               onClick={() => void onRefresh()}
               disabled={loading}
             >
@@ -187,7 +193,7 @@ export function RepositoryInventory({
         </div>
       </div>
 
-      <div className="px-2 pb-2 pt-1">
+      <div>
         {loading && repos.length === 0 ? (
           <div className="flex items-center justify-center gap-2 py-20 text-slate-500">
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -195,11 +201,12 @@ export function RepositoryInventory({
           </div>
         ) : repos.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
+            <FolderGit2 className="h-10 w-10 text-slate-300 dark:text-slate-600" />
             <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              No repositories in inventory
+              No repositories connected
             </p>
             <p className="max-w-sm text-xs text-slate-500">
-              Add a source above to connect repositories and populate this table.
+              Add a source above to connect repositories and populate this list.
             </p>
           </div>
         ) : (
@@ -207,33 +214,14 @@ export function RepositoryInventory({
             <Table>
               <TableHeader>
                 <TableRow className="border-slate-100 hover:bg-transparent dark:border-slate-800">
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Repository
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Owner / path
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Provider
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Branch
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Status
-                  </TableHead>
-                  <TableHead className="text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Findings
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Severity
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Last scan
-                  </TableHead>
-                  <TableHead className="w-[160px] text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Actions
-                  </TableHead>
+                  <TableHead className="text-xs font-semibold tracking-wide text-slate-500">Repository</TableHead>
+                  <TableHead className="text-xs font-semibold tracking-wide text-slate-500">Provider</TableHead>
+                  <TableHead className="text-xs font-semibold tracking-wide text-slate-500">Branch</TableHead>
+                  <TableHead className="text-xs font-semibold tracking-wide text-slate-500">Status</TableHead>
+                  <TableHead className="text-right text-xs font-semibold tracking-wide text-slate-500">Findings</TableHead>
+                  <TableHead className="text-xs font-semibold tracking-wide text-slate-500">Severity</TableHead>
+                  <TableHead className="text-xs font-semibold tracking-wide text-slate-500">Last scan</TableHead>
+                  <TableHead className="w-[120px] text-xs font-semibold tracking-wide text-slate-500">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -254,30 +242,30 @@ export function RepositoryInventory({
                       <TableCell className="py-3">
                         <Link
                           href={href}
-                          className="font-medium text-slate-900 hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-400"
+                          className="font-medium text-slate-900 hover:text-indigo-600 dark:text-slate-100 dark:hover:text-indigo-400"
                         >
                           {repo.name}
                         </Link>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
-                        {repo.fullName}
+                        <div className="font-mono text-[11px] text-slate-400 truncate max-w-[200px]">
+                          {repo.fullName}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge
                           variant="outline"
-                          className="border-slate-200 font-normal text-[11px] text-slate-700 dark:border-slate-700"
+                          className="border-slate-200 font-normal text-[11px] text-slate-600 dark:border-slate-700 dark:text-slate-400"
                         >
                           {PROVIDER_LABEL[repo.provider]}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <span className="inline-flex items-center gap-1 font-mono text-xs text-slate-600 truncate max-w-xs" title={repo.branch}>
+                        <span className="inline-flex items-center gap-1 font-mono text-xs text-slate-600 truncate max-w-[120px] dark:text-slate-400" title={repo.branch}>
                           <GitBranch className="h-3 w-3 text-slate-400 shrink-0" />
                           <span className="truncate">{repo.branch}</span>
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={st.variant} className="font-normal">
+                        <Badge variant={st.variant} className="font-normal text-xs">
                           {st.label}
                         </Badge>
                       </TableCell>
@@ -287,7 +275,7 @@ export function RepositoryInventory({
                       <TableCell>
                         <span
                           className={cn(
-                            "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                            "inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium",
                             SEVERITY_STYLES[severity],
                           )}
                         >
@@ -298,12 +286,12 @@ export function RepositoryInventory({
                         {formatLastScan(repo.lastScanAt)}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center justify-end gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1 shrink-0">
                           {repo.scanId && (
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-8 gap-1 border-slate-200 text-xs whitespace-nowrap"
+                              className="h-8 gap-1 border-slate-300 text-xs whitespace-nowrap"
                               disabled={
                                 rescanningId === (repo.scanId ?? repo.projectId)
                               }
@@ -325,7 +313,7 @@ export function RepositoryInventory({
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500 shrink-0"
+                                className="h-8 w-8 text-slate-400 shrink-0"
                               >
                                 <MoreHorizontal className="h-4 w-4" />
                                 <span className="sr-only">Actions</span>

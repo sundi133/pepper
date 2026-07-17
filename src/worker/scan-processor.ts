@@ -493,6 +493,22 @@ Schema:
         // Suppression check failed — insert all findings as normal
       }
 
+      // Deduplicate within batch by (scanner, ruleId, filePath, startLine, title)
+      const beforeDedup = keptFindings.length;
+      const seen = new Set<string>();
+      keptFindings = keptFindings.filter((f) => {
+        const key = `${f.scanner}::${f.ruleId}::${f.filePath}::${f.startLine}::${f.title}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      if (beforeDedup > keptFindings.length) {
+        log.info(
+          { before: beforeDedup, after: keptFindings.length, removed: beforeDedup - keptFindings.length },
+          "Deduplicated findings within batch",
+        );
+      }
+
       // Insert kept findings as OPEN
       if (keptFindings.length > 0) {
         await prisma.finding.createMany({

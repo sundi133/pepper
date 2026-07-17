@@ -27,7 +27,6 @@ import {
   Shield,
   Sparkles,
   Database,
-  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
@@ -73,14 +72,41 @@ const PROVIDER_DEFAULTS: Record<
   },
 };
 
-const MODEL_REQUIRES_KEY: Record<string, boolean> = {
-  openai: true,
-  anthropic: true,
-  openrouter: false,
-  azure: true,
-  ollama: false,
-  vllm: false,
-  custom: false,
+const PROVIDER_MODELS: Record<string, { top: string[]; budget: string[] }> = {
+  openai: {
+    top: ["gpt-4o", "gpt-4.1", "o3", "o4-mini"],
+    budget: ["gpt-4o-mini", "gpt-4.1-mini", "o3-mini"],
+  },
+  anthropic: {
+    top: ["claude-opus-4-6", "claude-sonnet-4-6"],
+    budget: ["claude-haiku-4-5-20251001"],
+  },
+  openrouter: {
+    top: [
+      "google/gemini-2.5-flash",
+      "google/gemini-2.5-pro",
+      "deepseek/deepseek-coder",
+      "anthropic/claude-sonnet-4-6",
+    ],
+    budget: [
+      "google/gemini-2.0-flash",
+      "deepseek/deepseek-chat",
+      "meta-llama/llama-3.3-70b",
+      "mistralai/mistral-small",
+    ],
+  },
+  azure: {
+    top: ["gpt-4o", "gpt-4.1"],
+    budget: ["gpt-4o-mini", "gpt-4.1-mini"],
+  },
+  ollama: {
+    top: ["qwen2.5:7b", "llama3.2:7b", "mistral:7b"],
+    budget: ["qwen2.5:3b", "llama3.2:3b", "phi4:latest"],
+  },
+  vllm: {
+    top: ["meta-llama/Llama-3-70b", "mistralai/Mixtral-8x7B"],
+    budget: ["meta-llama/Llama-3-8b", "mistralai/Mistral-7B"],
+  },
 };
 
 const DEFAULT_SETTINGS = {
@@ -110,23 +136,6 @@ function ProviderIcon({ provider }: { provider: string }) {
   return <span className="mr-2">{icons[provider] || "🔌"}</span>;
 }
 
-async function fetchModelsFromProvider(
-  provider: string,
-  baseUrl: string,
-  apiKey?: string,
-): Promise<string[]> {
-  const params = new URLSearchParams({ provider, baseUrl });
-  if (apiKey) params.set("apiKey", apiKey);
-
-  const res = await fetch(`/api/settings/llm/models?${params}`);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Failed to fetch models`);
-  }
-  const data = await res.json();
-  return data.models || [];
-}
-
 export default function LlmSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -135,10 +144,7 @@ export default function LlmSettingsPage() {
   >("idle");
   const [testError, setTestError] = useState("");
   const [settings, setSettings] = useState<LlmSettings>(DEFAULT_SETTINGS);
-  const [models, setModels] = useState<string[]>([]);
-  const [fetchingModels, setFetchingModels] = useState(false);
-  const [useModelDropdown, setUseModelDropdown] = useState(false);
-  const [modelFetchError, setModelFetchError] = useState("");
+  const [useCustomModel, setUseCustomModel] = useState(false);
   const customRef = useRef({ url: "", model: "" });
 
   useEffect(() => {
@@ -201,43 +207,6 @@ export default function LlmSettingsPage() {
     }
   }
 
-  async function fetchModels() {
-    const key = MODEL_REQUIRES_KEY[settings.llmProvider]
-      ? settings.llmApiKey || settings.hasApiKey
-        ? settings.llmApiKey || undefined
-        : undefined
-      : undefined;
-
-    if (MODEL_REQUIRES_KEY[settings.llmProvider] && !key) {
-      toast.error("Enter an API key first to fetch models");
-      return;
-    }
-
-    setFetchingModels(true);
-    setModelFetchError("");
-    try {
-      const list = await fetchModelsFromProvider(
-        settings.llmProvider,
-        settings.llmBaseUrl,
-        key || settings.llmApiKey || undefined,
-      );
-      setModels(list);
-      if (list.length === 0) {
-        setModelFetchError("No models returned — check the URL");
-      } else {
-        setUseModelDropdown(true);
-        toast.success(`Found ${list.length} models`);
-      }
-    } catch (err) {
-      setModelFetchError(
-        err instanceof Error ? err.message : "Failed to fetch models",
-      );
-      setUseModelDropdown(false);
-    } finally {
-      setFetchingModels(false);
-    }
-  }
-
   async function updateSettings(
     patch: Partial<
       Pick<LlmSettings, "enableLlmSast" | "enableLlmSecrets" | "vulnDbMode">
@@ -268,25 +237,25 @@ export default function LlmSettingsPage() {
     }
     setTestResult("idle");
     setTestError("");
-    setModels([]);
-    setUseModelDropdown(false);
-    setModelFetchError("");
+    setUseCustomModel(false);
   }
 
   function handleModelSelect(value: string) {
     if (value === "__custom__") {
-      setUseModelDropdown(false);
+      setUseCustomModel(true);
       return;
     }
     setSettings((s) => ({ ...s, llmModel: value }));
   }
 
   const needsKey = settings.llmProvider !== "ollama";
-  const canFetchModels =
-    settings.llmBaseUrl &&
-    (!MODEL_REQUIRES_KEY[settings.llmProvider] ||
-      settings.llmApiKey ||
-      settings.hasApiKey);
+  const isCustomProvider = settings.llmProvider === "custom";
+  const models = PROVIDER_MODELS[settings.llmProvider];
+
+  function modelInList(): boolean {
+    if (!models) return false;
+    return [...models.top, ...models.budget].includes(settings.llmModel);
+  }
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -375,42 +344,37 @@ export default function LlmSettingsPage() {
               />
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Model</Label>
-                {canFetchModels && !fetchingModels && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 gap-1 px-2 text-xs text-muted-foreground"
-                    onClick={fetchModels}
-                  >
-                    <Search className="h-3 w-3" />
-                    Browse
-                  </Button>
-                )}
-                {fetchingModels && (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Loading...
-                  </span>
-                )}
-              </div>
-              {useModelDropdown && models.length > 0 ? (
+              <Label>Model</Label>
+              {!isCustomProvider && models && !useCustomModel ? (
                 <Select
-                  value={settings.llmModel}
+                  value={modelInList() ? settings.llmModel : "__custom__"}
                   onValueChange={handleModelSelect}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a model" />
                   </SelectTrigger>
-                  <SelectContent className="max-h-64">
-                    {models.map((m) => (
+                  <SelectContent className="max-h-72">
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                      Top models
+                    </div>
+                    {models.top.map((m) => (
                       <SelectItem key={m} value={m}>
                         {m}
                       </SelectItem>
                     ))}
-                    <SelectItem value="__custom__" className="border-t text-muted-foreground text-xs italic">
-                      Type custom model name...
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                      Budget
+                    </div>
+                    {models.budget.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                    <SelectItem
+                      value="__custom__"
+                      className="border-t text-muted-foreground text-xs italic"
+                    >
+                      Type custom name...
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -421,12 +385,20 @@ export default function LlmSettingsPage() {
                     setSettings((s) => ({ ...s, llmModel: e.target.value }));
                     setTestResult("idle");
                   }}
-                  placeholder="gpt-4o-mini"
+                  placeholder={
+                    isCustomProvider ? "gpt-4o-mini" : "Enter model name"
+                  }
                 />
               )}
-              {modelFetchError && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {modelFetchError}
+              {useCustomModel && (
+                <p className="text-xs text-muted-foreground">
+                  Type any model name above.{" "}
+                  <button
+                    className="underline"
+                    onClick={() => setUseCustomModel(false)}
+                  >
+                    Back to list
+                  </button>
                 </p>
               )}
             </div>

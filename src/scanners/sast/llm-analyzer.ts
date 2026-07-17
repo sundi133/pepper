@@ -595,10 +595,6 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
     ctx.onProgress?.(`LLM SAST: ${validated.length} findings across ${totalFiles} files`);
   }
 
-  if (ctx.onScannerComplete) {
-    await ctx.onScannerComplete("SAST_LLM", validated);
-  }
-
   return validated;
 }
 

@@ -464,10 +464,6 @@ export const secretsPatternScanner: ScannerPlugin = {
       await ctx.onBatchFindings("SECRETS_PATTERN", findings);
     }
 
-    if (ctx.onScannerComplete) {
-      await ctx.onScannerComplete("SECRETS_PATTERN", findings);
-    }
-
     return findings;
   },
 };
@@ -563,16 +559,10 @@ export const secretsLlmScanner: ScannerPlugin = {
         model: ctx.orgSettings.llmModel,
       });
       ctx.onProgress?.(`Secrets AI: ${classified.length} confirmed secret(s) after classification`);
-      if (ctx.onScannerComplete) {
-        await ctx.onScannerComplete("SECRETS_LLM", classified);
-      }
       return classified;
     }
 
     ctx.onProgress?.(`Secrets AI: ${findings.length} confirmed secret(s)`);
-    if (ctx.onScannerComplete) {
-      await ctx.onScannerComplete("SECRETS_LLM", findings);
-    }
     return findings;
   },
 };

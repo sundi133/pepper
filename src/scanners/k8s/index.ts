@@ -215,7 +215,7 @@ export const k8sScanner: ScannerPlugin = {
       }
     }
 
-    if (findings.length > 0 && ctx.onScannerComplete) {
+    if (findings.length > 0) {
       ctx.onProgress?.(`K8S: found ${findings.length} security issue(s)`);
     }
 

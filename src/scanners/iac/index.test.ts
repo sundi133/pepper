@@ -207,7 +207,9 @@ describe("IaC scanner", () => {
         },
       });
       // Suppressed findings should be marked
-      const suppressed = findings.filter((f) => f.suppressed);
+      const suppressed = findings.filter(
+        (f) => (f as unknown as Record<string, unknown>).suppressed,
+      );
       expect(suppressed.length >= 0).toBe(true);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });

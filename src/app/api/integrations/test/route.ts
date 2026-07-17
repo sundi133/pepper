@@ -23,6 +23,10 @@ export async function POST(req: NextRequest) {
   }
 
   const body = (await req.json()) as IntegrationConfigData;
+  // Captured before the exhaustive branching below: the union is fully handled,
+  // so `body` narrows to `never` in the final else — but that branch is still
+  // reachable at runtime for a malformed/unknown kind from req.json().
+  const kind = body.kind;
 
   try {
     if (body.kind === "SLACK") {
@@ -80,7 +84,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, status: result.status });
     } else {
       return NextResponse.json(
-        { error: `Test not implemented for ${body.kind}` },
+        { error: `Test not implemented for ${kind}` },
         { status: 400 },
       );
     }

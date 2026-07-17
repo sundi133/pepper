@@ -22,6 +22,7 @@ const VALID_SCANNERS = new Set([
   "MALICIOUS_PKG",
   "ZERO_DAY",
   "CONTAINER",
+  "K8S",
 ]);
 
 const VALID_COVERAGE = new Set(["assessable", "partial", "not-assessable"]);

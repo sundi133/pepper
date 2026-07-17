@@ -87,7 +87,6 @@ export async function queueAzureDevOpsWebhookScan(params: {
       settings,
       params.project.organizationId,
     ),
-    dastTargetUrl: params.project.dastTargetUrl || undefined,
     buildGate: params.project.buildGate
       ? {
           maxCritical: params.project.buildGate.maxCritical,

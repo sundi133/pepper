@@ -458,7 +458,7 @@ function SastFindingReport({ finding, sourceContext }: { finding: Finding; sourc
       )}
 
       {/* Steps to Reproduce */}
-      {(generatedDetails?.stepsToReproduce?.length || stepsToUse.length > 0 || loadingDetails) && (
+      {finding.scanner !== "K8S" && (generatedDetails?.stepsToReproduce?.length || stepsToUse.length > 0 || loadingDetails) && (
         <div className="space-y-2 border-t border-border/40 pt-4">
           <h2 className="text-sm font-semibold text-foreground">Steps to Reproduce</h2>
           <div className="text-xs sm:text-sm space-y-1.5 text-foreground">
@@ -1423,6 +1423,24 @@ function FindingMetadataGrid({ finding }: { finding: Finding }) {
     details.push({ label: "File", value: finding.filePath });
   }
 
+  if (finding.scanner === "K8S") {
+    const resourceType = metadata?.resourceType ? String(metadata.resourceType) : undefined;
+    const resourceName = metadata?.resourceName ? String(metadata.resourceName) : undefined;
+    const namespace = metadata?.namespace ? String(metadata.namespace) : undefined;
+
+    if (resourceType) {
+      details.push({ label: "Resource Type", value: resourceType });
+    }
+
+    if (resourceName) {
+      details.push({ label: "Resource Name", value: resourceName });
+    }
+
+    if (namespace) {
+      details.push({ label: "Namespace", value: namespace });
+    }
+  }
+
   if (metadata?.endpoint) {
     details.push({ label: "Endpoint", value: String(metadata.endpoint) });
   }
@@ -1499,9 +1517,52 @@ interface AiSuggestFixResponse {
   optionalUnifiedDiff: string | null;
 }
 
+function K8sFindingReport({ finding }: { finding: Finding; sourceContext?: FindingScanSourceContext }) {
+  const report = buildStoredFindingReport(finding);
+
+  return (
+    <section className="finding-detail-report interactive-card min-w-0 max-w-full space-y-6 overflow-hidden p-4">
+      <FindingMetadataGrid finding={finding} />
+
+      <div className="border-t border-border/40 pt-6">
+        <h2 className="text-lg font-bold text-foreground mb-4">
+          {stripReportMarkdown(report.vulnerabilityName)}
+        </h2>
+
+        <div className="space-y-6">
+          <ReportBlock title="What is wrong" icon="📋">
+            <ReportSummaryText text={report.summary} />
+          </ReportBlock>
+
+          {finding.snippet && (
+            <ReportBlock title="Evidence" icon="🧩">
+              <pre className="overflow-x-auto rounded-md bg-muted px-3 py-2 text-xs whitespace-pre-wrap text-foreground">
+                {finding.snippet}
+              </pre>
+            </ReportBlock>
+          )}
+
+          <ReportBlock title="Impact" icon="⚠️">
+            <ReportRichText text={report.impact} />
+          </ReportBlock>
+
+          <ReportBlock title="Recommended remediation" icon="🔒">
+            <ReportPlainList items={report.remediation} />
+          </ReportBlock>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function FindingReportSections({ finding, sourceContext }: { finding: Finding; sourceContext?: FindingScanSourceContext }) {
   if (isPatternBasedScanner(finding.scanner)) {
     return <PatternMatchReport finding={finding} />;
+  }
+
+  const isK8s = finding.scanner === "K8S";
+  if (isK8s) {
+    return <K8sFindingReport finding={finding} sourceContext={sourceContext} />;
   }
 
   const isSecret = finding.scanner?.startsWith("SECRETS");
@@ -1545,7 +1606,7 @@ function FindingReportSections({ finding, sourceContext }: { finding: Finding; s
             <ReportSummaryText text={report.summary} />
           </ReportBlock>
 
-          {report.stepsToReproduce.length > 0 && (
+          {finding.scanner !== "K8S" && report.stepsToReproduce.length > 0 && (
             <ReportBlock title="Steps to Reproduce" icon="🔧">
               <ReportPlainList items={report.stepsToReproduce} />
             </ReportBlock>

@@ -32,7 +32,6 @@ export type AuditAction =
   | "apikey.revoked"
   | "settings.updated"
   | "settings.llm.updated"
-  | "settings.dast.updated"
   | "settings.signing.updated"
   | "settings.webhooks.updated";
 

@@ -105,7 +105,6 @@ async function checkDueSchedules() {
         repoUrl: project.repoUrl,
         branch: schedule.branch || project.defaultBranch,
         orgSettings: buildOrgSettingsForJob(orgSettings, project.organizationId),
-        dastTargetUrl: project.dastTargetUrl || undefined,
         buildGate: project.buildGate
           ? {
               maxCritical: project.buildGate.maxCritical,

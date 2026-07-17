@@ -13,7 +13,7 @@ type ScanTypeSelectorProps = {
 };
 
 const ALL_SCANNERS_LIST =
-  "SAST · SCA · Secrets · IaC · Zero-day · Container";
+  "SAST · SCA · Secrets · IaC · Zero-day · Container · Kubernetes";
 
 export function ScanTypeSelector({
   value,

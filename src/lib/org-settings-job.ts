@@ -10,10 +10,6 @@ type RawOrgSettings = {
   enableLlmSecrets?: boolean | null;
   osvApiUrl?: string | null;
   vulnDbMode?: string | null;
-  dastEnabled?: boolean | null;
-  dastEndpoint?: string | null;
-  dastApiKeyEnc?: string | null;
-  dastConfigYamlEnc?: string | null;
   containerRegistryType?: string | null;
   containerRegistryUsernameEnc?: string | null;
   containerRegistryPasswordEnc?: string | null;
@@ -22,29 +18,12 @@ type RawOrgSettings = {
 
 /**
  * Build the slimmed-down `orgSettings` blob that gets serialised onto a
- * BullMQ job, including resolved DAST configuration.
+ * BullMQ job.
  */
 export function buildOrgSettingsForJob(
   orgSettings: RawOrgSettings,
   organizationId: string,
 ): ScanJobData["orgSettings"] {
-  let dastApiKey: string | undefined;
-  if (orgSettings?.dastApiKeyEnc) {
-    try {
-      dastApiKey = decryptSecret(orgSettings.dastApiKeyEnc);
-    } catch {
-      dastApiKey = undefined;
-    }
-  }
-  let dastConfigYaml: string | undefined;
-  if (orgSettings?.dastConfigYamlEnc) {
-    try {
-      dastConfigYaml = decryptSecret(orgSettings.dastConfigYamlEnc);
-    } catch {
-      dastConfigYaml = undefined;
-    }
-  }
-
   let containerRegistryUsername: string | undefined;
   if (orgSettings?.containerRegistryUsernameEnc) {
     try {
@@ -79,10 +58,6 @@ export function buildOrgSettingsForJob(
       | "mirror"
       | "offline",
     orgId: organizationId,
-    dastEnabled: orgSettings?.dastEnabled ?? false,
-    dastEndpoint: orgSettings?.dastEndpoint || undefined,
-    dastApiKey,
-    dastConfigYaml,
     containerRegistryType: orgSettings?.containerRegistryType || undefined,
     containerRegistryUsername,
     containerRegistryPassword,

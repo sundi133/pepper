@@ -23,7 +23,6 @@ const SEVERITY_BASE: Record<string, number> = {
 const SCANNER_MULTIPLIER: Record<string, number> = {
   MALICIOUS_PKG:   1.15, // explicit supply-chain attack indicators
   SECRETS_PATTERN: 1.10, // credentials are almost always real
-  DAST:            1.05, // confirmed by a live HTTP test
   SECRETS_LLM:     1.00,
   SAST_LLM:        0.90,
   IAC:             0.85,

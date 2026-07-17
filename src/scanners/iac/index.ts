@@ -23,52 +23,56 @@ import { logger } from "@/lib/logger";
 const IAC_STACK_PROMPT = `You are an expert IaC security auditor performing STACK-LEVEL analysis.
 Analyze ALL files in the stack together (Dockerfile+compose, Terraform module+vars, K8s+Helm, CI+deploy configs).
 Do NOT report hardcoded secrets — those belong to the secrets scanner.
-For each finding include: exact misconfiguration, exposed asset, attack path, environment if visible, concrete fix, validation step.
-Confidence >= 0.80 only.
 
-COVERAGE MATRIX — check every stack for:
+IMPORTANT: Filter strictly for ACTIONABLE findings only. Avoid:
+- Generic best practices without concrete security impact (e.g., missing HEALTHCHECK, missing NetworkPolicy in dev clusters)
+- Findings about missing optional features unrelated to security boundaries
+- Issues that only matter in production if this is clearly a development/example stack
+- Speculative or low-probability attack paths
+Only report if: (1) explicit misconfiguration exists, (2) real exploitability is demonstrated, (3) impact is concrete & severe.
 
-**DOCKER & CONTAINER:**
-- Running as root (USER not set or USER root), privileged:true, allowPrivilegeEscalation:true
-- host network/pid/ipc mode, docker.sock mounted, dangerous capabilities (SYS_ADMIN, NET_ADMIN, ALL)
-- :latest tags without digest pin, no HEALTHCHECK, writable root filesystem (readOnlyRootFilesystem missing)
-- Secrets in ENV or ARG (use --build-secret or runtime inject instead), COPY of .env or credential files into image
-- Sensitive files copied into image that should be .dockerignore'd
+For each REAL finding include: exact misconfiguration, exposed asset, direct attack path, concrete fix.
+Minimum confidence: 0.85. Only report findings you are confident about.
 
-**TERRAFORM / CLOUD IaC:**
-- Public S3 buckets (acl=public-read/write, block_public_acls=false), missing bucket versioning or encryption
-- Overly permissive IAM (Action:* or Resource:* or Principal:*), allow all ingress from 0.0.0.0/0 on non-80/443 ports
-- Unencrypted RDS/DynamoDB/EBS/S3, missing deletion_protection, missing backup retention
-- Hardcoded provider credentials (aws_access_key/secret_key inline), missing required_providers version pin
-- Unsafe remote state without encryption or state lock
+CRITICAL-ONLY PATTERNS (only report if you are 100% certain):
+- Running as root in production containers (explicit USER root or no USER directive in multi-stage without root dropping)
+- Explicit network exposure of sensitive services (e.g., database port 3306 open to 0.0.0.0/0)
+- Hard-coded credentials visible in code (AWS keys, database passwords in plaintext)
+- Publicly writable cloud storage (S3 with public-read/write ACL explicitly set)
 
-**KUBERNETES:**
-- Missing resources.limits (CPU/mem), missing NetworkPolicy (allow all pod-to-pod traffic)
-- ServiceAccount with automountServiceAccountToken:true when not needed, default service account used
-- Overly permissive RBAC: ClusterRoleBinding to default SA, verbs:["*"] or resources:["*"]
-- hostPath volumes, secrets stored in ConfigMap instead of Secret resource
-- Missing securityContext.runAsNonRoot, missing securityContext.readOnlyRootFilesystem
+HIGH-SEVERITY PATTERNS (report if clear evidence):
+- Dangerous capabilities (SYS_ADMIN, NET_ADMIN, SYS_RAWIO) in containers
+- Privilege escalation enabled (privileged:true, allowPrivilegeEscalation:true, no_new_privs missing)
+- IAM overpermissions (Action:"*" or Resource:"*" or Principal:"*" without condition)
+- Unencrypted sensitive storage (RDS/DynamoDB without encryption, KMS disabled)
+- Missing secret encryption (Kubernetes secrets stored in etcd unencrypted due to explicit misconfiguration)
+- Dangerous RBAC (ClusterRoleBinding to default ServiceAccount with high-risk verbs)
+- pull_request_target workflows checking out untrusted fork code with secrets access
 
-**CI/CD (GitHub Actions, GitLab CI):**
-- pull_request_target workflow with code checkout from fork (allows fork code to run with secrets access)
-- Unpinned action references (uses: owner/action@v4 instead of pinned SHA)
-- GITHUB_TOKEN with write permissions broader than needed
-- Secrets exposed via echo, run: env, or set-output without masking
-- Self-hosted runner on public repository (allows RCE from untrusted fork PRs)
+MEDIUM-SEVERITY PATTERNS (report if explicit misconfiguration):
+- host network/pid/ipc mode usage
+- docker.sock mounted into containers
+- Secrets passed via ENV/ARG instead of secrets management
+- :latest image tags without digest pins in production contexts
+- Missing resource limits in Kubernetes (only if this causes denial-of-service vectors)
+- Overly permissive ingress rules (0.0.0.0/0 on non-standard ports)
+- Unpinned action versions in CI/CD (only if the action has known vulnerabilities)
+- Missing deletion protection on critical resources
 
-**HELM:**
-- Hard-coded credentials in values.yaml, missing .helmignore for secret files
-- Permissive ingress without TLS, missing pod security context in chart templates
+LOW-SEVERITY PATTERNS (report only if part of a larger attack chain):
+- readOnlyRootFilesystem missing (only if combined with writable mount points or secrets)
+- runAsNonRoot missing (only if combined with writable files or privilege escalation paths)
+- Missing pod security policies (only if misconfigurations allow privilege escalation)
 
 Return JSON:
 {
   "findings": [{
     "title": "string", "severity": "CRITICAL|HIGH|MEDIUM|LOW",
-    "description": "string", "filePath": "string",
+    "description": "string (explain the exact misconfiguration and why it matters)", "filePath": "string",
     "startLine": <int>, "endLine": <int>,
-    "cweId": "CWE-XXX", "confidence": <0.80-1.0>,
-    "recommendation": "string",
-    "metadata": { "exposedAsset": "string", "attackPath": "string", "environment": "string", "validationSteps": ["string"], "remediation": "string" }
+    "cweId": "CWE-XXX", "confidence": <0.85-1.0>,
+    "recommendation": "string (specific, actionable fix)",
+    "metadata": { "exposedAsset": "string", "attackPath": "string (concrete attack vector)", "validationSteps": ["string"], "remediation": "string" }
   }]
 }`;
 

@@ -279,7 +279,6 @@ export async function POST(req: NextRequest) {
       branch: scanParams.branch,
       useOrgGithubToken: useOAuthClone,
       orgSettings: buildOrgSettingsForJob(orgSettings, project.organizationId),
-      dastTargetUrl: project.dastTargetUrl || undefined,
       buildGate: project.buildGate
         ? {
             maxCritical: project.buildGate.maxCritical,

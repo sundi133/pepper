@@ -9,7 +9,7 @@ export type ScannerType =
   | "MALICIOUS_PKG"
   | "ZERO_DAY"
   | "CONTAINER"
-  | "DAST";
+  | "K8S";
 
 export interface ScanContext {
   workDir: string;
@@ -27,11 +27,6 @@ export interface ScanContext {
     osvApiUrl: string;
     vulnDbMode: "online" | "mirror" | "offline";
     orgId?: string;
-    dastEnabled?: boolean;
-    dastTargetUrl?: string;
-    dastEndpoint?: string;
-    dastApiKey?: string;
-    dastConfigYaml?: string;
     containerRegistryType?: string;
     containerRegistryUsername?: string;
     containerRegistryPassword?: string;

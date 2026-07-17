@@ -829,7 +829,7 @@ async function analyzeChunk(
       const owaspApiCategory = getOwaspApiCategory(f.cweId);
       const owaspLlmCategory = getOwaspLlmCategory(f.cweId);
 
-      let base: RawFinding = applySeverityCalibration({
+      const base: RawFinding = applySeverityCalibration({
         scanner: "SAST_LLM" as const,
         severity: parseSeverity(f.severity),
         title: f.title,

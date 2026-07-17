@@ -1,12 +1,12 @@
 import { RawFinding, ScanContext, ScannerPlugin, ScanResult } from "./types";
 import { sastLlmScanner } from "./sast";
 import { scaScanner, parseDependencies } from "./sca";
-import { secretsLlmScanner } from "./secrets";
+import { secretsPatternScanner, secretsLlmScanner } from "./secrets";
 import { iacScanner } from "./iac";
 import { maliciousPkgScanner } from "./sca/malicious-pkg";
 import { zeroDayScanner } from "./zero-day";
 import { containerScanner } from "./container";
-import { dastScanner } from "./dast";
+import { k8sScanner } from "./k8s";
 import {
   buildRootCauseKey,
   areRootCauseDuplicates,
@@ -19,7 +19,6 @@ export function getScanners(
   orgSettings: {
     enableLlmSast: boolean;
     enableLlmSecrets: boolean;
-    dastEnabled?: boolean;
   },
 ): ScannerPlugin[] {
   const scanners: ScannerPlugin[] = [];
@@ -33,7 +32,7 @@ export function getScanners(
   const includeIac = ["FULL", "IAC_ONLY"].includes(scanType);
   const includeZeroDay = ["FULL", "ZERO_DAY_ONLY", "INCREMENTAL"].includes(scanType);
   const includeContainer = ["FULL", "CONTAINER_ONLY"].includes(scanType);
-  const includeDast = ["FULL", "DAST_ONLY"].includes(scanType);
+  const includeK8s = ["FULL", "K8S_ONLY"].includes(scanType);
 
   if (includeSast && orgSettings.enableLlmSast) {
     scanners.push(sastLlmScanner);
@@ -44,8 +43,13 @@ export function getScanners(
     scanners.push(maliciousPkgScanner);
   }
 
-  if (includeSecrets && orgSettings.enableLlmSecrets) {
-    scanners.push(secretsLlmScanner);
+  if (includeSecrets) {
+    // Always run pattern scanner for fast, high-confidence detections
+    scanners.push(secretsPatternScanner);
+    // Also run LLM scanner if enabled for deeper analysis
+    if (orgSettings.enableLlmSecrets) {
+      scanners.push(secretsLlmScanner);
+    }
   }
 
   if (includeIac && orgSettings.enableLlmSast) {
@@ -60,8 +64,8 @@ export function getScanners(
     scanners.push(containerScanner);
   }
 
-  if (includeDast && orgSettings.dastEnabled) {
-    scanners.push(dastScanner);
+  if (includeK8s && orgSettings.enableLlmSast) {
+    scanners.push(k8sScanner);
   }
 
   return scanners;

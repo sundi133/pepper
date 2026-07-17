@@ -66,7 +66,6 @@ export async function POST(
       useOrgBitbucketToken: scan.project.connectedViaBitbucket,
       useOrgAzureDevOpsToken: scan.project.connectedViaAzure,
       orgSettings: buildOrgSettingsForJob(orgSettings, orgId),
-      dastTargetUrl: scan.project.dastTargetUrl || undefined,
       buildGate: scan.project.buildGate
         ? {
             maxCritical: scan.project.buildGate.maxCritical,

@@ -17,7 +17,6 @@ const scheduleSchema = z.object({
       "IAC_ONLY",
       "ZERO_DAY_ONLY",
       "CONTAINER_ONLY",
-      "DAST_ONLY",
     ])
     .default("FULL"),
   branch: z.string().optional(),

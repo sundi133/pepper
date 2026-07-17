@@ -205,8 +205,6 @@ model Project {
   gitlabProjectId     Int?
   gitlabNamespace     String?    // e.g. "myorg/myrepo"
 
-  /// Target URL for DAST (dapper) scans of this project.
-  dastTargetUrl      String?
 
   organization Organization @relation(fields: [organizationId], references: [id])
   scans        Scan[]
@@ -297,7 +295,7 @@ enum ScanType {
   IAC_ONLY
   ZERO_DAY_ONLY
   CONTAINER_ONLY
-  DAST_ONLY
+  K8S_ONLY
 }
 
 enum SourceType {
@@ -306,7 +304,6 @@ enum SourceType {
   SVN_CHECKOUT
   WEBHOOK
   CONTAINER_IMAGE
-  DAST_TARGET
   PRECOMMIT
 }
 
@@ -368,7 +365,7 @@ enum Scanner {
   MALICIOUS_PKG
   ZERO_DAY
   CONTAINER
-  DAST
+  K8S
 }
 
 enum Severity {
@@ -398,7 +395,6 @@ enum ArtifactType {
   SBOM_SPDX
   SCAN_LOG
   CONTAINER_REPORT
-  DAST_REPORT
   SIGNATURE
 }
 
@@ -459,12 +455,6 @@ model OrgSettings {
   smtpPassword    String?  @db.Text
   smtpFromAddress String?  @default("noreply@pepper-sast.local")
   smtpUseTls      Boolean  @default(true)
-
-  // DAST (dapper) integration
-  dastEnabled     Boolean  @default(false)
-  dastEndpoint    String?
-  dastApiKeyEnc   String?  @db.Text
-  dastConfigYamlEnc String? @db.Text
 
   // Code signing (cosign keyless or key-based)
   codeSigningEnabled Boolean @default(false)
@@ -545,7 +535,7 @@ model ApiKey {
   organization Organization @relation(fields: [organizationId], references: [id])
 }
 
-/// Outbound integrations: Jira, Slack, SIEM (HTTPS/syslog), DAST (dapper).
+/// Outbound integrations: Jira, Slack, SIEM (HTTPS/syslog).
 model IntegrationConfig {
   id             String          @id @default(cuid())
   organizationId String
@@ -566,7 +556,6 @@ enum IntegrationKind {
   JIRA
   SLACK
   SIEM
-  DAST
   CODE_SIGNING
   WEBHOOK
 }

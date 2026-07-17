@@ -39,7 +39,6 @@ export interface ScanJobData {
     | "SVN_CHECKOUT"
     | "WEBHOOK"
     | "CONTAINER_IMAGE"
-    | "DAST_TARGET"
     | "PRECOMMIT";
   sourceRef: string;
   scanType:
@@ -51,7 +50,7 @@ export interface ScanJobData {
     | "IAC_ONLY"
     | "ZERO_DAY_ONLY"
     | "CONTAINER_ONLY"
-    | "DAST_ONLY";
+    | "K8S_ONLY";
   baseSha?: string;
   commitSha?: string;
   prNumber?: number;
@@ -78,17 +77,11 @@ export interface ScanJobData {
     osvApiUrl: string;
     vulnDbMode: "online" | "mirror" | "offline";
     orgId?: string;
-    dastEnabled?: boolean;
-    dastTargetUrl?: string;
-    dastEndpoint?: string;
-    dastApiKey?: string;
-    dastConfigYaml?: string;
     containerRegistryType?: string;
     containerRegistryUsername?: string;
     containerRegistryPassword?: string;
     containerRegistryRegion?: string;
   };
-  dastTargetUrl?: string;
   buildGate?: {
     maxCritical: number;
     maxHigh: number;

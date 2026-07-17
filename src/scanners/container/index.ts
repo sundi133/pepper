@@ -27,6 +27,7 @@ import {
   isVmAmiRef,
   type ImageRef,
 } from "./discover";
+import { parseDockerfile, lintDockerfile } from "./dockerfile-parser";
 
 const execFileP = promisify(execFile);
 
@@ -288,6 +289,77 @@ async function scanContainerConfig(
   return findings;
 }
 
+function scanDockerfileLints(ctx: ScanContext): RawFinding[] {
+  const findings: RawFinding[] = [];
+  const dockerfileFiles = ctx.fileList.filter(
+    (f) => DOCKERFILE_NAMES.has(path.basename(f)) || /\.dockerfile$/i.test(f),
+  );
+
+  for (const filePath of dockerfileFiles) {
+    try {
+      const content = fs.readFileSync(path.join(ctx.workDir, filePath), "utf-8");
+      const stages = parseDockerfile(content, filePath);
+      const lints = lintDockerfile(stages);
+
+      for (const lint of lints) {
+        findings.push(
+          enrichFinding(
+            {
+              scanner: "CONTAINER",
+              severity: lint.severity,
+              title: lint.title,
+              description: lint.description,
+              filePath,
+              startLine: lint.line,
+              ruleId: lint.ruleId,
+              confidence: 1,
+              metadata: {
+                category: "DOCKERFILE_LINT",
+              },
+            },
+            { category: "DOCKERFILE_LINT" },
+            {
+              whatIsWrong: lint.title,
+              where: `${filePath}:${lint.line}`,
+              whyExploitable: lint.description,
+              fix: getDockerfileFix(lint.ruleId),
+              validation: `Review Dockerfile and ensure ${lint.ruleId} rule is satisfied`,
+            },
+          ),
+        );
+      }
+    } catch {
+      // Skip files that cannot be parsed
+    }
+  }
+
+  return findings;
+}
+
+function getDockerfileFix(ruleId: string): string {
+  const fixes: Record<string, string> = {
+    "DOCKERFILE-NO-USER": "Add USER directive with non-root user (e.g., USER app)",
+    "DOCKERFILE-ROOT-USER":
+      "Change USER to a non-root user (e.g., USER app). Create the user with RUN groupadd -r appgroup && useradd -r -g appgroup app",
+    "DOCKERFILE-NO-HEALTHCHECK":
+      "Add HEALTHCHECK directive to monitor container health. Example: HEALTHCHECK CMD curl http://localhost:3000 || exit 1",
+    "DOCKERFILE-LATEST-TAG":
+      "Pin base image to explicit version tag (e.g., node:20-alpine instead of node:latest)",
+    "DOCKERFILE-NO-DIGEST-PIN":
+      "Pin base image with SHA256 digest for reproducibility. Format: FROM image:tag@sha256:hash",
+    "DOCKERFILE-HARDCODED-SECRET-ENV":
+      "Use Docker secrets or build-time arguments instead of ENV variables. Never hardcode secrets in Dockerfile.",
+    "DOCKERFILE-HARDCODED-SECRET-RUN":
+      "Use docker secrets or multi-stage builds to avoid baking secrets in layers. Use --mount=type=secret in RUN.",
+    "DOCKERFILE-NO-LABELS":
+      "Add LABEL directives for metadata. Example: LABEL maintainer=name version=1.0.0 description='App description'",
+  };
+  return (
+    fixes[ruleId] ||
+    "Review Dockerfile best practices at https://docs.docker.com/develop/develop-images/dockerfile_best-practices/"
+  );
+}
+
 export const containerScanner: ScannerPlugin = {
   name: "CONTAINER",
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
@@ -295,16 +367,21 @@ export const containerScanner: ScannerPlugin = {
     const images = discoverArtifactImages(ctx.workDir, ctx.fileList);
     const configFindings = await scanContainerConfig(ctx);
 
+    // Dockerfile linting for best practices and security
+    const dockerfileLintFindings = scanDockerfileLints(ctx);
+
+    const allLintFindings = [...configFindings, ...dockerfileLintFindings];
+
     if (images.length === 0) {
       ctx.onProgress?.("CONTAINER: no artifact image references; config review only");
-      return configFindings;
+      return allLintFindings;
     }
 
     ctx.onProgress?.(
       `CONTAINER: ${artifactSummary(images)} artifact image(s); Trivy when available`,
     );
 
-    const findings: RawFinding[] = [...configFindings];
+    const findings: RawFinding[] = [...allLintFindings];
 
     // First pass: record VM AMI references (always, regardless of Trivy availability)
     for (const ref of images) {

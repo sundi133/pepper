@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
 import { useScanPolling, useFindings } from "@/hooks/use-scan-polling";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
@@ -29,10 +28,8 @@ import { FindingsTable } from "@/components/scans/findings-table";
 import { FindingDetailInline } from "@/components/scans/finding-detail-panel";
 import { Progress } from "@/components/ui/progress";
 import {
-  Download,
   Ban,
   AlertTriangle,
-  BookOpen,
   RotateCcw,
   Trash2,
   Pause,
@@ -51,10 +48,6 @@ import { useRouter } from "next/navigation";
 import { nextFindingSelection } from "@/lib/create-scan-validation";
 import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
 import { ScanTriageChat } from "@/components/scans/scan-triage-chat";
-
-/** Stronger scan toolbar outline buttons (readable while a scan is running). */
-const scanToolbarOutlineClass =
-  "text-xs sm:text-sm h-9 sm:h-10 px-3 sm:px-4 text-foreground border border-border/60 bg-background hover:bg-primary/5 dark:border-border/40 dark:hover:bg-primary/10 hover:border-primary/40 dark:hover:border-primary/50 transition-colors whitespace-nowrap";
 
 type Finding = {
   id: string;
@@ -236,9 +229,10 @@ export default function ScanDetailPage() {
             { label: "Scan" },
           ]}
         />
-        <p className="text-muted-foreground text-center py-12">
-          Loading scan...
-        </p>
+        <div className="flex items-center justify-center gap-2 py-20 text-slate-500">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+          <span className="text-sm">Loading scan...</span>
+        </div>
       </div>
     );
   }
@@ -252,7 +246,10 @@ export default function ScanDetailPage() {
             { label: "Scan not found" },
           ]}
         />
-        <p className="text-destructive text-center py-12">Scan not found</p>
+        <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-500">
+          <AlertTriangle className="h-8 w-8 text-red-400" />
+          <p className="text-sm font-medium text-red-600">Scan not found</p>
+        </div>
       </div>
     );
   }
@@ -391,172 +388,151 @@ export default function ScanDetailPage() {
       <PageBreadcrumb items={breadcrumbItems} />
 
       {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="space-y-1 min-w-0">
-          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-            <h1 className="text-xl font-bold break-words sm:text-2xl">
-              {scan.project?.name || "Scan"} - {scan.scanType}
-            </h1>
-            <ScanStatusBadge status={scan.status} />
-            {scan.status === "COMPLETED" && (
-              <GateResultBadge result={scan.gateResult} />
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex flex-col gap-4 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1 min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+              <h1 className="truncate text-lg font-bold text-slate-900 sm:text-xl dark:text-slate-50">
+                {scan.project?.name || "Scan"}
+              </h1>
+              <Badge variant="secondary" className="rounded-md border-slate-200 bg-slate-100 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                {scan.scanType}
+              </Badge>
+              <ScanStatusBadge status={scan.status} />
+              {scan.status === "COMPLETED" && (
+                <GateResultBadge result={scan.gateResult} />
+              )}
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {formatScanMetadataLine(scan)}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5 shrink-0">
+            {canDelete && (
+              <Button
+                variant="outline"
+                className="h-8 gap-1 border-slate-300 px-2.5 text-xs text-slate-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700 dark:border-slate-700 dark:text-slate-400"
+                disabled={deleting || isRunning || isPaused}
+                onClick={handleDelete}
+                title="Delete this scan and all findings"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </Button>
+            )}
+            {canRescan && (
+              <Button
+                variant="outline"
+                className="h-8 gap-1 border-slate-300 px-2.5 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-400"
+                disabled={rescanning}
+                onClick={handleRescan}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                {rescanning ? "Rescanning..." : "Rescan"}
+              </Button>
+            )}
+            {canManageScan && isRunning && (
+              <Button
+                variant="outline"
+                className="h-8 gap-1 border-slate-300 px-2.5 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-400"
+                disabled={pausing}
+                onClick={handlePause}
+              >
+                <Pause className="h-3.5 w-3.5" />
+                Pause
+              </Button>
+            )}
+            {canManageScan && (isPaused || isStopped) && (
+              <Button
+                variant="outline"
+                className="h-8 gap-1 border-slate-300 px-2.5 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-400"
+                disabled={resuming}
+                onClick={handleResume}
+              >
+                <Play className="h-3.5 w-3.5" />
+                {resuming ? "Resuming..." : isStopped ? "Restart" : "Resume"}
+              </Button>
+            )}
+            {canManageScan && isActive && (
+              <Button
+                variant="outline"
+                className="h-8 gap-1 border-slate-300 px-2.5 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-400"
+                onClick={handleCancel}
+              >
+                <Ban className="h-3.5 w-3.5" />
+                Cancel
+              </Button>
+            )}
+            {hasReportableFindings && (
+              <div className="ml-1 flex items-center gap-0.5 border-l border-slate-200 pl-2 dark:border-slate-700">
+                <Button
+                  variant="ghost"
+                  className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
+                  onClick={() =>
+                    window.open(`/api/scans/${scanId}/findings/export?format=csv`, "_blank")
+                  }
+                >CSV</Button>
+                <Button
+                  variant="ghost"
+                  className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
+                  onClick={() =>
+                    window.open(`/api/scans/${scanId}/findings/export?format=pdf`, "_blank")
+                  }
+                >PDF</Button>
+                {scan.status === "COMPLETED" && (
+                  <Button
+                    variant="ghost"
+                    className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
+                    onClick={() => router.push(`/scans/${scanId}/compliance`)}
+                  >Compliance</Button>
+                )}
+                {scan.status === "COMPLETED" && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
+                      onClick={() =>
+                        window.open(`/api/scans/${scanId}/artifacts/cyclonedx`, "_blank")
+                      }
+                    >SBOM (CDX)</Button>
+                    <Button
+                      variant="ghost"
+                      className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
+                      onClick={() =>
+                        window.open(`/api/scans/${scanId}/artifacts/spdx`, "_blank")
+                      }
+                    >SBOM (SPDX)</Button>
+                  </>
+                )}
+              </div>
             )}
           </div>
-          <p className="text-sm text-muted-foreground">
-            {formatScanMetadataLine(scan)}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2 shrink-0">
-          {canDelete && (
-            <Button
-              variant="destructive"
-              className="text-xs sm:text-sm h-9 sm:h-10 px-3 sm:px-4 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 transition-colors whitespace-nowrap"
-              disabled={deleting || isRunning || isPaused}
-              onClick={handleDelete}
-              title="Delete this scan and all findings"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">Delete</span>
-              <span className="sm:hidden">Del</span>
-            </Button>
-          )}
-          {canRescan && (
-            <Button
-              variant="outline"
-              className={scanToolbarOutlineClass}
-              disabled={rescanning}
-              onClick={handleRescan}
-            >
-              <RotateCcw className="mr-2 h-4 w-4" />
-              {rescanning ? "Rescanning..." : "Rescan"}
-            </Button>
-          )}
-          {canManageScan && isRunning && (
-            <Button
-              variant="outline"
-              className={scanToolbarOutlineClass}
-              disabled={pausing}
-              onClick={handlePause}
-            >
-              <Pause className="mr-2 h-4 w-4" />
-              {pausing ? "Pausing..." : "Pause"}
-            </Button>
-          )}
-          {canManageScan && (isPaused || isStopped) && (
-            <Button
-              variant="outline"
-              className={scanToolbarOutlineClass}
-              disabled={resuming}
-              onClick={handleResume}
-            >
-              <Play className="mr-2 h-4 w-4" />
-              {resuming
-                ? isStopped
-                  ? "Restarting..."
-                  : "Resuming..."
-                : isStopped
-                  ? "Restart Scan"
-                  : "Resume"}
-            </Button>
-          )}
-          {canManageScan && isActive && (
-            <Button
-              variant="outline"
-              className={scanToolbarOutlineClass}
-              onClick={handleCancel}
-            >
-              <Ban className="mr-2 h-4 w-4" />
-              Cancel
-            </Button>
-          )}
-          {hasReportableFindings && (
-            <>
-              <Button
-                variant="outline"
-                className={scanToolbarOutlineClass}
-                onClick={() =>
-                  window.open(
-                    `/api/scans/${scanId}/findings/export?format=csv`,
-                    "_blank",
-                  )
-                }
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Findings CSV
-              </Button>
-              <Button
-                variant="outline"
-                className={scanToolbarOutlineClass}
-                onClick={() =>
-                  window.open(
-                    `/api/scans/${scanId}/findings/export?format=pdf`,
-                    "_blank",
-                  )
-                }
-              >
-                <Download className="mr-2 h-4 w-4" />
-                PDF Report
-              </Button>
-              {scan.status === "COMPLETED" && (
-                <Button
-                  variant="outline"
-                  className={scanToolbarOutlineClass}
-                  onClick={() => router.push(`/scans/${scanId}/compliance`)}
-                >
-                  <BookOpen className="mr-2 h-4 w-4" />
-                  Compliance Report
-                </Button>
-              )}
-              {scan.status === "COMPLETED" && (
-                <>
-                  <Button
-                    variant="outline"
-                    className={scanToolbarOutlineClass}
-                    onClick={() =>
-                      window.open(
-                        `/api/scans/${scanId}/artifacts/cyclonedx`,
-                        "_blank",
-                      )
-                    }
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    SBOM (CycloneDX)
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className={scanToolbarOutlineClass}
-                    onClick={() =>
-                      window.open(
-                        `/api/scans/${scanId}/artifacts/spdx`,
-                        "_blank",
-                      )
-                    }
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    SBOM (SPDX)
-                  </Button>
-                </>
-              )}
-            </>
-          )}
         </div>
       </div>
 
       {/* Progress bar for active scans */}
       {isActive && (
-        <Card>
-          <CardContent className="py-6">
+        <div className="overflow-hidden rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50/80 to-white shadow-sm dark:border-indigo-900/50 dark:from-indigo-950/30 dark:to-slate-950">
+          <div className="px-5 py-5 sm:px-6">
             <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span>{isPaused ? "Scan paused" : "Scanning..."}</span>
-                <span className="text-muted-foreground font-medium">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-100 dark:bg-indigo-900/40">
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent dark:border-indigo-400" />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {isPaused ? "Scan paused" : "Scanning..."}
+                  </span>
+                </div>
+                <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
                   {etaInfo?.etaText}
                 </span>
               </div>
               <Progress
                 value={computeScanProgress(scan.scannerProgress, scan.status)}
+                className="h-2 [&>div]:bg-gradient-to-r [&>div]:from-indigo-500 [&>div]:to-blue-500"
               />
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                 {etaInfo?.elapsedText && (
                   <span className="inline-flex items-center gap-1">
                     <Clock className="h-3 w-3" aria-hidden />
@@ -572,7 +548,7 @@ export default function ScanDetailPage() {
               </div>
               {scan.scannerProgress &&
                 Object.keys(scan.scannerProgress).length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-1">
+                  <div className="flex flex-wrap gap-1.5">
                     {Object.entries(
                       scan.scannerProgress as Record<
                         string,
@@ -586,26 +562,22 @@ export default function ScanDetailPage() {
                     ).map(([name, info]) => (
                       <Badge
                         key={name}
-                        variant={
-                          info.status === "DONE" ? "default" : "secondary"
-                        }
-                        className="gap-1.5 font-medium"
+                        variant={info.status === "DONE" ? "default" : "secondary"}
+                        className={cn(
+                          "gap-1.5 text-xs font-medium",
+                          info.status === "DONE"
+                            ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300"
+                            : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300",
+                        )}
                       >
                         {info.status === "DONE" ? (
                           <>
-                            <Check
-                              className="h-3.5 w-3.5 shrink-0"
-                              aria-hidden
-                            />
+                            <Check className="h-3 w-3 shrink-0" aria-hidden />
                             <span>{name}</span>
-                            <span className="opacity-90">Done</span>
                           </>
                         ) : (
                           <span>
-                            {name}: Running
-                            {info.filesTotal
-                              ? ` (${info.filesCompleted ?? 0}/${info.filesTotal})`
-                              : ""}
+                            {name}{info.filesTotal ? ` (${info.filesCompleted ?? 0}/${info.filesTotal})` : ""}
                           </span>
                         )}
                       </Badge>
@@ -613,70 +585,60 @@ export default function ScanDetailPage() {
                   </div>
                 )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Summary Cards */}
       {(hasReportableFindings || isActive) && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-3">
-          <Card className="border-0 bg-gradient-to-br from-red-50 to-red-50/50 dark:from-red-950/30 dark:to-red-950/10 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-red-100 dark:bg-red-900/40">
-                  <Siren className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
-                </div>
-                <span className="text-xs font-semibold text-red-700 dark:text-red-400 uppercase tracking-wider">Critical</span>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
+          <div className="rounded-xl border border-red-200 bg-gradient-to-br from-red-50 to-white p-4 shadow-sm transition-all hover:shadow-md dark:border-red-900/40 dark:from-red-950/20 dark:to-slate-950">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900/40">
+                <Siren className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
               </div>
-              <p className="text-3xl font-bold text-red-700 dark:text-red-400 tabular-nums">{scan.criticalCount}</p>
-              <div className="mt-1.5 h-0.5 w-10 bg-gradient-to-r from-red-600 to-red-400 rounded-full"></div>
-            </CardContent>
-          </Card>
-          <Card className="border-0 bg-gradient-to-br from-orange-50 to-orange-50/50 dark:from-orange-950/30 dark:to-orange-950/10 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-orange-100 dark:bg-orange-900/40">
-                  <AlertTriangle className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
-                </div>
-                <span className="text-xs font-semibold text-orange-700 dark:text-orange-400 uppercase tracking-wider">High</span>
+              <span className="text-xs font-semibold text-red-700 dark:text-red-400">Critical</span>
+            </div>
+            <p className="mt-2 text-2xl font-bold text-red-700 dark:text-red-400 tabular-nums">{scan.criticalCount}</p>
+          </div>
+          <div className="rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 to-white p-4 shadow-sm transition-all hover:shadow-md dark:border-orange-900/40 dark:from-orange-950/20 dark:to-slate-950">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/40">
+                <AlertTriangle className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
               </div>
-              <p className="text-3xl font-bold text-orange-700 dark:text-orange-400 tabular-nums">{scan.highCount}</p>
-              <div className="mt-1.5 h-0.5 w-10 bg-gradient-to-r from-orange-500 to-orange-400 rounded-full"></div>
-            </CardContent>
-          </Card>
-          <Card className="border-0 bg-gradient-to-br from-yellow-50 to-yellow-50/50 dark:from-yellow-950/30 dark:to-yellow-950/10 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-yellow-100 dark:bg-yellow-900/40">
-                  <Shield className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
-                </div>
-                <span className="text-xs font-semibold text-yellow-700 dark:text-yellow-400 uppercase tracking-wider">Medium</span>
+              <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">High</span>
+            </div>
+            <p className="mt-2 text-2xl font-bold text-orange-700 dark:text-orange-400 tabular-nums">{scan.highCount}</p>
+          </div>
+          <div className="rounded-xl border border-yellow-200 bg-gradient-to-br from-yellow-50 to-white p-4 shadow-sm transition-all hover:shadow-md dark:border-yellow-900/40 dark:from-yellow-950/20 dark:to-slate-950">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-yellow-100 dark:bg-yellow-900/40">
+                <Shield className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
               </div>
-              <p className="text-3xl font-bold text-yellow-700 dark:text-yellow-400 tabular-nums">{scan.mediumCount}</p>
-              <div className="mt-1.5 h-0.5 w-10 bg-gradient-to-r from-yellow-500 to-yellow-400 rounded-full"></div>
-            </CardContent>
-          </Card>
-          <Card className="border-0 bg-gradient-to-br from-blue-50 to-blue-50/50 dark:from-blue-950/30 dark:to-blue-950/10 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-100 dark:bg-blue-900/40">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wider">Low</span>
+              <span className="text-xs font-semibold text-yellow-700 dark:text-yellow-400">Medium</span>
+            </div>
+            <p className="mt-2 text-2xl font-bold text-yellow-700 dark:text-yellow-400 tabular-nums">{scan.mediumCount}</p>
+          </div>
+          <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-4 shadow-sm transition-all hover:shadow-md dark:border-blue-900/40 dark:from-blue-950/20 dark:to-slate-950">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/40">
+                <CheckCircle2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
               </div>
-              <p className="text-3xl font-bold text-blue-700 dark:text-blue-400 tabular-nums">{scan.lowCount}</p>
-              <div className="mt-1.5 h-0.5 w-10 bg-gradient-to-r from-blue-500 to-blue-400 rounded-full"></div>
-            </CardContent>
-          </Card>
+              <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">Low</span>
+            </div>
+            <p className="mt-2 text-2xl font-bold text-blue-700 dark:text-blue-400 tabular-nums">{scan.lowCount}</p>
+          </div>
         </div>
       )}
 
       {/* Auto-resolved banner */}
       {scan.status === "COMPLETED" && (scan as { autoResolvedCount?: number }).autoResolvedCount ? (
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
-          <Check className="h-4 w-4 shrink-0" />
-          <span>
-            <span className="font-semibold">{(scan as { autoResolvedCount?: number }).autoResolvedCount}</span>
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-5 py-3 text-sm text-emerald-800 shadow-sm dark:border-emerald-900/40 dark:from-emerald-950/20 dark:to-slate-950 dark:text-emerald-300">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/40">
+            <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <span className="font-medium">
+            <span className="font-bold">{(scan as { autoResolvedCount?: number }).autoResolvedCount}</span>
             {" "}previously-open{" "}
             {(scan as { autoResolvedCount?: number }).autoResolvedCount === 1 ? "finding was" : "findings were"}{" "}
             auto-resolved — no longer detected in this scan.
@@ -691,164 +653,163 @@ export default function ScanDetailPage() {
           tabIndex={-1}
           className="scroll-mt-24 outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring min-w-0 w-full"
         >
-          <div className="space-y-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-2xl font-bold tracking-tight">Findings <span className="text-muted-foreground font-normal">({visibleFindingCount})</span></h2>
-                {scan.status === "COMPLETED" && (scan as { newFindingCount?: number }).newFindingCount ? (
-                  <button
-                    type="button"
-                    onClick={() => setNewOnlyFilter((v) => !v)}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors",
-                      newOnlyFilter
-                        ? "bg-blue-600 text-white"
-                        : "bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300",
-                    )}
-                  >
-                    {(scan as { newFindingCount?: number }).newFindingCount} new
-                  </button>
-                ) : null}
-              </div>
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
-                <Select
-                  value={severityFilter}
-                  onValueChange={setSeverityFilter}
-                >
-                  <SelectTrigger className="w-full sm:w-36">
-                    <SelectValue placeholder="Severity" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Severities</SelectItem>
-                    <SelectItem value="CRITICAL">Critical</SelectItem>
-                    <SelectItem value="HIGH">High</SelectItem>
-                    <SelectItem value="MEDIUM">Medium</SelectItem>
-                    <SelectItem value="LOW">Low</SelectItem>
-                    <SelectItem value="INFO">Info</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={scannerFilter} onValueChange={setScannerFilter}>
-                  <SelectTrigger className="w-full sm:w-40">
-                    <SelectValue placeholder="Scanner" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Scanners</SelectItem>
-                    <SelectItem value="SAST_LLM">SAST (AI)</SelectItem>
-                    <SelectItem value="SCA">SCA</SelectItem>
-                    <SelectItem value="SECRETS_LLM">Secrets (AI)</SelectItem>
-                    <SelectItem value="IAC">IaC Security</SelectItem>
-                    <SelectItem value="MALICIOUS_PKG">Supply Chain</SelectItem>
-                    <SelectItem value="CONTAINER">Container</SelectItem>
-                    <SelectItem value="ZERO_DAY">Zero-Day (AI)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-full sm:w-36">
-                    <SelectValue placeholder="Sort" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="severity">By Severity</SelectItem>
-                    <SelectItem value="risk">By Risk Score</SelectItem>
-                    <SelectItem value="file">By File</SelectItem>
-                    <SelectItem value="recent">Most Recent</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {findingSections.length > 0 && (
-              <Tabs
-                value={activeSection}
-                onValueChange={setActiveSection}
-              >
-                <TabsList
-                  variant="line"
-                  className="w-full justify-start border-b border-border rounded-none h-auto p-0 gap-0"
-                >
-                  {findingSections.map(({ id, title, findings }) => (
-                    <TabsTrigger
-                      key={id}
-                      value={id}
-                      className="rounded-none pb-2.5 pr-2"
-                    >
-                      {title}
-                      <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums">
-                        {findings.length}
-                      </span>
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-            )}
-          </div>
-          <div className="min-w-0 w-full overflow-hidden mt-6">
-            {findingSections.length === 0 ? (
-              <FindingsTable
-                findings={visibleFindings}
-                fixPrSource={fixPrSource}
-                onSelect={(f) =>
-                  setSelectedFinding((prev) => nextFindingSelection(prev, f))
-                }
-                selectedId={selectedFinding?.id as string}
-                onBulkStatusChange={() => refreshFindings()}
-                renderExpanded={(finding) => (
-                  <FindingDetailInline
-                    finding={finding}
-                    sourceContext={
-                      scan
-                        ? {
-                            scanId: scan.id,
-                            sourceType: scan.sourceType,
-                            repoUrl: scan.project?.repoUrl ?? null,
-                            scanSourceRef: scan.sourceRef ?? null,
-                            defaultBranch: scan.project?.defaultBranch ?? "main",
-                            branch: scan.branch ?? null,
-                            commitSha: scan.commitSha ?? null,
-                          }
-                        : undefined
-                    }
-                    onStatusChange={() => refreshFindings()}
-                  />
-                )}
-              />
-            ) : (
-              <Tabs value={activeSection} onValueChange={setActiveSection}>
-                {findingSections.map((section) => (
-                  <TabsContent key={section.id} value={section.id}>
-                    <FindingsTable
-                      findings={section.findings}
-                      fixPrSource={fixPrSource}
-                      onSelect={(f) =>
-                        setSelectedFinding((prev) =>
-                          nextFindingSelection(prev, f),
-                        )
-                      }
-                      selectedId={selectedFinding?.id as string}
-                      onBulkStatusChange={() => refreshFindings()}
-                      renderExpanded={(finding) => (
-                        <FindingDetailInline
-                          finding={finding}
-                          sourceContext={
-                            scan
-                              ? {
-                                  scanId: scan.id,
-                                  sourceType: scan.sourceType,
-                                  repoUrl: scan.project?.repoUrl ?? null,
-                                  scanSourceRef: scan.sourceRef ?? null,
-                                  defaultBranch:
-                                    scan.project?.defaultBranch ?? "main",
-                                  branch: scan.branch ?? null,
-                                  commitSha: scan.commitSha ?? null,
-                                }
-                              : undefined
-                          }
-                          onStatusChange={() => refreshFindings()}
-                        />
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="border-b border-slate-100 px-5 py-4 sm:px-6 dark:border-slate-800">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-slate-50">
+                    Findings
+                  </h2>
+                  <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-0.5 text-sm font-semibold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                    {visibleFindingCount}
+                  </span>
+                  {scan.status === "COMPLETED" && (scan as { newFindingCount?: number }).newFindingCount ? (
+                    <button
+                      type="button"
+                      onClick={() => setNewOnlyFilter((v) => !v)}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold transition-colors",
+                        newOnlyFilter
+                          ? "bg-indigo-600 text-white"
+                          : "border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300",
                       )}
+                    >
+                      {(scan as { newFindingCount?: number }).newFindingCount} new
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select value={severityFilter} onValueChange={setSeverityFilter}>
+                    <SelectTrigger className="h-8 w-full border-slate-300 bg-white text-xs sm:w-[130px] dark:border-slate-600 dark:bg-slate-900">
+                      <SelectValue placeholder="Severity" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Severities</SelectItem>
+                      <SelectItem value="CRITICAL">Critical</SelectItem>
+                      <SelectItem value="HIGH">High</SelectItem>
+                      <SelectItem value="MEDIUM">Medium</SelectItem>
+                      <SelectItem value="LOW">Low</SelectItem>
+                      <SelectItem value="INFO">Info</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={scannerFilter} onValueChange={setScannerFilter}>
+                    <SelectTrigger className="h-8 w-full border-slate-300 bg-white text-xs sm:w-[140px] dark:border-slate-600 dark:bg-slate-900">
+                      <SelectValue placeholder="Scanner" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Scanners</SelectItem>
+                      <SelectItem value="SAST_LLM">SAST (AI)</SelectItem>
+                      <SelectItem value="SCA">SCA</SelectItem>
+                      <SelectItem value="SECRETS_LLM">Secrets (AI)</SelectItem>
+                      <SelectItem value="IAC">IaC Security</SelectItem>
+                      <SelectItem value="MALICIOUS_PKG">Supply Chain</SelectItem>
+                      <SelectItem value="CONTAINER">Container</SelectItem>
+                      <SelectItem value="ZERO_DAY">Zero-Day (AI)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger className="h-8 w-full border-slate-300 bg-white text-xs sm:w-[130px] dark:border-slate-600 dark:bg-slate-900">
+                      <SelectValue placeholder="Sort" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="severity">By Severity</SelectItem>
+                      <SelectItem value="risk">By Risk Score</SelectItem>
+                      <SelectItem value="file">By File</SelectItem>
+                      <SelectItem value="recent">Most Recent</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {findingSections.length > 0 && (
+                <div className="mt-4">
+                  <Tabs value={activeSection} onValueChange={setActiveSection}>
+                    <TabsList className="w-full justify-start gap-1 rounded-none border-0 bg-transparent p-0">
+                      {findingSections.map(({ id, title, findings: secFindings }) => (
+                        <TabsTrigger
+                          key={id}
+                          value={id}
+                          className="rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium data-[state=active]:border-indigo-200 data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700 dark:data-[state=active]:border-indigo-800 dark:data-[state=active]:bg-indigo-950/30 dark:data-[state=active]:text-indigo-300"
+                        >
+                          {title}
+                          <span className="ml-1.5 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                            {secFindings.length}
+                          </span>
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
+                </div>
+              )}
+            <div className="px-0 sm:px-0">
+              {findingSections.length === 0 ? (
+                <FindingsTable
+                  findings={visibleFindings}
+                  fixPrSource={fixPrSource}
+                  onSelect={(f) =>
+                    setSelectedFinding((prev) => nextFindingSelection(prev, f))
+                  }
+                  selectedId={selectedFinding?.id as string}
+                  onBulkStatusChange={() => refreshFindings()}
+                  renderExpanded={(finding) => (
+                    <FindingDetailInline
+                      finding={finding}
+                      sourceContext={
+                        scan
+                          ? {
+                              scanId: scan.id,
+                              sourceType: scan.sourceType,
+                              repoUrl: scan.project?.repoUrl ?? null,
+                              scanSourceRef: scan.sourceRef ?? null,
+                              defaultBranch: scan.project?.defaultBranch ?? "main",
+                              branch: scan.branch ?? null,
+                              commitSha: scan.commitSha ?? null,
+                            }
+                          : undefined
+                      }
+                      onStatusChange={() => refreshFindings()}
                     />
-                  </TabsContent>
-                ))}
-              </Tabs>
-            )}
+                  )}
+                />
+              ) : (
+                <Tabs value={activeSection} onValueChange={setActiveSection}>
+                  {findingSections.map((section) => (
+                    <TabsContent key={section.id} value={section.id}>
+                      <FindingsTable
+                        findings={section.findings}
+                        fixPrSource={fixPrSource}
+                        onSelect={(f) =>
+                          setSelectedFinding((prev) =>
+                            nextFindingSelection(prev, f),
+                          )
+                        }
+                        selectedId={selectedFinding?.id as string}
+                        onBulkStatusChange={() => refreshFindings()}
+                        renderExpanded={(finding) => (
+                          <FindingDetailInline
+                            finding={finding}
+                            sourceContext={
+                              scan
+                                ? {
+                                    scanId: scan.id,
+                                    sourceType: scan.sourceType,
+                                    repoUrl: scan.project?.repoUrl ?? null,
+                                    scanSourceRef: scan.sourceRef ?? null,
+                                    defaultBranch:
+                                      scan.project?.defaultBranch ?? "main",
+                                    branch: scan.branch ?? null,
+                                    commitSha: scan.commitSha ?? null,
+                                  }
+                                : undefined
+                            }
+                            onStatusChange={() => refreshFindings()}
+                          />
+                        )}
+                      />
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -856,21 +817,21 @@ export default function ScanDetailPage() {
       {/* Error / stop details */}
       {scan.errorMessage &&
         (scan.status === "FAILED" || scan.status === "CANCELLED") && (
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="space-y-3 py-6">
-            <div className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden />
-              <span className="text-base font-semibold">
-                {scan.status === "FAILED"
-                  ? "Scan failed"
-                  : "Scan cancelled"}
-              </span>
+        <div className="overflow-hidden rounded-xl border border-red-200 bg-gradient-to-br from-red-50 to-white shadow-sm dark:border-red-900/40 dark:from-red-950/20 dark:to-slate-950">
+          <div className="flex items-start gap-3 px-5 py-5 sm:px-6">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900/40">
+              <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
             </div>
-            <p className="text-base leading-relaxed text-foreground whitespace-pre-wrap break-words">
-              {scan.errorMessage}
-            </p>
-          </CardContent>
-        </Card>
+            <div className="space-y-2 min-w-0">
+              <span className="text-sm font-semibold text-red-700 dark:text-red-400">
+                {scan.status === "FAILED" ? "Scan failed" : "Scan cancelled"}
+              </span>
+              <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap break-words dark:text-slate-300">
+                {scan.errorMessage}
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* AI Triage Chat — shown when scan is complete */}

@@ -5,7 +5,6 @@ import type {
   JiraConfig,
   SlackConfig,
   SiemConfig,
-  DapperIntegrationConfig,
   WebhookConfig,
 } from "./types";
 
@@ -14,7 +13,6 @@ export type {
   JiraConfig,
   SlackConfig,
   SiemConfig,
-  DapperIntegrationConfig,
   WebhookConfig,
 };
 

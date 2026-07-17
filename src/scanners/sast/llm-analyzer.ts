@@ -649,16 +649,27 @@ async function validateCandidatesPass2(
         findings: [],
       });
 
-      for (let fi = 0; fi < (parsed.findings || []).length; fi++) {
-        const f = parsed.findings![fi];
+      for (const f of parsed.findings || []) {
         if (!f.title) continue; // Pass-2 SAST_PASS2_PROMPT already requires >= 0.80
 
-        // Match LLM response findings to source candidates by stable key (title + filePath)
-        let src = batch[fi]; // default to index match
-        if (!src || src.title?.toLowerCase() !== f.title?.toLowerCase()) {
-          // Try to find by title match within the batch
-          src = batch.find(c => c.title?.toLowerCase() === f.title?.toLowerCase()) || batch[0];
+        // Match LLM response findings to source candidates by normalized title first,
+        // then by filePath + line proximity. Never fall back to positional index —
+        // LLM may reorder, merge, or drop findings.
+        const fTitle = f.title.toLowerCase().replace(/[^a-z0-9]+/g, "");
+        let src: (typeof batch)[0] | undefined;
+        let bestScore = 0;
+        for (const c of batch) {
+          const cTitle = (c.title || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+          if (cTitle === fTitle) { src = c; bestScore = 2; break; }
+          if (cTitle.includes(fTitle) || fTitle.includes(cTitle)) {
+            if (bestScore < 1) { src = c; bestScore = 1; }
+          }
         }
+        // If only a fuzzy match, tighten with filePath proximity
+        if (src && bestScore < 2 && src.filePath !== f.filePath) {
+          src = batch.find(c => c.filePath === f.filePath) || src;
+        }
+        if (!src) continue; // orphan finding from LLM — skip
 
         const base: RawFinding = applySeverityCalibration({
           scanner: "SAST_LLM",

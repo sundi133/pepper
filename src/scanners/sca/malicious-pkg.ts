@@ -607,6 +607,8 @@ export const maliciousPkgScanner: ScannerPlugin = {
           )
             continue;
 
+          const dep = batch.find((d) => d.name === f.packageName);
+          const depAny = dep as Record<string, unknown> | undefined;
           findings.push({
             scanner: "MALICIOUS_PKG",
             severity: normalizeSeverity(f.severity),
@@ -614,13 +616,13 @@ export const maliciousPkgScanner: ScannerPlugin = {
             description: f.recommendation
               ? `${f.description}\n\nRecommendation: ${f.recommendation}`
               : f.description,
-            filePath: batch.find((d) => d.name === f.packageName && (d as any).sourceFile) ? ((batch.find((d) => d.name === f.packageName) as any)?.sourceFile || undefined) : undefined,
+            filePath: depAny?.sourceFile as string | undefined,
             ruleId: `MAL-${f.type || "PKG"}`,
             cweId: f.type === "TYPOSQUAT" ? "CWE-506" : "CWE-829",
             confidence:
               f.confidence ?? MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT,
             metadata: {
-              ecosystem: batch.find((d) => d.name === f.packageName)?.ecosystem,
+              ecosystem: dep?.ecosystem,
               version: f.version,
               type: f.type,
               similarTo: f.similarTo,

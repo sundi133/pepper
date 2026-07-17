@@ -69,7 +69,19 @@ const SECRETS_PATTERNS = [
  * Parse a complete Dockerfile and extract all structural information.
  */
 export function parseDockerfile(content: string, filePath: string): DockerfileStage[] {
-  const lines = content.split(/\r?\n/);
+  const rawLines = content.split(/\r?\n/);
+  // Join backslash-continuation lines so directives spanning multiple physical
+  // lines (e.g. a long RUN or ENV) are treated as a single logical line.
+  const lines: string[] = [];
+  for (const rl of rawLines) {
+    const prev = lines[lines.length - 1];
+    if (prev !== undefined && prev.endsWith("\\")) {
+      lines[lines.length - 1] = prev.slice(0, -1).trimEnd() + " " + rl.trimStart();
+    } else {
+      lines.push(rl);
+    }
+  }
+
   const stages: DockerfileStage[] = [];
   let currentStage: DockerfileStage | null = null;
 

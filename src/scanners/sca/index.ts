@@ -144,36 +144,19 @@ export const scaScanner: ScannerPlugin = {
 
     if (dependencies.length === 0) return [];
 
-    // Identify direct dependencies for risk scoring
+    // Identify direct dependencies for risk scoring by checking which deps
+    // came from manifest files (not lock files). Manifest parsers only extract
+    // direct deps; lock file parsers may include transitive deps.
+    const MANIFEST_NAMES = new Set([
+      "package.json", "requirements.txt", "Pipfile", "go.mod", "Cargo.toml",
+      "pom.xml", "Gemfile", "composer.json", "pyproject.toml", "pubspec.yaml",
+      "mix.exs", "Package.swift", "build.gradle", "build.gradle.kts",
+      ".csproj", ".fsproj", ".vbproj",
+    ]);
     const directDependencies = new Set<string>();
-    for (const filePath of parsedFiles) {
-      const fileName = path.basename(filePath);
-      // Direct dependencies are typically in lock files or manifest files
-      if (
-        fileName === "package.json" ||
-        fileName === "requirements.txt" ||
-        fileName === "go.mod" ||
-        fileName === "Cargo.toml" ||
-        fileName === "pom.xml" ||
-        fileName === "Gemfile" ||
-        fileName === "composer.json" ||
-        fileName === "pyproject.toml" ||
-        fileName === "pubspec.yaml" ||
-        fileName === "mix.exs" ||
-        fileName === "Package.swift"
-      ) {
-        // Parse direct deps from manifests
-        const fullPath = path.join(ctx.workDir, filePath);
-        try {
-          const content = fs.readFileSync(fullPath, "utf-8");
-          for (const dep of dependencies) {
-            if (dep.sourceFile === filePath) {
-              directDependencies.add(dep.name);
-            }
-          }
-        } catch {
-          // Continue on parse errors
-        }
+    for (const dep of dependencies) {
+      if (dep.sourceFile && MANIFEST_NAMES.has(path.basename(dep.sourceFile))) {
+        directDependencies.add(dep.name);
       }
     }
 

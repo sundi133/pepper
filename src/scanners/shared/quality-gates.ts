@@ -6,7 +6,10 @@ import {
   ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 
-const PATTERN_SCANNERS = new Set(["SAST_PATTERN", "SECRETS_PATTERN"]);
+// SAST_PATTERN is quarantined (returns zero findings). SECRETS_PATTERN findings
+// are fast, high-confidence detections that should reach the final result;
+// deduplication with SECRETS_LLM is handled in areRootCauseDuplicates.
+const PATTERN_SCANNERS = new Set(["SAST_PATTERN"]);
 
 const FAILURE_RULE_IDS = new Set([
   "CONTAINER-INVENTORY",
@@ -110,8 +113,8 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
 
     if (f.scanner === "CONTAINER") {
       const image = f.metadata?.image as string;
-      const isConfig = f.metadata?.category === "CONTAINER_CONFIG";
-      if (!image && !isConfig) return false;
+      const category = f.metadata?.category as string | undefined;
+      if (!image && category !== "CONTAINER_CONFIG" && category !== "DOCKERFILE_LINT") return false;
     }
 
     if (

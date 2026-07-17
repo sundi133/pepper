@@ -188,7 +188,6 @@ const PATTERN_DETECTORS: Record<string, { patterns: RegExp[]; severity: "CRITICA
   },
   FIREBASE_KEY: {
     patterns: [
-      /AIza[0-9A-Za-z\-_]{35}/g,
       /AAAA[a-zA-Z0-9_-]{52}/g,
     ],
     severity: "CRITICAL",

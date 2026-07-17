@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Loader2, RefreshCw, Search, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 type ImportItem = {
@@ -84,7 +84,7 @@ export function ImportRepoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl overflow-hidden">
+      <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -128,7 +128,7 @@ export function ImportRepoDialog({
                 No repositories match “{query.trim()}”.
               </p>
             ) : (
-              <ScrollArea className="max-h-[min(50vh,360px)] pr-3">
+              <div className="max-h-[min(50vh,360px)] overflow-y-auto pr-1">
                 <ul className="space-y-2">
                   {visibleItems.map((repo) => (
                 <li
@@ -192,7 +192,7 @@ export function ImportRepoDialog({
                 </li>
                   ))}
                 </ul>
-              </ScrollArea>
+              </div>
             )}
           </div>
         )}

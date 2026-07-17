@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
 
-  const body = (await req.json()) as IntegrationConfigData;
+  const body: IntegrationConfigData = await req.json();
 
   try {
     if (body.kind === "SLACK") {
@@ -79,8 +79,9 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ ok: true, status: result.status });
     } else {
+      const _exhaustiveCheck: never = body;
       return NextResponse.json(
-        { error: `Test not implemented for ${body.kind}` },
+        { error: `Test not implemented for this integration type` },
         { status: 400 },
       );
     }

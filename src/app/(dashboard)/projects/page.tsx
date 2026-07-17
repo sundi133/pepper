@@ -248,13 +248,13 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-          <div className="hidden border-b border-slate-100 bg-slate-50/80 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 md:flex md:items-center">
-            <div className="w-[36px]" />
+          <div className="hidden border-b border-slate-100 bg-slate-50/80 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 md:flex md:items-center">
+            <div className="w-[44px]" />
             <div className="flex-1 min-w-0">Project</div>
-            <div className="w-[100px] shrink-0">Vulnerabilities</div>
-            <div className="w-[130px] shrink-0">Secrets / Deps</div>
+            <div className="w-[160px] shrink-0">Vulnerabilities</div>
+            <div className="w-[160px] shrink-0">Secrets / Deps</div>
             <div className="w-[80px] shrink-0">Grade</div>
-            <div className="w-[100px] shrink-0">Last scan</div>
+            <div className="w-[120px] shrink-0">Last scan</div>
             <div className="w-10 shrink-0" />
           </div>
           <ul className="list-none p-0">
@@ -343,7 +343,7 @@ function ProjectCard({
 
   return (
     <div
-      className="group relative flex items-center gap-3 px-5 py-3 transition-colors hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20"
+      className="group relative flex items-center gap-6 px-6 py-4 transition-colors hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20"
     >
       <Link
         href={primaryHref}
@@ -354,8 +354,8 @@ function ProjectCard({
             : `Open project ${project.name}`
         }
       />
-      <div className="w-[36px] shrink-0">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-800">
+      <div className="w-[44px] shrink-0">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-800">
           <Icon className="h-4 w-4" aria-hidden />
         </div>
       </div>
@@ -365,54 +365,54 @@ function ProjectCard({
         </p>
         <p className="truncate text-xs text-slate-500 dark:text-slate-400">{card.sourceLabel}</p>
       </div>
-      <div className="hidden w-[100px] shrink-0 md:flex md:items-center md:gap-1">
+      <div className="hidden w-[160px] shrink-0 md:flex md:items-center md:gap-1.5">
         {hasVulns ? (
           <>
             {card.criticalCount > 0 && (
-              <span className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+              <span className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-bold tabular-nums text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
                 {card.criticalCount}C
               </span>
             )}
             {card.highCount > 0 && (
-              <span className="inline-flex items-center rounded-md border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-orange-700 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-300">
+              <span className="inline-flex items-center rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-bold tabular-nums text-orange-700 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-300">
                 {card.highCount}H
               </span>
             )}
             {card.mediumCount > 0 && (
-              <span className="inline-flex items-center rounded-md border border-yellow-200 bg-yellow-50 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-yellow-800 dark:border-yellow-900/50 dark:bg-yellow-950/30 dark:text-yellow-300">
+              <span className="inline-flex items-center rounded-md border border-yellow-200 bg-yellow-50 px-2 py-0.5 text-xs font-bold tabular-nums text-yellow-800 dark:border-yellow-900/50 dark:bg-yellow-950/30 dark:text-yellow-300">
                 {card.mediumCount}M
               </span>
             )}
             {card.lowCount > 0 && (
-              <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
+              <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold tabular-nums text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
                 {card.lowCount}L
               </span>
             )}
           </>
         ) : (
-          <span className="px-1.5 py-0.5 text-xs text-slate-400">None</span>
+          <span className="text-xs text-slate-400">None</span>
         )}
       </div>
-      <div className="hidden w-[130px] shrink-0 md:flex md:items-center md:gap-3">
-        <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-          <KeyRound className="h-3 w-3 text-indigo-500/70" />
+      <div className="hidden w-[160px] shrink-0 md:flex md:items-center md:gap-4">
+        <span className="inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
+          <KeyRound className="h-3.5 w-3.5 text-indigo-500/70" />
           <span className="tabular-nums font-medium text-slate-700 dark:text-slate-300">{card.secretsCount}</span>
         </span>
-        <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-          <Package className="h-3 w-3 text-indigo-500/70" />
+        <span className="inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
+          <Package className="h-3.5 w-3.5 text-indigo-500/70" />
           <span className="tabular-nums font-medium text-slate-700 dark:text-slate-300">{card.depsCount}</span>
         </span>
       </div>
       <div className="hidden w-[80px] shrink-0 md:block">
         <span
-          className={`flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold tabular-nums ${gradeBadgeClass(card.grade)}`}
+          className={`flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold tabular-nums ${gradeBadgeClass(card.grade)}`}
           title={card.grade ? `Grade ${card.grade}` : "No completed scan"}
         >
           {card.grade ?? "—"}
         </span>
       </div>
-      <div className="hidden w-[100px] shrink-0 md:block">
-        <span className="text-xs text-slate-500 dark:text-slate-400">
+      <div className="hidden w-[120px] shrink-0 md:block">
+        <span className="text-sm text-slate-500 dark:text-slate-400">
           {formatRelative(card.lastScanAt)}
         </span>
       </div>

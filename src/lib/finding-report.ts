@@ -235,6 +235,9 @@ function inferWhatIsWrong(
   if (family === "sca") {
     return finding.title;
   }
+  if (family === "container") {
+    return finding.title;
+  }
   if (location) return finding.title;
   return undefined;
 }
@@ -247,6 +250,8 @@ function inferValidationSteps(finding: FindingReportInput): string | undefined {
       return "Upgrade the dependency, regenerate the lockfile, and confirm the vulnerable version is no longer resolved.";
     case "iac":
       return "Re-run IaC or policy scanning on the updated configuration before deployment.";
+    case "container":
+      return "Rebuild the container image and re-run the container scan to confirm the issue is resolved.";
     default:
       return undefined;
   }
@@ -296,6 +301,10 @@ function buildSummaryLead(input: {
       return `A vulnerable dependency was identified${where}.`;
     case "secrets":
       return `A secret or credential-like value was identified${where}.`;
+    case "container":
+      return location
+        ? `Container or Dockerfile misconfiguration at ${location}.`
+        : "Container or Dockerfile misconfiguration.";
     default: {
       if (!parameter && !sink) {
         return location
@@ -341,6 +350,15 @@ function buildSteps(input: {
 
   if (family === "secrets") {
     return [];
+  }
+
+  if (family === "container") {
+    const loc = location || `${input.finding.filePath || "Dockerfile"}:${input.finding.startLine ?? 1}`;
+    return [
+      `Open ${loc} in your editor.`,
+      `Apply the fix described in the finding (e.g. add a USER directive, pin the base image digest, or remove the hardcoded secret).`,
+      `Rebuild the image and re-run the scan to confirm the issue is resolved.`,
+    ];
   }
 
   if (family === "iac") {
@@ -452,12 +470,13 @@ function buildVulnerabilityName(finding: FindingReportInput): string {
 
 function scannerFamily(
   finding: FindingReportInput,
-): "sast" | "sca" | "secrets" | "iac" | "zero-day" {
+): "sast" | "sca" | "secrets" | "iac" | "zero-day" | "container" {
   const scanner = finding.scanner || "";
   if (scanner === "SCA" || scanner === "MALICIOUS_PKG") return "sca";
   if (scanner.startsWith("SECRETS")) return "secrets";
   if (scanner === "IAC") return "iac";
   if (scanner === "ZERO_DAY") return "zero-day";
+  if (scanner === "CONTAINER" || scanner === "K8S") return "container";
   return "sast";
 }
 
@@ -470,6 +489,8 @@ function buildConsequenceSentence(finding: FindingReportInput): string {
       return "Exposure risk remains until the value is confirmed inactive and rotated or revoked.";
     case "iac":
       return "The weakness can affect the deployed environment if this configuration is applied.";
+    case "container":
+      return "The container or image configuration deviates from security best practices and can weaken the runtime environment.";
     case "zero-day":
       return "The issue is based on code-flow evidence rather than a simple pattern match and should be validated against the reachable application path.";
   }
@@ -503,6 +524,8 @@ function buildImpact(finding: FindingReportInput): string {
     }
     case "iac":
       return "A misconfigured infrastructure, container, or CI/CD control can weaken the deployed environment and affect confidentiality, integrity, or availability.";
+    case "container":
+      return "A misconfigured container or Dockerfile can lead to privilege escalation, secret exposure, or non-reproducible builds in production.";
     case "zero-day":
       return "A reachable logic or authorization flaw can allow unauthorized business actions, cross-user or cross-tenant access, or bypass of intended workflow controls.";
   }
@@ -559,6 +582,18 @@ function buildRemediation(
         "Apply least privilege for identities, networks, containers, and CI/CD jobs.",
         "Validate the fixed configuration with IaC/security policy scanning before deployment.",
       ];
+    case "container": {
+      const md = normalizeMetadata(finding.metadata);
+      const fix = readString(md.remediation);
+      return fix
+        ? [fix]
+        : [
+            "Update the Dockerfile or container configuration to follow security best practices.",
+            "Pin base images with SHA256 digests for reproducible builds.",
+            "Avoid running containers as root — add a USER directive.",
+            "Remove hardcoded secrets and use Docker secrets or build-time arguments instead.",
+          ];
+    }
     case "zero-day":
       return [
         "Enforce the missing authorization, state, tenant, or workflow control server-side.",

@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, status: result.status });
     } else {
       return NextResponse.json(
-        { error: `Test not implemented for ${body.kind}` },
+        { error: "Test not implemented for this integration type" },
         { status: 400 },
       );
     }

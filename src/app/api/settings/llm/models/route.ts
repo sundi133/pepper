@@ -36,15 +36,17 @@ export async function GET(req: NextRequest) {
       const data = await res.json();
       models = (data.models || []).map((m: { name: string }) => m.name);
     } else if (provider === "anthropic") {
-      const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/models`, {
+      const modelsUrl = `${baseUrl.replace(/\/+$/, "")}/models`;
+      const res = await fetch(modelsUrl, {
         headers: {
           "x-api-key": apiKey || "",
-          "anthropic-version": "2023-06-01",
+          "anthropic-version": "2024-10-22",
         },
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error?.message || `Anthropic returned ${res.status}`);
+        const msg = body.error?.message || `Anthropic returned ${res.status}`;
+        throw new Error(`${msg} — try typing the model name manually`);
       }
       const data = await res.json();
       models = (data.data || []).map((m: { id: string }) => m.id);

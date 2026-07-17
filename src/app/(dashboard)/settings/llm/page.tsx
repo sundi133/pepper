@@ -138,6 +138,7 @@ export default function LlmSettingsPage() {
   const [models, setModels] = useState<string[]>([]);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [useModelDropdown, setUseModelDropdown] = useState(false);
+  const [modelFetchError, setModelFetchError] = useState("");
   const customRef = useRef({ url: "", model: "" });
 
   useEffect(() => {
@@ -213,6 +214,7 @@ export default function LlmSettingsPage() {
     }
 
     setFetchingModels(true);
+    setModelFetchError("");
     try {
       const list = await fetchModelsFromProvider(
         settings.llmProvider,
@@ -220,14 +222,14 @@ export default function LlmSettingsPage() {
         key || settings.llmApiKey || undefined,
       );
       setModels(list);
-      setUseModelDropdown(true);
       if (list.length === 0) {
-        toast.error("No models returned — check the URL");
+        setModelFetchError("No models returned — check the URL");
       } else {
+        setUseModelDropdown(true);
         toast.success(`Found ${list.length} models`);
       }
     } catch (err) {
-      toast.error(
+      setModelFetchError(
         err instanceof Error ? err.message : "Failed to fetch models",
       );
       setUseModelDropdown(false);
@@ -268,6 +270,7 @@ export default function LlmSettingsPage() {
     setTestError("");
     setModels([]);
     setUseModelDropdown(false);
+    setModelFetchError("");
   }
 
   function handleModelSelect(value: string) {
@@ -420,6 +423,11 @@ export default function LlmSettingsPage() {
                   }}
                   placeholder="gpt-4o-mini"
                 />
+              )}
+              {modelFetchError && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {modelFetchError}
+                </p>
               )}
             </div>
           </div>

@@ -54,7 +54,7 @@ function createOpenAIClient(config: LlmConfig): OpenAI {
   }
 
   return new OpenAI({
-    apiKey: config.apiKey || "not-needed",
+    apiKey: config.apiKey || process.env.LLM_API_KEY || "",
     baseURL: config.baseUrl,
   });
 }

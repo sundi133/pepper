@@ -62,7 +62,7 @@ export function buildOrgSettingsForJob(
     llmProvider: orgSettings?.llmProvider || "openai",
     llmBaseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",
     llmModel: orgSettings?.llmModel || "gpt-4o-mini",
-    llmApiKey: decryptLlmApiKey(orgSettings?.llmApiKey),
+    llmApiKey: decryptLlmApiKey(orgSettings?.llmApiKey) || process.env.LLM_API_KEY,
     enableLlmSast: orgSettings?.enableLlmSast ?? true,
     enableLlmSecrets: orgSettings?.enableLlmSecrets ?? true,
     osvApiUrl: orgSettings?.osvApiUrl || "https://api.osv.dev",

@@ -273,6 +273,7 @@ interface LlmFinding {
   title: string;
   severity: string;
   description: string;
+  filePath?: string;
   startLine: number;
   endLine: number;
   cweId?: string;

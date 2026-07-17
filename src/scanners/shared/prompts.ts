@@ -17,6 +17,7 @@ Return JSON:
       "title": "...",
       "severity": "CRITICAL|HIGH|MEDIUM|LOW",
       "description": "structured: what, where, why exploitable",
+      "filePath": "<file path>",
       "startLine": <int>,
       "endLine": <int>,
       "cweId": "CWE-XXX",

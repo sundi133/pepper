@@ -264,7 +264,7 @@ export default function LlmSettingsPage() {
     setSettings((s) => ({ ...s, llmModel: value }));
   }
 
-  const needsKey = settings.llmProvider !== "ollama" && settings.llmProvider !== "opencode";
+  const needsKey = settings.llmProvider !== "ollama";
   const isCustomProvider = settings.llmProvider === "custom";
   const models = PROVIDER_MODELS[settings.llmProvider];
 
@@ -473,8 +473,18 @@ export default function LlmSettingsPage() {
 
           {settings.llmProvider === "opencode" && (
             <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
-              OpenCode Zen offers free models — no API key needed. Get the full
-              model list at{" "}
+              OpenCode Zen offers free models. Sign in at{" "}
+              <a
+                href="https://opencode.ai/auth"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                opencode.ai/auth
+              </a>{" "}
+              to get your API key. The free models (DeepSeek V4 Flash Free,
+              MiMo-V2.5 Free, etc.) cost nothing to use. Get the full model list
+              at{" "}
               <a
                 href="https://opencode.ai/docs/zen"
                 target="_blank"

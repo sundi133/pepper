@@ -27,6 +27,7 @@ import {
   Shield,
   Sparkles,
   Database,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
@@ -72,6 +73,16 @@ const PROVIDER_DEFAULTS: Record<
   },
 };
 
+const MODEL_REQUIRES_KEY: Record<string, boolean> = {
+  openai: true,
+  anthropic: true,
+  openrouter: false,
+  azure: true,
+  ollama: false,
+  vllm: false,
+  custom: false,
+};
+
 const DEFAULT_SETTINGS = {
   llmProvider: "openai",
   llmBaseUrl: "https://api.openai.com/v1",
@@ -99,6 +110,45 @@ function ProviderIcon({ provider }: { provider: string }) {
   return <span className="mr-2">{icons[provider] || "🔌"}</span>;
 }
 
+async function fetchModelsFromProvider(
+  provider: string,
+  baseUrl: string,
+  apiKey?: string,
+): Promise<string[]> {
+  if (provider === "ollama") {
+    const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/tags`);
+    if (!res.ok) throw new Error(`Ollama returned ${res.status}`);
+    const data = await res.json();
+    return (data.models || []).map((m: { name: string }) => m.name);
+  }
+
+  if (provider === "anthropic") {
+    const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/models`, {
+      headers: {
+        "x-api-key": apiKey || "",
+        "anthropic-version": "2023-06-01",
+      },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error?.message || `Anthropic returned ${res.status}`);
+    }
+    const data = await res.json();
+    return (data.data || []).map((m: { id: string }) => m.id);
+  }
+
+  // OpenAI-compatible
+  const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/models`, {
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error?.message || `API returned ${res.status}`);
+  }
+  const data = await res.json();
+  return (data.data || []).map((m: { id: string }) => m.id);
+}
+
 export default function LlmSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -107,6 +157,9 @@ export default function LlmSettingsPage() {
   >("idle");
   const [testError, setTestError] = useState("");
   const [settings, setSettings] = useState<LlmSettings>(DEFAULT_SETTINGS);
+  const [models, setModels] = useState<string[]>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [useModelDropdown, setUseModelDropdown] = useState(false);
   const customRef = useRef({ url: "", model: "" });
 
   useEffect(() => {
@@ -169,6 +222,42 @@ export default function LlmSettingsPage() {
     }
   }
 
+  async function fetchModels() {
+    const key = MODEL_REQUIRES_KEY[settings.llmProvider]
+      ? settings.llmApiKey || settings.hasApiKey
+        ? settings.llmApiKey || undefined
+        : undefined
+      : undefined;
+
+    if (MODEL_REQUIRES_KEY[settings.llmProvider] && !key) {
+      toast.error("Enter an API key first to fetch models");
+      return;
+    }
+
+    setFetchingModels(true);
+    try {
+      const list = await fetchModelsFromProvider(
+        settings.llmProvider,
+        settings.llmBaseUrl,
+        key || settings.llmApiKey || undefined,
+      );
+      setModels(list);
+      setUseModelDropdown(true);
+      if (list.length === 0) {
+        toast.error("No models returned — check the URL");
+      } else {
+        toast.success(`Found ${list.length} models`);
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to fetch models",
+      );
+      setUseModelDropdown(false);
+    } finally {
+      setFetchingModels(false);
+    }
+  }
+
   async function updateSettings(
     patch: Partial<
       Pick<LlmSettings, "enableLlmSast" | "enableLlmSecrets" | "vulnDbMode">
@@ -199,9 +288,24 @@ export default function LlmSettingsPage() {
     }
     setTestResult("idle");
     setTestError("");
+    setModels([]);
+    setUseModelDropdown(false);
   }
 
-  const provider = PROVIDER_DEFAULTS[settings.llmProvider];
+  function handleModelSelect(value: string) {
+    if (value === "__custom__") {
+      setUseModelDropdown(false);
+      return;
+    }
+    setSettings((s) => ({ ...s, llmModel: value }));
+  }
+
+  const needsKey = settings.llmProvider !== "ollama";
+  const canFetchModels =
+    settings.llmBaseUrl &&
+    (!MODEL_REQUIRES_KEY[settings.llmProvider] ||
+      settings.llmApiKey ||
+      settings.hasApiKey);
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -222,11 +326,13 @@ export default function LlmSettingsPage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            <CardTitle>AI Provider</CardTitle>
+            <div>
+              <CardTitle>AI Provider</CardTitle>
+              <CardDescription>
+                Choose your LLM provider and enter credentials
+              </CardDescription>
+            </div>
           </div>
-          <CardDescription>
-            Choose your LLM provider and enter credentials
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
@@ -288,24 +394,64 @@ export default function LlmSettingsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Model</Label>
-              <Input
-                value={settings.llmModel}
-                onChange={(e) => {
-                  setSettings((s) => ({ ...s, llmModel: e.target.value }));
-                  setTestResult("idle");
-                }}
-                placeholder="gpt-4o-mini"
-              />
+              <div className="flex items-center justify-between">
+                <Label>Model</Label>
+                {canFetchModels && !fetchingModels && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 px-2 text-xs text-muted-foreground"
+                    onClick={fetchModels}
+                  >
+                    <Search className="h-3 w-3" />
+                    Browse
+                  </Button>
+                )}
+                {fetchingModels && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Loading...
+                  </span>
+                )}
+              </div>
+              {useModelDropdown && models.length > 0 ? (
+                <Select
+                  value={settings.llmModel}
+                  onValueChange={handleModelSelect}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a model" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    {models.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="__custom__" className="border-t text-muted-foreground text-xs italic">
+                      Type custom model name...
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={settings.llmModel}
+                  onChange={(e) => {
+                    setSettings((s) => ({ ...s, llmModel: e.target.value }));
+                    setTestResult("idle");
+                  }}
+                  placeholder="gpt-4o-mini"
+                />
+              )}
             </div>
           </div>
 
-          {settings.llmProvider !== "ollama" && (
+          {needsKey && (
             <div className="space-y-2">
               <Label>
                 API Key
                 {settings.hasApiKey && (
-                  <Badge variant="outline" className="ml-2 text-xs">
+                  <Badge variant="outline" className="ml-2 text-xs font-normal">
                     Configured
                   </Badge>
                 )}
@@ -347,8 +493,8 @@ export default function LlmSettingsPage() {
             </div>
           )}
 
-          <div className="flex gap-3 pt-2">
-            {settings.llmProvider !== "ollama" && (
+          <div className="flex flex-wrap gap-3 pt-2">
+            {needsKey && (
               <Button
                 variant="outline"
                 onClick={testConnection}
@@ -375,11 +521,13 @@ export default function LlmSettingsPage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            <CardTitle>AI Features</CardTitle>
+            <div>
+              <CardTitle>AI Features</CardTitle>
+              <CardDescription>
+                Toggle which scans use AI assistance
+              </CardDescription>
+            </div>
           </div>
-          <CardDescription>
-            Toggle which scans use AI assistance
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
@@ -415,11 +563,13 @@ export default function LlmSettingsPage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Database className="h-5 w-5 text-primary" />
-            <CardTitle>Vulnerability Database</CardTitle>
+            <div>
+              <CardTitle>Vulnerability Database</CardTitle>
+              <CardDescription>
+                Configure how vulnerability data is sourced for SCA scans
+              </CardDescription>
+            </div>
           </div>
-          <CardDescription>
-            Configure how vulnerability data is sourced for SCA scans
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">

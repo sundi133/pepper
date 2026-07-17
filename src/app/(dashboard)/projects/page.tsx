@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@/lib/utils";
 import { useProjects, type ProjectListFilters } from "@/hooks/use-scan-polling";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

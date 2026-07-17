@@ -811,7 +811,6 @@ export default function ScanDetailPage() {
               )}
             </div>
           </div>
-        </div>
       )}
 
       {/* Error / stop details */}

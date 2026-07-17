@@ -39,7 +39,7 @@ describe("ensureWebhookScanSlot", () => {
       commitSha: "abc",
       scanType: "INCREMENTAL",
       status: "QUEUED",
-    });
+    } as never);
     await expect(
       ensureWebhookScanSlot({
         projectId: "p1",
@@ -56,7 +56,7 @@ describe("ensureWebhookScanSlot", () => {
       commitSha: "old",
       scanType: "FULL",
       status: "COMPLETED",
-    });
+    } as never);
     await expect(
       ensureWebhookScanSlot({
         projectId: "p1",

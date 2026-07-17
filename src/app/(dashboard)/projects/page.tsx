@@ -1,7 +1,7 @@
 "use client";
 
+import { cn } from "@/lib/utils";
 import { useProjects, type ProjectListFilters } from "@/hooks/use-scan-polling";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -34,7 +34,6 @@ import {
   FolderGit2,
   MoreVertical,
   Trash2,
-  AlertTriangle,
   KeyRound,
   Package,
   ExternalLink,
@@ -248,19 +247,36 @@ export default function ProjectsPage() {
           </div>
         </div>
       ) : (
-        <ul className="grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
-          {typedProjects.map((project) => (
-            <li key={project.id}>
-              <ProjectCard
-                project={project}
-                onDelete={() =>
-                  setDeleteTarget({ id: project.id, name: project.name })
-                }
-                deleting={deletingId === project.id}
-              />
-            </li>
-          ))}
-        </ul>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <div className="hidden border-b border-slate-100 bg-slate-50/80 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 md:flex md:items-center">
+            <div className="w-[36px]" />
+            <div className="flex-1 min-w-0">Project</div>
+            <div className="w-[100px] shrink-0">Vulnerabilities</div>
+            <div className="w-[130px] shrink-0">Secrets / Deps</div>
+            <div className="w-[80px] shrink-0">Grade</div>
+            <div className="w-[100px] shrink-0">Last scan</div>
+            <div className="w-10 shrink-0" />
+          </div>
+          <ul className="list-none p-0">
+            {typedProjects.map((project, i) => (
+              <li
+                key={project.id}
+                className={cn(
+                  "border-b border-slate-100 last:border-b-0 dark:border-slate-800",
+                  i % 2 === 0 ? "bg-white dark:bg-slate-950" : "bg-slate-50/50 dark:bg-slate-900/30",
+                )}
+              >
+                <ProjectCard
+                  project={project}
+                  onDelete={() =>
+                    setDeleteTarget({ id: project.id, name: project.name })
+                  }
+                  deleting={deletingId === project.id}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <Dialog
@@ -326,123 +342,111 @@ function ProjectCard({
     : `/projects/${project.id}`;
 
   return (
-    <Card className="group relative h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-indigo-200 hover:shadow-md hover:shadow-indigo-500/5 dark:border-slate-800 dark:bg-slate-950">
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 to-blue-500 opacity-0 transition-opacity group-hover:opacity-100" />
+    <div
+      className="group relative flex items-center gap-3 px-5 py-3 transition-colors hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20"
+    >
       <Link
         href={primaryHref}
-        className="absolute inset-0 z-0 rounded-xl"
+        className="absolute inset-0 z-0"
         aria-label={
           latestScanId
             ? `View findings for ${project.name}`
             : `Open project ${project.name}`
         }
       />
-      <CardContent className="relative z-10 flex h-full flex-col p-5 pointer-events-none">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-800">
-              <Icon className="h-5 w-5" aria-hidden />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-900 group-hover:text-indigo-600 dark:text-slate-100">
-                {project.name}
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{card.sourceLabel}</p>
-            </div>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="relative z-20 h-8 w-8 shrink-0 pointer-events-auto text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
-                aria-label="Project actions"
-              >
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[10rem]">
-              <DropdownMenuItem asChild>
-                <Link href={`/projects/${project.id}`}>
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Open project
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                disabled={deleting}
-                onClick={onDelete}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+      <div className="w-[36px] shrink-0">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-800">
+          <Icon className="h-4 w-4" aria-hidden />
         </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-1.5">
-          <span className="flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-            Vulnerabilities:
-          </span>
-          {hasVulns ? (
-            <div className="flex flex-wrap items-center gap-1">
-              {card.criticalCount > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-bold tabular-nums text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-                  {card.criticalCount}C
-                </span>
-              )}
-              {card.highCount > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-bold tabular-nums text-orange-700 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-300">
-                  {card.highCount}H
-                </span>
-              )}
-              {card.mediumCount > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-md border border-yellow-200 bg-yellow-50 px-2 py-0.5 text-[11px] font-bold tabular-nums text-yellow-800 dark:border-yellow-900/50 dark:bg-yellow-950/30 dark:text-yellow-300">
-                  {card.mediumCount}M
-                </span>
-              )}
-              {card.lowCount > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold tabular-nums text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
-                  {card.lowCount}L
-                </span>
-              )}
-            </div>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-              None
-            </span>
-          )}
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-          <span className="inline-flex items-center gap-1.5">
-            <KeyRound className="h-3.5 w-3.5 text-indigo-500/70" />
-            <span className="tabular-nums font-medium text-slate-700 dark:text-slate-300">{card.secretsCount}</span> secrets
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <Package className="h-3.5 w-3.5 text-indigo-500/70" />
-            <span className="tabular-nums font-medium text-slate-700 dark:text-slate-300">{card.depsCount}</span> deps
-          </span>
-        </div>
-
-        <div className="mt-auto flex items-end justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <span className="inline-flex h-2 w-2 rounded-full bg-indigo-400" />
-            Last scan:{" "}
-            <span className="font-medium text-slate-700 dark:text-slate-300">
-              {formatRelative(card.lastScanAt)}
-            </span>
-          </div>
-          <span
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold tabular-nums ${gradeBadgeClass(card.grade)}`}
-            title={card.grade ? `Grade ${card.grade}` : "No completed scan"}
-          >
-            {card.grade ?? "—"}
-          </span>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="truncate text-sm font-semibold text-slate-900 group-hover:text-indigo-600 dark:text-slate-100">
+          {project.name}
+        </p>
+        <p className="truncate text-xs text-slate-500 dark:text-slate-400">{card.sourceLabel}</p>
+      </div>
+      <div className="hidden w-[100px] shrink-0 md:flex md:items-center md:gap-1">
+        {hasVulns ? (
+          <>
+            {card.criticalCount > 0 && (
+              <span className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+                {card.criticalCount}C
+              </span>
+            )}
+            {card.highCount > 0 && (
+              <span className="inline-flex items-center rounded-md border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-orange-700 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-300">
+                {card.highCount}H
+              </span>
+            )}
+            {card.mediumCount > 0 && (
+              <span className="inline-flex items-center rounded-md border border-yellow-200 bg-yellow-50 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-yellow-800 dark:border-yellow-900/50 dark:bg-yellow-950/30 dark:text-yellow-300">
+                {card.mediumCount}M
+              </span>
+            )}
+            {card.lowCount > 0 && (
+              <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
+                {card.lowCount}L
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="px-1.5 py-0.5 text-xs text-slate-400">None</span>
+        )}
+      </div>
+      <div className="hidden w-[130px] shrink-0 md:flex md:items-center md:gap-3">
+        <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+          <KeyRound className="h-3 w-3 text-indigo-500/70" />
+          <span className="tabular-nums font-medium text-slate-700 dark:text-slate-300">{card.secretsCount}</span>
+        </span>
+        <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+          <Package className="h-3 w-3 text-indigo-500/70" />
+          <span className="tabular-nums font-medium text-slate-700 dark:text-slate-300">{card.depsCount}</span>
+        </span>
+      </div>
+      <div className="hidden w-[80px] shrink-0 md:block">
+        <span
+          className={`flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold tabular-nums ${gradeBadgeClass(card.grade)}`}
+          title={card.grade ? `Grade ${card.grade}` : "No completed scan"}
+        >
+          {card.grade ?? "—"}
+        </span>
+      </div>
+      <div className="hidden w-[100px] shrink-0 md:block">
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          {formatRelative(card.lastScanAt)}
+        </span>
+      </div>
+      <div className="relative z-10 shrink-0 pointer-events-auto">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+              aria-label="Project actions"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[10rem]">
+            <DropdownMenuItem asChild>
+              <Link href={`/projects/${project.id}`}>
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Open project
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              disabled={deleting}
+              onClick={onDelete}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
   );
 }

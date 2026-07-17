@@ -157,20 +157,20 @@ export default function ProjectsPage() {
       {/* Header */}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0 space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl dark:text-slate-50">
             Projects
           </h1>
-          <p className="text-sm text-muted-foreground sm:text-base">
+          <p className="text-sm text-slate-500 sm:text-base dark:text-slate-400">
             Manage and monitor your security scan projects
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
           <CreateScanDialog
             triggerLabel="New Scan"
-            triggerClassName="w-full bg-primary font-semibold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto"
+            triggerClassName="w-full bg-indigo-600 font-semibold text-white shadow-lg shadow-indigo-500/25 hover:bg-indigo-700 sm:w-auto"
             onScanCreated={() => refresh()}
           />
-          <Button variant="outline" className="w-full border-border/80 sm:w-auto" asChild>
+          <Button variant="outline" className="w-full border-slate-300 sm:w-auto dark:border-slate-700" asChild>
             <Link href="/projects/new">
               <Plus className="mr-2 h-4 w-4" />
               New project
@@ -186,7 +186,7 @@ export default function ProjectsPage() {
             placeholder="Search projects…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="h-10 border-border/60 bg-card/60 pr-3"
+            className="h-10 border-slate-300 bg-white pr-3 dark:border-slate-600 dark:bg-slate-950"
             aria-label="Search projects"
           />
         </div>
@@ -197,7 +197,7 @@ export default function ProjectsPage() {
               setSource(v as ProjectListFilters["source"])
             }
           >
-            <SelectTrigger className="h-10 w-full border-border/60 bg-card/60 sm:w-[140px]">
+            <SelectTrigger className="h-10 w-full border-slate-300 bg-white sm:w-[140px] dark:border-slate-600 dark:bg-slate-950">
               <SelectValue placeholder="All types" />
             </SelectTrigger>
             <SelectContent>
@@ -210,7 +210,7 @@ export default function ProjectsPage() {
             value={sort}
             onValueChange={(v) => setSort(v as ProjectListFilters["sort"])}
           >
-            <SelectTrigger className="h-10 w-full border-border/60 bg-card/60 sm:w-[160px]">
+            <SelectTrigger className="h-10 w-full border-slate-300 bg-white sm:w-[160px] dark:border-slate-600 dark:bg-slate-950">
               <SelectValue placeholder="Sort" />
             </SelectTrigger>
             <SelectContent>
@@ -224,26 +224,29 @@ export default function ProjectsPage() {
       </div>
 
       {isLoading ? (
-        <p className="py-16 text-center text-sm text-muted-foreground">
-          Loading projects…
-        </p>
+        <div className="flex items-center justify-center gap-2 py-20 text-slate-500">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+          <span className="text-sm">Loading projects…</span>
+        </div>
       ) : typedProjects.length === 0 ? (
-        <Card className="border-border/60 bg-card/80">
-          <CardContent className="flex flex-col items-center justify-center py-14">
-            <FolderOpen className="mb-4 h-12 w-12 text-muted-foreground" />
-            <h3 className="text-lg font-medium text-foreground">No projects</h3>
-            <p className="mb-6 max-w-sm text-center text-sm text-muted-foreground">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex flex-col items-center justify-center py-16">
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+              <FolderOpen className="h-7 w-7" />
+            </div>
+            <h3 className="mt-4 text-base font-semibold text-slate-900 dark:text-slate-50">No projects</h3>
+            <p className="mt-1 mb-6 max-w-sm text-center text-sm text-slate-500 dark:text-slate-400">
               {searchInput || source !== "all"
                 ? "No projects match your filters. Try adjusting search or type."
                 : "Create your first project to start scanning code."}
             </p>
             {!searchInput && source === "all" ? (
-              <Button asChild>
+              <Button className="bg-indigo-600 text-white hover:bg-indigo-700" asChild>
                 <Link href="/projects/new">Create project</Link>
               </Button>
             ) : null}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ) : (
         <ul className="grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
           {typedProjects.map((project) => (
@@ -323,7 +326,8 @@ function ProjectCard({
     : `/projects/${project.id}`;
 
   return (
-    <Card className="group relative h-full overflow-hidden border-border/60 bg-card/90 shadow-sm transition-colors hover:border-primary/30">
+    <Card className="group relative h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-indigo-200 hover:shadow-md hover:shadow-indigo-500/5 dark:border-slate-800 dark:bg-slate-950">
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 to-blue-500 opacity-0 transition-opacity group-hover:opacity-100" />
       <Link
         href={primaryHref}
         className="absolute inset-0 z-0 rounded-xl"
@@ -333,17 +337,17 @@ function ProjectCard({
             : `Open project ${project.name}`
         }
       />
-      <CardContent className="relative z-10 flex h-full flex-col p-4 sm:p-5 pointer-events-none">
+      <CardContent className="relative z-10 flex h-full flex-col p-5 pointer-events-none">
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 flex-1 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary ring-1 ring-primary/25">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-800">
               <Icon className="h-5 w-5" aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="truncate font-semibold text-foreground group-hover:text-primary">
+              <p className="truncate text-sm font-semibold text-slate-900 group-hover:text-indigo-600 dark:text-slate-100">
                 {project.name}
               </p>
-              <p className="text-xs text-muted-foreground">{card.sourceLabel}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{card.sourceLabel}</p>
             </div>
           </div>
           <DropdownMenu>
@@ -351,7 +355,7 @@ function ProjectCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="relative z-20 h-8 w-8 shrink-0 pointer-events-auto text-muted-foreground hover:text-foreground"
+                className="relative z-20 h-8 w-8 shrink-0 pointer-events-auto text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                 aria-label="Project actions"
               >
                 <MoreVertical className="h-4 w-4" />
@@ -377,59 +381,62 @@ function ProjectCard({
           </DropdownMenu>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500/90" />
+        <div className="mt-4 flex flex-wrap items-center gap-1.5">
+          <span className="flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
             Vulnerabilities:
           </span>
           {hasVulns ? (
             <div className="flex flex-wrap items-center gap-1">
               {card.criticalCount > 0 && (
-                <span className="rounded px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-white bg-[#ef4444]">
+                <span className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-bold tabular-nums text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
                   {card.criticalCount}C
                 </span>
               )}
               {card.highCount > 0 && (
-                <span className="rounded px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-white bg-[#f97316]">
+                <span className="inline-flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-bold tabular-nums text-orange-700 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-300">
                   {card.highCount}H
                 </span>
               )}
               {card.mediumCount > 0 && (
-                <span className="rounded px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-foreground bg-[#eab308]">
+                <span className="inline-flex items-center gap-1 rounded-md border border-yellow-200 bg-yellow-50 px-2 py-0.5 text-[11px] font-bold tabular-nums text-yellow-800 dark:border-yellow-900/50 dark:bg-yellow-950/30 dark:text-yellow-300">
                   {card.mediumCount}M
                 </span>
               )}
               {card.lowCount > 0 && (
-                <span className="rounded px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-emerald-950 bg-emerald-400">
+                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold tabular-nums text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
                   {card.lowCount}L
                 </span>
               )}
             </div>
           ) : (
-            <span className="text-xs text-muted-foreground">None</span>
+            <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+              None
+            </span>
           )}
         </div>
 
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
-            <KeyRound className="h-3.5 w-3.5 text-primary/80" />
-            <span className="tabular-nums">{card.secretsCount}</span> secrets
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+          <span className="inline-flex items-center gap-1.5">
+            <KeyRound className="h-3.5 w-3.5 text-indigo-500/70" />
+            <span className="tabular-nums font-medium text-slate-700 dark:text-slate-300">{card.secretsCount}</span> secrets
           </span>
-          <span className="inline-flex items-center gap-1">
-            <Package className="h-3.5 w-3.5 text-primary/80" />
-            <span className="tabular-nums">{card.depsCount}</span> deps
+          <span className="inline-flex items-center gap-1.5">
+            <Package className="h-3.5 w-3.5 text-indigo-500/70" />
+            <span className="tabular-nums font-medium text-slate-700 dark:text-slate-300">{card.depsCount}</span> deps
           </span>
         </div>
 
-        <div className="mt-auto flex items-end justify-between gap-3 pt-3">
-          <p className="text-xs text-muted-foreground">
+        <div className="mt-auto flex items-end justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span className="inline-flex h-2 w-2 rounded-full bg-indigo-400" />
             Last scan:{" "}
-            <span className="font-medium text-foreground/90">
+            <span className="font-medium text-slate-700 dark:text-slate-300">
               {formatRelative(card.lastScanAt)}
             </span>
-          </p>
+          </div>
           <span
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-sm font-bold tabular-nums ${gradeBadgeClass(card.grade)}`}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold tabular-nums ${gradeBadgeClass(card.grade)}`}
             title={card.grade ? `Grade ${card.grade}` : "No completed scan"}
           >
             {card.grade ?? "—"}

@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import { useProjects, type ProjectListFilters } from "@/hooks/use-scan-polling";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,13 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -32,10 +24,7 @@ import {
   Plus,
   Upload,
   FolderGit2,
-  MoreVertical,
   Trash2,
-  KeyRound,
-  Package,
   ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
@@ -249,13 +238,12 @@ export default function ProjectsPage() {
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
           <div className="hidden border-b border-slate-100 bg-slate-50/80 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 md:flex md:items-center">
-            <div className="w-[44px]" />
+            <div className="w-11" />
             <div className="flex-1 min-w-0">Project</div>
-            <div className="w-[160px] shrink-0">Vulnerabilities</div>
-            <div className="w-[160px] shrink-0">Secrets / Deps</div>
-            <div className="w-[80px] shrink-0">Grade</div>
-            <div className="w-[120px] shrink-0">Last scan</div>
-            <div className="w-10 shrink-0" />
+            <div className="w-[180px] shrink-0 text-center">Vulnerabilities</div>
+            <div className="w-[60px] shrink-0 text-center">Grade</div>
+            <div className="w-[110px] shrink-0">Last scan</div>
+            <div className="w-[100px] shrink-0" />
           </div>
           <ul className="list-none p-0">
             {typedProjects.map((project, i) => (
@@ -342,30 +330,19 @@ function ProjectCard({
     : `/projects/${project.id}`;
 
   return (
-    <div
-      className="group relative flex items-center gap-6 px-6 py-4 transition-colors hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20"
-    >
-      <Link
-        href={primaryHref}
-        className="absolute inset-0 z-0"
-        aria-label={
-          latestScanId
-            ? `View findings for ${project.name}`
-            : `Open project ${project.name}`
-        }
-      />
-      <div className="w-[44px] shrink-0">
+    <div className="flex items-center gap-6 px-6 py-4 transition-colors hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20">
+      <div className="w-11 shrink-0">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-800">
           <Icon className="h-4 w-4" aria-hidden />
         </div>
       </div>
       <div className="flex-1 min-w-0">
-        <p className="truncate text-sm font-semibold text-slate-900 group-hover:text-indigo-600 dark:text-slate-100">
+        <Link href={primaryHref} className="truncate text-sm font-semibold text-slate-900 hover:text-indigo-600 dark:text-slate-100 dark:hover:text-indigo-400">
           {project.name}
-        </p>
+        </Link>
         <p className="truncate text-xs text-slate-500 dark:text-slate-400">{card.sourceLabel}</p>
       </div>
-      <div className="hidden w-[160px] shrink-0 md:flex md:items-center md:gap-1.5">
+      <div className="hidden w-[180px] shrink-0 md:flex md:items-center md:justify-center md:gap-1.5">
         {hasVulns ? (
           <>
             {card.criticalCount > 0 && (
@@ -393,17 +370,7 @@ function ProjectCard({
           <span className="text-xs text-slate-400">None</span>
         )}
       </div>
-      <div className="hidden w-[160px] shrink-0 md:flex md:items-center md:gap-4">
-        <span className="inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
-          <KeyRound className="h-3.5 w-3.5 text-indigo-500/70" />
-          <span className="tabular-nums font-medium text-slate-700 dark:text-slate-300">{card.secretsCount}</span>
-        </span>
-        <span className="inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
-          <Package className="h-3.5 w-3.5 text-indigo-500/70" />
-          <span className="tabular-nums font-medium text-slate-700 dark:text-slate-300">{card.depsCount}</span>
-        </span>
-      </div>
-      <div className="hidden w-[80px] shrink-0 md:block">
+      <div className="hidden w-[60px] shrink-0 md:flex md:items-center md:justify-center">
         <span
           className={`flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold tabular-nums ${gradeBadgeClass(card.grade)}`}
           title={card.grade ? `Grade ${card.grade}` : "No completed scan"}
@@ -411,41 +378,27 @@ function ProjectCard({
           {card.grade ?? "—"}
         </span>
       </div>
-      <div className="hidden w-[120px] shrink-0 md:block">
+      <div className="hidden w-[110px] shrink-0 md:block">
         <span className="text-sm text-slate-500 dark:text-slate-400">
           {formatRelative(card.lastScanAt)}
         </span>
       </div>
-      <div className="relative z-10 shrink-0 pointer-events-auto">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
-              aria-label="Project actions"
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[10rem]">
-            <DropdownMenuItem asChild>
-              <Link href={`/projects/${project.id}`}>
-                <ExternalLink className="mr-2 h-4 w-4" />
-                Open project
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              disabled={deleting}
-              onClick={onDelete}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <div className="relative z-10 flex shrink-0 items-center gap-1 pointer-events-auto">
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600" asChild>
+          <Link href={`/projects/${project.id}`} aria-label="Open project">
+            <ExternalLink className="h-4 w-4" />
+          </Link>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-slate-400 hover:text-red-600"
+          disabled={deleting}
+          onClick={onDelete}
+          aria-label="Delete project"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   );

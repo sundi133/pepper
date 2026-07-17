@@ -5,6 +5,7 @@ import {
   createLlmClient,
   analyzeWithLlm,
   parseLlmJsonResponse,
+  getLlmConfig,
 } from "@/lib/llm-gateway";
 import { z } from "zod";
 
@@ -106,12 +107,9 @@ export async function POST(req: NextRequest) {
     where: { organizationId: orgId },
   });
 
-  const apiKey =
-    orgSettings?.llmApiKey?.trim() ||
-    process.env.LLM_API_KEY?.trim() ||
-    process.env.OPENAI_API_KEY?.trim();
+  const llmCfg = getLlmConfig(orgSettings);
 
-  if (!apiKey) {
+  if (!llmCfg.apiKey) {
     return NextResponse.json(
       {
         error:
@@ -120,14 +118,6 @@ export async function POST(req: NextRequest) {
       { status: 503 },
     );
   }
-
-  const provider = orgSettings?.llmProvider || "openai";
-  const baseUrl =
-    orgSettings?.llmBaseUrl ||
-    (provider.toLowerCase() === "ollama"
-      ? process.env.OLLAMA_HOST || "http://localhost:11434"
-      : "https://api.openai.com/v1");
-  const model = orgSettings?.llmModel || "gpt-4o-mini";
 
   // Build indexed context for LLM
   const context = findings.map((f, i) => ({
@@ -145,11 +135,11 @@ export async function POST(req: NextRequest) {
   }));
 
   try {
-    const client = createLlmClient({ provider, baseUrl, apiKey, model });
+    const client = createLlmClient(llmCfg);
 
     const raw = await analyzeWithLlm(
       client,
-      model,
+      llmCfg.model,
       SYSTEM,
       JSON.stringify({ findings: context }),
       { temperature: 0.1, maxTokens: 4096 },

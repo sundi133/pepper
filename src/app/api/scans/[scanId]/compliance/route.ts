@@ -9,6 +9,7 @@ import {
   runFrameworkMapping,
   type FindingRow,
 } from "@/lib/compliance/report-run";
+import { getLlmConfig as resolveLlmConfig } from "@/lib/llm-gateway";
 
 /**
  * GET /api/scans/[scanId]/compliance
@@ -128,12 +129,8 @@ export async function GET(
     const orgSettings = await prisma.orgSettings.findUnique({
       where: { organizationId: orgId! },
     });
-    llmConfig = {
-      provider: orgSettings?.llmProvider || "openai",
-      baseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",
-      apiKey: orgSettings?.llmApiKey || undefined,
-      model: modelOverride || orgSettings?.llmModel || "gpt-4o-mini",
-    };
+    const base = resolveLlmConfig(orgSettings);
+    llmConfig = { ...base, model: modelOverride || base.model };
     return llmConfig;
   }
 

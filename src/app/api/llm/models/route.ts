@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
-import { createLlmClient, LlmConfig } from "@/lib/llm-gateway";
+import { createLlmClient, getLlmConfig, LlmConfig } from "@/lib/llm-gateway";
 import { logger } from "@/lib/logger";
 
 /**
@@ -60,12 +60,7 @@ export async function GET() {
     where: { organizationId: orgId },
   });
 
-  const cfg: LlmConfig = {
-    provider: orgSettings?.llmProvider || "openai",
-    baseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",
-    apiKey: orgSettings?.llmApiKey || undefined,
-    model: orgSettings?.llmModel || "gpt-4o-mini",
-  };
+  const cfg: LlmConfig = getLlmConfig(orgSettings);
   const provider = cfg.provider.toLowerCase();
   const defaultModel = cfg.model;
 

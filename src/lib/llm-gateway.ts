@@ -2,12 +2,64 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { Ollama } from "ollama";
 import { logger } from "@/lib/logger";
+import { decryptSecret } from "@/lib/token-encryption";
 
 export interface LlmConfig {
   provider: string;
   baseUrl: string;
   apiKey?: string;
   model: string;
+}
+
+function decryptLlmApiKey(stored: string | null | undefined): string | undefined {
+  if (!stored) return undefined;
+  if (stored.startsWith("enc:")) {
+    try {
+      return decryptSecret(stored.slice(4));
+    } catch {
+      return undefined;
+    }
+  }
+  return stored;
+}
+
+const ENV_PROVIDER = process.env.LLM_PROVIDER || "openai";
+const ENV_BASE_URL = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
+const ENV_API_KEY = process.env.LLM_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim() || "";
+const ENV_MODEL = process.env.LLM_MODEL || "gpt-4o-mini";
+
+/**
+ * Build LLM config from org settings + env vars.
+ *
+ * If the user has stored an API key in Settings → LLM, use DB settings
+ * for everything (with env fallback for provider/baseUrl/model).
+ *
+ * If no API key in DB, use .env only — this prevents DB defaults
+ * (openai / api.openai.com / gpt-4o-mini) from silently overriding
+ * a user's .env LLM_PROVIDER=openrouter etc.
+ */
+export function getLlmConfig(orgSettings?: Record<string, unknown> | null): { provider: string; baseUrl: string; apiKey: string; model: string } {
+  const str = (k: string) => {
+    const v = orgSettings?.[k];
+    return typeof v === "string" ? v : undefined;
+  };
+  const dbApiKey = decryptLlmApiKey(str("llmApiKey"));
+
+  if (dbApiKey) {
+    return {
+      provider: str("llmProvider") || ENV_PROVIDER,
+      baseUrl: str("llmBaseUrl") || ENV_BASE_URL,
+      apiKey: dbApiKey,
+      model: str("llmModel") || ENV_MODEL,
+    };
+  }
+
+  return {
+    provider: ENV_PROVIDER,
+    baseUrl: ENV_BASE_URL,
+    apiKey: ENV_API_KEY,
+    model: ENV_MODEL,
+  };
 }
 
 // ─── Ollama Client (native SDK) ───────────────────────────────────────

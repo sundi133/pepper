@@ -38,6 +38,8 @@ type LlmSettings = typeof DEFAULT_SETTINGS;
 
 export default function LlmSettingsPage() {
   const [loading, setLoading] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<"idle" | "success" | "error">("idle");
   const [settings, setSettings] = useState<LlmSettings>(DEFAULT_SETTINGS);
 
   useEffect(() => {
@@ -65,6 +67,36 @@ export default function LlmSettingsPage() {
 
   async function handleSave() {
     await saveSettings(settings);
+  }
+
+  async function testConnection() {
+    setTesting(true);
+    setTestResult("idle");
+    try {
+      const res = await fetch("/api/settings/llm/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          llmProvider: settings.llmProvider,
+          llmBaseUrl: settings.llmBaseUrl,
+          llmModel: settings.llmModel,
+          llmApiKey: settings.llmApiKey || undefined,
+        }),
+      });
+      if (res.ok) {
+        setTestResult("success");
+        toast.success("Connection successful");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setTestResult("error");
+        toast.error(data.error || "Connection failed");
+      }
+    } catch {
+      setTestResult("error");
+      toast.error("Connection failed — check the URL and network");
+    } finally {
+      setTesting(false);
+    }
   }
 
   async function updateSettings(
@@ -346,9 +378,18 @@ export default function LlmSettingsPage() {
         </CardContent>
       </Card>
 
-      <Button onClick={handleSave} disabled={loading}>
-        {loading ? "Saving..." : "Save Settings"}
-      </Button>
+      <div className="flex gap-3">
+        <Button
+          variant="outline"
+          onClick={testConnection}
+          disabled={testing || loading || settings.llmProvider === "ollama"}
+        >
+          {testing ? "Testing..." : testResult === "success" ? "✓ Connected" : testResult === "error" ? "✗ Failed" : "Test Connection"}
+        </Button>
+        <Button onClick={handleSave} disabled={loading || testing}>
+          {loading ? "Saving..." : "Save Settings"}
+        </Button>
+      </div>
     </div>
   );
 }

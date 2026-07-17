@@ -115,38 +115,16 @@ async function fetchModelsFromProvider(
   baseUrl: string,
   apiKey?: string,
 ): Promise<string[]> {
-  if (provider === "ollama") {
-    const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/tags`);
-    if (!res.ok) throw new Error(`Ollama returned ${res.status}`);
-    const data = await res.json();
-    return (data.models || []).map((m: { name: string }) => m.name);
-  }
+  const params = new URLSearchParams({ provider, baseUrl });
+  if (apiKey) params.set("apiKey", apiKey);
 
-  if (provider === "anthropic") {
-    const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/models`, {
-      headers: {
-        "x-api-key": apiKey || "",
-        "anthropic-version": "2023-06-01",
-      },
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.error?.message || `Anthropic returned ${res.status}`);
-    }
-    const data = await res.json();
-    return (data.data || []).map((m: { id: string }) => m.id);
-  }
-
-  // OpenAI-compatible
-  const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/models`, {
-    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
-  });
+  const res = await fetch(`/api/settings/llm/models?${params}`);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error?.message || `API returned ${res.status}`);
+    throw new Error(body.error || `Failed to fetch models`);
   }
   const data = await res.json();
-  return (data.data || []).map((m: { id: string }) => m.id);
+  return data.models || [];
 }
 
 export default function LlmSettingsPage() {

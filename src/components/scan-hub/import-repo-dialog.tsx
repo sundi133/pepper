@@ -84,7 +84,7 @@ export function ImportRepoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-xl overflow-hidden">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -134,7 +134,7 @@ export function ImportRepoDialog({
                 <li
                   key={repo.key}
                   className={cn(
-                    "flex items-start gap-3 rounded-lg border border-border p-3",
+                    "flex items-start gap-3 rounded-lg border border-border p-3 overflow-hidden",
                     repo.alreadyConnected
                       ? "bg-muted/20 opacity-80"
                       : "bg-muted/30",
@@ -175,7 +175,7 @@ export function ImportRepoDialog({
                             onBranchChange?.(repo.key, branch)
                           }
                         >
-                          <SelectTrigger className="h-8 w-full max-w-[260px]">
+                          <SelectTrigger className="h-8 w-full max-w-[200px]">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>

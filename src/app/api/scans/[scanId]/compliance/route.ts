@@ -42,6 +42,9 @@ export async function GET(
   // "deep" (default) = agentic LLM mapping with grounding + self-verification.
   // "fast" = deterministic CWE crosswalk only (no LLM).
   const mode = url.searchParams.get("mode") === "fast" ? "fast" : "deep";
+  // Optional per-report model override (deep mode only). Falls back to the org's
+  // configured model. Never persisted — scoped to this request.
+  const modelOverride = url.searchParams.get("model")?.trim() || null;
 
   const scan = await prisma.scan.findFirst({
     where: { id: scanId, project: { organizationId: orgId } },
@@ -129,7 +132,7 @@ export async function GET(
       provider: orgSettings?.llmProvider || "openai",
       baseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",
       apiKey: orgSettings?.llmApiKey || undefined,
-      model: orgSettings?.llmModel || "gpt-4o-mini",
+      model: modelOverride || orgSettings?.llmModel || "gpt-4o-mini",
     };
     return llmConfig;
   }
@@ -144,13 +147,18 @@ export async function GET(
   }
   const canUseLlm = mode === "deep" ? await llmUsable() : false;
 
+  // The chosen model is part of the cache identity — different models produce
+  // different mappings. Non-LLM runs share one key ("det").
+  const activeModel = canUseLlm ? (await getLlmConfig()).model : null;
+  const modelSeg = activeModel ?? "det";
+
   // Frameworks are independent, so map them concurrently instead of
   // one-after-another (major speedup). Each task returns its report plus the
   // cache key; the shared cache is assembled afterwards to avoid races.
   const perFramework = await Promise.all(
     frameworks.map(async (framework) => {
       const slug = frameworkSlug(framework.name);
-      const cacheKey = `${slug}::${mode}`;
+      const cacheKey = `${slug}::${mode}::${modelSeg}`;
 
       if (!refresh && cache[cacheKey]) {
         return { cacheKey, report: cache[cacheKey], cached: true };
@@ -182,6 +190,7 @@ export async function GET(
     scanId,
     commitSha: scan.commitSha || null,
     mode,
+    model: activeModel,
     totalFindings: findings.length,
     generatedAt: new Date().toISOString(),
     availableFrameworks: available,

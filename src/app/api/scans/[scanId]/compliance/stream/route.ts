@@ -45,6 +45,7 @@ export async function GET(
     .filter(Boolean);
   const mode = url.searchParams.get("mode") === "fast" ? "fast" : "deep";
   const refresh = url.searchParams.get("refresh") === "1";
+  const modelOverride = url.searchParams.get("model")?.trim() || null;
 
   const scan = await prisma.scan.findFirst({
     where: { id: scanId, project: { organizationId: orgId } },
@@ -102,7 +103,7 @@ export async function GET(
       provider: orgSettings?.llmProvider || "openai",
       baseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",
       apiKey: orgSettings?.llmApiKey || undefined,
-      model: orgSettings?.llmModel || "gpt-4o-mini",
+      model: modelOverride || orgSettings?.llmModel || "gpt-4o-mini",
     };
     return llmConfig;
   }
@@ -113,6 +114,9 @@ export async function GET(
           return cfg.provider === "ollama" || !!cfg.apiKey;
         })()
       : false;
+  // Model is part of the cache identity; non-LLM runs share one key.
+  const activeModel = canUseLlm ? (await getLlmConfig()).model : null;
+  const modelSeg = activeModel ?? "det";
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -129,12 +133,13 @@ export async function GET(
       try {
         send("start", {
           mode,
+          model: activeModel,
           frameworks: frameworks.map((f) => f.name),
           totalFindings: findings.length,
         });
 
         for (const framework of frameworks) {
-          const cacheKey = `${frameworkSlug(framework.name)}::${mode}`;
+          const cacheKey = `${frameworkSlug(framework.name)}::${mode}::${modelSeg}`;
 
           if (!refresh && cache[cacheKey]) {
             send("progress", {

@@ -7,7 +7,7 @@ const testSchema = z.object({
   llmProvider: z.enum(["ollama", "openai", "anthropic", "openrouter", "azure", "vllm", "opencode", "custom"]),
   llmBaseUrl: z.string().url(),
   llmModel: z.string().min(1),
-  llmApiKey: z.string().min(1, "API key cannot be empty").optional(),
+  llmApiKey: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {

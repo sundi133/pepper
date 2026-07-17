@@ -47,7 +47,7 @@ const updateSchema = z.object({
     .optional(),
   llmBaseUrl: z.string().url().optional(),
   llmModel: z.string().min(1).optional(),
-  llmApiKey: z.string().min(1, "API key cannot be empty").optional(),
+  llmApiKey: z.string().optional(),
   enableLlmSast: z.boolean().optional(),
   enableLlmSecrets: z.boolean().optional(),
   osvApiUrl: z.string().url().optional(),

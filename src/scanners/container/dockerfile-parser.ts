@@ -168,7 +168,7 @@ export function parseDockerfile(content: string, filePath: string): DockerfileSt
 
       case "LABEL": {
         const [key, value] = parseKeyValue(args);
-        if (key) {
+        if (key && value) {
           currentStage.labels.set(key, { value, line: i + 1 });
         }
         break;

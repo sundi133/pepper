@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
 
-  const body = (await req.json()) as IntegrationConfigData;
+  const body: IntegrationConfigData = await req.json();
 
   try {
     if (body.kind === "SLACK") {

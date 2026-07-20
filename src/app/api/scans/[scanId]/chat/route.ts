@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
-import { createLlmClient, streamChatWithLlm, type ChatMessage } from "@/lib/llm-gateway";
+import { createLlmClient, streamChatWithLlm, type ChatMessage, getLlmConfig } from "@/lib/llm-gateway";
 import { z } from "zod";
 
 const MAX_FINDINGS_IN_CONTEXT = 60;
@@ -142,10 +142,10 @@ export async function POST(
     select: { llmApiKey: true, llmProvider: true, llmBaseUrl: true, llmModel: true },
   });
 
-  const apiKey = orgSettings?.llmApiKey?.trim();
-  if (!apiKey) {
+  const llmCfg = getLlmConfig(orgSettings);
+  if (!llmCfg.apiKey) {
     return NextResponse.json(
-      { error: "LLM not configured. Add an API key under Settings → LLM Config." },
+      { error: "LLM not configured. Add an API key under Settings → LLM Config or set LLM_API_KEY." },
       { status: 422 },
     );
   }
@@ -168,12 +168,7 @@ export async function POST(
     take: MAX_FINDINGS_IN_CONTEXT,
   });
 
-  const llmClient = createLlmClient({
-    provider: orgSettings?.llmProvider ?? "openai",
-    baseUrl: orgSettings?.llmBaseUrl ?? "https://api.openai.com/v1",
-    apiKey,
-    model: orgSettings?.llmModel ?? "gpt-4o-mini",
-  });
+  const llmClient = createLlmClient(llmCfg);
 
   const systemPrompt = buildSystemPrompt(scan, findings);
 

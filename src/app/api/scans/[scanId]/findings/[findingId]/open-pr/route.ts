@@ -8,6 +8,7 @@ import {
 } from "@/lib/github-source-link";
 import { openGithubSecurityFixPr } from "@/lib/github-open-fix-pr";
 import { openAgenticSecurityFixPr } from "@/lib/agentic-fix-pr";
+import { getLlmConfig } from "@/lib/llm-gateway";
 import { resolveGithubPrTokenForOrg } from "@/lib/github-pr-token-resolve";
 import {
   normalizeRepoFilePath,
@@ -152,12 +153,9 @@ export async function POST(
     );
   }
 
-  const apiKey =
-    orgSettings?.llmApiKey?.trim() ||
-    process.env.LLM_API_KEY?.trim() ||
-    process.env.OPENAI_API_KEY?.trim();
+  const llmCfg = getLlmConfig(orgSettings);
 
-  if (!apiKey) {
+  if (!llmCfg.apiKey) {
     return NextResponse.json(
       {
         error:
@@ -166,14 +164,6 @@ export async function POST(
       { status: 503 },
     );
   }
-
-  const provider = orgSettings?.llmProvider || "openai";
-  const baseUrl =
-    orgSettings?.llmBaseUrl ||
-    (provider.toLowerCase() === "ollama"
-      ? process.env.OLLAMA_HOST || "http://localhost:11434"
-      : "https://api.openai.com/v1");
-  const model = orgSettings?.llmModel || "gpt-4o-mini";
 
   const baseBranch =
     body?.branch?.trim() ||
@@ -226,7 +216,7 @@ export async function POST(
 
   const fixInput = {
     githubToken,
-    llm: { provider, baseUrl, model, apiKey },
+    llm: llmCfg,
     owner: parsed.owner,
     repo: parsed.repo,
     baseBranch,

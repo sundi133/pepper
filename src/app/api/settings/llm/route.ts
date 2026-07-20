@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { encryptSecret } from "@/lib/token-encryption";
 import { z } from "zod";
 
 export async function GET() {
@@ -42,7 +43,7 @@ export async function GET() {
 
 const updateSchema = z.object({
   llmProvider: z
-    .enum(["ollama", "openai", "anthropic", "openrouter", "azure", "vllm", "custom"])
+    .enum(["ollama", "openai", "anthropic", "openrouter", "azure", "vllm", "opencode", "custom"])
     .optional(),
   llmBaseUrl: z.string().url().optional(),
   llmModel: z.string().min(1).optional(),
@@ -67,7 +68,13 @@ export async function PUT(req: NextRequest) {
 
     // Don't update llmApiKey if empty string (means "keep existing")
     const updateData: Record<string, unknown> = { ...data };
-    if (data.llmApiKey === "") delete updateData.llmApiKey;
+    if (data.llmApiKey === "") {
+      delete updateData.llmApiKey;
+    } else if (data.llmApiKey) {
+      // Encrypt before storing — use "enc:" prefix so readers can distinguish
+      // encrypted keys from legacy plaintext values still in the database.
+      updateData.llmApiKey = "enc:" + encryptSecret(data.llmApiKey);
+    }
 
     await prisma.orgSettings.upsert({
       where: { organizationId: orgId },
@@ -88,6 +95,42 @@ export async function PUT(req: NextRequest) {
     }
     return NextResponse.json(
       { error: "Failed to update settings" },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+}
+
+const DEFAULTS = {
+  llmProvider: "openai",
+  llmBaseUrl: "https://api.openai.com/v1",
+  llmModel: "gpt-4o-mini",
+  llmApiKey: null,
+  enableLlmSast: true,
+  enableLlmSecrets: true,
+  osvApiUrl: "https://api.osv.dev",
+  vulnDbMode: "online",
+};
+
+export async function DELETE() {
+  const auth = await requireAuth();
+  if ("error" in auth) return auth.error;
+
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId)
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
+
+  try {
+    await prisma.orgSettings.upsert({
+      where: { organizationId: orgId },
+      update: DEFAULTS,
+      create: { organizationId: orgId, ...DEFAULTS },
+    });
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json(
+      { error: "Failed to reset settings" },
       { status: 500 },
     );
   }

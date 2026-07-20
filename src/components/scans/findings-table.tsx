@@ -550,9 +550,22 @@ export function FindingsTable({
           {findings.map((finding) => (
             <Fragment key={finding.id}>
               <TableRow
-                className={`cursor-pointer ${selectedId === finding.id ? "bg-muted" : ""}`}
+                className={`cursor-pointer group transition-colors ${selectedId === finding.id ? "bg-muted" : "hover:bg-muted/50"}`}
               >
-                <TableCell onClick={(e) => e.stopPropagation()}>
+                <TableCell
+                  className="relative"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div
+                    className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{
+                      backgroundColor:
+                        finding.severity === "CRITICAL" ? "oklch(0.55 0.22 25)"
+                        : finding.severity === "HIGH" ? "oklch(0.62 0.22 45)"
+                        : finding.severity === "MEDIUM" ? "oklch(0.75 0.18 85)"
+                        : "oklch(0.55 0.18 240)",
+                    }}
+                  />
                   <Checkbox
                     checked={selected.has(finding.id)}
                     onCheckedChange={() => toggleOne(finding.id)}
@@ -569,7 +582,7 @@ export function FindingsTable({
                   onClick={() => onSelect?.(finding)}
                 >
                   <div className="min-w-0">
-                    <p className="break-words text-sm font-medium leading-snug">
+                    <p className="break-words text-sm font-semibold leading-snug text-foreground">
                       {finding.title}
                     </p>
                     {finding.cweId && (
@@ -582,14 +595,14 @@ export function FindingsTable({
                 <TableCell onClick={() => onSelect?.(finding)}>
                   {finding.status && STATUS_LABELS[finding.status] && (
                     <span
-                      className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${STATUS_LABELS[finding.status].color}`}
+                      className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold ${STATUS_LABELS[finding.status].color}`}
                     >
                       {STATUS_LABELS[finding.status].label}
                     </span>
                   )}
                 </TableCell>
                 <TableCell onClick={() => onSelect?.(finding)}>
-                  <Badge variant="outline" className="text-xs">
+                  <Badge variant="outline" className="text-[11px] font-medium">
                     {SCANNER_LABELS[
                       finding.scanner as keyof typeof SCANNER_LABELS
                     ] || finding.scanner}

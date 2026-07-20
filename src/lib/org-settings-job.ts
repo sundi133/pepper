@@ -45,11 +45,26 @@ export function buildOrgSettingsForJob(
     }
   }
 
+  function decryptLlmApiKey(stored: string | null | undefined): string | undefined {
+    if (!stored) return undefined;
+    if (stored.startsWith("enc:")) {
+      try {
+        return decryptSecret(stored.slice(4));
+      } catch {
+        return undefined;
+      }
+    }
+    // Legacy plaintext value — still usable
+    return stored;
+  }
+
+  const dbKey = decryptLlmApiKey(orgSettings?.llmApiKey);
+
   return {
-    llmProvider: orgSettings?.llmProvider || "openai",
-    llmBaseUrl: orgSettings?.llmBaseUrl || "https://api.openai.com/v1",
-    llmModel: orgSettings?.llmModel || "gpt-4o-mini",
-    llmApiKey: orgSettings?.llmApiKey || undefined,
+    llmProvider: dbKey ? (orgSettings?.llmProvider || process.env.LLM_PROVIDER || "openai") : (process.env.LLM_PROVIDER || "openai"),
+    llmBaseUrl: dbKey ? (orgSettings?.llmBaseUrl || process.env.LLM_BASE_URL || "https://api.openai.com/v1") : (process.env.LLM_BASE_URL || "https://api.openai.com/v1"),
+    llmModel: dbKey ? (orgSettings?.llmModel || process.env.LLM_MODEL || "gpt-4o-mini") : (process.env.LLM_MODEL || "gpt-4o-mini"),
+    llmApiKey: dbKey || process.env.LLM_API_KEY,
     enableLlmSast: orgSettings?.enableLlmSast ?? true,
     enableLlmSecrets: orgSettings?.enableLlmSecrets ?? true,
     osvApiUrl: orgSettings?.osvApiUrl || "https://api.osv.dev",

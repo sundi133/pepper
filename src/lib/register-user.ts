@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { encryptSecret } from "@/lib/token-encryption";
 import { uniqueOrganizationSlug } from "@/lib/org-slug";
 
 export class RegisterUserError extends Error {
@@ -13,11 +14,12 @@ export class RegisterUserError extends Error {
 }
 
 function defaultOrgSettings() {
+  const apiKey = process.env.LLM_API_KEY;
   return {
     llmProvider: process.env.LLM_PROVIDER || "openrouter",
     llmBaseUrl: process.env.LLM_BASE_URL || "https://openrouter.ai/api/v1",
     llmModel: process.env.LLM_MODEL || "google/gemini-2.5-flash",
-    ...(process.env.LLM_API_KEY ? { llmApiKey: process.env.LLM_API_KEY } : {}),
+    ...(apiKey ? { llmApiKey: "enc:" + encryptSecret(apiKey) } : {}),
   };
 }
 

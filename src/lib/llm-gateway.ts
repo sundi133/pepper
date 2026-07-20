@@ -2,12 +2,62 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { Ollama } from "ollama";
 import { logger } from "@/lib/logger";
+import { decryptSecret } from "@/lib/token-encryption";
 
 export interface LlmConfig {
   provider: string;
   baseUrl: string;
   apiKey?: string;
   model: string;
+}
+
+function decryptLlmApiKey(stored: string | null | undefined): string | undefined {
+  if (!stored) return undefined;
+  if (stored.startsWith("enc:")) {
+    try {
+      return decryptSecret(stored.slice(4));
+    } catch {
+      return undefined;
+    }
+  }
+  return stored;
+}
+
+/**
+ * Build LLM config from org settings + env vars.
+ *
+ * If the user has stored an API key in Settings → LLM, use DB settings
+ * for everything (with env fallback for provider/baseUrl/model).
+ *
+ * If no API key in DB, use .env only.
+ */
+export function getLlmConfig(orgSettings?: Record<string, unknown> | null): { provider: string; baseUrl: string; apiKey: string; model: string } {
+  const envProvider = process.env.LLM_PROVIDER || "openai";
+  const envBaseUrl = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
+  const envApiKey = process.env.LLM_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim() || "";
+  const envModel = process.env.LLM_MODEL || "gpt-4o-mini";
+
+  const str = (k: string) => {
+    const v = orgSettings?.[k];
+    return typeof v === "string" ? v : undefined;
+  };
+  const dbApiKey = decryptLlmApiKey(str("llmApiKey"));
+
+  if (dbApiKey) {
+    return {
+      provider: str("llmProvider") || envProvider,
+      baseUrl: str("llmBaseUrl") || envBaseUrl,
+      apiKey: dbApiKey,
+      model: str("llmModel") || envModel,
+    };
+  }
+
+  return {
+    provider: envProvider,
+    baseUrl: envBaseUrl,
+    apiKey: envApiKey,
+    model: envModel,
+  };
 }
 
 // ─── Ollama Client (native SDK) ───────────────────────────────────────
@@ -54,7 +104,7 @@ function createOpenAIClient(config: LlmConfig): OpenAI {
   }
 
   return new OpenAI({
-    apiKey: config.apiKey || "not-needed",
+    apiKey: config.apiKey || process.env.LLM_API_KEY || "",
     baseURL: config.baseUrl,
   });
 }
@@ -68,7 +118,7 @@ export type LlmClient =
   | { type: "openai"; client: OpenAI; model: string };
 
 export function createLlmClient(config: LlmConfig): LlmClient {
-  const provider = config.provider.toLowerCase();
+  const provider = (config.provider || "openai").toLowerCase();
 
   if (provider === "ollama") {
     return {
@@ -81,7 +131,10 @@ export function createLlmClient(config: LlmConfig): LlmClient {
   if (provider === "anthropic") {
     return {
       type: "anthropic",
-      client: new Anthropic({ apiKey: config.apiKey || "" }),
+      client: new Anthropic({
+        apiKey: config.apiKey || "",
+        ...(config.baseUrl ? { baseURL: config.baseUrl } : {}),
+      }),
       model: config.model,
     };
   }
@@ -131,45 +184,57 @@ export async function analyzeWithLlm(
 
   // Anthropic path — uses native Messages API
   if (llmClient.type === "anthropic") {
-    const response = await llmClient.client.messages.create({
-      model: model || llmClient.model,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userContent }],
-      temperature,
-      max_tokens: options?.maxTokens ?? 8192,
-    });
-    const block = response.content[0];
-    return block.type === "text" ? block.text : "{}";
+    try {
+      const response = await llmClient.client.messages.create({
+        model: model || llmClient.model,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userContent }],
+        temperature,
+        max_tokens: options?.maxTokens ?? 8192,
+      });
+      const block = response.content[0];
+      return block.type === "text" ? block.text : "{}";
+    } catch {
+      return "{}";
+    }
   }
 
   // OpenRouter path — many models don't support response_format, so we
   // enforce JSON via the prompt and parse the response manually.
   if (llmClient.type === "openrouter") {
-    const jsonSystemPrompt = `${systemPrompt}\n\nIMPORTANT: You MUST respond with valid JSON only. No markdown, no explanation, no code fences — just raw JSON.`;
+    try {
+      const jsonSystemPrompt = `${systemPrompt}\n\nIMPORTANT: You MUST respond with valid JSON only. No markdown, no explanation, no code fences — just raw JSON.`;
+      const response = await llmClient.client.chat.completions.create({
+        model: model || llmClient.model,
+        messages: [
+          { role: "system", content: jsonSystemPrompt },
+          { role: "user", content: userContent },
+        ],
+        temperature,
+        max_tokens: options?.maxTokens ?? 8192,
+      });
+      return response.choices[0]?.message?.content || "{}";
+    } catch {
+      return "{}";
+    }
+  }
+
+  // OpenAI-compatible path
+  try {
     const response = await llmClient.client.chat.completions.create({
       model: model || llmClient.model,
       messages: [
-        { role: "system", content: jsonSystemPrompt },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userContent },
       ],
       temperature,
       max_tokens: options?.maxTokens ?? 8192,
+      response_format: { type: "json_object" },
     });
     return response.choices[0]?.message?.content || "{}";
+  } catch {
+    return "{}";
   }
-
-  // OpenAI-compatible path
-  const response = await llmClient.client.chat.completions.create({
-    model: model || llmClient.model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userContent },
-    ],
-    temperature,
-    max_tokens: options?.maxTokens ?? 8192,
-    response_format: { type: "json_object" },
-  });
-  return response.choices[0]?.message?.content || "{}";
 }
 
 // ─── Streaming Chat ───────────────────────────────────────────────────

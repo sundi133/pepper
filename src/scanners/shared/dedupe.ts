@@ -74,6 +74,21 @@ export function areRootCauseDuplicates(a: RawFinding, b: RawFinding): boolean {
     // SAST ↔ SECRETS: hardcoded credentials (CWE-798) found by both scanners
     // are the same root cause. SAST finds it in app code, SECRETS finds it via patterns.
     // Keep only the SECRETS finding as it has more redaction/masking capability.
+    // SECRETS_PATTERN ↔ SECRETS_LLM: pattern found the same credential the LLM
+    // confirmed. Keep only the LLM version (it has richer metadata + entropy analysis).
+    const patternLlmPair =
+      (a.scanner === "SECRETS_PATTERN" && b.scanner === "SECRETS_LLM") ||
+      (a.scanner === "SECRETS_LLM" && b.scanner === "SECRETS_PATTERN");
+    if (patternLlmPair) {
+      if (
+        (a.filePath || "") === (b.filePath || "") &&
+        lineBucket(a.startLine) === lineBucket(b.startLine) &&
+        weaknessKey(a) === weaknessKey(b)
+      ) {
+        return true;
+      }
+    }
+
     const sastSecretsPair =
       (a.scanner === "SAST_LLM" && b.scanner === "SECRETS_LLM") ||
       (a.scanner === "SECRETS_LLM" && b.scanner === "SAST_LLM");
@@ -87,6 +102,20 @@ export function areRootCauseDuplicates(a: RawFinding, b: RawFinding): boolean {
         ) {
           return true;
         }
+      }
+    }
+
+    // SECRETS_PATTERN ↔ IAC: pattern scanner and IaC stack analysis both finding
+    // the same hardcoded credential in infrastructure configs.
+    if (
+      (a.scanner === "SECRETS_PATTERN" && b.scanner === "IAC") ||
+      (a.scanner === "IAC" && b.scanner === "SECRETS_PATTERN")
+    ) {
+      if (
+        (a.filePath || "") === (b.filePath || "") &&
+        lineBucket(a.startLine) === lineBucket(b.startLine)
+      ) {
+        return true;
       }
     }
 

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { scanQueue, ScanJobData } from "@/lib/queue";
 import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
+import { parseRescanBody } from "@/lib/scan-types";
 import { execFileSync } from "child_process";
 
 function resolveGitDefaultBranch(repoUrl: string) {
@@ -20,11 +21,18 @@ function resolveGitDefaultBranch(repoUrl: string) {
 }
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ scanId: string }> },
 ) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
+
+  // Body is optional: an empty POST keeps the original behaviour.
+  const body = parseRescanBody(await req.text().catch(() => ""));
+  if (!body.ok) {
+    return NextResponse.json({ error: body.error }, { status: 400 });
+  }
+  const requestedScanType = body.scanType;
 
   const orgId = getDefaultOrgId(auth.session);
   if (!orgId) {
@@ -64,6 +72,7 @@ export async function POST(
   });
   const sourceType =
     originalScan.sourceType === "WEBHOOK" ? "GIT_CLONE" : originalScan.sourceType;
+  const scanType = requestedScanType ?? originalScan.scanType;
   const branch =
     sourceType === "GIT_CLONE"
       ? resolveGitDefaultBranch(originalScan.sourceRef) ||
@@ -95,7 +104,7 @@ export async function POST(
   const scan = await prisma.scan.create({
     data: {
       projectId: originalScan.projectId,
-      scanType: originalScan.scanType,
+      scanType,
       branch,
       baseSha: originalScan.baseSha,
       sourceType,
@@ -113,7 +122,7 @@ export async function POST(
     projectId: scan.projectId,
     sourceType: sourceType as ScanJobData["sourceType"],
     sourceRef: originalScan.sourceRef,
-    scanType: originalScan.scanType as ScanJobData["scanType"],
+    scanType: scanType as ScanJobData["scanType"],
     baseSha: originalScan.baseSha || undefined,
     commitSha: originalScan.commitSha || undefined,
     prNumber: originalScan.prNumber ?? undefined,

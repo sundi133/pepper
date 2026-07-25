@@ -100,12 +100,22 @@ export function RepositoryInventory({
         return;
       }
 
+      // Honour the Scan mode selector. Without this the rescan reused the
+      // previous scan's type, so choosing "All" on a repository last scanned
+      // with a narrower mode silently gave you that narrower mode again — and
+      // no SBOM, VEX or dependency findings.
       const res = await fetch(`/api/scans/${repo.scanId}/rescan`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scanType }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(data.error || "Failed to start rescan");
-      toast.success("Rescan queued");
+      toast.success(
+        scanType === "FULL"
+          ? "Rescan queued (all scanners)"
+          : `Rescan queued (${scanType.replace(/_ONLY$/, "").toLowerCase()})`,
+      );
       onRefresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to start rescan");

@@ -71,3 +71,41 @@ export const API_CREATE_SCAN_TYPES = [
   "CONTAINER_ONLY",
   "K8S_ONLY",
 ] as const satisfies readonly ScanJobData["scanType"][];
+
+/**
+ * Parse the optional body of a rescan request.
+ *
+ * A rescan with no body reuses the original scan's type, which is the
+ * historical behaviour. A body may specify `scanType` to change the depth —
+ * typically FULL, to pick up SCA, SBOM and VEX on a project whose last scan
+ * used a narrower mode.
+ */
+export function parseRescanBody(
+  rawBody: string,
+): { ok: true; scanType?: ScanJobData["scanType"] } | { ok: false; error: string } {
+  if (!rawBody || !rawBody.trim()) return { ok: true };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    return { ok: false, error: "Invalid request body" };
+  }
+
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, error: "Invalid request body" };
+  }
+
+  const value = (parsed as { scanType?: unknown }).scanType;
+  // An explicitly absent scanType is valid and means "reuse the original".
+  if (value === undefined || value === null) return { ok: true };
+
+  if (
+    typeof value !== "string" ||
+    !(API_CREATE_SCAN_TYPES as readonly string[]).includes(value)
+  ) {
+    return { ok: false, error: "Invalid scanType" };
+  }
+
+  return { ok: true, scanType: value as ScanJobData["scanType"] };
+}

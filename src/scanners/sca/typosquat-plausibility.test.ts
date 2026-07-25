@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isPlausibleTyposquat,
+  isEstablishedPackage,
   normalisePackageName,
   editDistance,
 } from "./typosquat-plausibility";
@@ -151,5 +152,47 @@ describe("editDistance", () => {
     expect(editDistance("requests", "requests")).toBe(0);
     expect(editDistance("reqeusts", "requests")).toBe(2);
     expect(editDistance("", "abc")).toBe(3);
+  });
+});
+
+describe("maturity corroboration", () => {
+  // Lexical rules cannot separate `preact` from `reqeusts` — both sit one or two
+  // edits from a popular name. A package's own history can.
+  it("treats a long-lived package with a repository as established", () => {
+    // preact: first released 2015, 286 releases, github.com/preactjs/preact
+    expect(
+      isEstablishedPackage({
+        ageInDays: 3800,
+        hasRepository: true,
+        totalVersions: 286,
+      }),
+    ).toBe(true);
+  });
+
+  it("treats a heavily released package as established on release count alone", () => {
+    expect(isEstablishedPackage({ totalVersions: 63 })).toBe(true);
+  });
+
+  it("does not treat a fresh package as established", () => {
+    // The profile of an actual squat: days old, one release, no repository.
+    expect(
+      isEstablishedPackage({
+        ageInDays: 3,
+        hasRepository: false,
+        totalVersions: 1,
+      }),
+    ).toBe(false);
+  });
+
+  it("does not treat age alone as established without a repository", () => {
+    expect(isEstablishedPackage({ ageInDays: 900, hasRepository: false })).toBe(
+      false,
+    );
+  });
+
+  it("treats missing metadata as unknown, not established", () => {
+    // A package we could not look up gets no benefit of the doubt.
+    expect(isEstablishedPackage(undefined)).toBe(false);
+    expect(isEstablishedPackage({})).toBe(false);
   });
 });

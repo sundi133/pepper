@@ -18,7 +18,11 @@ import {
   MALICIOUS_VALIDATION_PROMPT,
   UNTRUSTED_CONTENT_GUARD,
 } from "../shared/prompts";
-import { isPlausibleTyposquat } from "./typosquat-plausibility";
+import {
+  isPlausibleTyposquat,
+  isEstablishedPackage,
+  type PackageMaturity,
+} from "./typosquat-plausibility";
 
 // ─── OSV Malware Advisory Query (Batch) ───────────────────────────────
 // OSV tracks malicious packages (MAL-*) reported by OpenSSF and others.
@@ -647,6 +651,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
 
     const findings: RawFinding[] = [];
     const supplyChainEvidence: Array<Record<string, unknown>> = [];
+    const maturityByPackage = new Map<string, PackageMaturity>();
     const osvApiUrl = ctx.orgSettings.osvApiUrl || "https://api.osv.dev";
     const useVulnerabilityDb = ctx.orgSettings.vulnDbMode !== "offline";
 
@@ -729,6 +734,13 @@ export const maliciousPkgScanner: ScannerPlugin = {
           meta.installScripts,
         );
         const vh = meta.versionHistory;
+        // Kept for the typosquat gate below: a package's own history is what
+        // separates a legitimate lookalike from a squat.
+        maturityByPackage.set(dep.name, {
+          ageInDays: meta.ageInDays,
+          hasRepository: meta.hasRepository,
+          totalVersions: vh?.totalVersions,
+        });
         supplyChainEvidence.push({
           packageName: dep.name,
           version: dep.version,
@@ -841,6 +853,18 @@ export const maliciousPkgScanner: ScannerPlugin = {
                   reason: verdict.reason,
                 },
                 "Dropped implausible typosquat claim",
+              );
+              continue;
+            }
+
+            // Lexical similarity is necessary but not sufficient: `preact` is
+            // one edit from `react`, `vuex` one from `vue`. Squats are
+            // ephemeral, so a package with its own release history behind a
+            // real repository is not squatting anything.
+            if (isEstablishedPackage(maturityByPackage.get(f.packageName))) {
+              logger.info(
+                { packageName: f.packageName, similarTo: f.similarTo },
+                "Dropped typosquat claim: package is established in its own right",
               );
               continue;
             }

@@ -136,6 +136,81 @@ OAuth scopes requested: read:user repo</pre>
         </tbody>
       </table>
 
+      <h2 id="supply-chain">Supply chain &amp; SCA</h2>
+      <p>
+        See <a href="supply-chain.html">Supply chain security</a> for what these control.
+        Every external lookup degrades gracefully: if a source is unreachable the scan
+        continues and reports less, rather than reporting a clean result it cannot support.
+      </p>
+
+      <h3>License policy</h3>
+      <table>
+        <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>LICENSE_POLICY_DENY</code></td><td><code>AGPL-*,GPL-*,SSPL-*,BUSL-*,CC-BY-NC-*,Commons-Clause,Elastic-2.0</code></td><td>Licenses that fail policy (HIGH finding). SPDX IDs or <code>PREFIX-*</code> wildcards, comma-separated</td></tr>
+          <tr><td><code>LICENSE_POLICY_WARN</code></td><td><code>LGPL-*,MPL-*,EPL-*,CDDL-*,OSL-*,MS-RL,CPAL-*</code></td><td>Licenses allowed but flagged for review (LOW finding)</td></tr>
+          <tr><td><code>LICENSE_POLICY_FLAG_UNKNOWN</code></td><td><code>false</code></td><td>Report dependencies whose license could not be determined</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Dependency metadata (deps.dev)</h3>
+      <table>
+        <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>ENABLE_DEPS_DEV</code></td><td><code>true</code></td><td>Set <code>false</code> to disable license, provenance, and dependency-path lookups entirely (air-gapped)</td></tr>
+          <tr><td><code>DEPS_DEV_API_URL</code></td><td><code>https://api.deps.dev</code></td><td>Override to point at a mirror</td></tr>
+          <tr><td><code>DEPS_DEV_TIMEOUT_MS</code></td><td>10000</td><td>Per-request timeout</td></tr>
+          <tr><td><code>DEPS_DEV_CONCURRENCY</code></td><td>10</td><td>Parallel metadata requests</td></tr>
+          <tr><td><code>DEPS_DEV_CACHE_TTL_MS</code></td><td>21600000</td><td>Metadata cache lifetime (6h). Package metadata is immutable per version, so repeat scans are nearly free</td></tr>
+          <tr><td><code>DEPS_DEV_MAX_CACHE_ENTRIES</code></td><td>20000</td><td>Cache size bound</td></tr>
+          <tr><td><code>DEPS_DEV_MAX_GRAPH_FETCHES</code></td><td>60</td><td>Max dependency graphs fetched per scan when explaining transitive vulnerabilities. Truncation is reported in the scan log</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Exploitation signals</h3>
+      <table>
+        <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>ENABLE_EPSS_KEV</code></td><td><code>true</code></td><td>Set <code>false</code> to disable EPSS and CISA KEV enrichment</td></tr>
+          <tr><td><code>EPSS_API_TIMEOUT</code></td><td>10000</td><td>EPSS request timeout</td></tr>
+        </tbody>
+      </table>
+
+      <h3>AI triage of dependency CVEs</h3>
+      <p>
+        Triage reads the published advisory text so exploitability conditions come from the
+        advisory rather than the model's recollection. These budgets keep the advisory
+        inside the model's context window — local models default to a much smaller window,
+        so they use smaller values.
+      </p>
+      <table>
+        <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>SCA_TRIAGE_ADVISORY_CHARS</code></td><td>1500</td><td>Advisory characters per CVE (API models)</td></tr>
+          <tr><td><code>SCA_TRIAGE_ADVISORY_CHARS_OLLAMA</code></td><td>500</td><td>Advisory characters per CVE (local models)</td></tr>
+          <tr><td><code>SCA_TRIAGE_BATCH_SIZE</code></td><td>20</td><td>CVEs per triage request (API models)</td></tr>
+          <tr><td><code>SCA_TRIAGE_BATCH_SIZE_OLLAMA</code></td><td>8</td><td>CVEs per triage request (local models)</td></tr>
+          <tr><td><code>MALICIOUS_PKG_MIN_CONFIDENCE</code></td><td>0.8</td><td>Minimum confidence for AI malicious-package findings</td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        Raising the advisory or batch values on a local model can silently overflow its
+        context window and degrade triage quality. Increase the model's context size first.
+      </div>
+
+      <h3>Container image scanning</h3>
+      <table>
+        <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>TRIVY_CACHE_DIR</code></td><td><code>/var/cache/trivy</code></td><td>Trivy database location. Mount a pre-populated cache here for air-gapped scanning</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Trivy ships inside the worker image, so no host installation is required. When the
+        vulnerability database mode is <strong>offline</strong>, Trivy scans against the
+        mounted cache without attempting an update.
+      </p>
+
       <h2 id="email">Email (SMTP)</h2>
       <table>
         <thead><tr><th>Variable</th><th>Description</th></tr></thead>

@@ -130,8 +130,37 @@ FIXVERSION: use the supplied "fixVersion" or a version the advisory names. Never
 Return JSON: { "triaged": [{ "osvId", "keep": true|false, "reason", "metadata": { "directDependency": bool, "reachable": bool, "exploitPreconditions": "...", "fixVersion": "...", "remediation": "..." } }] }`;
 
 export const MALICIOUS_VALIDATION_PROMPT = `Validate supply-chain risk from EVIDENCE only (metadata, install scripts, typosquat signals, OSV MAL-*).
-Do NOT emit findings for "new package" or "no repository" alone.
 Emit only if credible malicious/suspicious risk (confidence >= 0.80).
+
+NOT findings on their own — never emit for these alone:
+- "new package" or "no repository"
+- the mere presence of an install script. Packages with native components must
+  have one. Anything listed under "standardBuildScripts" has already been
+  recognised as a normal build step (node-gyp, prebuild-install, cmake-js, …)
+  and is NOT evidence of anything. Only "installScriptsNeedingReview" entries
+  are worth judging.
+If your own reasoning would say a command is "standard", "common" or "normal"
+for the ecosystem, do not emit a finding about it. Report the specific
+suspicious behaviour or report nothing.
+
+JUDGE THE VERSION, NOT THE PACKAGE — this is the strongest signal available.
+Real supply-chain attacks are hijacked *releases* of otherwise trusted packages
+(event-stream, ua-parser-js, node-ipc), so what matters is whether THIS release
+changed anything:
+- identicalScriptReleases high (this exact script shipped for many prior
+  releases): established build step. NOT suspicious, regardless of what it runs.
+- installScriptsIntroducedInThisVersion=true on a mature package (high
+  ageInDays / totalVersions): the classic account-takeover pattern. Suspicious
+  even if the command looks ordinary — say which script appeared and when.
+- installScriptsChangedFromPrevious=true: compare against previousInstallScripts
+  and describe the change. An unexplained change is the finding; a version bump
+  inside the same build command is not.
+- versionAgeInDays very low AND isLatestVersion=false: a version published and
+  then superseded quickly can indicate a pulled malicious release.
+- A brand-new package (low ageInDays, few totalVersions) with install scripts
+  deserves more suspicion than a mature one, but is still not a finding on its own.
+Absent version fields mean "unknown", not "safe" — fall back to the scripts and
+metadata you do have, and say the history was unavailable.
 
 ${UNTRUSTED_CONTENT_GUARD}
 

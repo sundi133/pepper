@@ -72,6 +72,61 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+
+/**
+ * Urgency panel content for a malicious-package finding.
+ *
+ * Previously hardcoded to "CRITICAL / Remove immediately / Remove dependency
+ * now" for every finding, which contradicted the severity badge and gave
+ * impossible advice for transitive dependencies. A confirmed malware advisory
+ * genuinely does warrant removal; a heuristic MEDIUM does not.
+ */
+function maliciousUrgency(
+  severity: string,
+  metadata: Record<string, unknown> | undefined,
+) {
+  const confirmedMalware =
+    metadata?.source === "osv-malware-db" ||
+    typeof metadata?.osvId === "string";
+
+  if (confirmedMalware || severity === "CRITICAL") {
+    return {
+      icon: "🔴",
+      headline: confirmedMalware
+        ? "Known malicious package — remove immediately"
+        : "Remove immediately",
+      action: confirmedMalware
+        ? "Remove the dependency and rotate any credentials available on machines where it was installed."
+        : "Remove or replace this dependency.",
+      boxClass: "border-red-500/30 bg-red-950/20 dark:bg-red-950/40",
+      titleClass: "text-red-500 dark:text-red-400",
+      bodyClass: "text-red-600 dark:text-red-300",
+    };
+  }
+
+  if (severity === "HIGH") {
+    return {
+      icon: "🟠",
+      headline: "Review before shipping",
+      action:
+        "Verify the package and its install scripts, then remove or pin it if you cannot account for the behaviour.",
+      boxClass: "border-orange-500/30 bg-orange-950/20 dark:bg-orange-950/40",
+      titleClass: "text-orange-500 dark:text-orange-400",
+      bodyClass: "text-orange-600 dark:text-orange-300",
+    };
+  }
+
+  return {
+    icon: "🟡",
+    headline: "Worth a look, not urgent",
+    action:
+      "Confirm the package is the one you intended and that its install behaviour is expected. No action needed if it checks out.",
+    boxClass: "border-yellow-500/30 bg-yellow-950/10 dark:bg-yellow-950/30",
+    titleClass: "text-yellow-600 dark:text-yellow-400",
+    bodyClass: "text-yellow-700 dark:text-yellow-300",
+  };
+}
+
 const FINDING_STATUSES = [
   { value: "OPEN", label: "Open", color: "bg-yellow-100 text-yellow-800" },
   {
@@ -534,6 +589,12 @@ function MaliciousPkgFindingReport({ finding, sourceContext }: { finding: Findin
   const report = buildStoredFindingReport(finding);
   const metadata = finding.metadata as Record<string, unknown> | undefined;
   const vulnData = metadata?.aiAnalysis as { description?: string; impact?: string; remediation?: string[] } | undefined;
+  // Prefer the real package name over the rule id, which is what this panel
+  // used to show (e.g. "MAL-LLM-VALIDATED" instead of "fsevents").
+  const packageName =
+    (metadata?.packageName as string | undefined) ||
+    (metadata?.package as string | undefined);
+  const malUrgency = maliciousUrgency(finding.severity, metadata);
 
   return (
     <section className="finding-detail-report min-w-0 max-w-full overflow-hidden">
@@ -547,7 +608,7 @@ function MaliciousPkgFindingReport({ finding, sourceContext }: { finding: Findin
             <div className="space-y-2 text-xs">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Package Name</p>
-                <code className="text-xs font-mono text-foreground mt-1 block break-all">{finding.ruleId || "Unknown"}</code>
+                <code className="text-xs font-mono text-foreground mt-1 block break-all">{packageName || finding.ruleId || "Unknown"}</code>
               </div>
               {finding.filePath && (
                 <div>
@@ -639,17 +700,23 @@ function MaliciousPkgFindingReport({ finding, sourceContext }: { finding: Findin
           </div>
 
           <div className="space-y-2">
-            <div className="rounded-lg border border-red-500/30 bg-red-950/20 dark:bg-red-950/40 p-2">
-              <h3 className="font-semibold text-xs text-red-500 dark:text-red-400 mb-1">🔴 CRITICAL</h3>
-              <p className="text-xs text-red-600 dark:text-red-300 leading-tight">
-                Remove immediately
+            {/* Urgency must follow the finding's severity. These panels were
+                hardcoded to CRITICAL / "Remove dependency now", which
+                contradicted a MEDIUM badge and told developers to remove
+                dependencies (often transitive) that they cannot remove. */}
+            <div className={`rounded-lg border p-2 ${malUrgency.boxClass}`}>
+              <h3 className={`font-semibold text-xs mb-1 ${malUrgency.titleClass}`}>
+                {malUrgency.icon} {finding.severity}
+              </h3>
+              <p className={`text-xs leading-tight ${malUrgency.bodyClass}`}>
+                {malUrgency.headline}
               </p>
             </div>
 
-            <div className="rounded-lg border border-orange-500/30 bg-orange-950/20 dark:bg-orange-950/40 p-2">
-              <h3 className="font-semibold text-xs text-orange-500 dark:text-orange-400 mb-1">⚡ Action</h3>
-              <p className="text-xs text-orange-600 dark:text-orange-300 leading-tight">
-                Remove dependency now
+            <div className="rounded-lg border border-border/40 p-2">
+              <h3 className="font-semibold text-xs text-muted-foreground mb-1">⚡ Action</h3>
+              <p className="text-xs text-foreground leading-tight">
+                {malUrgency.action}
               </p>
             </div>
           </div>
@@ -746,6 +813,10 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
   const metadata = finding.metadata as Record<string, unknown> | undefined;
   const fixVersion = typeof metadata?.fixVersion === "string" ? metadata.fixVersion : undefined;
   const currentVersion = typeof metadata?.currentVersion === "string" ? metadata.currentVersion : undefined;
+  // SCA findings carry the package in metadata; the rule id is the advisory id.
+  const packageName =
+    (metadata?.packageName as string | undefined) ||
+    (metadata?.package as string | undefined);
   const cveId = finding.cveId || (Array.isArray(metadata?.cves) ? metadata.cves[0] : undefined);
 
   // Get AI-analyzed vulnerability data from finding metadata (analyzed during scan)
@@ -763,7 +834,7 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
             <div className="space-y-2 text-xs">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Package Name</p>
-                <code className="text-sm font-mono text-foreground mt-1 block break-all">{finding.ruleId || "Unknown"}</code>
+                <code className="text-sm font-mono text-foreground mt-1 block break-all">{packageName || finding.ruleId || "Unknown"}</code>
               </div>
               {currentVersion && (
                 <div>

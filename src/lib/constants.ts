@@ -235,6 +235,37 @@ export const MAX_LLM_CONCURRENCY = parseInt(
   10,
 );
 
+
+// ─── Web research (supply-chain corroboration) ───────────────────────────────
+// Answers "has this package been publicly reported as malicious?", which no
+// registry API covers. Flag-only: a result may raise suspicion, never dismiss a
+// finding, because search results are attacker-influenceable.
+
+/** Off unless a key is configured; also disable explicitly for air-gapped installs. */
+export const ENABLE_WEB_RESEARCH = process.env.ENABLE_WEB_RESEARCH !== "false";
+
+export const WEB_RESEARCH_TIMEOUT_MS = parseInt(
+  process.env.WEB_RESEARCH_TIMEOUT_MS || "12000",
+  10,
+);
+
+export const WEB_RESEARCH_MAX_RESULTS = parseInt(
+  process.env.WEB_RESEARCH_MAX_RESULTS || "5",
+  10,
+);
+
+/** Whether a package has been reported is org-independent, so cache broadly. */
+export const WEB_RESEARCH_CACHE_TTL_MS = parseInt(
+  process.env.WEB_RESEARCH_CACHE_TTL_MS || String(24 * 60 * 60 * 1000),
+  10,
+);
+
+/** Upper bound on searches per scan, so a large dependency set cannot fan out. */
+export const WEB_RESEARCH_MAX_PER_SCAN = parseInt(
+  process.env.WEB_RESEARCH_MAX_PER_SCAN || "10",
+  10,
+);
+
 // ─── deps.dev (Open Source Insights) ─────────────────────────────────────────
 // Supplies declared licenses, source repo, deprecation and provenance signals.
 // Covers npm, PyPI, Maven, Go, crates.io, NuGet and RubyGems; Packagist, Pub,

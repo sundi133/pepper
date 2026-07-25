@@ -25,7 +25,14 @@ import { uploadObject } from "@/lib/minio";
 import {
   generateCycloneDx,
   generateSpdx,
+  purlFor,
 } from "@/scanners/sca/sbom-generator";
+import {
+  buildVexStatements,
+  generateOpenVex,
+  generateCycloneDxVex,
+  summarizeVex,
+} from "@/lib/vex-generator";
 import {
   signWithCosignKeyless,
   signWithRsaKey,
@@ -735,6 +742,80 @@ Schema:
           "SBOMs generated (CycloneDX + SPDX)",
         );
 
+        // VEX: state whether the vulnerabilities in the SBOM's components
+        // actually affect this product. Built from the stored findings and their
+        // adjudicated statuses, so suppressions and accepted risks are asserted
+        // in a form a consumer can verify rather than being invisible.
+        const vexFindings = await prisma.finding.findMany({
+          where: {
+            scanId,
+            OR: [{ cveId: { not: null } }, { scanner: "SCA" }],
+          },
+          select: {
+            cveId: true,
+            ruleId: true,
+            title: true,
+            severity: true,
+            status: true,
+            statusNote: true,
+            statusUpdatedAt: true,
+            metadata: true,
+          },
+        });
+
+        const vexMeta = {
+          productName: sbomMeta.projectName,
+          productId: `pkg:generic/${encodeURIComponent(sbomMeta.projectName)}@${sbomMeta.commitSha || "0.0.0"}`,
+          scanId,
+          commitSha: sbomMeta.commitSha,
+          branch: sbomMeta.branch,
+        };
+
+        const vexStatements = buildVexStatements(vexFindings, {
+          // Identify components exactly as the SBOM does, otherwise the
+          // statements cannot be matched to the bill of materials.
+          purlFor: (name, version, ecosystem) =>
+            purlFor({ name, version, ecosystem }),
+        });
+
+        let openVex: string | undefined;
+        let cycloneVex: string | undefined;
+
+        if (vexStatements.length > 0) {
+          openVex = generateOpenVex(vexStatements, vexMeta);
+          cycloneVex = generateCycloneDxVex(vexStatements, vexMeta);
+          const openVexKey = `vex/${scanId}/openvex.json`;
+          const cycloneVexKey = `vex/${scanId}/cyclonedx-vex.json`;
+
+          await uploadObject(openVexKey, openVex, "application/json");
+          await uploadObject(
+            cycloneVexKey,
+            cycloneVex,
+            "application/vnd.cyclonedx+json",
+          );
+
+          for (const [type, key, body] of [
+            ["VEX_OPENVEX", openVexKey, openVex],
+            ["VEX_CYCLONEDX", cycloneVexKey, cycloneVex],
+          ] as const) {
+            await prisma.scanArtifact.upsert({
+              where: { scanId_type: { scanId, type } },
+              create: {
+                scanId,
+                type,
+                objectKey: key,
+                size: Buffer.byteLength(body),
+              },
+              update: { objectKey: key, size: Buffer.byteLength(body) },
+            });
+          }
+
+          log.info(
+            { statements: vexStatements.length, ...summarizeVex(vexStatements) },
+            "VEX generated (OpenVEX + CycloneDX)",
+          );
+        }
+
         // Sign SBOMs if code signing is enabled for this org
         try {
           const signingSettings = await prisma.orgSettings.findUnique({
@@ -748,10 +829,18 @@ Schema:
           });
           if (signingSettings?.codeSigningEnabled) {
             const bundles: Record<string, SignatureBundle> = {};
-            for (const [label, body] of [
+            // VEX is signed alongside the SBOMs: an unsigned exploitability
+            // claim is not evidence, since anything asserting "not affected"
+            // has to be attributable.
+            const signable: Array<[string, string]> = [
               ["cyclonedx", cyclone],
               ["spdx", spdx],
-            ] as const) {
+              ...(openVex ? ([["openvex", openVex]] as Array<[string, string]>) : []),
+              ...(cycloneVex
+                ? ([["cyclonedx-vex", cycloneVex]] as Array<[string, string]>)
+                : []),
+            ];
+            for (const [label, body] of signable) {
               let bundle: SignatureBundle | null = null;
               if (
                 signingSettings.codeSigningMode === "keyless" ||

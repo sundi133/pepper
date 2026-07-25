@@ -15,7 +15,12 @@ const TOOL_VENDOR = "Pepper";
 const TOOL_NAME = "pepper-sca";
 const TOOL_VERSION = "1.0.0";
 
-function purlFor(dep: Dependency): string {
+/**
+ * Package URL for a dependency. Exported so VEX documents identify components
+ * with exactly the same identifiers as the SBOM — a VEX statement is only
+ * useful if its subcomponent reference matches the SBOM it accompanies.
+ */
+export function purlFor(dep: Dependency): string {
   const eco = dep.ecosystem.toLowerCase();
   const ecoMap: Record<string, string> = {
     npm: "npm",

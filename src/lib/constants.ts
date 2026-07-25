@@ -268,6 +268,16 @@ export const DEPS_DEV_MAX_CACHE_ENTRIES = parseInt(
 /** Set to "false" to skip deps.dev enrichment entirely (air-gapped installs). */
 export const ENABLE_DEPS_DEV = process.env.ENABLE_DEPS_DEV !== "false";
 
+/**
+ * Upper bound on dependency-graph fetches per scan when explaining why a
+ * transitive dependency is present. Bounds cost on large monorepos; truncation
+ * is always logged and surfaced rather than silently capping coverage.
+ */
+export const DEPS_DEV_MAX_GRAPH_FETCHES = parseInt(
+  process.env.DEPS_DEV_MAX_GRAPH_FETCHES || "60",
+  10,
+);
+
 // ─── License policy ──────────────────────────────────────────────────────────
 // Patterns are SPDX IDs or `PREFIX-*` wildcards, matched case-insensitively.
 // A bare ID also covers its `-only` / `-or-later` / `+` variants.

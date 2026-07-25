@@ -35,6 +35,10 @@ import { enrichFindingsWithEpssKev } from "@/lib/epss-kev-enrichment";
 import { enhanceSCAFindingWithRiskScore } from "./supply-chain-scorer";
 import { fetchVersionInfoBatch } from "./deps-dev-client";
 import { buildLicenseFindings } from "./license-findings";
+import {
+  attachDependencyPaths,
+  resolveDependencyPaths,
+} from "./dependency-paths";
 import { ENABLE_DEPS_DEV } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 
@@ -216,6 +220,35 @@ export const scaScanner: ScannerPlugin = {
     findings = findings.map((f) =>
       enhanceSCAFindingWithRiskScore(f, directDependencies),
     );
+
+    // Explain why each vulnerable transitive package is present, and which
+    // direct dependency introduced it. Resolved before triage so the model can
+    // use it as evidence.
+    if (findings.length > 0 && ENABLE_DEPS_DEV) {
+      const vulnerablePackages = new Set(
+        findings
+          .map((f) => f.metadata?.packageName as string | undefined)
+          .filter((n): n is string => !!n),
+      );
+      try {
+        await ctx.waitIfPaused?.();
+        ctx.onProgress?.(
+          `SCA: resolving dependency paths for ${vulnerablePackages.size} vulnerable packages...`,
+        );
+        const paths = await resolveDependencyPaths(
+          vulnerablePackages,
+          dependencies,
+          directDependencies,
+          { signal: ctx.signal, onProgress: ctx.onProgress },
+        );
+        findings = attachDependencyPaths(findings, paths);
+        ctx.onProgress?.(
+          `SCA: explained ${paths.size}/${vulnerablePackages.size} vulnerable packages`,
+        );
+      } catch (err) {
+        logger.warn({ err }, "dependency path resolution failed");
+      }
+    }
 
     if (findings.length > 0 && ctx.orgSettings.enableLlmSast) {
       ctx.onProgress?.(`SCA: AI triaging ${findings.length} CVE findings...`);

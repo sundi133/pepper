@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Supply chain security — Pepper SAST</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo">P</div>
+        <div>
+          <h1>Pepper SAST</h1>
+          <span>Documentation</span>
+        </div>
+      </div>
+      <nav>
+        <section>
+          <h2>Guide</h2>
+          <ul>
+            <li><a href="index.html">Overview</a></li>
+            <li><a href="faq.html">Feature FAQ</a></li>
+            <li><a href="getting-started.html">Getting started</a></li>
+            <li><a href="user-guide.html">How to use</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Features</h2>
+          <ul>
+            <li><a href="supply-chain.html" class="active">Supply chain</a></li>
+            <li><a href="faq.html#sbom">SBOM (CycloneDX + SPDX)</a></li>
+            <li><a href="faq.html#sast">SAST</a></li>
+            <li><a href="faq.html#sca">SCA</a></li>
+            <li><a href="faq.html#container">Container scanning</a></li>
+            <li><a href="faq.html#code-signing">Code signing</a></li>
+            <li><a href="faq.html#compliance">Compliance</a></li>
+          </ul>
+        </section>
+        <section>
+          <h2>Operate</h2>
+          <ul>
+            <li><a href="deployment.html">Deployment</a></li>
+            <li><a href="ci-cd.html">CI/CD recipes</a></li>
+            <li><a href="api.html">API reference</a></li>
+            <li><a href="configuration.html">Environment vars</a></li>
+          </ul>
+        </section>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <h1>Supply chain security</h1>
+      <p class="lead">
+        Pepper analyses your third-party dependencies for known vulnerabilities,
+        malicious packages, and license policy violations — then tells you which
+        findings actually matter, why each dependency is present, and produces
+        signed SBOM and VEX documents you can hand to a customer or auditor.
+      </p>
+
+      <div class="callout">
+        <strong>Design principle:</strong> a vulnerability database can tell you a CVE
+        exists in a package. It cannot tell you whether that matters in your code.
+        Pepper aims to report a small number of findings you should act on, and to
+        state — in a verifiable document — what it ruled out and why.
+      </div>
+
+      <h2 id="what-runs">What runs during a scan</h2>
+      <table>
+        <thead><tr><th>Stage</th><th>What it does</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td>Dependency discovery</td><td>Parses manifests and lockfiles, including transitive dependencies</td><td>Your repository</td></tr>
+          <tr><td>Vulnerability lookup</td><td>Known CVEs per package version</td><td>OSV.dev</td></tr>
+          <tr><td>Exploitation signals</td><td>EPSS probability and CISA KEV (exploited in the wild)</td><td>FIRST.org, CISA</td></tr>
+          <tr><td>License resolution</td><td>Declared licenses, source repo, deprecation, provenance</td><td>deps.dev</td></tr>
+          <tr><td>Dependency paths</td><td>Which direct dependency introduced a transitive package</td><td>deps.dev + your lockfiles</td></tr>
+          <tr><td>Malicious package checks</td><td>Known malware, typosquatting, install-script behaviour</td><td>OSV malware DB, registries, AI</td></tr>
+          <tr><td>AI triage</td><td>Decides which CVEs apply to your code, using the advisory text</td><td>Your configured LLM</td></tr>
+          <tr><td>Container images</td><td>OS and application CVEs in referenced images</td><td>Trivy</td></tr>
+          <tr><td>Documents</td><td>SBOM (CycloneDX + SPDX), VEX (OpenVEX + CycloneDX), signatures</td><td>Pepper</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="ecosystems">Supported ecosystems</h2>
+      <p>
+        Dependency and vulnerability scanning covers all ecosystems below. License,
+        provenance, and dependency-path data come from deps.dev, which covers the
+        seven marked <strong>Full</strong>. The rest are scanned for vulnerabilities but
+        report no license data.
+      </p>
+      <table>
+        <thead><tr><th>Ecosystem</th><th>Files parsed</th><th>Coverage</th></tr></thead>
+        <tbody>
+          <tr><td>npm</td><td><code>package.json</code>, <code>package-lock.json</code>, <code>yarn.lock</code>, <code>pnpm-lock.yaml</code></td><td>Full</td></tr>
+          <tr><td>PyPI</td><td><code>requirements.txt</code>, <code>Pipfile.lock</code>, <code>poetry.lock</code>, <code>pyproject.toml</code></td><td>Full</td></tr>
+          <tr><td>Maven / Gradle</td><td><code>pom.xml</code>, <code>build.gradle</code>, <code>build.gradle.kts</code></td><td>Full</td></tr>
+          <tr><td>Go</td><td><code>go.mod</code></td><td>Full</td></tr>
+          <tr><td>crates.io</td><td><code>Cargo.toml</code>, <code>Cargo.lock</code></td><td>Full</td></tr>
+          <tr><td>NuGet</td><td><code>.csproj</code>, <code>.fsproj</code>, <code>.vbproj</code>, <code>packages.config</code></td><td>Full</td></tr>
+          <tr><td>RubyGems</td><td><code>Gemfile.lock</code></td><td>Full</td></tr>
+          <tr><td>Packagist</td><td><code>composer.json</code>, <code>composer.lock</code></td><td>Vulnerabilities only</td></tr>
+          <tr><td>Pub (Dart)</td><td><code>pubspec.yaml</code></td><td>Vulnerabilities only</td></tr>
+          <tr><td>Hex (Elixir)</td><td><code>mix.lock</code></td><td>Vulnerabilities only</td></tr>
+          <tr><td>SwiftPM</td><td><code>Package.resolved</code></td><td>Vulnerabilities only</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="prioritisation">How findings are prioritised</h2>
+      <p>Each dependency vulnerability carries the evidence behind its priority:</p>
+      <ul>
+        <li><strong>EPSS score</strong> — probability of exploitation in the next 30 days.</li>
+        <li><strong>CISA KEV</strong> — confirmed exploited in the wild. These are never suppressed.</li>
+        <li><strong>Direct vs transitive</strong> — whether you depend on the package directly.</li>
+        <li><strong>Import evidence</strong> — where your code actually imports the package.</li>
+        <li><strong>Fix availability</strong> — whether a patched version exists.</li>
+      </ul>
+      <p>
+        AI triage reads the <em>published advisory text</em> alongside this evidence, so
+        exploitability conditions come from the advisory rather than from the model's
+        recollection of a CVE identifier. Where an advisory states a precondition that
+        does not hold in your codebase, the finding is ruled out — and recorded in the
+        VEX document rather than silently dropped.
+      </p>
+
+      <h2 id="dependency-paths">Why is this dependency here?</h2>
+      <p>
+        Vulnerabilities in transitive dependencies include the chain that introduced
+        them and the direct dependency to change:
+      </p>
+      <pre>Introduced by: express
+Path: express@4.18.2 → accepts@1.3.8 → mime-types@2.1.35 → mime-db@1.52.0</pre>
+      <p>
+        The fix for a transitive vulnerability is usually to upgrade the introducing
+        dependency or pin an override — not to add the vulnerable package as a direct
+        dependency. Paths are verified against your own lockfiles: Pepper only reports a
+        chain whose every hop genuinely exists in your project. If a path cannot be
+        established, the finding simply carries no path rather than a guess.
+      </p>
+
+      <h2 id="licenses">License policy</h2>
+      <p>
+        Declared licenses are resolved per dependency version and recorded in both SBOM
+        formats. Findings are raised <strong>only</strong> for policy violations — a
+        compliant dependency produces no finding, and the SBOM remains the full
+        inventory.
+      </p>
+      <table>
+        <thead><tr><th>Verdict</th><th>Severity</th><th>Default patterns</th></tr></thead>
+        <tbody>
+          <tr><td>Denied</td><td>HIGH</td><td><code>AGPL-*</code>, <code>GPL-*</code>, <code>SSPL-*</code>, <code>BUSL-*</code>, <code>CC-BY-NC-*</code>, <code>Commons-Clause</code>, <code>Elastic-2.0</code></td></tr>
+          <tr><td>Review</td><td>LOW</td><td><code>LGPL-*</code>, <code>MPL-*</code>, <code>EPL-*</code>, <code>CDDL-*</code>, <code>OSL-*</code>, <code>MS-RL</code>, <code>CPAL-*</code></td></tr>
+          <tr><td>Allowed</td><td>—</td><td>Everything else (MIT, Apache-2.0, BSD, ISC, …)</td></tr>
+          <tr><td>Unknown</td><td>—</td><td>Not reported unless you opt in</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Dual licenses are handled correctly</h3>
+      <p>
+        Licenses are SPDX <em>expressions</em>, not plain names. A package offered as
+        <code>BSD-3-Clause OR GPL-2.0</code> may be taken under BSD, so it does
+        <strong>not</strong> violate a GPL ban. Pepper evaluates the expression:
+      </p>
+      <ul>
+        <li><code>OR</code> — the most permissive branch applies (you may choose it).</li>
+        <li><code>AND</code> — the most restrictive branch applies (all obligations bind).</li>
+      </ul>
+      <p>
+        Patterns are prefix-scoped, so <code>GPL-*</code> does not match
+        <code>LGPL-*</code>, and a bare pattern such as <code>GPL-2.0</code> also covers
+        <code>GPL-2.0-only</code>, <code>GPL-2.0-or-later</code>, and <code>GPL-2.0+</code>.
+      </p>
+      <p>Severity is not reduced for transitive dependencies, because copyleft obligations apply regardless of dependency depth.</p>
+
+      <h3>Configuring the policy</h3>
+      <pre># Comma-separated SPDX IDs or PREFIX-* wildcards
+LICENSE_POLICY_DENY=AGPL-*,GPL-*,SSPL-*,BUSL-*
+LICENSE_POLICY_WARN=LGPL-*,MPL-*,EPL-*
+# Report dependencies whose license could not be determined (default false)
+LICENSE_POLICY_FLAG_UNKNOWN=false</pre>
+      <p>
+        To allow a license your policy denies, remove it from
+        <code>LICENSE_POLICY_DENY</code> rather than suppressing each finding
+        individually.
+      </p>
+
+      <h2 id="malicious">Malicious package detection</h2>
+      <p>Runs in three passes, from cheapest and most certain to most exploratory:</p>
+      <ol class="steps">
+        <li><strong>Known malware</strong> — batch check against the OpenSSF Malicious Packages database (OSV <code>MAL-*</code> advisories). Confirmed hits are CRITICAL.</li>
+        <li><strong>Registry metadata</strong> — package age, missing source repository, and the presence of install scripts, across npm, PyPI, Maven, Go, crates.io, and RubyGems.</li>
+        <li><strong>AI analysis</strong> — typosquatting against popular names, and install-script behaviour such as credential exfiltration, remote code execution, and obfuscation.</li>
+      </ol>
+      <div class="callout">
+        <strong>Adversary-resistant by design.</strong> In supply chain analysis the attacker
+        writes the text being analysed — install scripts, package metadata, even lockfile
+        version strings. Pepper treats all of it as untrusted data, never as instructions,
+        and content that tries to talk the analysis out of a verdict is itself treated as a
+        malicious signal. A confirmed malware advisory can never be downgraded by model output.
+      </div>
+
+      <h2 id="containers">Container image scanning</h2>
+      <p>
+        Image references found in Dockerfiles, Compose files, and infrastructure code are
+        scanned for OS and application CVEs with Trivy, which ships inside the Pepper
+        worker image. Base-image OS packages are reported one severity level lower than
+        application-layer packages, since they are owned by the base image maintainer.
+      </p>
+      <div class="callout warn">
+        <strong>Coverage is always reported.</strong> If image scanning cannot run — Trivy
+        missing, a private registry without credentials, a tag that does not exist — Pepper
+        raises an INFO finding naming the unscanned images. An empty result never silently
+        means "these images are clean". These findings do not fail build gates.
+      </div>
+
+      <h2 id="sbom">SBOM and VEX documents</h2>
+      <p>Every scan with dependencies produces downloadable artifacts:</p>
+      <table>
+        <thead><tr><th>Artifact</th><th>Format</th><th>Contents</th></tr></thead>
+        <tbody>
+          <tr><td>SBOM</td><td>CycloneDX 1.5 JSON</td><td>Components, PURLs, licenses, dev/runtime scope</td></tr>
+          <tr><td>SBOM</td><td>SPDX 2.3 JSON</td><td>Same inventory in SPDX form</td></tr>
+          <tr><td>VEX</td><td>OpenVEX 0.2.0</td><td>Whether each vulnerability affects your product</td></tr>
+          <tr><td>VEX</td><td>CycloneDX 1.5 VEX</td><td>Same statements for CycloneDX-native tools</td></tr>
+          <tr><td>Signatures</td><td>JSON bundle</td><td>Cosign or RSA signatures over each document</td></tr>
+        </tbody>
+      </table>
+
+      <h3>What the VEX tells a consumer</h3>
+      <p>
+        An SBOM lists what is in your product. It says nothing about whether the
+        vulnerabilities in those components affect you — so a customer scanning your SBOM
+        re-derives every CVE with no idea which you already assessed. The VEX answers
+        that:
+      </p>
+      <table>
+        <thead><tr><th>VEX status</th><th>Meaning</th><th>Comes from</th></tr></thead>
+        <tbody>
+          <tr><td><code>affected</code></td><td>Applies to us; includes what to do</td><td>Open, in-progress, and accepted-risk findings</td></tr>
+          <tr><td><code>not_affected</code></td><td>Does not apply; includes why</td><td>Findings marked false positive, and CVEs ruled out by AI triage</td></tr>
+          <tr><td><code>fixed</code></td><td>Already remediated</td><td>Findings marked resolved</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Each <code>not_affected</code> statement carries a machine-readable justification
+        where one applies — for example <code>vulnerable_code_not_in_execute_path</code> or
+        <code>component_not_present</code> — and otherwise carries the reason in prose.
+        Pepper never invents a justification it did not establish.
+      </p>
+      <p>
+        A risk you have formally accepted is reported as <code>affected</code>, not
+        <code>not_affected</code>, with your acceptance rationale as the action statement.
+        Claiming otherwise would misstate your position to a customer.
+      </p>
+      <p>
+        Statements produced by AI triage rather than a human reviewer say so explicitly, so
+        a reader can weigh them accordingly.
+      </p>
+
+      <h3>Verifying a signature</h3>
+      <p>
+        Enable signing under <a href="settings.html">Settings</a>. Signatures cover the
+        SBOM and VEX bytes, so any edit to a document — including flipping a
+        <code>not_affected</code> statement — invalidates them.
+      </p>
+      <pre># Keyless (sigstore) mode
+cosign verify-blob --signature sig.txt openvex.json
+
+# Key-based mode
+openssl dgst -sha256 -verify public.pem -signature sig.bin openvex.json</pre>
+
+      <h2 id="air-gapped">Air-gapped and offline operation</h2>
+      <p>
+        Pepper runs fully on-premise with a local LLM and no outbound network access.
+        Set the vulnerability database mode to <strong>offline</strong> under Settings, or
+        disable individual lookups:
+      </p>
+      <table>
+        <thead><tr><th>Feature</th><th>Offline behaviour</th></tr></thead>
+        <tbody>
+          <tr><td>CVE lookup (OSV)</td><td>Skipped, or pointed at a mirror via <code>OSV_API_URL</code></td></tr>
+          <tr><td>License / provenance (deps.dev)</td><td>Skipped. Set <code>ENABLE_DEPS_DEV=false</code> to disable entirely</td></tr>
+          <tr><td>EPSS / CISA KEV</td><td>Skipped. Set <code>ENABLE_EPSS_KEV=false</code> to disable entirely</td></tr>
+          <tr><td>Container CVEs (Trivy)</td><td>Uses a pre-populated database; no update attempted</td></tr>
+          <tr><td>SAST / IaC / triage</td><td>Runs against your in-network LLM (for example Ollama)</td></tr>
+          <tr><td>SBOM / VEX / signing</td><td>Fully offline</td></tr>
+        </tbody>
+      </table>
+      <p>To scan container images without network access, mount a Trivy database into the worker:</p>
+      <pre># Populate a cache on a connected machine
+trivy image --download-db-only --cache-dir ./trivy-cache
+
+# Mount it into the worker and enable offline mode
+services:
+  worker:
+    environment:
+      TRIVY_CACHE_DIR: /var/cache/trivy
+    volumes:
+      - ./trivy-cache:/var/cache/trivy:ro</pre>
+      <div class="callout">
+        Every external lookup degrades to "unknown", never to "clean". If a data source is
+        unreachable, Pepper reports less — it does not report success it cannot support.
+      </div>
+
+      <h2 id="env">Related environment variables</h2>
+      <p>See <a href="configuration.html#supply-chain">Environment variables</a> for the full list, including tuning for local models and cost controls.</p>
+    </main>
+  </div>
+</body>
+</html>

@@ -252,7 +252,7 @@ export const scaScanner: ScannerPlugin = {
 
     if (findings.length > 0 && ctx.orgSettings.enableLlmSast) {
       ctx.onProgress?.(`SCA: AI triaging ${findings.length} CVE findings...`);
-      findings = await triageScaFindings(
+      const triaged = await triageScaFindings(
         findings,
         {
           provider: ctx.orgSettings.llmProvider,
@@ -262,6 +262,16 @@ export const scaScanner: ScannerPlugin = {
         },
         { workDir: ctx.workDir, fileList: ctx.fileList },
       );
+      findings = triaged.kept;
+
+      // Ruled-out CVEs do not become findings, but they are reported so they can
+      // be asserted as VEX not_affected statements instead of vanishing.
+      if (triaged.suppressed.length > 0) {
+        ctx.onSuppressedVulnerabilities?.(triaged.suppressed);
+        ctx.onProgress?.(
+          `SCA: ${triaged.suppressed.length} CVEs ruled out by triage (recorded for VEX)`,
+        );
+      }
     }
 
     ctx.onProgress?.(

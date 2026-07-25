@@ -5,7 +5,7 @@ import {
   analyzeWithLlm,
   parseLlmJsonResponse,
 } from "@/lib/llm-gateway";
-import type { RawFinding } from "../types";
+import type { RawFinding, SuppressedVulnerability } from "../types";
 import { enrichFinding } from "../shared/finding-normalize";
 import { SCA_TRIAGE_PROMPT } from "../shared/prompts";
 import {
@@ -97,6 +97,48 @@ function truncateAdvisory(text: string | undefined, maxChars: number): string {
   return `${lastSpace > maxChars * 0.6 ? cut.slice(0, lastSpace) : cut}… [truncated]`;
 }
 
+/** Turn a dropped finding into a record that can become a VEX statement. */
+function toSuppressed(
+  finding: RawFinding,
+  reason: string,
+): SuppressedVulnerability {
+  const meta = finding.metadata || {};
+  const vulnerabilityId =
+    finding.cveId || (meta.osvId as string | undefined) || finding.ruleId || "";
+  return {
+    vulnerabilityId,
+    advisoryId:
+      finding.ruleId && finding.ruleId !== vulnerabilityId
+        ? finding.ruleId
+        : undefined,
+    title: finding.title,
+    severity: finding.severity,
+    packageName: meta.packageName as string | undefined,
+    packageVersion: meta.packageVersion as string | undefined,
+    ecosystem: meta.ecosystem as string | undefined,
+    reason,
+    assessedBy: "automated-triage",
+    metadata: {
+      epssScore: meta.epssScore,
+      cisaKevListed: meta.cisaKevListed,
+      introducedBy: meta.introducedBy,
+      dependencyPathText: meta.dependencyPathText,
+      fixVersion: meta.fixVersion,
+    },
+  };
+}
+
+export interface ScaTriageResult {
+  /** Findings that survived triage and will be reported. */
+  kept: RawFinding[];
+  /**
+   * Vulnerabilities triage ruled out. Returned rather than dropped so they can
+   * be asserted as VEX `not_affected` statements; they are never persisted as
+   * findings.
+   */
+  suppressed: SuppressedVulnerability[];
+}
+
 /** Group CVE findings by package@version and apply AI triage. */
 export async function triageScaFindings(
   findings: RawFinding[],
@@ -107,8 +149,8 @@ export async function triageScaFindings(
     model: string;
   },
   codeContext?: { workDir: string; fileList: string[] },
-): Promise<RawFinding[]> {
-  if (findings.length === 0) return [];
+): Promise<ScaTriageResult> {
+  if (findings.length === 0) return { kept: [], suppressed: [] };
 
   const grouped = new Map<string, RawFinding[]>();
   for (const f of findings) {
@@ -153,6 +195,7 @@ export async function triageScaFindings(
     : SCA_TRIAGE_BATCH_SIZE;
 
   const triaged: RawFinding[] = [];
+  const suppressed: SuppressedVulnerability[] = [];
 
   for (let i = 0; i < deduped.length; i += BATCH) {
     const batch = deduped.slice(i, i + BATCH);
@@ -210,7 +253,16 @@ export async function triageScaFindings(
 
       for (const f of batch) {
         const decision = decisionMap.get(f.ruleId || "");
-        if (decision && !decision.keep) continue;
+        if (decision && !decision.keep) {
+          // Carry the decision out for VEX instead of discarding it.
+          suppressed.push(
+            toSuppressed(
+              f,
+              decision.reason || "Assessed by automated triage as not applicable",
+            ),
+          );
+          continue;
+        }
 
         const meta = {
           ...(f.metadata || {}),
@@ -253,5 +305,5 @@ export async function triageScaFindings(
   // SCA findings are database-confirmed (confidence=1.0 from OSV); do not
   // filter them by the LLM confidence floor which is meant for LLM-generated
   // findings.  The AI triage already removed low-value entries via keep=false.
-  return triaged;
+  return { kept: triaged, suppressed };
 }

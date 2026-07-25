@@ -112,6 +112,12 @@
         against <a href="https://osv.dev">OSV</a> for known vulnerabilities, plus a
         malicious-package heuristic for supply-chain attacks.
       </p>
+      <p>
+        Findings also carry license policy verdicts, the dependency path that introduced a
+        transitive package, and EPSS / CISA KEV exploitation signals. See
+        <a href="supply-chain.html">Supply chain security</a> for the full picture,
+        including how AI triage decides which CVEs apply to your code.
+      </p>
       <p><strong>Supported ecosystems:</strong></p>
       <ul>
         <li>JavaScript / TypeScript — <code>package.json</code>, <code>package-lock.json</code></li>
@@ -135,7 +141,14 @@
       <p>
         Every scan automatically emits two software-bill-of-materials documents from the
         dependency graph SCA produced. They are stored as scan artifacts in MinIO and
-        downloadable through the API or the scan-detail UI.
+        downloadable through the API or the scan-detail UI. Component licenses are
+        included when they can be resolved.
+      </p>
+      <p>
+        Each scan also emits <strong>VEX</strong> documents (OpenVEX 0.2.0 and CycloneDX
+        VEX) stating whether the vulnerabilities in those components actually affect your
+        product, so a customer scanning your SBOM does not have to re-triage every CVE.
+        See <a href="supply-chain.html#sbom">SBOM and VEX documents</a>.
       </p>
       <table>
         <thead>
@@ -232,8 +245,13 @@
         The <code>CONTAINER</code> scanner discovers image references in source — both
         <code>FROM</code> directives in Dockerfiles and <code>image:</code> entries in
         Compose files — then runs
-        <a href="https://aquasecurity.github.io/trivy/">Trivy</a> against each image
-        when it is installed on the worker.
+        <a href="https://aquasecurity.github.io/trivy/">Trivy</a> against each image.
+        Trivy ships inside the Pepper worker image, so no host installation is needed.
+      </p>
+      <p>
+        If an image cannot be scanned — a private registry without credentials, a missing
+        tag, or no route to the registry — Pepper raises an INFO finding naming the
+        unscanned images. An empty result never silently means the images are clean.
       </p>
       <p><strong>Findings include:</strong></p>
       <ul>

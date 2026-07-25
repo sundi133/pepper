@@ -23,4 +23,16 @@ ENV NODE_ENV=production
 
 RUN apk add --no-cache subversion
 
+# Trivy powers container/serverless image CVE scanning. Without it on PATH the
+# container scanner reports zero CVEs, which is indistinguishable from a clean
+# image — so it ships in the worker rather than being an operator prerequisite.
+# Copied from the official image so the version is pinned and reproducible.
+COPY --from=aquasec/trivy:0.72.0 /usr/local/bin/trivy /usr/local/bin/trivy
+
+# Trivy caches its vulnerability database here. For air-gapped installs, mount a
+# pre-populated cache at this path and set VULN_DB_MODE=offline so Trivy skips
+# the DB update and scans against the bundled database.
+ENV TRIVY_CACHE_DIR=/var/cache/trivy
+RUN mkdir -p /var/cache/trivy
+
 CMD ["npx", "tsx", "src/worker/index.ts"]

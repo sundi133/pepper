@@ -155,14 +155,28 @@ export function renderReportMarkdown(report: StoredFindingReport): string {
 }
 
 /** Remove markdown markers (paired or stray) from report text. */
+/**
+ * Strip markdown formatting from finding text.
+ *
+ * Underscores are treated as literal characters, not emphasis, unless they sit
+ * on a word boundary. Security findings have to name identifiers exactly —
+ * environment variables (TRIVY_CACHE_DIR), snake_case functions and columns,
+ * and Python dunders (__init__) — and stripping the underscores turned them
+ * into names that do not exist, which made remediation advice wrong.
+ *
+ * `__double__` emphasis is therefore not unwrapped at all: CommonMark would
+ * read it as bold, but in this codebase's output a `__name__` is far more
+ * likely to be a Python identifier than intentional formatting. Asterisk
+ * emphasis (`**bold**`, `*italic*`) is unaffected and remains the supported
+ * form, which is also what the prompts and models actually emit.
+ */
 export function stripReportMarkdown(text: string): string {
   return text
     .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/__(?!_)([^_]+)__/g, "$1")
     .replace(/\*([^*\n]+)\*/g, "$1")
-    .replace(/_([^_\n]+)_/g, "$1")
+    // Only unwrap _emphasis_ when neither delimiter is intraword.
+    .replace(/(^|[^\w])_([^_\n]+)_(?!\w)/g, "$1$2")
     .replace(/\*\*/g, "")
-    .replace(/__/g, "")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/```[\w-]*\n?([\s\S]*?)```/g, "$1")
     .replace(/^\s*#{1,6}\s+/gm, "")

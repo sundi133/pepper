@@ -79,6 +79,12 @@ export interface Dependency {
   isDev?: boolean;
   lockfileVersion?: string;
   sourceFile?: string; // The manifest file this dependency came from (e.g., package.json)
+  /**
+   * Declared SPDX license expressions (e.g. ["Apache-2.0 OR MIT"]), resolved
+   * from deps.dev. Undefined means "not looked up or unavailable" — never
+   * "unlicensed".
+   */
+  licenses?: string[];
 }
 
 export interface DependencyParser {

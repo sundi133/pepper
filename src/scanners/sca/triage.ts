@@ -182,6 +182,9 @@ export async function triageScaFindings(
         cisaKevRansomwareUse: meta.cisaKevRansomwareUse,
         directDependency: risk?.directDependency,
         transitiveSeverity: risk?.transitiveSeverity,
+        // Why this package is in the tree, when it could be established.
+        introducedBy: meta.introducedBy,
+        dependencyPath: meta.dependencyPathText,
         importEvidence: imports || "no imports found in scanned source files",
       };
     });

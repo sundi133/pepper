@@ -43,6 +43,35 @@ function purlFor(dep: Dependency): string {
   return `pkg:${purlType}/${name}@${encodeURIComponent(dep.version)}`;
 }
 
+/** deps.dev marker for a license string it could not map to SPDX. */
+const NON_STANDARD = "non-standard";
+
+/** True when the string is a compound SPDX expression rather than a bare ID. */
+function isSpdxExpression(license: string): boolean {
+  return /\s(AND|OR|WITH)\s/i.test(license) || license.includes("(");
+}
+
+/**
+ * CycloneDX `licenses` entries. The spec requires a choice between a license
+ * object (single ID/name) and an `expression` string for compound expressions,
+ * so unmappable values are emitted as a free-text `name` rather than a bogus ID.
+ */
+function cycloneDxLicenses(
+  licenses: string[] | undefined,
+): Array<Record<string, unknown>> | undefined {
+  const present = (licenses || []).filter((l) => l && l.trim());
+  if (present.length === 0) return undefined;
+
+  return present.map((license) => {
+    const value = license.trim();
+    if (isSpdxExpression(value)) return { expression: value };
+    if (value.toLowerCase() === NON_STANDARD) {
+      return { license: { name: value } };
+    }
+    return { license: { id: value } };
+  });
+}
+
 /** CycloneDX 1.5 JSON. https://cyclonedx.org/specification/overview/ */
 export function generateCycloneDx(
   dependencies: Dependency[],
@@ -51,6 +80,7 @@ export function generateCycloneDx(
   const generatedAt = meta.generatedAt || new Date().toISOString();
   const components = dependencies.map((dep) => {
     const purl = purlFor(dep);
+    const licenses = cycloneDxLicenses(dep.licenses);
     return {
       "bom-ref": purl,
       type: "library",
@@ -58,6 +88,7 @@ export function generateCycloneDx(
       version: dep.version,
       purl,
       scope: dep.isDev ? "optional" : "required",
+      ...(licenses ? { licenses } : {}),
       properties: [
         { name: "pepper:ecosystem", value: dep.ecosystem },
         ...(dep.lockfileVersion
@@ -95,6 +126,20 @@ export function generateCycloneDx(
   };
 
   return JSON.stringify(bom, null, 2);
+}
+
+/**
+ * SPDX `licenseDeclared`. Multiple declared licenses are joined with OR, which
+ * is how registries express dual licensing. Unmappable values become
+ * NOASSERTION rather than an invalid license identifier.
+ */
+function spdxLicenseDeclared(licenses: string[] | undefined): string {
+  const present = (licenses || [])
+    .map((l) => l.trim())
+    .filter((l) => l && l.toLowerCase() !== NON_STANDARD);
+  if (present.length === 0) return "NOASSERTION";
+  if (present.length === 1) return present[0];
+  return present.map((l) => (isSpdxExpression(l) ? `(${l})` : l)).join(" OR ");
 }
 
 /** SPDX 2.3 JSON. https://spdx.github.io/spdx-spec/v2.3/ */
@@ -157,8 +202,10 @@ export function generateSpdx(
       versionInfo: dep.version,
       downloadLocation: "NOASSERTION",
       filesAnalyzed: false,
+      // `licenseConcluded` stays NOASSERTION: we report what the registry
+      // declares, we do not perform our own license audit of the source.
       licenseConcluded: "NOASSERTION",
-      licenseDeclared: "NOASSERTION",
+      licenseDeclared: spdxLicenseDeclared(dep.licenses),
       copyrightText: "NOASSERTION",
       externalRefs: [
         {

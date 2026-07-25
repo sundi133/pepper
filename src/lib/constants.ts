@@ -235,6 +235,89 @@ export const MAX_LLM_CONCURRENCY = parseInt(
   10,
 );
 
+// ─── deps.dev (Open Source Insights) ─────────────────────────────────────────
+// Supplies declared licenses, source repo, deprecation and provenance signals.
+// Covers npm, PyPI, Maven, Go, crates.io, NuGet and RubyGems; Packagist, Pub,
+// Hex and SwiftPM are skipped.
+
+export const DEPS_DEV_API_URL =
+  process.env.DEPS_DEV_API_URL || "https://api.deps.dev";
+
+export const DEPS_DEV_TIMEOUT_MS = parseInt(
+  process.env.DEPS_DEV_TIMEOUT_MS || "10000",
+  10,
+);
+
+/** Parallel deps.dev requests. Matches the registry-metadata concurrency. */
+export const DEPS_DEV_CONCURRENCY = parseInt(
+  process.env.DEPS_DEV_CONCURRENCY || "10",
+  10,
+);
+
+/** Package metadata is immutable per version, so it is cached for a long time. */
+export const DEPS_DEV_CACHE_TTL_MS = parseInt(
+  process.env.DEPS_DEV_CACHE_TTL_MS || String(6 * 60 * 60 * 1000),
+  10,
+);
+
+export const DEPS_DEV_MAX_CACHE_ENTRIES = parseInt(
+  process.env.DEPS_DEV_MAX_CACHE_ENTRIES || "20000",
+  10,
+);
+
+/** Set to "false" to skip deps.dev enrichment entirely (air-gapped installs). */
+export const ENABLE_DEPS_DEV = process.env.ENABLE_DEPS_DEV !== "false";
+
+/**
+ * Upper bound on dependency-graph fetches per scan when explaining why a
+ * transitive dependency is present. Bounds cost on large monorepos; truncation
+ * is always logged and surfaced rather than silently capping coverage.
+ */
+export const DEPS_DEV_MAX_GRAPH_FETCHES = parseInt(
+  process.env.DEPS_DEV_MAX_GRAPH_FETCHES || "60",
+  10,
+);
+
+// ─── License policy ──────────────────────────────────────────────────────────
+// Patterns are SPDX IDs or `PREFIX-*` wildcards, matched case-insensitively.
+// A bare ID also covers its `-only` / `-or-later` / `+` variants.
+// Findings are emitted only for policy violations, never for every dependency.
+
+function csvEnv(value: string | undefined, fallback: string[]): string[] {
+  if (value === undefined) return fallback;
+  const parsed = value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parsed;
+}
+
+/** Strong copyleft and source-available licenses that usually block shipping. */
+export const LICENSE_POLICY_DENY = csvEnv(process.env.LICENSE_POLICY_DENY, [
+  "AGPL-*",
+  "GPL-*",
+  "SSPL-*",
+  "BUSL-*",
+  "CC-BY-NC-*",
+  "Commons-Clause",
+  "Elastic-2.0",
+]);
+
+/** Weak copyleft — usually allowed, but worth surfacing for review. */
+export const LICENSE_POLICY_WARN = csvEnv(process.env.LICENSE_POLICY_WARN, [
+  "LGPL-*",
+  "MPL-*",
+  "EPL-*",
+  "CDDL-*",
+  "OSL-*",
+  "MS-RL",
+  "CPAL-*",
+]);
+
+/** Off by default: unknown licenses are common and flagging them is noisy. */
+export const LICENSE_POLICY_FLAG_UNKNOWN =
+  process.env.LICENSE_POLICY_FLAG_UNKNOWN === "true";
+
 // ─── SCA triage evidence budget ──────────────────────────────────────────────
 // The triage LLM decides keep/drop and describes exploit preconditions, so it
 // must be given the actual advisory text rather than inferring from the CVE ID.

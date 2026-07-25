@@ -18,6 +18,7 @@ import {
   MALICIOUS_VALIDATION_PROMPT,
   UNTRUSTED_CONTENT_GUARD,
 } from "../shared/prompts";
+import { isPlausibleTyposquat } from "./typosquat-plausibility";
 
 // ─── OSV Malware Advisory Query (Batch) ───────────────────────────────
 // OSV tracks malicious packages (MAL-*) reported by OpenSSF and others.
@@ -532,7 +533,17 @@ const TYPOSQUAT_SYSTEM_PROMPT = `You are a supply chain security expert analyzin
 
 For each batch of package names and versions, analyze for:
 
-1. **TYPOSQUATTING**: Is this package name suspiciously similar to a well-known, popular package?
+1. **TYPOSQUATTING**: Is this package name one a human could MISTYPE or MISREAD for a
+   well-known package in the SAME registry, so the wrong package gets installed?
+
+   Typosquatting is a lexical attack within one registry. Two hard rules:
+   - Only compare packages in the SAME ecosystem. A PyPI package cannot typosquat an
+     npm package — nobody types 'pip install x' meaning to install from npm.
+   - The names must look CONFUSABLE, not merely related. An abbreviation, an acronym,
+     or the same project's SDK for another language is NOT a typosquat. 'mcp' is not a
+     typosquat of '@modelcontextprotocol/sdk'; it is that project's Python package.
+   If your reasoning is "this name is associated with / stands for / is the same project
+   as X", that is not typosquatting. Report nothing.
    - Character substitution (e.g., "reqeusts" for "requests")
    - Character omission/addition (e.g., "lodassh" for "lodash")
    - Hyphen/underscore confusion
@@ -810,6 +821,31 @@ export const maliciousPkgScanner: ScannerPlugin = {
 
           const dep = batch.find((d) => d.name === f.packageName);
           const depAny = dep as Record<string, unknown> | undefined;
+
+          // Typosquatting is a lexical attack within one registry. The model
+          // also reports semantic resemblance — it flagged PyPI's `mcp`, the
+          // official Model Context Protocol SDK, as a typosquat of npm's
+          // `@modelcontextprotocol/sdk` because "mcp" abbreviates the project
+          // name. Check the claim is structurally possible before reporting it.
+          if (f.type === "TYPOSQUAT" && f.similarTo) {
+            const verdict = isPlausibleTyposquat({
+              packageName: f.packageName,
+              ecosystem: dep?.ecosystem,
+              similarTo: f.similarTo,
+            });
+            if (!verdict.plausible) {
+              logger.info(
+                {
+                  packageName: f.packageName,
+                  similarTo: f.similarTo,
+                  reason: verdict.reason,
+                },
+                "Dropped implausible typosquat claim",
+              );
+              continue;
+            }
+          }
+
           findings.push({
             scanner: "MALICIOUS_PKG",
             severity: normalizeSeverity(f.severity),

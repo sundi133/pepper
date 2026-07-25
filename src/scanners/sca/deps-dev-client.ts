@@ -229,3 +229,135 @@ export async function fetchVersionInfoBatch(
 export function dependencyKey(dep: Dependency): string {
   return `${dep.ecosystem}:${dep.name}@${dep.version}`;
 }
+
+// ─── Dependency graph ────────────────────────────────────────────────────────
+// deps.dev resolves the dependency graph for a *published* package version.
+// That is the upstream resolution, which may differ from a project's own
+// lockfile, so callers must corroborate paths against the project's real
+// dependency set before presenting them. See ./dependency-paths.ts.
+
+export interface DepsDevGraphNode {
+  name: string;
+  version: string;
+  /** SELF is the queried package; DIRECT and INDIRECT are its dependencies. */
+  relation: "SELF" | "DIRECT" | "INDIRECT";
+  bundled: boolean;
+}
+
+export interface DepsDevGraph {
+  nodes: DepsDevGraphNode[];
+  /** Edges reference nodes by index. */
+  edges: Array<{ from: number; to: number; requirement?: string }>;
+}
+
+interface DepsDevGraphResponse {
+  nodes?: Array<{
+    versionKey?: { system?: string; name?: string; version?: string };
+    relation?: string;
+    bundled?: boolean;
+  }>;
+  edges?: Array<{ fromNode?: number; toNode?: number; requirement?: string }>;
+  error?: string;
+}
+
+const _graphCache = new Map<
+  string,
+  { graph: DepsDevGraph | null; fetchedAt: number }
+>();
+
+/** Test seam — clears the process-wide graph cache. */
+export function __clearDepsDevGraphCache(): void {
+  _graphCache.clear();
+}
+
+function normaliseRelation(relation?: string): DepsDevGraphNode["relation"] {
+  const value = (relation || "").toUpperCase();
+  if (value === "SELF") return "SELF";
+  if (value === "DIRECT") return "DIRECT";
+  return "INDIRECT";
+}
+
+/**
+ * Fetch the resolved dependency graph for one package version.
+ * Returns `null` for unsupported ecosystems, unknown versions and any failure.
+ */
+export async function fetchDependencyGraph(
+  dep: Dependency,
+  apiUrl = DEPS_DEV_API_URL,
+): Promise<DepsDevGraph | null> {
+  const system = depsDevSystemFor(dep.ecosystem);
+  if (!system || !dep.name || !dep.version) return null;
+
+  const key = cacheKey(system, dep.name, dep.version);
+  const cached = _graphCache.get(key);
+  if (cached && Date.now() - cached.fetchedAt <= DEPS_DEV_CACHE_TTL_MS) {
+    return cached.graph;
+  }
+  if (cached) _graphCache.delete(key);
+
+  const url =
+    `${apiUrl}/v3/systems/${system}/packages/${encodeURIComponent(dep.name)}` +
+    `/versions/${encodeURIComponent(dep.version)}:dependencies`;
+
+  const store = (graph: DepsDevGraph | null) => {
+    if (_graphCache.size >= DEPS_DEV_MAX_CACHE_ENTRIES) {
+      const oldest = _graphCache.keys().next();
+      if (!oldest.done) _graphCache.delete(oldest.value);
+    }
+    _graphCache.set(key, { graph, fetchedAt: Date.now() });
+  };
+
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(DEPS_DEV_TIMEOUT_MS),
+      headers: { Accept: "application/json" },
+    });
+
+    if (response.status === 404) {
+      store(null);
+      return null;
+    }
+    if (!response.ok) {
+      logger.warn(
+        { status: response.status, system, name: dep.name },
+        "deps.dev dependency graph request failed",
+      );
+      return null;
+    }
+
+    const data = (await response.json()) as DepsDevGraphResponse;
+
+    const nodes: DepsDevGraphNode[] = (data.nodes || []).map((n) => ({
+      name: n.versionKey?.name || "",
+      version: n.versionKey?.version || "",
+      relation: normaliseRelation(n.relation),
+      bundled: n.bundled === true,
+    }));
+
+    const edges = (data.edges || [])
+      .filter(
+        (e) =>
+          typeof e.fromNode === "number" &&
+          typeof e.toNode === "number" &&
+          e.fromNode >= 0 &&
+          e.toNode >= 0 &&
+          e.fromNode < nodes.length &&
+          e.toNode < nodes.length,
+      )
+      .map((e) => ({
+        from: e.fromNode as number,
+        to: e.toNode as number,
+        requirement: e.requirement || undefined,
+      }));
+
+    const graph: DepsDevGraph = { nodes, edges };
+    store(graph);
+    return graph;
+  } catch (err) {
+    logger.warn(
+      { err, system, name: dep.name },
+      "deps.dev dependency graph request errored",
+    );
+    return null;
+  }
+}

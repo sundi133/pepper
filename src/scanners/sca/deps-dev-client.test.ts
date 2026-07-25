@@ -5,7 +5,9 @@ import {
   dependencyKey,
   fetchVersionInfo,
   fetchVersionInfoBatch,
+  fetchDependencyGraph,
   __clearDepsDevCache,
+  __clearDepsDevGraphCache,
 } from "./deps-dev-client";
 import type { Dependency } from "../types";
 
@@ -250,5 +252,108 @@ describe("fetchVersionInfoBatch", () => {
 
     expect(result.size).toBe(0);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("fetchDependencyGraph", () => {
+  /** Shape matches the live deps.dev :dependencies response. */
+  const graphPayload = {
+    nodes: [
+      {
+        versionKey: { system: "NPM", name: "express", version: "4.18.2" },
+        relation: "SELF",
+        bundled: false,
+        errors: [],
+      },
+      {
+        versionKey: { system: "NPM", name: "qs", version: "6.11.0" },
+        relation: "INDIRECT",
+        bundled: false,
+        errors: [],
+      },
+    ],
+    edges: [{ fromNode: 0, toNode: 1, requirement: "6.11.0" }],
+    error: "",
+  };
+
+  beforeEach(() => {
+    __clearDepsDevGraphCache();
+  });
+
+  it("parses nodes, relations and edges", async () => {
+    global.fetch = mockFetchOnce(graphPayload) as never;
+
+    const graph = await fetchDependencyGraph(dep({ name: "express", version: "4.18.2" }));
+
+    expect(graph!.nodes).toHaveLength(2);
+    expect(graph!.nodes[0]).toEqual({
+      name: "express",
+      version: "4.18.2",
+      relation: "SELF",
+      bundled: false,
+    });
+    expect(graph!.edges).toEqual([{ from: 0, to: 1, requirement: "6.11.0" }]);
+  });
+
+  it("requests the :dependencies endpoint", async () => {
+    const fetchMock = mockFetchOnce(graphPayload);
+    global.fetch = fetchMock as never;
+
+    await fetchDependencyGraph(dep());
+
+    expect(fetchMock.mock.calls[0][0]).toContain(":dependencies");
+  });
+
+  it("drops edges whose indices are out of range", async () => {
+    global.fetch = mockFetchOnce({
+      ...graphPayload,
+      edges: [
+        { fromNode: 0, toNode: 1 },
+        { fromNode: 0, toNode: 99 },
+        { fromNode: -1, toNode: 0 },
+      ],
+    }) as never;
+
+    const graph = await fetchDependencyGraph(dep());
+    expect(graph!.edges).toEqual([{ from: 0, to: 1, requirement: undefined }]);
+  });
+
+  it("treats an unrecognised relation as INDIRECT", async () => {
+    global.fetch = mockFetchOnce({
+      nodes: [
+        { versionKey: { name: "x", version: "1.0.0" }, relation: "WHATEVER" },
+      ],
+      edges: [],
+    }) as never;
+
+    const graph = await fetchDependencyGraph(dep());
+    expect(graph!.nodes[0].relation).toBe("INDIRECT");
+  });
+
+  it("skips unsupported ecosystems without a request", async () => {
+    const fetchMock = mockFetchOnce(graphPayload);
+    global.fetch = fetchMock as never;
+
+    expect(await fetchDependencyGraph(dep({ ecosystem: "Hex" }))).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns null on 404 and on error", async () => {
+    global.fetch = mockFetchOnce({}, 404) as never;
+    expect(await fetchDependencyGraph(dep())).toBeNull();
+
+    __clearDepsDevGraphCache();
+    global.fetch = vi.fn().mockRejectedValue(new Error("down")) as never;
+    expect(await fetchDependencyGraph(dep())).toBeNull();
+  });
+
+  it("caches graphs across calls", async () => {
+    const fetchMock = mockFetchOnce(graphPayload);
+    global.fetch = fetchMock as never;
+
+    await fetchDependencyGraph(dep());
+    await fetchDependencyGraph(dep());
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

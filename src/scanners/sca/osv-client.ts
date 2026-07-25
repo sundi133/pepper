@@ -19,6 +19,7 @@ interface OsvVulnerability {
     }>;
   }>;
   references?: Array<{ type: string; url: string }>;
+  database_specific?: { cwe_ids?: string[] };
 }
 
 interface OsvBatchResponse {
@@ -97,6 +98,7 @@ export async function queryOsvBatch(
             filePath: (dep as any).sourceFile || undefined,
             ruleId: vuln.id,
             cveId,
+            cweId: vuln.database_specific?.cwe_ids?.[0],
             confidence: 1.0,
             metadata: {
               packageName: dep.name,

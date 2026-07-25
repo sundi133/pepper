@@ -8,7 +8,12 @@ import {
 import type { RawFinding } from "../types";
 import { enrichFinding } from "../shared/finding-normalize";
 import { SCA_TRIAGE_PROMPT } from "../shared/prompts";
-import { LLM_MIN_CONFIDENCE_DEFAULT } from "@/lib/constants";
+import {
+  SCA_TRIAGE_ADVISORY_CHARS,
+  SCA_TRIAGE_ADVISORY_CHARS_OLLAMA,
+  SCA_TRIAGE_BATCH_SIZE,
+  SCA_TRIAGE_BATCH_SIZE_OLLAMA,
+} from "@/lib/constants";
 import { logger } from "@/lib/logger";
 
 interface TriageEntry {
@@ -78,6 +83,20 @@ function collectImportEvidence(
   return evidence;
 }
 
+/**
+ * Trim advisory prose to a character budget on a word boundary.
+ * The advisory is the primary evidence the triage LLM reasons over, so it is
+ * truncated rather than omitted when it exceeds the budget.
+ */
+function truncateAdvisory(text: string | undefined, maxChars: number): string {
+  if (!text) return "no advisory text available";
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  if (collapsed.length <= maxChars) return collapsed;
+  const cut = collapsed.slice(0, maxChars);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${lastSpace > maxChars * 0.6 ? cut.slice(0, lastSpace) : cut}… [truncated]`;
+}
+
 /** Group CVE findings by package@version and apply AI triage. */
 export async function triageScaFindings(
   findings: RawFinding[],
@@ -122,22 +141,47 @@ export async function triageScaFindings(
       : new Map<string, string[]>();
 
   const client = createLlmClient(llmConfig);
-  const BATCH = 20;
+
+  // Local models run with a much smaller context window (Ollama does not set
+  // num_ctx), so shrink both the per-advisory budget and the batch size.
+  const isOllama = llmConfig.provider.toLowerCase() === "ollama";
+  const advisoryChars = isOllama
+    ? SCA_TRIAGE_ADVISORY_CHARS_OLLAMA
+    : SCA_TRIAGE_ADVISORY_CHARS;
+  const BATCH = isOllama
+    ? SCA_TRIAGE_BATCH_SIZE_OLLAMA
+    : SCA_TRIAGE_BATCH_SIZE;
+
   const triaged: RawFinding[] = [];
 
   for (let i = 0; i < deduped.length; i += BATCH) {
     const batch = deduped.slice(i, i + BATCH);
     const summary = batch.map((f) => {
-      const pkg = f.metadata?.packageName as string;
+      const meta = f.metadata || {};
+      const pkg = meta.packageName as string;
       const imports = pkg ? importEvidence.get(pkg) : undefined;
+      const risk = meta.supplyChainRisk as
+        | { directDependency?: boolean; transitiveSeverity?: string }
+        | undefined;
+
       return {
         osvId: f.ruleId,
         cveId: f.cveId,
+        cweId: f.cweId,
         package: pkg,
-        version: f.metadata?.packageVersion,
-        ecosystem: f.metadata?.ecosystem,
+        version: meta.packageVersion,
+        ecosystem: meta.ecosystem,
         severity: f.severity,
-        fixVersion: f.metadata?.fixVersion,
+        fixVersion: meta.fixVersion,
+        // The advisory text is the evidence for keep/drop and for
+        // exploitPreconditions — without it the model can only guess from the ID.
+        advisory: truncateAdvisory(f.description, advisoryChars),
+        // Exploitation signals (already fetched upstream in sca/index.ts).
+        epssScore: meta.epssScore,
+        cisaKevListed: meta.cisaKevListed,
+        cisaKevRansomwareUse: meta.cisaKevRansomwareUse,
+        directDependency: risk?.directDependency,
+        transitiveSeverity: risk?.transitiveSeverity,
         importEvidence: imports || "no imports found in scanned source files",
       };
     });
@@ -155,6 +199,11 @@ export async function triageScaFindings(
       const decisionMap = new Map(
         (parsed.triaged || []).map((t) => [t.osvId, t]),
       );
+      // The advisory excerpt each verdict was based on, so a keep/drop decision
+      // stays auditable after enrichFinding() rewrites the description.
+      const advisoryByOsvId = new Map(
+        summary.map((s) => [s.osvId, s.advisory]),
+      );
 
       for (const f of batch) {
         const decision = decisionMap.get(f.ruleId || "");
@@ -165,6 +214,11 @@ export async function triageScaFindings(
           ...(decision?.metadata || {}),
           duplicateGroup: `${f.metadata?.packageName}@${f.metadata?.packageVersion}`,
           confidenceReason: decision?.reason || "OSV advisory with AI triage",
+          // Preserve the evidence behind the verdict — enrichFinding() below
+          // replaces `description` with the structured summary, dropping the
+          // advisory prose that the triage decision was actually based on.
+          advisoryExcerpt: advisoryByOsvId.get(f.ruleId),
+          triagedByLlm: !!decision,
         };
 
         triaged.push(

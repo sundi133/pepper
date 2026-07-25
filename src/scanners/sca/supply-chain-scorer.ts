@@ -7,10 +7,41 @@ export interface SupplyChainRiskScore {
   transitiveSeverity: "immediate" | "indirect" | "deep";
   hasFixAvailable: boolean;
   isWidelyUsed: boolean;
+  /** True when CISA lists this CVE as exploited in the wild. */
+  knownExploited: boolean;
   vulnerability: {
     baseScore: number;
-    exploitability: "high" | "medium" | "low";
+    /** Derived from EPSS/KEV; "unknown" when neither feed returned data. */
+    exploitability: "high" | "medium" | "low" | "unknown";
+    /** EPSS probability of exploitation in the next 30 days, when available. */
+    epssScore?: number;
   };
+}
+
+/**
+ * EPSS thresholds. 0.1 (10% chance of exploitation within 30 days) is the
+ * commonly used "prioritize now" cut-off; below 0.001 is effectively noise.
+ */
+const EPSS_HIGH_THRESHOLD = 0.1;
+const EPSS_MEDIUM_THRESHOLD = 0.01;
+
+/**
+ * Exploitability from real exploitation signals.
+ *
+ * Previously this was derived from `finding.confidence`, but OSV-sourced SCA
+ * findings are always confidence 1.0, so every finding scored "high" and the
+ * multiplier was inert. EPSS/KEV are fetched upstream in sca/index.ts.
+ */
+function deriveExploitability(
+  epssScore: number | undefined,
+  knownExploited: boolean,
+): "high" | "medium" | "low" | "unknown" {
+  // Confirmed exploited in the wild outranks any prediction.
+  if (knownExploited) return "high";
+  if (typeof epssScore !== "number" || Number.isNaN(epssScore)) return "unknown";
+  if (epssScore >= EPSS_HIGH_THRESHOLD) return "high";
+  if (epssScore >= EPSS_MEDIUM_THRESHOLD) return "medium";
+  return "low";
 }
 
 function scoreSupplyChainRisk(
@@ -19,13 +50,11 @@ function scoreSupplyChainRisk(
 ): SupplyChainRiskScore {
   const metadata = finding.metadata as Record<string, unknown>;
   const packageName = metadata?.packageName as string | undefined;
-  const packageVersion = metadata?.packageVersion as string | undefined;
   const fixVersion = metadata?.fixVersion as string | undefined;
   const usageLocations = metadata?.usageLocations as
     | Array<{ filePath: string }>
     | undefined;
 
-  const dependencyKey = packageName ? `${packageName}@${packageVersion}` : "";
   const isDirectDependency = packageName ? directDependencies.has(packageName) : false;
 
   // Determine transitivity severity
@@ -50,12 +79,13 @@ function scoreSupplyChainRisk(
   };
   const baseScore = severityScores[finding.severity as keyof typeof severityScores] || 5.0;
 
-  // Determine exploitability from confidence
-  let exploitability: "high" | "medium" | "low" = "medium";
-  const confidence = finding.confidence ?? 1.0;
-  if (confidence >= 0.95) exploitability = "high";
-  else if (confidence >= 0.75) exploitability = "medium";
-  else exploitability = "low";
+  // Determine exploitability from EPSS / CISA KEV (set by epss-kev-enrichment).
+  const epssScore =
+    typeof metadata?.epssScore === "number"
+      ? (metadata.epssScore as number)
+      : undefined;
+  const knownExploited = metadata?.cisaKevListed === true;
+  const exploitability = deriveExploitability(epssScore, knownExploited);
 
   // Check if fix is available
   const hasFixAvailable = !!fixVersion;
@@ -125,11 +155,18 @@ function scoreSupplyChainRisk(
     riskScore *= 0.7; // 30% decrease for deep transitive
   }
 
-  // Adjust for exploitability
+  // Adjust for exploitability. "unknown" is neutral — absent EPSS/KEV data must
+  // not be read as low risk.
   if (exploitability === "high") {
     riskScore *= 1.1;
   } else if (exploitability === "low") {
     riskScore *= 0.8;
+  }
+
+  // Confirmed exploited in the wild is the strongest signal available and
+  // should dominate the heuristic multipliers below.
+  if (knownExploited) {
+    riskScore *= 1.25;
   }
 
   // Reduce risk if fix is available
@@ -161,9 +198,11 @@ function scoreSupplyChainRisk(
     transitiveSeverity,
     hasFixAvailable,
     isWidelyUsed,
+    knownExploited,
     vulnerability: {
       baseScore,
       exploitability,
+      ...(epssScore !== undefined ? { epssScore } : {}),
     },
   };
 }

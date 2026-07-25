@@ -235,6 +235,37 @@ export const MAX_LLM_CONCURRENCY = parseInt(
   10,
 );
 
+// ─── SCA triage evidence budget ──────────────────────────────────────────────
+// The triage LLM decides keep/drop and describes exploit preconditions, so it
+// must be given the actual advisory text rather than inferring from the CVE ID.
+// Budgets are per-vulnerability; the batch size is tuned so that
+// (batch × advisory chars) stays inside the model's context window.
+// Ollama does not set num_ctx, so local models often default to ~4k tokens.
+
+/** Max advisory characters per vulnerability sent to the triage LLM (cloud). */
+export const SCA_TRIAGE_ADVISORY_CHARS = parseInt(
+  process.env.SCA_TRIAGE_ADVISORY_CHARS || "1500",
+  10,
+);
+
+/** Max advisory characters per vulnerability for local/Ollama models. */
+export const SCA_TRIAGE_ADVISORY_CHARS_OLLAMA = parseInt(
+  process.env.SCA_TRIAGE_ADVISORY_CHARS_OLLAMA || "500",
+  10,
+);
+
+/** Vulnerabilities per triage LLM request (cloud). */
+export const SCA_TRIAGE_BATCH_SIZE = parseInt(
+  process.env.SCA_TRIAGE_BATCH_SIZE || "20",
+  10,
+);
+
+/** Vulnerabilities per triage LLM request for local/Ollama models. */
+export const SCA_TRIAGE_BATCH_SIZE_OLLAMA = parseInt(
+  process.env.SCA_TRIAGE_BATCH_SIZE_OLLAMA || "8",
+  10,
+);
+
 /** Default minimum model confidence to keep an LLM finding (SAST / IaC / supply-chain LLM phases). */
 export const LLM_MIN_CONFIDENCE_DEFAULT = parseFloat(
   process.env.LLM_MIN_CONFIDENCE || "0.75",

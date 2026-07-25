@@ -102,6 +102,12 @@ REACHABILITY — use "importEvidence" (actual import/require lines found in the 
   from those call sites. If the advisory names a specific vulnerable function that never appears,
   set reachable=false and explain which function was expected.
 
+REMEDIATION TARGET — "introducedBy" names the direct dependency that pulls the package in and
+"dependencyPath" shows the chain. When the vulnerable package is transitive, the actionable fix is
+usually to upgrade "introducedBy" (or add an override/resolution pin), not to add the transitive
+package as a direct dependency. Say which one in "remediation". Both fields may be absent when the
+path could not be established — in that case do not speculate about how it was introduced.
+
 EXPLOITATION SIGNALS — "epssScore" (0-1 probability of exploitation in the next 30 days),
 "cisaKevListed" (true = confirmed exploited in the wild), "cisaKevRansomwareUse":
 - cisaKevListed=true: ALWAYS keep=true regardless of severity or import evidence. Known exploited.

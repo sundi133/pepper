@@ -70,3 +70,75 @@ describe("generateSpdx", () => {
     expect(lp.externalRefs[0].referenceType).toBe("purl");
   });
 });
+
+// ─── License reporting ───────────────────────────────────────────────────────
+// Licences resolved from deps.dev must reach both SBOM formats; previously every
+// package was emitted as NOASSERTION regardless of its declared licence.
+
+const licensedDeps = [
+  { name: "lodash", version: "4.17.21", ecosystem: "npm", licenses: ["MIT"] },
+  { name: "serde", version: "1.0.197", ecosystem: "crates.io", licenses: ["Apache-2.0 OR MIT"] },
+  { name: "weird", version: "1.0.0", ecosystem: "npm", licenses: ["non-standard"] },
+  { name: "unknown-lic", version: "1.0.0", ecosystem: "npm" },
+];
+
+function component(out: { components: Array<{ name: string }> }, name: string) {
+  return out.components.find((c) => c.name === name) as Record<string, unknown>;
+}
+
+describe("generateCycloneDx — licenses", () => {
+  it("emits a bare SPDX ID as a license object", () => {
+    const out = JSON.parse(generateCycloneDx(licensedDeps, meta));
+    expect(component(out, "lodash").licenses).toEqual([{ license: { id: "MIT" } }]);
+  });
+
+  it("emits a compound SPDX expression as an expression", () => {
+    // CycloneDX requires `expression` rather than a license id for AND/OR forms.
+    const out = JSON.parse(generateCycloneDx(licensedDeps, meta));
+    expect(component(out, "serde").licenses).toEqual([
+      { expression: "Apache-2.0 OR MIT" },
+    ]);
+  });
+
+  it("emits an unmappable license as a free-text name, not a bogus ID", () => {
+    const out = JSON.parse(generateCycloneDx(licensedDeps, meta));
+    expect(component(out, "weird").licenses).toEqual([
+      { license: { name: "non-standard" } },
+    ]);
+  });
+
+  it("omits the licenses field entirely when no license is known", () => {
+    const out = JSON.parse(generateCycloneDx(licensedDeps, meta));
+    expect(component(out, "unknown-lic").licenses).toBeUndefined();
+  });
+});
+
+describe("generateSpdx — licenses", () => {
+  function pkg(out: { packages: Array<{ name: string }> }, name: string) {
+    return out.packages.find((p) => p.name === name) as Record<string, string>;
+  }
+
+  it("reports the declared license", () => {
+    const out = JSON.parse(generateSpdx(licensedDeps, meta));
+    expect(pkg(out, "lodash").licenseDeclared).toBe("MIT");
+    expect(pkg(out, "serde").licenseDeclared).toBe("Apache-2.0 OR MIT");
+  });
+
+  it("leaves licenseConcluded as NOASSERTION since we do not audit source", () => {
+    const out = JSON.parse(generateSpdx(licensedDeps, meta));
+    expect(pkg(out, "lodash").licenseConcluded).toBe("NOASSERTION");
+  });
+
+  it("falls back to NOASSERTION for unknown and unmappable licenses", () => {
+    const out = JSON.parse(generateSpdx(licensedDeps, meta));
+    expect(pkg(out, "unknown-lic").licenseDeclared).toBe("NOASSERTION");
+    expect(pkg(out, "weird").licenseDeclared).toBe("NOASSERTION");
+  });
+
+  it("still emits NOASSERTION for dependencies with no license data at all", () => {
+    const out = JSON.parse(generateSpdx(deps, meta));
+    for (const p of out.packages) {
+      expect(p.licenseDeclared).toBe("NOASSERTION");
+    }
+  });
+});

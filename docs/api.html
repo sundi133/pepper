@@ -76,6 +76,19 @@
         All organisation-scoped endpoints return <code>403</code> when the caller is
         not a member of the org the resource belongs to.
       </p>
+      <div class="callout">
+        <strong>What a key can do.</strong> API keys act with <code>DEVELOPER</code>
+        permissions at most, whoever created them — enough to create scans, read
+        findings and download artifacts, but never enough to change team membership,
+        delete scans or edit policy. A key issued by a user with a lower role keeps
+        that lower role. Actions are attributed to the user who created the key, so
+        they appear under that name in the audit log.
+      </div>
+      <div class="callout warn">
+        A key stops working if the user who created it leaves the organisation — a
+        credential does not outlive its owner's access. Reissue the key under a
+        current member.
+      </div>
 
       <h2 id="scans">Scans</h2>
       <h3>Create a scan</h3>
@@ -92,9 +105,10 @@
 # → { "scanId": "cl…", "projectId": "cl…", "status": "QUEUED" }</code></pre>
       <p><strong>Fields:</strong></p>
       <ul>
-        <li><code>scanType</code> — <code>FULL</code>, <code>SAST_ONLY</code>,
-          <code>SCA_ONLY</code>, <code>SECRETS_ONLY</code>, <code>CONTAINER_ONLY</code>,
-          <code>DAST_ONLY</code>, <code>INCREMENTAL</code></li>
+        <li><code>scanType</code> — <code>FULL</code>, <code>INCREMENTAL</code>,
+          <code>SAST_ONLY</code>, <code>SCA_ONLY</code>, <code>SECRETS_ONLY</code>,
+          <code>IAC_ONLY</code>, <code>ZERO_DAY_ONLY</code>, <code>CONTAINER_ONLY</code>,
+          <code>K8S_ONLY</code></li>
         <li><code>repoUrl</code> — clone from a public Git HTTPS URL instead of upload</li>
         <li><code>svnUrl</code> + <code>svnRevision</code> + <code>svnUsername</code>
           / <code>svnPassword</code> — Subversion source</li>

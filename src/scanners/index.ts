@@ -13,6 +13,10 @@ import {
   compareFindingQuality,
 } from "./shared/dedupe";
 import { applyQualityGates } from "./shared/quality-gates";
+import { fetchVersionInfoBatch } from "./sca/deps-dev-client";
+import { attachLicenses } from "./sca/license-findings";
+import { ENABLE_DEPS_DEV } from "@/lib/constants";
+import { logger } from "@/lib/logger";
 
 export function getScanners(
   scanType: string,
@@ -147,7 +151,25 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
 
   await ctx.waitIfPaused?.();
   const scaFiles = ctx.scaFileList ?? ctx.fileList;
-  const { dependencies } = parseDependencies(ctx.workDir, scaFiles);
+  let { dependencies } = parseDependencies(ctx.workDir, scaFiles);
+
+  // Attach declared licenses so the SBOM reports real licenses instead of
+  // NOASSERTION. The SCA scanner has usually already fetched these, so this
+  // normally resolves from the deps.dev cache without further network calls.
+  if (
+    dependencies.length > 0 &&
+    ENABLE_DEPS_DEV &&
+    ctx.orgSettings.vulnDbMode !== "offline"
+  ) {
+    try {
+      const infoByKey = await fetchVersionInfoBatch(dependencies, {
+        signal: ctx.signal,
+      });
+      dependencies = attachLicenses(dependencies, infoByKey);
+    } catch (err) {
+      logger.warn({ err }, "SBOM license enrichment failed (non-blocking)");
+    }
+  }
 
   const filesScanned = new Set([
     ...ctx.fileList,

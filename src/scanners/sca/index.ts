@@ -33,6 +33,10 @@ import { queryOsvBatch } from "./osv-client";
 import { triageScaFindings } from "./triage";
 import { enrichFindingsWithEpssKev } from "@/lib/epss-kev-enrichment";
 import { enhanceSCAFindingWithRiskScore } from "./supply-chain-scorer";
+import { fetchVersionInfoBatch } from "./deps-dev-client";
+import { buildLicenseFindings } from "./license-findings";
+import { ENABLE_DEPS_DEV } from "@/lib/constants";
+import { logger } from "@/lib/logger";
 
 const ALL_PARSERS: DependencyParser[] = [
   // JavaScript/TypeScript — lock files first for full transitive tree
@@ -167,6 +171,32 @@ export const scaScanner: ScannerPlugin = {
       return [];
     }
 
+    // License policy via deps.dev. Independent of OSV, and kept out of the CVE
+    // triage path below since it is not a vulnerability.
+    let licenseFindings: RawFinding[] = [];
+    if (ENABLE_DEPS_DEV) {
+      await ctx.waitIfPaused?.();
+      ctx.onProgress?.(
+        `SCA: resolving licenses for ${dependencies.length} dependencies...`,
+      );
+      try {
+        const infoByKey = await fetchVersionInfoBatch(dependencies, {
+          signal: ctx.signal,
+        });
+        licenseFindings = buildLicenseFindings(
+          dependencies,
+          infoByKey,
+          directDependencies,
+        );
+        ctx.onProgress?.(
+          `SCA: resolved ${infoByKey.size} package licenses, ${licenseFindings.length} policy issues`,
+        );
+      } catch (err) {
+        // Never fail a scan because license metadata was unavailable.
+        logger.warn({ err }, "deps.dev license enrichment failed");
+      }
+    }
+
     await ctx.waitIfPaused?.();
     ctx.onProgress?.(
       `SCA: querying OSV for ${dependencies.length} dependencies...`,
@@ -201,8 +231,10 @@ export const scaScanner: ScannerPlugin = {
       );
     }
 
-    ctx.onProgress?.(`SCA: ${findings.length} actionable vulnerabilities`);
-    return findings;
+    ctx.onProgress?.(
+      `SCA: ${findings.length} actionable vulnerabilities, ${licenseFindings.length} license issues`,
+    );
+    return [...findings, ...licenseFindings];
   },
 };
 

@@ -12,6 +12,52 @@ describe("stripReportMarkdown", () => {
     );
     expect(stripReportMarkdown("** secret.js:6-6")).toBe("secret.js:6-6");
   });
+
+  it("unwraps asterisk emphasis", () => {
+    expect(stripReportMarkdown("**bold** and *italic*")).toBe("bold and italic");
+  });
+
+  it("unwraps underscore emphasis at word boundaries", () => {
+    expect(stripReportMarkdown("this is _emphasised_ text")).toBe(
+      "this is emphasised text",
+    );
+    expect(stripReportMarkdown("_leading_ word")).toBe("leading word");
+  });
+
+  // Findings must name identifiers exactly; stripping underscores produced
+  // names that do not exist and made remediation advice wrong.
+  it("preserves environment variable names", () => {
+    expect(
+      stripReportMarkdown("Set TRIVY_CACHE_DIR and VULN_DB_MODE=offline"),
+    ).toBe("Set TRIVY_CACHE_DIR and VULN_DB_MODE=offline");
+  });
+
+  it("preserves snake_case identifiers", () => {
+    expect(stripReportMarkdown("call snake_case_name here")).toBe(
+      "call snake_case_name here",
+    );
+    expect(stripReportMarkdown("use os_system() not os.system")).toBe(
+      "use os_system() not os.system",
+    );
+  });
+
+  it("preserves Python dunder names", () => {
+    expect(stripReportMarkdown("Python __init__ and __name__ methods")).toBe(
+      "Python __init__ and __name__ methods",
+    );
+  });
+
+  it("preserves leading and trailing underscore identifiers", () => {
+    expect(stripReportMarkdown("the _private field")).toBe("the _private field");
+    expect(stripReportMarkdown("column user_id_ here")).toBe(
+      "column user_id_ here",
+    );
+  });
+
+  it("still strips backticks and headings", () => {
+    expect(stripReportMarkdown("use `foo_bar()` now")).toBe("use foo_bar() now");
+    expect(stripReportMarkdown("## Heading")).toBe("Heading");
+  });
 });
 
 describe("renderReportPlainText", () => {

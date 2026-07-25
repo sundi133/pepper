@@ -144,6 +144,7 @@ function buildRegistryEnv(
 async function scanImageWithTrivy(
   image: string,
   registryEnv?: Record<string, string>,
+  offline = false,
 ): Promise<TrivyOutput | null> {
   try {
     const { stdout } = await execFileP(
@@ -158,6 +159,9 @@ async function scanImageWithTrivy(
         "json",
         "--severity",
         "CRITICAL,HIGH,MEDIUM,LOW",
+        // Air-gapped installs mount a pre-populated Trivy cache; without these
+        // flags Trivy tries to refresh its database and fails with no network.
+        ...(offline ? ["--skip-db-update", "--skip-java-db-update"] : []),
         image,
       ],
       {
@@ -171,6 +175,103 @@ async function scanImageWithTrivy(
     logger.warn({ err, image }, "Trivy image scan failed");
     return null;
   }
+}
+
+/**
+ * Coverage-gap findings.
+ *
+ * When image CVE scanning cannot run, emitting nothing looks exactly like a
+ * clean result. These findings make the gap explicit and queryable. They are
+ * INFO so they never trip a build gate — they report missing coverage, not a
+ * vulnerability — and they are aggregated into one finding per cause rather
+ * than one per image.
+ */
+const COVERAGE_CATEGORY = "SCAN_COVERAGE_GAP";
+
+function imageList(refs: ImageRef[]): string {
+  const shown = refs.slice(0, 10).map((r) => `- ${r.image} (${r.filePath}:${r.line})`);
+  const extra = refs.length - shown.length;
+  return shown.join("\n") + (extra > 0 ? `\n- …and ${extra} more` : "");
+}
+
+function buildScannerUnavailableFinding(refs: ImageRef[]): RawFinding {
+  const count = refs.length;
+  const plural = count === 1 ? "" : "s";
+  // enrichFinding() rebuilds `description` from the structured fields below, so
+  // the warning against reading this as a clean result has to live in them —
+  // anything only in `description` here would be discarded.
+  return enrichFinding(
+    {
+      scanner: "CONTAINER",
+      severity: "INFO",
+      title: `Container image CVE scanning unavailable — ${count} image${plural} not scanned`,
+      description: "",
+      filePath: refs[0]?.filePath,
+      startLine: refs[0]?.line,
+      ruleId: "CONTAINER-SCANNER-UNAVAILABLE",
+      confidence: 1,
+      metadata: {
+        category: COVERAGE_CATEGORY,
+        unscannedImageCount: count,
+        images: refs.map((r) => r.image),
+      },
+    },
+    { category: COVERAGE_CATEGORY },
+    {
+      whatIsWrong:
+        `Container image vulnerability scanning did not run: Trivy is not installed ` +
+        `on the scanner host. ${count} discovered image reference${plural} ` +
+        `${count === 1 ? "was" : "were"} not scanned.`,
+      where: `${count} image reference${plural}:\n${imageList(refs)}`,
+      whyExploitable:
+        "The absence of container CVE findings in this scan does NOT mean these " +
+        "images are free of vulnerabilities — they were never assessed. Unscanned " +
+        "images may ship known-vulnerable OS and application packages.",
+      fix:
+        "Install Trivy on the scanner host so it is on PATH, or run the worker " +
+        "image, which bundles it. For air-gapped installs, mount a pre-populated " +
+        "Trivy cache at TRIVY_CACHE_DIR and set VULN_DB_MODE=offline.",
+      validation: "Re-run the container scan and confirm image CVE results appear",
+    },
+  );
+}
+
+function buildUnscannableImagesFinding(refs: ImageRef[]): RawFinding {
+  const count = refs.length;
+  const plural = count === 1 ? "" : "s";
+  return enrichFinding(
+    {
+      scanner: "CONTAINER",
+      severity: "INFO",
+      title: `${count} container image${plural} could not be scanned`,
+      description: "",
+      filePath: refs[0]?.filePath,
+      startLine: refs[0]?.line,
+      ruleId: "CONTAINER-IMAGE-UNSCANNABLE",
+      confidence: 1,
+      metadata: {
+        category: COVERAGE_CATEGORY,
+        unscannedImageCount: count,
+        images: refs.map((r) => r.image),
+      },
+    },
+    { category: COVERAGE_CATEGORY },
+    {
+      whatIsWrong:
+        `Trivy ran but could not pull or read ${count} discovered image ` +
+        `reference${plural} — typically a private registry without credentials, a ` +
+        `tag that does not exist, or no network route to the registry.`,
+      where: `${count} image reference${plural}:\n${imageList(refs)}`,
+      whyExploitable:
+        "These images were NOT assessed for vulnerabilities. Images that cannot be " +
+        "pulled are never scanned, so anything vulnerable in them stays invisible " +
+        "while the scan still reports success.",
+      fix:
+        "Configure registry credentials in organization settings, verify the image " +
+        "tags exist, and confirm the scanner host can reach the registry.",
+      validation: "Re-run the scan and confirm each image reports CVE results",
+    },
+  );
 }
 
 function artifactSummary(refs: ImageRef[]): string {
@@ -425,15 +526,32 @@ export const containerScanner: ScannerPlugin = {
       }
     }
 
+    // Images that a CVE scan could actually cover (AMIs are inventory only).
+    const scannableImages = images.filter((ref) => !isVmAmiRef(ref));
+
     const hasTrivy = await trivyAvailable();
     if (!hasTrivy) {
       ctx.onProgress?.(
         "CONTAINER: Trivy not installed — skipping CVE scan (no findings emitted)",
       );
+      // Reporting nothing here would be indistinguishable from "these images are
+      // clean". Record the coverage gap so the absence of CVEs is not read as
+      // assurance.
+      if (scannableImages.length > 0) {
+        findings.push(buildScannerUnavailableFinding(scannableImages));
+      }
       return findings;
     }
 
+    const offline = ctx.orgSettings.vulnDbMode === "offline";
+    if (offline) {
+      ctx.onProgress?.(
+        "CONTAINER: offline mode — Trivy will use its bundled database without updating",
+      );
+    }
+
     // Second pass: Trivy scans for container/serverless images only
+    const unscannable: ImageRef[] = [];
     for (const ref of images) {
       await ctx.waitIfPaused?.();
       if (isVmAmiRef(ref)) {
@@ -444,11 +562,12 @@ export const containerScanner: ScannerPlugin = {
         `CONTAINER: Trivy scanning ${ref.kind} artifact ${ref.image}`,
       );
       const registryEnv = buildRegistryEnv(ctx.orgSettings);
-      const trivyOutput = await scanImageWithTrivy(ref.image, registryEnv);
+      const trivyOutput = await scanImageWithTrivy(ref.image, registryEnv, offline);
       if (!trivyOutput?.Results) {
         ctx.onProgress?.(
           `CONTAINER: could not scan ${ref.image} (private/unreachable) — logged only`,
         );
+        unscannable.push(ref);
         continue;
       }
 
@@ -507,7 +626,15 @@ export const containerScanner: ScannerPlugin = {
       }
     }
 
-    ctx.onProgress?.(`CONTAINER: ${findings.length} findings`);
+    // Images Trivy could not pull are a coverage gap, not a clean result.
+    if (unscannable.length > 0) {
+      findings.push(buildUnscannableImagesFinding(unscannable));
+    }
+
+    const scanned = scannableImages.length - unscannable.length;
+    ctx.onProgress?.(
+      `CONTAINER: ${findings.length} findings (${scanned}/${scannableImages.length} images scanned)`,
+    );
     return findings;
   },
 };

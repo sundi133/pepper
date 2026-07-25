@@ -40,6 +40,13 @@ export interface ScanContext {
     scannerName: string,
     findings: RawFinding[],
   ) => Promise<void>;
+  /**
+   * Report vulnerabilities that triage ruled out. Kept separate from findings
+   * so they reach the VEX document without appearing in the findings list.
+   */
+  onSuppressedVulnerabilities?: (
+    suppressed: SuppressedVulnerability[],
+  ) => void;
   /** Called with intermediate findings as LLM batches complete (before scanner finishes) */
   onBatchFindings?: (
     scannerName: string,
@@ -120,9 +127,39 @@ export interface SecretPattern {
   allowlist?: RegExp[];
 }
 
+/**
+ * A vulnerability that automated triage determined does not affect this project.
+ *
+ * These are deliberately NOT stored as findings — surfacing them would undo the
+ * noise reduction triage exists to provide. They are carried out of the scan so
+ * they can be asserted in a VEX document instead: "we saw this CVE and
+ * determined it does not affect us, and here is why" is exactly what a VEX
+ * `not_affected` statement is for, and it is the half of the evidence that is
+ * otherwise lost.
+ */
+export interface SuppressedVulnerability {
+  /** CVE or advisory identifier. */
+  vulnerabilityId: string;
+  /** Advisory id when it differs from vulnerabilityId (e.g. the GHSA). */
+  advisoryId?: string;
+  title?: string;
+  severity?: SeverityLevel;
+  packageName?: string;
+  packageVersion?: string;
+  ecosystem?: string;
+  /** Why triage concluded it does not apply. Becomes the VEX justification. */
+  reason: string;
+  /** What produced the decision, for audit disclosure in the VEX. */
+  assessedBy: "automated-triage";
+  /** Evidence carried forward so the decision can be reviewed later. */
+  metadata?: Record<string, unknown>;
+}
+
 export interface ScanResult {
   findings: RawFinding[];
   dependencies: Dependency[];
   filesScanned: number;
   depsScanned: number;
+  /** Vulnerabilities triage ruled out, for VEX. Never persisted as findings. */
+  suppressed: SuppressedVulnerability[];
 }

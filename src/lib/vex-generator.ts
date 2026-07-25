@@ -266,6 +266,107 @@ export function buildVexStatements(
   );
 }
 
+/** Minimal shape of a triage-suppressed vulnerability. */
+export interface VexSuppressedInput {
+  vulnerabilityId: string;
+  advisoryId?: string;
+  title?: string;
+  severity?: string;
+  packageName?: string;
+  packageVersion?: string;
+  ecosystem?: string;
+  reason: string;
+  assessedBy?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Build `not_affected` statements for CVEs automated triage ruled out.
+ *
+ * These never became findings, so without this they would be absent from the
+ * VEX entirely — the consumer would re-derive them from the SBOM with no idea
+ * they had already been assessed. The assessor is disclosed in the impact
+ * statement: a reader is entitled to know a machine made the call, and to weigh
+ * it differently from a human sign-off.
+ */
+export function buildSuppressedVexStatements(
+  suppressed: VexSuppressedInput[],
+  options: {
+    purlFor?: (name: string, version: string, ecosystem: string) => string;
+  } = {},
+): VexStatement[] {
+  const byKey = new Map<string, VexStatement>();
+
+  for (const entry of suppressed) {
+    if (!entry.vulnerabilityId) continue;
+
+    const subcomponentPurl =
+      entry.packageName && entry.packageVersion && entry.ecosystem && options.purlFor
+        ? options.purlFor(
+            entry.packageName,
+            entry.packageVersion,
+            entry.ecosystem,
+          )
+        : undefined;
+
+    // Reuse the same justification mapping the adjudicated path uses, so an
+    // automated and a human decision with the same rationale are expressed
+    // identically.
+    const justification = justificationForFinding({
+      statusNote: entry.reason,
+      metadata: entry.metadata,
+    });
+
+    const disclosure =
+      entry.assessedBy === "automated-triage"
+        ? "Assessed by automated triage (not reviewed by a human): "
+        : "";
+
+    const statement: VexStatement = {
+      vulnerabilityId: entry.vulnerabilityId,
+      aliases:
+        entry.advisoryId && entry.advisoryId !== entry.vulnerabilityId
+          ? [entry.advisoryId]
+          : undefined,
+      description: entry.title,
+      status: "not_affected",
+      subcomponentPurl,
+      packageName: entry.packageName,
+      packageVersion: entry.packageVersion,
+      severity: entry.severity,
+      // Always carry the disclosure, alongside a justification when one applies.
+      impactStatement: `${disclosure}${entry.reason}`,
+      ...(justification ? { justification } : {}),
+    };
+
+    const key = `${entry.vulnerabilityId}::${subcomponentPurl || entry.packageName || ""}`;
+    if (!byKey.has(key)) byKey.set(key, statement);
+  }
+
+  return [...byKey.values()];
+}
+
+/**
+ * Merge adjudicated and triage-suppressed statements.
+ * A stored finding always wins over an automated suppression for the same
+ * vulnerability and component, since it reflects a later, stronger decision.
+ */
+export function mergeVexStatements(
+  fromFindings: VexStatement[],
+  fromSuppressed: VexStatement[],
+): VexStatement[] {
+  const key = (s: VexStatement) =>
+    `${s.vulnerabilityId}::${s.subcomponentPurl || s.packageName || ""}`;
+
+  const merged = new Map<string, VexStatement>();
+  for (const s of fromSuppressed) merged.set(key(s), s);
+  for (const s of fromFindings) merged.set(key(s), s);
+
+  return [...merged.values()].sort((a, b) =>
+    a.vulnerabilityId.localeCompare(b.vulnerabilityId),
+  );
+}
+
 // ─── OpenVEX 0.2.0 ───────────────────────────────────────────────────────────
 
 export function generateOpenVex(

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   buildVexStatements,
+  buildSuppressedVexStatements,
+  mergeVexStatements,
   generateCycloneDxVex,
   generateOpenVex,
   justificationForFinding,
@@ -370,6 +372,123 @@ describe("CycloneDX VEX document", () => {
       (x: { id: string }) => x.id === "CVE-2024-0001",
     );
     expect(v.ratings[0].severity).toBe("high");
+  });
+});
+
+describe("triage-suppressed statements", () => {
+  const suppressed = [
+    {
+      vulnerabilityId: "CVE-2024-5555",
+      advisoryId: "GHSA-dddd-eeee-ffff",
+      title: "ReDoS in unused-lib",
+      severity: "MEDIUM",
+      packageName: "unused-lib",
+      packageVersion: "1.0.0",
+      ecosystem: "npm",
+      reason: "package not imported in source",
+      assessedBy: "automated-triage",
+    },
+  ];
+
+  it("asserts ruled-out CVEs as not_affected instead of omitting them", () => {
+    const [s] = buildSuppressedVexStatements(suppressed, { purlFor });
+    expect(s.status).toBe("not_affected");
+    expect(s.vulnerabilityId).toBe("CVE-2024-5555");
+    expect(s.subcomponentPurl).toBe("pkg:npm/unused-lib@1.0.0");
+  });
+
+  it("discloses that a machine made the assessment", () => {
+    // A reader is entitled to weigh an automated call differently from a
+    // human sign-off.
+    const [s] = buildSuppressedVexStatements(suppressed, { purlFor });
+    expect(s.impactStatement).toMatch(/automated triage/i);
+    expect(s.impactStatement).toMatch(/not reviewed by a human/i);
+    expect(s.impactStatement).toContain("package not imported in source");
+  });
+
+  it("reuses the same justification mapping as adjudicated findings", () => {
+    const [s] = buildSuppressedVexStatements(suppressed, { purlFor });
+    expect(s.justification).toBe("vulnerable_code_not_present");
+  });
+
+  it("still carries an impact statement when no justification applies", () => {
+    const [s] = buildSuppressedVexStatements(
+      [{ ...suppressed[0], reason: "team decided it is fine" }],
+      { purlFor },
+    );
+    expect(s.justification).toBeUndefined();
+    expect(s.impactStatement).toBeTruthy();
+  });
+
+  it("skips entries with no vulnerability identifier", () => {
+    expect(
+      buildSuppressedVexStatements([{ ...suppressed[0], vulnerabilityId: "" }]),
+    ).toEqual([]);
+  });
+
+  it("carries the advisory id as an alias", () => {
+    const [s] = buildSuppressedVexStatements(suppressed, { purlFor });
+    expect(s.aliases).toEqual(["GHSA-dddd-eeee-ffff"]);
+  });
+
+  it("survives OpenVEX serialisation with the spec invariant intact", () => {
+    const statements = buildSuppressedVexStatements(suppressed, { purlFor });
+    const doc = JSON.parse(generateOpenVex(statements, meta));
+    const s = doc.statements[0];
+    expect(s.status).toBe("not_affected");
+    expect(Boolean(s.justification || s.impact_statement)).toBe(true);
+  });
+});
+
+describe("mergeVexStatements", () => {
+  const fromFindings = buildVexStatements(
+    [finding({ cveId: "CVE-2024-0001", status: "OPEN" })],
+    { purlFor },
+  );
+  const fromSuppressed = buildSuppressedVexStatements(
+    [
+      {
+        vulnerabilityId: "CVE-2024-0001",
+        packageName: "deepmerge",
+        packageVersion: "1.0.0",
+        ecosystem: "npm",
+        reason: "not imported",
+        assessedBy: "automated-triage",
+      },
+      {
+        vulnerabilityId: "CVE-2024-9999",
+        packageName: "other",
+        packageVersion: "2.0.0",
+        ecosystem: "npm",
+        reason: "not imported",
+        assessedBy: "automated-triage",
+      },
+    ],
+    { purlFor },
+  );
+
+  const merged = mergeVexStatements(fromFindings, fromSuppressed);
+
+  it("keeps statements from both sources", () => {
+    expect(merged).toHaveLength(2);
+  });
+
+  it("lets a stored finding win over an automated suppression", () => {
+    // The finding reflects a later, stronger decision for the same component.
+    const conflict = merged.find((s) => s.vulnerabilityId === "CVE-2024-0001");
+    expect(conflict!.status).toBe("affected");
+  });
+
+  it("keeps a suppression that has no corresponding finding", () => {
+    const only = merged.find((s) => s.vulnerabilityId === "CVE-2024-9999");
+    expect(only!.status).toBe("not_affected");
+  });
+
+  it("returns statements sorted by vulnerability id", () => {
+    expect(merged.map((s) => s.vulnerabilityId)).toEqual([
+      "CVE-2024-0001",
+      "CVE-2024-9999",
+    ]);
   });
 });
 

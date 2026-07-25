@@ -1,4 +1,10 @@
-import { RawFinding, ScanContext, ScannerPlugin, ScanResult } from "./types";
+import {
+  RawFinding,
+  ScanContext,
+  ScannerPlugin,
+  ScanResult,
+  SuppressedVulnerability,
+} from "./types";
 import { sastLlmScanner } from "./sast";
 import { scaScanner, parseDependencies } from "./sca";
 import { secretsPatternScanner, secretsLlmScanner } from "./secrets";
@@ -124,9 +130,14 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
   );
 
   const deduplicator = new FindingDeduplicator();
+  const suppressed: SuppressedVulnerability[] = [];
 
   const wrappedCtx: ScanContext = {
     ...ctx,
+    onSuppressedVulnerabilities: (entries) => {
+      suppressed.push(...entries);
+      ctx.onSuppressedVulnerabilities?.(entries);
+    },
     onBatchFindings: ctx.onBatchFindings
       ? async (scannerName: string, findings: RawFinding[]) => {
           const deduped = deduplicator.dedupe(findings);
@@ -181,5 +192,6 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
     dependencies,
     filesScanned,
     depsScanned: dependencies.length,
+    suppressed,
   };
 }

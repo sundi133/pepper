@@ -29,6 +29,8 @@ import {
 } from "@/scanners/sca/sbom-generator";
 import {
   buildVexStatements,
+  buildSuppressedVexStatements,
+  mergeVexStatements,
   generateOpenVex,
   generateCycloneDxVex,
   summarizeVex,
@@ -771,12 +773,18 @@ Schema:
           branch: sbomMeta.branch,
         };
 
-        const vexStatements = buildVexStatements(vexFindings, {
-          // Identify components exactly as the SBOM does, otherwise the
-          // statements cannot be matched to the bill of materials.
-          purlFor: (name, version, ecosystem) =>
-            purlFor({ name, version, ecosystem }),
-        });
+        // Identify components exactly as the SBOM does, otherwise the statements
+        // cannot be matched to the bill of materials.
+        const vexPurl = (name: string, version: string, ecosystem: string) =>
+          purlFor({ name, version, ecosystem });
+
+        // CVEs triage ruled out never became findings, so they are asserted from
+        // the scan result. A stored finding wins over an automated suppression
+        // for the same vulnerability.
+        const vexStatements = mergeVexStatements(
+          buildVexStatements(vexFindings, { purlFor: vexPurl }),
+          buildSuppressedVexStatements(result.suppressed, { purlFor: vexPurl }),
+        );
 
         let openVex: string | undefined;
         let cycloneVex: string | undefined;

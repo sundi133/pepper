@@ -154,8 +154,10 @@ describe("SCA triage evidence payload", () => {
 
     const result = await triageScaFindings([finding()], cloudConfig);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].cveId).toBe("CVE-2024-0001");
+    expect(result.kept).toHaveLength(1);
+    expect(result.kept[0].cveId).toBe("CVE-2024-0001");
+    // A failed model call must not be recorded as "assessed and ruled out".
+    expect(result.suppressed).toHaveLength(0);
   });
 
   it("drops findings the model marks keep=false", async () => {
@@ -172,12 +174,53 @@ describe("SCA triage evidence payload", () => {
     );
 
     const result = await triageScaFindings([finding()], cloudConfig);
-    expect(result).toHaveLength(0);
+    expect(result.kept).toHaveLength(0);
+  });
+
+  it("retains a ruled-out CVE for VEX instead of discarding it", async () => {
+    analyzeWithLlm.mockResolvedValue(
+      JSON.stringify({
+        triaged: [
+          {
+            osvId: "GHSA-aaaa-bbbb-cccc",
+            keep: false,
+            reason: "package not imported in source",
+          },
+        ],
+      }),
+    );
+
+    const { kept, suppressed } = await triageScaFindings(
+      [finding()],
+      cloudConfig,
+    );
+
+    expect(kept).toHaveLength(0);
+    expect(suppressed).toHaveLength(1);
+    expect(suppressed[0]).toMatchObject({
+      vulnerabilityId: "CVE-2024-0001",
+      packageName: "deepmerge",
+      packageVersion: "1.0.0",
+      reason: "package not imported in source",
+      assessedBy: "automated-triage",
+    });
+  });
+
+  it("records a reason even when the model gives none", async () => {
+    analyzeWithLlm.mockResolvedValue(
+      JSON.stringify({
+        triaged: [{ osvId: "GHSA-aaaa-bbbb-cccc", keep: false }],
+      }),
+    );
+
+    const { suppressed } = await triageScaFindings([finding()], cloudConfig);
+    expect(suppressed[0].reason).toBeTruthy();
   });
 
   it("returns an empty list without calling the model for no findings", async () => {
     const result = await triageScaFindings([], cloudConfig);
-    expect(result).toEqual([]);
+    expect(result.kept).toEqual([]);
+    expect(result.suppressed).toEqual([]);
     expect(analyzeWithLlm).not.toHaveBeenCalled();
   });
 
@@ -186,9 +229,11 @@ describe("SCA triage evidence payload", () => {
     // decision must survive in metadata for auditing.
     const result = await triageScaFindings([finding()], cloudConfig);
 
-    expect(result[0].metadata?.advisoryExcerpt).toContain("Prototype pollution");
-    expect(result[0].metadata?.triagedByLlm).toBe(true);
-    expect(result[0].description).not.toContain("Prototype pollution");
+    expect(result.kept[0].metadata?.advisoryExcerpt).toContain(
+      "Prototype pollution",
+    );
+    expect(result.kept[0].metadata?.triagedByLlm).toBe(true);
+    expect(result.kept[0].description).not.toContain("Prototype pollution");
   });
 
   it("instructs the model to treat advisory text as untrusted data", async () => {

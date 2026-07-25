@@ -91,6 +91,153 @@ async function batchQueryOsvForMalware(
   return results;
 }
 
+/** package.json script hooks npm runs during install. */
+const INSTALL_SCRIPT_KEYS = [
+  "preinstall",
+  "install",
+  "postinstall",
+  "preuninstall",
+  "postuninstall",
+] as const;
+
+/**
+ * Standard native-addon build commands.
+ *
+ * The presence of an install script is not evidence of anything: every package
+ * with a native component needs one. `node-gyp rebuild` in particular is the
+ * canonical way to compile a Node addon and appears in thousands of legitimate
+ * packages. Flagging it produced findings that told developers to remove
+ * dependencies like fsevents — which they cannot remove, and should not.
+ *
+ * A script counts as benign only if the WHOLE command matches a known build
+ * pattern. Anything chained onto it (`&&`, `;`, `|`, a redirect, a `curl`) makes
+ * it non-benign and worth analysing, so this cannot be used to smuggle a payload
+ * past the check by prefixing it with a build command.
+ */
+const BENIGN_BUILD_SCRIPTS: RegExp[] = [
+  /^node-gyp\s+(rebuild|build|configure)(\s+--\S+)*$/,
+  /^(node-)?pre-?gyp\s+install(\s+--\S+)*$/,
+  /^prebuild-install(\s+--\S+)*$/,
+  /^prebuildify(\s+--\S+)*$/,
+  /^cmake-js\s+(compile|build|rebuild)(\s+--\S+)*$/,
+  /^neon\s+build(\s+--\S+)*$/,
+  /^napi\s+build(\s+--\S+)*$/,
+  /^nan-gyp\s+\S+$/,
+  /^(npm|yarn|pnpm)\s+run\s+build(:\S+)?$/,
+  /^tsc(\s+-p\s+\S+)?$/,
+  /^(echo|true|:)\b.*$/,
+];
+
+/** Shell metacharacters that mean the command does more than one thing. */
+const SHELL_CHAINING = /[;&|><`$(]/;
+
+/** True when a single install-script command is a recognised plain build step. */
+export function isBenignBuildScript(command: string): boolean {
+  const cmd = command.trim();
+  if (!cmd) return true;
+  // A build command with anything chained onto it is not a plain build step.
+  if (SHELL_CHAINING.test(cmd)) return false;
+  return BENIGN_BUILD_SCRIPTS.some((re) => re.test(cmd));
+}
+
+/**
+ * Split install scripts into recognised build steps and everything else.
+ * Only the remainder is worth an LLM call or a finding.
+ */
+export function classifyInstallScripts(
+  scripts: Record<string, string>,
+): { benign: string[]; needsReview: string[] } {
+  const benign: string[] = [];
+  const needsReview: string[] = [];
+  for (const [key, command] of Object.entries(scripts || {})) {
+    (isBenignBuildScript(command) ? benign : needsReview).push(
+      `${key}: ${command}`,
+    );
+  }
+  return { benign, needsReview };
+}
+
+
+/** Install-script subset of a package.json `scripts` block. */
+function installScriptsOf(scripts: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  const s = (scripts || {}) as Record<string, unknown>;
+  for (const key of INSTALL_SCRIPT_KEYS) {
+    if (typeof s[key] === "string") out[key] = s[key] as string;
+  }
+  return out;
+}
+
+function sameScripts(
+  a: Record<string, string>,
+  b: Record<string, string>,
+): boolean {
+  const ka = Object.keys(a).sort();
+  const kb = Object.keys(b).sort();
+  if (ka.join("|") !== kb.join("|")) return false;
+  return ka.every((k) => a[k] === b[k]);
+}
+
+/**
+ * Derive version-level history from an npm packument.
+ *
+ * Ordering is by publish time rather than semver, because what matters for
+ * hijack detection is which release actually shipped before this one.
+ */
+function buildVersionHistory(
+  packument: {
+    time?: Record<string, string>;
+    versions?: Record<string, { scripts?: unknown }>;
+    "dist-tags"?: { latest?: string };
+  },
+  version: string,
+  currentScripts: Record<string, string>,
+): VersionHistory {
+  const time = packument.time || {};
+  const versions = packument.versions || {};
+
+  const published = Object.entries(time)
+    .filter(([k]) => k !== "created" && k !== "modified" && versions[k])
+    .map(([v, t]) => ({ version: v, at: Date.parse(t) }))
+    .filter((e) => !Number.isNaN(e.at))
+    .sort((a, b) => a.at - b.at);
+
+  const idx = published.findIndex((e) => e.version === version);
+  const previous = idx > 0 ? published[idx - 1] : undefined;
+  const previousInstallScripts = previous
+    ? installScriptsOf(versions[previous.version]?.scripts)
+    : undefined;
+
+  const hasNow = Object.keys(currentScripts).length > 0;
+  const hadBefore = Object.keys(previousInstallScripts || {}).length > 0;
+
+  // Walk backwards counting releases that carried byte-identical scripts.
+  let identical = 0;
+  for (let i = idx - 1; i >= 0; i--) {
+    const scripts = installScriptsOf(versions[published[i].version]?.scripts);
+    if (!sameScripts(scripts, currentScripts)) break;
+    identical++;
+  }
+
+  const versionAt = idx >= 0 ? published[idx].at : undefined;
+
+  return {
+    versionAgeInDays:
+      versionAt !== undefined
+        ? Math.floor((Date.now() - versionAt) / 86400000)
+        : undefined,
+    isLatestVersion: packument["dist-tags"]?.latest === version,
+    totalVersions: published.length,
+    previousVersion: previous?.version,
+    previousInstallScripts,
+    installScriptsIntroducedInThisVersion: hasNow && !hadBefore,
+    installScriptsChangedFromPrevious:
+      previousInstallScripts !== undefined &&
+      !sameScripts(currentScripts, previousInstallScripts),
+    identicalScriptReleases: identical,
+  };
+}
+
 // ─── Registry Metadata Checks (Multi-Ecosystem) ──────────────────────
 // Fast, deterministic checks using public registry APIs
 
@@ -100,6 +247,34 @@ interface PkgMetadata {
   installScripts: Record<string, string>;
   ageInDays?: number;
   hasRepository: boolean;
+  /** Version-level history. Populated where the registry exposes it (npm). */
+  versionHistory?: VersionHistory;
+}
+
+/**
+ * How the *installed version* compares with the package's own history.
+ *
+ * This is the difference between a false positive and a real detection. A
+ * package that has shipped the same build script for years is unremarkable;
+ * a mature package whose newest version suddenly introduces or changes an
+ * install script is the classic account-takeover / hijacked-release pattern
+ * (event-stream, ua-parser-js, node-ipc all look like this). Judging the
+ * package instead of the version cannot tell those apart.
+ */
+interface VersionHistory {
+  /** Days since this specific version was published. */
+  versionAgeInDays?: number;
+  isLatestVersion: boolean;
+  totalVersions: number;
+  /** The version published immediately before this one. */
+  previousVersion?: string;
+  previousInstallScripts?: Record<string, string>;
+  /** This version has install scripts and the previous one did not. */
+  installScriptsIntroducedInThisVersion: boolean;
+  /** Install scripts differ from the previous version. */
+  installScriptsChangedFromPrevious: boolean;
+  /** Consecutive earlier releases carrying identical install scripts. */
+  identicalScriptReleases: number;
 }
 
 async function fetchPkgMetadata(dep: Dependency): Promise<PkgMetadata | null> {
@@ -133,25 +308,15 @@ async function fetchNpmMeta(
     if (!response.ok) return null;
 
     const data = await response.json();
-    const scripts = data.scripts || {};
-    const dangerousKeys = [
-      "preinstall",
-      "install",
-      "postinstall",
-      "preuninstall",
-      "postuninstall",
-    ];
-    const installScripts: Record<string, string> = {};
-    for (const key of dangerousKeys) {
-      if (scripts[key]) installScripts[key] = scripts[key];
-    }
+    const installScripts = installScriptsOf(data.scripts);
 
     let ageInDays: number | undefined;
     let hasRepository = !!data.repository;
+    let versionHistory: VersionHistory | undefined;
     try {
       const pkgRes = await fetch(
         `https://registry.npmjs.org/${encodeURIComponent(pkgName)}`,
-        { signal: AbortSignal.timeout(5000) },
+        { signal: AbortSignal.timeout(8000) },
       );
       if (pkgRes.ok) {
         const pkgData = await pkgRes.json();
@@ -161,6 +326,9 @@ async function fetchNpmMeta(
           );
         }
         hasRepository = hasRepository || !!pkgData.repository;
+        // The packument already carries every version's scripts, so version
+        // history costs no extra request.
+        versionHistory = buildVersionHistory(pkgData, version, installScripts);
       }
     } catch {
       /* ignore */
@@ -172,6 +340,7 @@ async function fetchNpmMeta(
       installScripts,
       ageInDays,
       hasRepository,
+      versionHistory,
     };
   } catch {
     return null;
@@ -541,7 +710,14 @@ export const maliciousPkgScanner: ScannerPlugin = {
         if (!meta) continue;
         const dep = batch[j];
 
-        // Collect evidence for LLM validation (no direct heuristic findings)
+        // Collect evidence for LLM validation (no direct heuristic findings).
+        // Recognised build steps are reported separately from scripts that
+        // actually warrant review, so the model is not asked to judge
+        // `node-gyp rebuild` as though it were unexplained behaviour.
+        const { benign, needsReview } = classifyInstallScripts(
+          meta.installScripts,
+        );
+        const vh = meta.versionHistory;
         supplyChainEvidence.push({
           packageName: dep.name,
           version: dep.version,
@@ -549,7 +725,20 @@ export const maliciousPkgScanner: ScannerPlugin = {
           ageInDays: meta.ageInDays,
           hasRepository: meta.hasRepository,
           hasInstallScripts: meta.hasInstallScripts,
-          installScripts: meta.installScripts,
+          standardBuildScripts: benign,
+          installScriptsNeedingReview: needsReview,
+          // Version-level history: whether THIS release changed anything, which
+          // is what separates a long-standing build step from a hijacked release.
+          versionAgeInDays: vh?.versionAgeInDays,
+          isLatestVersion: vh?.isLatestVersion,
+          totalVersions: vh?.totalVersions,
+          previousVersion: vh?.previousVersion,
+          installScriptsIntroducedInThisVersion:
+            vh?.installScriptsIntroducedInThisVersion,
+          installScriptsChangedFromPrevious:
+            vh?.installScriptsChangedFromPrevious,
+          identicalScriptReleases: vh?.identicalScriptReleases,
+          previousInstallScripts: vh?.previousInstallScripts,
         });
 
         // Collect npm deps with install scripts for LLM analysis in Phase 3
@@ -734,9 +923,15 @@ export const maliciousPkgScanner: ScannerPlugin = {
           "postuninstall",
         ];
 
-        const scriptEntries = dangerousKeys
-          .filter((k) => scripts[k])
-          .map((k) => `${k}: ${scripts[k]}`);
+        const declaredScripts: Record<string, string> = {};
+        for (const k of dangerousKeys) {
+          if (scripts[k]) declaredScripts[k] = scripts[k];
+        }
+
+        // Only send scripts that are not recognised build steps. Asking the
+        // model about `node-gyp rebuild` wastes a call and invites a finding
+        // whose own text concedes the command is standard.
+        const scriptEntries = classifyInstallScripts(declaredScripts).needsReview;
 
         if (scriptEntries.length === 0) continue;
 
@@ -816,6 +1011,39 @@ export const maliciousPkgScanner: ScannerPlugin = {
               !f.packageName ||
               (f.confidence ?? 0) < MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT
             ) {
+              continue;
+            }
+
+            // Defence in depth: the prompt forbids flagging a package solely
+            // for having a standard build script, but the model does it anyway
+            // (its own rationale concedes the command is normal). Drop findings
+            // for packages whose scripts are all recognised build steps unless
+            // some other evidence supports them.
+            const evidenceForPkg = batch.find(
+              (e) => e.packageName === f.packageName,
+            ) as
+              | {
+                  installScriptsNeedingReview?: string[];
+                  standardBuildScripts?: string[];
+                  hasRepository?: boolean;
+                }
+              | undefined;
+            const onlyStandardBuildScripts =
+              (evidenceForPkg?.standardBuildScripts?.length ?? 0) > 0 &&
+              (evidenceForPkg?.installScriptsNeedingReview?.length ?? 0) === 0;
+            const claimsScriptRisk =
+              /install script|postinstall|preinstall|node-gyp|build script/i.test(
+                `${f.title} ${f.suspiciousBehavior} ${f.evidence}`,
+              );
+            if (
+              onlyStandardBuildScripts &&
+              claimsScriptRisk &&
+              evidenceForPkg?.hasRepository
+            ) {
+              logger.info(
+                { packageName: f.packageName },
+                "Dropped install-script finding: scripts are standard build steps",
+              );
               continue;
             }
             const dep = dependencies.find(

@@ -6,6 +6,10 @@ import { useParams } from "next/navigation";
 import { useScanPolling, useFindings } from "@/hooks/use-scan-polling";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  FINDING_SECTIONS,
+  groupFindingsBySection,
+} from "@/lib/finding-sections";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 import {
   Select,
@@ -69,50 +73,6 @@ type Finding = {
   metadata?: Record<string, unknown>;
 };
 
-const FINDING_SECTIONS = [
-  {
-    id: "SAST",
-    title: "SAST Findings",
-    scanners: ["SAST_LLM"],
-    description: "Static application security findings (AI)",
-  },
-  {
-    id: "SECRETS",
-    title: "Secrets Findings",
-    scanners: ["SECRETS_LLM"],
-    description: "Leaked or exposed credential findings (AI)",
-  },
-  {
-    id: "SCA",
-    title: "SCA Findings",
-    scanners: ["SCA"],
-    description: "Known vulnerable dependency findings",
-  },
-  {
-    id: "MALICIOUS_PKG",
-    title: "Supply Chain Findings",
-    scanners: ["MALICIOUS_PKG"],
-    description: "Malicious package, typosquat, and install-script findings",
-  },
-  {
-    id: "IAC",
-    title: "IaC Findings",
-    scanners: ["IAC"],
-    description: "Infrastructure, cloud, container, and CI/CD findings",
-  },
-  {
-    id: "CONTAINER",
-    title: "Container Findings",
-    scanners: ["CONTAINER"],
-    description: "Docker image and container security findings",
-  },
-  {
-    id: "ZERO_DAY",
-    title: "Zero-Day Findings",
-    scanners: ["ZERO_DAY"],
-    description: "Business logic, IDOR, race, and advanced AI findings",
-  },
-];
 
 export default function ScanDetailPage() {
   const { data: session } = useSession();
@@ -143,7 +103,12 @@ export default function ScanDetailPage() {
   if (newOnlyFilter) filters.isNew = "true";
   if (sortBy !== "severity") filters.sort = sortBy;
 
-  const { findings, pagination, refresh: refreshFindings } = useFindings(
+  const {
+    findings,
+    scannerCounts,
+    pagination,
+    refresh: refreshFindings,
+  } = useFindings(
     scanId,
     filters,
     scan?.status,
@@ -267,7 +232,7 @@ export default function ScanDetailPage() {
     visibleFindings.length >= totalFindings
       ? String(totalFindings)
       : `${visibleFindings.length} of ${totalFindings}`;
-  const findingSections = groupFindingsBySection(visibleFindings);
+  const findingSections = groupFindingsBySection(visibleFindings, scannerCounts);
 
   const fixPrSource = {
     scanId: scan.id,
@@ -724,18 +689,25 @@ export default function ScanDetailPage() {
                 <div className="mt-4">
                   <Tabs value={activeSection} onValueChange={setActiveSection}>
                     <TabsList className="w-full justify-start gap-1 rounded-none border-0 bg-transparent p-0">
-                      {findingSections.map(({ id, title, findings: secFindings }) => (
-                        <TabsTrigger
-                          key={id}
-                          value={id}
-                          className="rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium data-[state=active]:border-indigo-200 data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700 dark:data-[state=active]:border-indigo-800 dark:data-[state=active]:bg-indigo-950/30 dark:data-[state=active]:text-indigo-300"
-                        >
-                          {title}
-                          <span className="ml-1.5 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                            {secFindings.length}
-                          </span>
-                        </TabsTrigger>
-                      ))}
+                      {findingSections.map(
+                        ({ id, title, findings: secFindings, total }) => (
+                          <TabsTrigger
+                            key={id}
+                            value={id}
+                            className="rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium data-[state=active]:border-indigo-200 data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700 dark:data-[state=active]:border-indigo-800 dark:data-[state=active]:bg-indigo-950/30 dark:data-[state=active]:text-indigo-300"
+                          >
+                            {title}
+                            {/* The scan total, not the number on this page, so a
+                                category never reads as empty because its findings
+                                sit beyond the page limit. */}
+                            <span className="ml-1.5 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                              {secFindings.length < total
+                                ? `${secFindings.length} of ${total}`
+                                : total}
+                            </span>
+                          </TabsTrigger>
+                        ),
+                      )}
                     </TabsList>
                   </Tabs>
                 </div>
@@ -991,29 +963,3 @@ function formatScanMetadataLine(scan: {
   return parts.join(" · ");
 }
 
-function groupFindingsBySection(findings: Finding[]) {
-  const groupedScannerNames = new Set(
-    FINDING_SECTIONS.flatMap((section) => section.scanners),
-  );
-  const sections = FINDING_SECTIONS.map((section) => ({
-    ...section,
-    findings: findings.filter((finding) =>
-      section.scanners.includes(finding.scanner),
-    ),
-  })).filter((section) => section.findings.length > 0);
-  const ungrouped = findings.filter(
-    (finding) => !groupedScannerNames.has(finding.scanner),
-  );
-
-  if (ungrouped.length > 0) {
-    sections.push({
-      id: "OTHER",
-      title: "Other Findings",
-      scanners: [],
-      description: "Findings from scanners that do not have a dedicated group",
-      findings: ungrouped,
-    });
-  }
-
-  return sections;
-}

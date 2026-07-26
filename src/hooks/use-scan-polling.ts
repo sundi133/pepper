@@ -94,6 +94,8 @@ export function useFindings(
 
   return {
     findings: data?.findings || [],
+    /** Per-scanner totals across all findings, independent of the page size. */
+    scannerCounts: (data?.scannerCounts || {}) as Record<string, number>,
     pagination: data?.pagination,
     error,
     isLoading,

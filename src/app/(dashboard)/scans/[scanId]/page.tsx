@@ -113,7 +113,10 @@ export default function ScanDetailPage() {
 
   const findingFilters = useMemo(
     () =>
-      sectionScanners?.length
+      // The "All Scanners" dropdown still wins when the user picks a specific
+      // scanner (filters.scanner is set); only fall back to the active tab's
+      // scanners when the dropdown is on "All", so neither control is broken.
+      !filters.scanner && sectionScanners?.length
         ? { ...filters, scanner: sectionScanners.join(",") }
         : filters,
     [filters, sectionScanners],

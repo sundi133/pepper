@@ -210,3 +210,43 @@ export function isPlausibleTyposquat(claim: TyposquatClaim): PlausibilityResult 
 
   return { plausible: true, similarity };
 }
+
+// ─── Corroboration by package maturity ───────────────────────────────────────
+
+/**
+ * Lexical similarity is necessary but not sufficient. `preact` is one edit from
+ * `react`, `vuex` one from `vue`, `aws-cdk-lib` a suffix from `aws-cdk` — all
+ * legitimate, and indistinguishable from a squat by name alone.
+ *
+ * What separates them is history. Typosquats are ephemeral: published days ago,
+ * one or two releases, usually no source repository, and removed once reported.
+ * A package with years of releases behind a real repository is not squatting
+ * anything — `preact` has shipped 286 releases since 2015.
+ */
+export interface PackageMaturity {
+  ageInDays?: number;
+  hasRepository?: boolean;
+  totalVersions?: number;
+}
+
+/** Age beyond which a package with a repository is treated as established. */
+const ESTABLISHED_AGE_DAYS = 180;
+
+/** Release count that on its own indicates a maintained project. */
+const ESTABLISHED_RELEASE_COUNT = 25;
+
+/**
+ * Whether a package's own history rules out typosquatting.
+ *
+ * Absent metadata means "unknown", never "established" — a package we could not
+ * look up is not given the benefit of the doubt.
+ */
+export function isEstablishedPackage(meta: PackageMaturity | undefined): boolean {
+  if (!meta) return false;
+
+  if ((meta.totalVersions ?? 0) >= ESTABLISHED_RELEASE_COUNT) return true;
+
+  return (
+    (meta.ageInDays ?? 0) >= ESTABLISHED_AGE_DAYS && meta.hasRepository === true
+  );
+}

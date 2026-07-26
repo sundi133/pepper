@@ -18,7 +18,12 @@ import {
   MALICIOUS_VALIDATION_PROMPT,
   UNTRUSTED_CONTENT_GUARD,
 } from "../shared/prompts";
-import { isPlausibleTyposquat } from "./typosquat-plausibility";
+import {
+  isPlausibleTyposquat,
+  isEstablishedPackage,
+  type PackageMaturity,
+} from "./typosquat-plausibility";
+import { sameRepositoryOwner } from "./repo-owner";
 
 // ─── OSV Malware Advisory Query (Batch) ───────────────────────────────
 // OSV tracks malicious packages (MAL-*) reported by OpenSSF and others.
@@ -239,6 +244,72 @@ function buildVersionHistory(
   };
 }
 
+
+/** Repository URL out of the shapes registries use (string or object). */
+function repositoryUrlOf(repository: unknown): string | undefined {
+  if (typeof repository === "string") return repository;
+  if (repository && typeof repository === "object") {
+    const url = (repository as { url?: unknown }).url;
+    if (typeof url === "string") return url;
+  }
+  return undefined;
+}
+
+/**
+ * Source repository of a package by name alone.
+ *
+ * Used for the *target* of a typosquat claim, where only a name is known.
+ * Results are cached because the same popular package is named as the target
+ * repeatedly, and a failure is cached as "unknown" so a broken lookup does not
+ * clear findings.
+ */
+const _targetRepoCache = new Map<string, string | undefined>();
+
+export async function fetchPackageRepository(
+  name: string,
+  ecosystem: string,
+): Promise<string | undefined> {
+  const eco = ecosystem.toLowerCase();
+  const key = `${eco}:${name}`;
+  if (_targetRepoCache.has(key)) return _targetRepoCache.get(key);
+
+  let url: string | undefined;
+  try {
+    if (eco === "npm") {
+      const res = await fetch(
+        `https://registry.npmjs.org/${encodeURIComponent(name)}`,
+        { signal: AbortSignal.timeout(5000) },
+      );
+      if (res.ok) url = repositoryUrlOf((await res.json()).repository);
+    } else if (eco === "pypi" || eco === "pip") {
+      const res = await fetch(
+        `https://pypi.org/pypi/${encodeURIComponent(name)}/json`,
+        { signal: AbortSignal.timeout(5000) },
+      );
+      if (res.ok) {
+        const info = (await res.json()).info || {};
+        const links = info.project_urls || {};
+        url =
+          links.Repository ||
+          links.Source ||
+          links["Source Code"] ||
+          info.home_page ||
+          undefined;
+      }
+    }
+  } catch {
+    url = undefined;
+  }
+
+  _targetRepoCache.set(key, url);
+  return url;
+}
+
+/** Test seam. */
+export function __clearTargetRepoCache(): void {
+  _targetRepoCache.clear();
+}
+
 // ─── Registry Metadata Checks (Multi-Ecosystem) ──────────────────────
 // Fast, deterministic checks using public registry APIs
 
@@ -248,6 +319,8 @@ interface PkgMetadata {
   installScripts: Record<string, string>;
   ageInDays?: number;
   hasRepository: boolean;
+  /** Source repository URL, used to compare project ownership. */
+  repositoryUrl?: string;
   /** Version-level history. Populated where the registry exposes it (npm). */
   versionHistory?: VersionHistory;
 }
@@ -313,6 +386,7 @@ async function fetchNpmMeta(
 
     let ageInDays: number | undefined;
     let hasRepository = !!data.repository;
+    let repositoryUrl = repositoryUrlOf(data.repository);
     let versionHistory: VersionHistory | undefined;
     try {
       const pkgRes = await fetch(
@@ -327,6 +401,7 @@ async function fetchNpmMeta(
           );
         }
         hasRepository = hasRepository || !!pkgData.repository;
+        repositoryUrl = repositoryUrl || repositoryUrlOf(pkgData.repository);
         // The packument already carries every version's scripts, so version
         // history costs no extra request.
         versionHistory = buildVersionHistory(pkgData, version, installScripts);
@@ -341,6 +416,7 @@ async function fetchNpmMeta(
       installScripts,
       ageInDays,
       hasRepository,
+      repositoryUrl,
       versionHistory,
     };
   } catch {
@@ -647,6 +723,8 @@ export const maliciousPkgScanner: ScannerPlugin = {
 
     const findings: RawFinding[] = [];
     const supplyChainEvidence: Array<Record<string, unknown>> = [];
+    const maturityByPackage = new Map<string, PackageMaturity>();
+    const repoUrlByPackage = new Map<string, string>();
     const osvApiUrl = ctx.orgSettings.osvApiUrl || "https://api.osv.dev";
     const useVulnerabilityDb = ctx.orgSettings.vulnDbMode !== "offline";
 
@@ -729,6 +807,16 @@ export const maliciousPkgScanner: ScannerPlugin = {
           meta.installScripts,
         );
         const vh = meta.versionHistory;
+        // Kept for the typosquat gate below: a package's own history is what
+        // separates a legitimate lookalike from a squat.
+        maturityByPackage.set(dep.name, {
+          ageInDays: meta.ageInDays,
+          hasRepository: meta.hasRepository,
+          totalVersions: vh?.totalVersions,
+        });
+        if (meta.repositoryUrl) {
+          repoUrlByPackage.set(dep.name, meta.repositoryUrl);
+        }
         supplyChainEvidence.push({
           packageName: dep.name,
           version: dep.version,
@@ -841,6 +929,41 @@ export const maliciousPkgScanner: ScannerPlugin = {
                   reason: verdict.reason,
                 },
                 "Dropped implausible typosquat claim",
+              );
+              continue;
+            }
+
+            // Strongest signal: if both packages publish from the same
+            // organisation they are one project, not an impersonation — which
+            // holds even for a package published last week that has no history
+            // to judge yet.
+            const candidateRepo = repoUrlByPackage.get(f.packageName);
+            if (candidateRepo && dep?.ecosystem) {
+              const targetRepo = await fetchPackageRepository(
+                f.similarTo,
+                dep.ecosystem,
+              );
+              if (sameRepositoryOwner(candidateRepo, targetRepo)) {
+                logger.info(
+                  {
+                    packageName: f.packageName,
+                    similarTo: f.similarTo,
+                    repository: candidateRepo,
+                  },
+                  "Dropped typosquat claim: same repository owner as the target",
+                );
+                continue;
+              }
+            }
+
+            // Lexical similarity is necessary but not sufficient: `preact` is
+            // one edit from `react`, `vuex` one from `vue`. Squats are
+            // ephemeral, so a package with its own release history behind a
+            // real repository is not squatting anything.
+            if (isEstablishedPackage(maturityByPackage.get(f.packageName))) {
+              logger.info(
+                { packageName: f.packageName, similarTo: f.similarTo },
+                "Dropped typosquat claim: package is established in its own right",
               );
               continue;
             }

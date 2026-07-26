@@ -54,6 +54,10 @@ export async function GET(
     where.severity = { notIn: ["INFO"] };
   }
 
+  // Everything except the scanner filter, for the per-scanner totals.
+  const countsWhere = { ...where };
+  delete (countsWhere as Record<string, unknown>).scanner;
+
   const orderBy: Record<string, string> = {};
   if (sort === "risk") {
     orderBy.riskScore = "desc"; // highest risk first
@@ -77,9 +81,12 @@ export async function GET(
       take: limit,
     }),
     prisma.finding.count({ where }),
+    // Counts deliberately ignore the scanner filter: the tab strip must keep
+    // showing every category even while one of them is selected, otherwise
+    // choosing a tab would hide all the others.
     prisma.finding.groupBy({
       by: ["scanner"],
-      where,
+      where: countsWhere,
       _count: { _all: true },
     }),
   ]);

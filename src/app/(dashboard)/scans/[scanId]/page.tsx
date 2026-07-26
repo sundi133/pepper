@@ -103,6 +103,22 @@ export default function ScanDetailPage() {
   if (newOnlyFilter) filters.isNew = "true";
   if (sortBy !== "severity") filters.sort = sortBy;
 
+  // The selected tab is a server-side filter, not a slice of an already-fetched
+  // page. Without this a category whose findings sort below the page limit shows
+  // "0 of 38" and an empty table: the findings exist, they were simply never
+  // fetched. Selecting the tab now asks for exactly that scanner's findings.
+  const sectionScanners = FINDING_SECTIONS.find(
+    (section) => section.id === activeSection,
+  )?.scanners;
+
+  const findingFilters = useMemo(
+    () =>
+      sectionScanners?.length
+        ? { ...filters, scanner: sectionScanners.join(",") }
+        : filters,
+    [filters, sectionScanners],
+  );
+
   const {
     findings,
     scannerCounts,
@@ -110,7 +126,7 @@ export default function ScanDetailPage() {
     refresh: refreshFindings,
   } = useFindings(
     scanId,
-    filters,
+    findingFilters,
     scan?.status,
   );
 
@@ -129,11 +145,13 @@ export default function ScanDetailPage() {
     return () => window.clearTimeout(t);
   }, [scanId, scan?.status, findings]);
 
-  // Auto-select first section tab when findings change
+  // Choose an initial tab from the scan-wide totals. Only when none is selected
+  // yet: re-running on every refresh would override whatever the user picked.
   useEffect(() => {
-    const sections = groupFindingsBySection(findings as Finding[]);
-    setActiveSection(sections[0]?.id ?? "");
-  }, [findings]);
+    if (activeSection) return;
+    const sections = groupFindingsBySection([], scannerCounts);
+    if (sections.length > 0) setActiveSection(sections[0].id);
+  }, [activeSection, scannerCounts]);
 
   useEffect(() => {
     if (typeof window === "undefined" || isLoading || !scan) return;
@@ -228,10 +246,14 @@ export default function ScanDetailPage() {
     scan.lowCount +
     scan.infoCount;
   const visibleFindings = findings as Finding[];
-  const visibleFindingCount =
-    visibleFindings.length >= totalFindings
-      ? String(totalFindings)
-      : `${visibleFindings.length} of ${totalFindings}`;
+  // Grand total across every category, from the scan-wide per-scanner counts.
+  // The table below is filtered to the selected tab, so a "500 of N" here would
+  // describe the page rather than the scan; show the plain total instead.
+  const scannerCountTotal = Object.values(scannerCounts).reduce(
+    (sum, n) => sum + n,
+    0,
+  );
+  const visibleFindingCount = String(scannerCountTotal || totalFindings);
   const findingSections = groupFindingsBySection(visibleFindings, scannerCounts);
 
   const fixPrSource = {
@@ -690,20 +712,19 @@ export default function ScanDetailPage() {
                   <Tabs value={activeSection} onValueChange={setActiveSection}>
                     <TabsList className="w-full justify-start gap-1 rounded-none border-0 bg-transparent p-0">
                       {findingSections.map(
-                        ({ id, title, findings: secFindings, total }) => (
+                        ({ id, title, total }) => (
                           <TabsTrigger
                             key={id}
                             value={id}
                             className="rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium data-[state=active]:border-indigo-200 data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700 dark:data-[state=active]:border-indigo-800 dark:data-[state=active]:bg-indigo-950/30 dark:data-[state=active]:text-indigo-300"
                           >
                             {title}
-                            {/* The scan total, not the number on this page, so a
-                                category never reads as empty because its findings
-                                sit beyond the page limit. */}
+                            {/* Always the scan-wide total for this category.
+                                Selecting the tab fetches that scanner's findings
+                                from the server, so the table shows all of them
+                                regardless of the page limit or severity sort. */}
                             <span className="ml-1.5 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                              {secFindings.length < total
-                                ? `${secFindings.length} of ${total}`
-                                : total}
+                              {total}
                             </span>
                           </TabsTrigger>
                         ),

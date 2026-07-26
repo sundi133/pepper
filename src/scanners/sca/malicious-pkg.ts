@@ -24,6 +24,13 @@ import {
   type PackageMaturity,
 } from "./typosquat-plausibility";
 import { sameRepositoryOwner } from "./repo-owner";
+import {
+  researchPackage,
+  formatResearchEvidence,
+  isWebResearchEnabled,
+} from "@/lib/web-research";
+import { WEB_RESEARCH_MAX_PER_SCAN } from "@/lib/constants";
+import { WEB_CORROBORATION_PROMPT } from "../shared/prompts";
 
 // ─── OSV Malware Advisory Query (Batch) ───────────────────────────────
 // OSV tracks malicious packages (MAL-*) reported by OpenSSF and others.
@@ -982,6 +989,10 @@ export const maliciousPkgScanner: ScannerPlugin = {
             confidence:
               f.confidence ?? MALICIOUS_PKG_LLM_MIN_CONFIDENCE_DEFAULT,
             metadata: {
+              // packageName drives dedup, the UI's Package Details field and
+              // web corroboration; without it the panel showed the rule id.
+              packageName: f.packageName,
+              packageVersion: f.version,
               ecosystem: dep?.ecosystem,
               version: f.version,
               type: f.type,
@@ -1257,12 +1268,127 @@ export const maliciousPkgScanner: ScannerPlugin = {
       return true;
     });
 
-    ctx.onProgress?.(
-      `Supply Chain: ${dedupedFindings.length} validated issues (${phase1Count} from OSV malware DB)`,
+    // PHASE 5: corroborate the survivors against public reports (flag-only).
+    const corroborated = await corroborateWithWebResearch(
+      dedupedFindings,
+      ctx,
+      client,
+      maxResponseTokens,
     );
-    return dedupedFindings;
+
+    ctx.onProgress?.(
+      `Supply Chain: ${corroborated.length} validated issues (${phase1Count} from OSV malware DB)`,
+    );
+    return corroborated;
   },
 };
+
+
+interface CorroborationVerdict {
+  corroborated?: boolean;
+  confidence?: number;
+  reason?: string;
+  references?: string[];
+}
+
+/**
+ * Check surviving findings against public reports.
+ *
+ * Runs last, on the small set that survived the deterministic gates, so a large
+ * dependency tree cannot fan out into hundreds of searches.
+ *
+ * Corroboration can only strengthen a finding. A report may raise it to
+ * CRITICAL and attach the public references that support it, but no result ever
+ * removes or downgrades one: search results are attacker-influenceable, and
+ * only registry facts may dismiss a concern. Absence of reports changes nothing.
+ */
+async function corroborateWithWebResearch(
+  findings: RawFinding[],
+  ctx: ScanContext,
+  client: ReturnType<typeof createLlmClient>,
+  maxTokens: number,
+): Promise<RawFinding[]> {
+  if (!isWebResearchEnabled()) return findings;
+  if (ctx.orgSettings.vulnDbMode === "offline") return findings;
+
+  let searched = 0;
+  const out: RawFinding[] = [];
+
+  for (const finding of findings) {
+    const meta = (finding.metadata || {}) as Record<string, unknown>;
+    const packageName = meta.packageName as string | undefined;
+    const ecosystem = meta.ecosystem as string | undefined;
+
+    if (
+      !packageName ||
+      !ecosystem ||
+      searched >= WEB_RESEARCH_MAX_PER_SCAN ||
+      ctx.signal?.aborted
+    ) {
+      out.push(finding);
+      continue;
+    }
+
+    searched++;
+    try {
+      const research = await researchPackage(packageName, ecosystem, {
+        signal: ctx.signal,
+      });
+      // No provider, no key, or nothing naming the package: unknown, so the
+      // finding stands exactly as it was.
+      if (!research || research.hits.length === 0) {
+        out.push(finding);
+        continue;
+      }
+
+      const raw = await analyzeWithLlm(
+        client,
+        ctx.orgSettings.llmModel,
+        WEB_CORROBORATION_PROMPT,
+        JSON.stringify(
+          {
+            package: packageName,
+            registry: ecosystem,
+            reports: formatResearchEvidence(research),
+          },
+          null,
+          2,
+        ),
+        { maxTokens },
+      );
+      const verdict = parseLlmJsonResponse<CorroborationVerdict>(raw, {});
+
+      if (!verdict.corroborated || (verdict.confidence ?? 0) < 0.8) {
+        out.push(finding);
+        continue;
+      }
+
+      ctx.onProgress?.(
+        `Supply Chain: public reports corroborate ${packageName}`,
+      );
+      out.push({
+        ...finding,
+        severity: "CRITICAL",
+        confidence: Math.max(finding.confidence ?? 0, verdict.confidence ?? 0.8),
+        metadata: {
+          ...meta,
+          webCorroborated: true,
+          webCorroborationReason: verdict.reason,
+          references: verdict.references?.length
+            ? verdict.references
+            : research.hits.map((h) => h.url),
+          researchQuery: research.query,
+          researchProvider: research.provider,
+        },
+      });
+    } catch (err) {
+      logger.warn({ err, packageName }, "web corroboration failed");
+      out.push(finding);
+    }
+  }
+
+  return out;
+}
 
 function normalizeSeverity(s: string): RawFinding["severity"] {
   const upper = s.toUpperCase();

@@ -65,7 +65,11 @@ export async function GET(
     orderBy.createdAt = "desc";
   }
 
-  const [findings, total] = await Promise.all([
+  // Counts are aggregated over every matching finding, not the returned page.
+  // Deriving them from the page made a whole scanner's tab disappear once the
+  // results ran past the limit: with severity sorting, 400+ criticals filled the
+  // page and lower-severity SCA findings fell outside it entirely.
+  const [findings, total, byScanner] = await Promise.all([
     prisma.finding.findMany({
       where,
       orderBy,
@@ -73,7 +77,17 @@ export async function GET(
       take: limit,
     }),
     prisma.finding.count({ where }),
+    prisma.finding.groupBy({
+      by: ["scanner"],
+      where,
+      _count: { _all: true },
+    }),
   ]);
+
+  const scannerCounts: Record<string, number> = {};
+  for (const row of byScanner) {
+    scannerCounts[row.scanner] = row._count._all;
+  }
 
   const enrichedFindings = findings.map(enrichFindingWithReport);
   await Promise.allSettled(
@@ -89,6 +103,8 @@ export async function GET(
 
   return NextResponse.json({
     findings: enrichedFindings,
+    /** Totals per scanner across all matching findings, for the section tabs. */
+    scannerCounts,
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }

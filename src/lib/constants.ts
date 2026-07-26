@@ -241,8 +241,8 @@ export const MAX_LLM_CONCURRENCY = parseInt(
 // registry API covers. Flag-only: a result may raise suspicion, never dismiss a
 // finding, because search results are attacker-influenceable.
 
-/** Off unless a key is configured; also disable explicitly for air-gapped installs. */
-export const ENABLE_WEB_RESEARCH = process.env.ENABLE_WEB_RESEARCH !== "false";
+// The on/off switch lives in web-research.ts as isWebResearchEnabled(), which
+// reads the environment at call time; a constant here would freeze it at import.
 
 export const WEB_RESEARCH_TIMEOUT_MS = parseInt(
   process.env.WEB_RESEARCH_TIMEOUT_MS || "12000",

@@ -27,7 +27,6 @@
 
 import { logger } from "@/lib/logger";
 import {
-  ENABLE_WEB_RESEARCH,
   WEB_RESEARCH_CACHE_TTL_MS,
   WEB_RESEARCH_MAX_RESULTS,
   WEB_RESEARCH_TIMEOUT_MS,
@@ -132,6 +131,20 @@ export function __clearWebResearchCache(): void {
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
+/**
+ * Whether web research may run.
+ *
+ * Read at call time rather than captured at import: a module-level constant
+ * freezes the value when the file is first loaded, which makes the kill switch
+ * unverifiable and unreliable. Requires both an explicit opt-out check and a
+ * configured key, so an install with no key never reaches the network.
+ */
+export function isWebResearchEnabled(): boolean {
+  return (
+    process.env.ENABLE_WEB_RESEARCH !== "false" && !!process.env.TAVILY_API_KEY
+  );
+}
+
 /** True when a result actually concerns the package, not the topic. */
 export function mentionsPackage(hit: WebResearchHit, name: string): boolean {
   const needle = name.toLowerCase().trim();
@@ -203,7 +216,7 @@ export async function researchPackage(
   ecosystem: string,
   options: { signal?: AbortSignal } = {},
 ): Promise<WebResearchResult | null> {
-  if (!ENABLE_WEB_RESEARCH || !process.env.TAVILY_API_KEY) return null;
+  if (!isWebResearchEnabled()) return null;
   if (!name?.trim()) return null;
 
   const key = `${ecosystem.toLowerCase()}:${name.toLowerCase()}`;

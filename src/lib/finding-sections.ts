@@ -13,14 +13,19 @@ export const FINDING_SECTIONS = [
   {
     id: "SAST",
     title: "SAST Findings",
-    scanners: ["SAST_LLM"],
-    description: "Static application security findings (AI)",
+    // SAST_PATTERN is currently quarantined and emits nothing, but it belongs
+    // here rather than in Other if it is ever re-enabled.
+    scanners: ["SAST_LLM", "SAST_PATTERN"],
+    description: "Static application security findings",
   },
   {
     id: "SECRETS",
     title: "Secrets Findings",
-    scanners: ["SECRETS_LLM"],
-    description: "Leaked or exposed credential findings (AI)",
+    // Both secret scanners belong in one tab. SECRETS_PATTERN was previously
+    // unmapped, so a high-volume scanner fell into "Other" — 778 of 976
+    // findings on one scan — and crowded every other category off the page.
+    scanners: ["SECRETS_LLM", "SECRETS_PATTERN"],
+    description: "Leaked or exposed credential findings",
   },
   {
     id: "SCA",
@@ -45,6 +50,12 @@ export const FINDING_SECTIONS = [
     title: "Container Findings",
     scanners: ["CONTAINER"],
     description: "Docker image and container security findings",
+  },
+  {
+    id: "K8S",
+    title: "Kubernetes Findings",
+    scanners: ["K8S"],
+    description: "Kubernetes manifest and workload security findings",
   },
   {
     id: "ZERO_DAY",

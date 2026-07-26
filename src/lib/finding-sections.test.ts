@@ -99,3 +99,49 @@ describe("section counts come from the scan, not the page", () => {
     );
   });
 });
+
+describe("every scanner has a home", () => {
+  const ALL_SCANNERS = [
+    "SAST_PATTERN",
+    "SAST_LLM",
+    "SCA",
+    "SECRETS_PATTERN",
+    "SECRETS_LLM",
+    "IAC",
+    "MALICIOUS_PKG",
+    "ZERO_DAY",
+    "CONTAINER",
+    "K8S",
+  ];
+
+  it("maps every Scanner enum value to a dedicated tab", () => {
+    const mapped = new Set(FINDING_SECTIONS.flatMap((s) => s.scanners));
+    for (const scanner of ALL_SCANNERS) {
+      expect(mapped.has(scanner)).toBe(true);
+    }
+  });
+
+  it("puts both secret scanners in the Secrets tab", () => {
+    // SECRETS_PATTERN was previously unmapped and fell into Other, a
+    // high-volume scanner that crowded every other category off the page.
+    const sections = groupFindingsBySection([], {
+      SECRETS_LLM: 9,
+      SECRETS_PATTERN: 300,
+    });
+    expect(sections.find((s) => s.id === "SECRETS")!.total).toBe(309);
+    expect(sections.find((s) => s.id === "OTHER")).toBeUndefined();
+  });
+
+  it("gives Kubernetes findings their own tab", () => {
+    const sections = groupFindingsBySection([], { K8S: 5 });
+    expect(sections.find((s) => s.id === "K8S")!.total).toBe(5);
+    expect(sections.find((s) => s.id === "OTHER")).toBeUndefined();
+  });
+
+  it("leaves Other empty for a normal scan", () => {
+    const counts: Record<string, number> = {};
+    for (const scanner of ALL_SCANNERS) counts[scanner] = 3;
+    const sections = groupFindingsBySection([], counts);
+    expect(sections.find((s) => s.id === "OTHER")).toBeUndefined();
+  });
+})

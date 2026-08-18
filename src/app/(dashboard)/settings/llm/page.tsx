@@ -100,8 +100,9 @@ const PROVIDER_MODELS: Record<string, { top: string[]; budget: string[] }> = {
     top: [
       "google/gemini-2.5-flash",
       "google/gemini-2.5-pro",
-      "deepseek/deepseek-coder",
       "anthropic/claude-sonnet-4-6",
+      "moonshotai/kimi-k3",
+      "z-ai/glm-5.2",
     ],
     budget: [
       "google/gemini-2.0-flash",

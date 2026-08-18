@@ -64,6 +64,21 @@ LOW-SEVERITY PATTERNS (report only if part of a larger attack chain):
 - runAsNonRoot missing (only if combined with writable files or privilege escalation paths)
 - Missing pod security policies (only if misconfigurations allow privilege escalation)
 
+WEB SERVER / REVERSE-PROXY CONFIG PATTERNS (nginx, Apache/httpd, Caddy, HAProxy, lighttpd, varnish, Tomcat, Spring configs):
+- Directory listing enabled (autoindex on, Options +Indexes, directory browse) exposing source/secrets/backups
+- Missing or weak TLS (ssl off on public listener, TLSv1/TLSv1.1 allowed, no redirect to HTTPS, missing HSTS)
+- Sensitive paths exposed without auth (admin panels, /server-status, /nginx_status, /metrics, /.git, /actuator, debug endpoints)
+- Open proxies / unrestricted forward rules (proxy_pass/proxy_request to user-controlled host)
+- Overly permissive access (allow all / deny none, IP allowlist misconfig, missing auth on basic_auth-protected resources)
+- Missing security headers (X-Content-Type-Options, X-Frame-Options/CSP, Referrer-Policy, nosniff)
+- Dangerous default behavior (default virtual host serving the filesystem root, misconfigured rewrite/alias with path traversal, php cgi enabled with arbitrary execution)
+- Error pages or status pages leaking stack traces, versions, or internal paths
+- Excessively large client_max_body_size or upload limits allowing DoS; rate limiting absent on auth endpoints
+- Insecure cipher suites / protocols, missing OCSP stapling, session tickets enabled
+- Secrets stored in config files (passwords, API keys, htpasswd entries) — only if they look like real credentials
+
+Only report findings with a concrete misconfiguration, a real attack path, and an exact fix. Apply the same minimum confidence: 0.85.
+
 Return JSON:
 {
   "findings": [{

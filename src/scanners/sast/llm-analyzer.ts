@@ -201,10 +201,22 @@ Focus on exploitable instances of:
 - Supply-chain and CI/CD risk classes: unpinned actions/images, unsafe pull_request_target workflows, dependency install scripts, unsigned webhooks, build secret exposure, artifact poisoning
 - Cloud-native and identity risk classes: tenant isolation failures, service-account overpermission, missing audit trails for privileged M2M operations, insecure OAuth/OIDC scopes, webhook replay
 
+**HIGH-SIGNAL SIGNATURE DETECTION (these exact signatures MUST be flagged when they appear in code):**
+- Unrestricted file upload: @UseInterceptors(FileInterceptor('file')), @UploadedFile, multer({ storage }), busboy/formidable upload handlers WITHOUT a server-side extension/MIME allowlist, filename sanitization, or size limit → report CWE-434/CWE-22 (the decorator/interceptor itself is the sink even if the handler body is not in the chunk)
+- Insecure cookie flags: res.cookie('token', token, { httpOnly: false, secure: false }), cookie-parser with sameSite: 'none' or lax without HttpOnly/Secure, manual Set-Cookie with HttpOnly absent on auth/session cookies → report CWE-614/CWE-1004
+- HTML injection (stored): user-controlled text saved via db.save/create/insert/repository.save then later rendered as raw HTML/markup (innerHTML, dangerouslySetInnerHTML, v-html, {!! !!}, raw, render) → report CWE-80 (report at the persistence layer with the render sink named)
+- XPath injection: string concatenation into XPath/XQuery ('/users/user[@name="' + input + '"]'), libxml2/libxmljs/php DOMXPath query building → report CWE-643
+- Missing anti-CSRF: cookie/session-based auth on state-changing routes (POST/PUT/PATCH/DELETE) with no CSRF token check, no SameSite=Strict/Lax protection on the session cookie, or commented-out csurf/CSRF middleware → report CWE-352
+- Missing hardening headers: commented-out or removed helmet()/secure-headers, no HSTS/CSP/X-Content-Type-Options/Cache-Control on responses → report CWE-693/CWE-16
+- Missing rate limiting: commented-out @UseGuards(ThrottlerGuard) or rate-limiter middleware on login/OTP/2FA/password-reset/export/upload endpoints, or no throttling anywhere auth-related → report CWE-770/CWE-307
+- JWT misuse: 'kid' or other JWT header field concatenated into a query or command; algorithm confusion (alg header switching RS256→HS256/none); secret from untrusted source → report CWE-345/CWE-287 (chained header→sink flows are in scope even across files)
+
 **INJECTION & INPUT VALIDATION:**
 - SQL/NoSQL injection (raw string concatenation into queries, NOT parameterized/ORM)
 - Command injection (unsanitized user input passed to exec/spawn/system)
 - XSS (unsanitized output in raw HTML, NOT framework-escaped templates)
+- HTML injection (CWE-80): unsanitized user input rendered as raw HTML/markup (not just <script>) — inline event handlers, tag injection, attribute injection (src/href/onerror), allowing markup/snippet injection or HTML smuggling; distinct from script-based XSS
+- XPath injection (CWE-643): user input concatenated into XPath/XQuery expressions (e.g. /users/user[@name='" + input + "']), enabling query manipulation, blind data extraction, or auth bypass
 - LDAP injection, XML injection (XXE), template injection (SSTI)
 - Path traversal (user input in file paths without validation)
 - ReDoS (catastrophic regex backtracking, user input in new RegExp/re.compile)
@@ -219,8 +231,15 @@ Focus on exploitable instances of:
 - Property/function-level authorization: users must not update role, owner, price, status, plan, balance, isAdmin, or scope fields unless explicitly authorized
 - OAuth/OIDC flaws (missing state param, no PKCE, open redirect in callback URL, token leakage via Referer)
 - Session management flaws (weak entropy, missing invalidation on privilege change, excessive timeouts)
-- Missing cookie security attributes (Secure, HttpOnly, SameSite)
+- Missing cookie security attributes (Secure, HttpOnly, SameSite), including explicitly disabled flags such as res.cookie('token', token, { httpOnly: false, secure: false }) or cookie-parser options setting sameSite: none — session/auth cookies exposed to XSS scraping or sent cross-site
+- CSRF (CWE-352): state-changing endpoints (POST/PUT/PATCH/DELETE) that rely on cookie-based auth but lack CSRF token validation, SameSite=None without token verification, double-submit cookies with a static/reusable token, or missing Origin/Referer checking on sensitive mutations
 - WebAuthn/FIDO2 bypass: credential ID not re-validated against the authenticated user's registered credentials before completing the ceremony
+
+**MISSING SECURITY CONTROL (ABSENCE DETECTION):**
+The prompt below intentionally enables reporting MISSING or DISABLED controls — not just present-and-broken code. Absence is a first-class finding class.
+- Report when a security control is commented out, disabled by flag, wrapped in a no-op, or entirely absent where the code path clearly requires it (e.g., auth middleware not applied to a route that mutates data, rate limiting missing on login/OTP/export, helmet/csurf removed, cookie flags absent on session cookies, security headers absent).
+- ONLY report absence when the provided lines give evidence the control is missing: an auth guard applied to sibling handlers but not this one, a commented-out middleware line, a route registered without its guard, a cookie set without Secure/HttpOnly. Do NOT report "missing X" speculatively when the chunk shows no such control ever existed and the framework may provide it elsewhere — state the evidence explicitly and lower confidence.
+- Confidence for absence findings should reflect how strong the evidence is: commented-out control or clearly unguarded sensitive handler = 0.7-0.8; weaker inference = 0.65-0.69.
 
 **DATA EXPOSURE & CRYPTO:**
 - Hardcoded credentials (actual passwords/keys/tokens in source, NOT env var references)
@@ -240,8 +259,8 @@ Focus on exploitable instances of:
 
 **DESERIALIZATION & FILE HANDLING:**
 - Insecure deserialization (untrusted data passed to deserialize/pickle/eval)
-- File upload exploits (unrestricted types, path traversal in filenames, polyglot files)
-- Prototype pollution (user input merged into object prototypes)
+- File upload exploits: missing server-side extension/type validation on upload endpoints (e.g. @UseInterceptors(FileInterceptor('file')), multer, busboy, formidable, fileUpload, UploadedFile) — no allowlist of extensions/MIME types, unfiltered filenames enabling path traversal or polyglot/writable-content upload, missing size limits
+- Prototype pollution (user input merged into object prototypes, __proto__/constructor keys)
 - Zip/XML/JSON bombs, recursive parsing, or large unbounded uploads without streaming, size limits, content-type validation, or quarantine
 
 **BUSINESS LOGIC & CONCURRENCY:**

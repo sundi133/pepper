@@ -66,6 +66,7 @@ LOW-SEVERITY PATTERNS (report only if part of a larger attack chain):
 
 WEB SERVER / REVERSE-PROXY CONFIG PATTERNS (nginx, Apache/httpd, Caddy, HAProxy, lighttpd, varnish, Tomcat, Spring configs):
 - Directory listing enabled (autoindex on, Options +Indexes, directory browse) exposing source/secrets/backups
+- Unrestricted HTTP methods on raw locations (nginx put.raw-style location, dav_methods PUT/DELETE, missing method allowlist) allowing arbitrary file writes, deletions, or content uploads on the web root
 - Missing or weak TLS (ssl off on public listener, TLSv1/TLSv1.1 allowed, no redirect to HTTPS, missing HSTS)
 - Sensitive paths exposed without auth (admin panels, /server-status, /nginx_status, /metrics, /.git, /actuator, debug endpoints)
 - Open proxies / unrestricted forward rules (proxy_pass/proxy_request to user-controlled host)

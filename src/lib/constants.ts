@@ -84,6 +84,21 @@ export const FILE_EXTENSIONS: Record<string, string> = {
   ".hcl": "terraform",
   ".dockerfile": "docker",
   ".proto": "protobuf",
+  ".ejs": "template",
+  ".hbs": "template",
+  ".handlebars": "template",
+  ".njk": "template",
+  ".nunjucks": "template",
+  ".mustache": "template",
+  ".twig": "template",
+  ".pug": "template",
+  ".jade": "template",
+  ".vue": "template",
+  ".svelte": "template",
+  ".erb": "template",
+  ".cshtml": "template",
+  ".jinja": "template",
+  ".jinja2": "template",
 };
 
 export const SKIP_DIRECTORIES = new Set([

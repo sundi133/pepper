@@ -1,5 +1,34 @@
 import { describe, it, expect } from "vitest";
-import { detectIacFileType } from "./constants";
+import { detectIacFileType, FILE_EXTENSIONS } from "./constants";
+
+describe("FILE_EXTENSIONS", () => {
+  it("includes server-rendered template formats so SAST/zero-day scan them", () => {
+    const templateExts = [
+      ".ejs",
+      ".hbs",
+      ".handlebars",
+      ".njk",
+      ".nunjucks",
+      ".mustache",
+      ".twig",
+      ".pug",
+      ".jade",
+      ".vue",
+      ".svelte",
+      ".erb",
+      ".cshtml",
+      ".jinja",
+      ".jinja2",
+    ];
+    for (const ext of templateExts) {
+      expect(FILE_EXTENSIONS[ext], ext).toBe("template");
+    }
+  });
+
+  it("does not scan plain static .html as a server template", () => {
+    expect(FILE_EXTENSIONS[".html"]).toBeUndefined();
+  });
+});
 
 describe("detectIacFileType", () => {
   it("classifies known server/proxy config basenames as server-config", () => {

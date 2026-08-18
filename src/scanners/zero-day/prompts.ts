@@ -111,6 +111,7 @@ Look for endpoints where a user-supplied ID is used to fetch/modify a resource W
 - **Import/export abuse**: Importing a CSV/JSON that sets fields the user shouldn't be able to set
 - **Model/tool boundary abuse**: LLM, MCP, plugin, browser automation, or background agents perform privileged actions based on untrusted content
 - **CI/CD trust abuse**: Pull request, package script, artifact, or workflow input crosses into deploy or secret-bearing context
+- **VCS/common-file exposure**: App code reads/serves VCS metadata or common config files that leak secrets, source history, or internals (e.g. serving or reading .git/config, .git/HEAD, .hg/requires, .env, .htaccess, nginx.conf) or otherwise exposes backup/editor/temp files (.bak, ~, .swp, .DS_Store)
 
 🔴 **Unsafe State Management**
 - **Incomplete rollback on error**: Partial state left after failed operation (money deducted but order not created)
@@ -120,6 +121,9 @@ Look for endpoints where a user-supplied ID is used to fetch/modify a resource W
 
 🔴 **Cryptographic & Token Issues**
 - **Weak randomness**: Math.random() for tokens, predictable session IDs
+- **Session ID predictability (CWE-331/CWE-330)**: session IDs / tokens generated from weak entropy, timestamps, counters, or client-supplied values; enumerable or brute-forceable session IDs
+- **Missing session invalidation**: sessions not invalidated on logout, password change, privilege change, or account deactivation; zombie/remember-me tokens surviving password resets
+- **Session-as-auth for privileged MCP/tool endpoints**: MCP, plugin, browser-automation, or agent tool endpoints authenticate solely on a session ID / session header without re-verifying the session is still valid, still bound to the same user, or that the tool call is authorized for that session
 - **Timing attacks**: String comparison of secrets using === instead of constant-time compare
 - **JWT issues**: Algorithm confusion (none/HS256/RS256), missing audience/issuer validation
 - **Nonce reuse**: Same IV/nonce used for multiple encryptions
@@ -128,6 +132,7 @@ Look for endpoints where a user-supplied ID is used to fetch/modify a resource W
 🔴 **Resource Exhaustion & DoS through Logic**
 - **Algorithmic complexity**: Unbounded regex on user input (ReDoS), deeply nested JSON parsing
 - **Unbounded operations**: API that triggers N+1 queries, recursive operations without depth limit
+- **Unbounded date-range / date manipulation**: endpoint accepts user-controlled from/to date range with no bounds, generating unbounded queries, aggregation, report, export, or archival work (e.g. computing daily/monthly aggregates across the full table) — report when the range length is unvalidated and drives resource-heavy logic
 - **File/memory bombs**: Zip bombs, XML billion laughs, large file uploads without streaming
 - **Lock starvation**: Long-held database locks blocking other operations
 - **AI cost exhaustion**: Public endpoints trigger unbounded LLM calls, long prompts, tool loops, or expensive report generation

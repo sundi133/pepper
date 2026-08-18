@@ -226,6 +226,11 @@ Focus on exploitable instances of:
 - Mass assignment (accepting unfiltered request body into ORM create/update)
 - GraphQL injection: user-controlled field arguments reaching resolvers without input validation; alias-based query batching for rate-limit bypass; introspection enabled in production exposing schema
 - ORM unsafe raw: Prisma.$queryRawUnsafe(string + userInput) vs $queryRaw with template literals — only the Unsafe variant is exploitable; flag only when user input is concatenated into the string argument
+- HTTP request smuggling (CWE-444): front-end/back-end disagreement over request boundaries from a Content-Length vs Transfer-Encoding mismatch (CL.TE/TE.CL/TE.TE), reverse-proxy passthrough of conflicting headers, or unsafe body-parser/multipart boundary handling — enables request queue poisoning, cache poisoning, or credential theft
+- Host header injection (CWE-644): Host header trusted for password-reset link generation, cache keys, redirects, or security checks without an allowlist — enables password-reset poisoning, cache poisoning, or routing bypass
+- HTTP parameter pollution (CWE-235): duplicate or conflicting parameters (id=1&id=2, _method=, X-HTTP-Method-Override) parsed differently by proxy vs application, allowing WAF bypass, authz bypass, or override of read-only/immutable fields
+- Web cache poisoning / cache deception (CWE-345/CWE-444): unkeyed request headers (X-Forwarded-Host, X-Original-URL, X-HTTP-Method-Override) or path-normalization differences between cache and origin that allow attacker-controlled content to be cached for other users, or sensitive responses to be cached and served cross-user
+- Response splitting / CRLF injection (CWE-113): user-controlled CRLF sequences reaching raw response headers (res.setHeader, set-cookie, redirect Location) or log output — header injection, cache poisoning, or log forging
 
 **AUTH & ACCESS CONTROL:**
 - Authentication bypass (missing auth checks on sensitive endpoints)
@@ -248,6 +253,10 @@ The prompt below intentionally enables reporting MISSING or DISABLED controls �
 - Hardcoded credentials (actual passwords/keys/tokens in source, NOT env var references)
 - Default/weak credentials (CWE-798/CWE-1392/CWE-287): hardcoded default username/password pairs (admin/admin, admin/password, test/test), seeded admin accounts with known default passwords, no forced password change or lockout on default accounts, or password fallbacks to weak defaults
 - Weak cryptography (MD5/SHA1 for security, Math.random for tokens, ECB mode, RSA < 2048 bits)
+- IV/nonce reuse (CWE-329/CWE-323): static, predictable, or reused IVs/nonces across encryptions in GCM/CTR/CBC (e.g. hardcoded iv=, nonce reused across messages, counter restarted per message) — destroys confidentiality and enables forgery
+- Unauthenticated encryption / padding-oracle patterns (CWE-353/CWE-209): AES-CBC or similar unauthenticated modes where ciphertext is attacker-controlled and the app reveals padding validity via distinct errors or timing, without Encrypt-then-MAC or an AEAD mode
+- Weak key derivation / password storage (CWE-916/CWE-261): passwords or keys derived with fast unsalted hashes (md5, sha1, sha256 of password), low PBKDF2/script iterations, or bcrypt/argon2 cost below safe thresholds instead of an adaptive KDF
+- Key reuse across algorithms/modes (CWE-323): the same key used for encryption and signing, or for multiple IV/nonce spaces, enabling cross-protocol attacks
 - TLS verification bypass (rejectUnauthorized:false, verify=False, InsecureSkipVerify)
 - Sensitive data in logs (PII, credentials, tokens written to log output)
 - Full path disclosure (CWE-209): error responses, stack traces, or exception handlers leaking absolute filesystem paths, internal hostnames, or deployment paths; verbose error middleware returning server internals

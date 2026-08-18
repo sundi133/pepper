@@ -59,10 +59,22 @@ MEDIUM-SEVERITY PATTERNS (report if explicit misconfiguration):
 - Unpinned action versions in CI/CD (only if the action has known vulnerabilities)
 - Missing deletion protection on critical resources
 
+CLOUD HARDENING PATTERNS (AWS/Azure/GCP) — report with explicit evidence:
+- Publicly accessible storage without policy (S3/GCS/Blob bucket with public-read/write ACL, policy Principal:"*", or no bucket policy restricting access)
+- Missing encryption at rest where the platform offers it (S3 encryption off, EBS unencrypted, RDS/DynamoDB encryption disabled, GCS/Azure equivalents with explicit disable flags)
+- Overly broad security group / firewall rules (0.0.0.0/0 or ::/0 ingress to non-HTTP/S management, DB, cache, or admin ports; allow-all egress without justification)
+- IAM roles/policies without conditions (Action:"*" or Resource:"*" with no Principal restriction, service principals granted admin, broad PassRole on ec2/eks/lambda)
+- Missing or disabled logging/monitoring (CloudTrail disabled or bucket without access logging, VPC flow logs off, Azure diagnostics off, GCP audit log export missing) where the config explicitly disables them
+- Storage buckets without versioning/immutability on sensitive data (S3 versioning disabled on buckets holding PII/backups)
+- Terraform/cloud state or backend exposing secrets (state stored unencrypted, remote state without locking/encryption, backend config with hardcoded keys)
+- KMS/CMK key rotation or deletion protection disabled on sensitive keys
+- Data-at-rest encryption downgrades (explicit encryption: false, kms_key_id removed, or SSL enforced=false on a service)
+
 LOW-SEVERITY PATTERNS (report only if part of a larger attack chain):
 - readOnlyRootFilesystem missing (only if combined with writable mount points or secrets)
 - runAsNonRoot missing (only if combined with writable files or privilege escalation paths)
 - Missing pod security policies (only if misconfigurations allow privilege escalation)
+- Storage buckets without lifecycle/retention or with public list permissions (only if content is sensitive)
 
 WEB SERVER / REVERSE-PROXY CONFIG PATTERNS (nginx, Apache/httpd, Caddy, HAProxy, lighttpd, varnish, Tomcat, Spring configs):
 - Directory listing enabled (autoindex on, Options +Indexes, directory browse) exposing source/secrets/backups

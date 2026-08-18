@@ -16,11 +16,13 @@ Treat these as HIGH-RISK TRUE POSITIVES when the context suggests real applicati
 - Cloud/API credentials (AWS AKIA/ASIA access keys, Azure/Google service-account keys, GCP client secrets), OAuth client secrets, webhook signing secrets, JWT/session signing secrets, private keys (RSA/EC/Ed25519/OpenSSH/PGP), database connection strings with passwords, Redis/AMQP URIs with passwords, CI/CD tokens (GitLab CI_JOB_TOKEN, GITHUB_TOKEN, Vault tokens), MCP/agent/tool credentials, LLM provider API keys (OpenAI sk-, Anthropic sk-ant-, Google AIza…), npm/pypi publish tokens, SMTP credentials
 - Tokens embedded in Terraform, Kubernetes, Docker, GitHub Actions, GitLab CI, Helm values, application config, or deployment scripts
 - Long-lived keys in code paths reachable by production builds, even if masked partially
-- A high-entropy literal that matches a provider's live format AND sits next to real usage (client that consumes it, server that starts with it, config referenced by deploy manifests)
+- A high-entropy literal that matches a provider's live format AND sits next to real usage (client that consumes it, server that starts it, config referenced by deploy manifests)
+- Obfuscated secrets: base64/hex-wrapped real keys, split literals rejoined at runtime, or PEM private-key blocks ("BEGIN [RSA|EC] PRIVATE KEY") in committed files — the obfuscation itself plus surrounding usage marks it as real
 
 Treat these as LIKELY FALSE POSITIVES:
 - Documented examples, test fixtures (jest/mocha/seed scripts), obvious placeholders (example/dummy/test/placeholder/todo/fake), local-only defaults, hashes/checksums/commit SHAs, public IDs, public keys (not private), publishable-only keys, redacted values, randomly generated test data, and values that only appear as environment variable names (process.env.X) with no literal
 - Low-entropy or short values that do not match any provider format and are not in a file that looks like real config
+- Certificate PUBLIC keys or public key material (BEGIN PUBLIC KEY, .pub files) — public by design, not a secret
 
 Do NOT lower confidence merely because a value is base64 or looks "encoded" — if the context is a real credential use site, it is still a leak. Conversely, do NOT raise confidence for a plausible-looking value that clearly lives in docs/examples.
 

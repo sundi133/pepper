@@ -27,6 +27,22 @@ export const SAST_PASS2_PROMPT = `You are performing PASS 2 (cross-file validati
 Given repository context (routes, auth boundaries, sinks) and candidate findings, validate each candidate.
 Only confirm findings where the exploit path holds with available context. Reject duplicates of generic lint noise.
 Confirmed findings need confidence >= 0.80 and full remediation.
+
+RULES:
+1. You are a VALIDATOR, not a discoverer. Do NOT invent new findings beyond the candidates presented.
+   Do NOT merge, rename, or split candidates — keep their filePath/startLine/endLine intact.
+2. Judge each candidate against the repository context and the quoted evidence. Confirm only when:
+   - the sink and its taint source are both visible (in-chunk or in repo context),
+   - the route/parameter/input source named by the candidate actually exists, and
+   - no mitigating control (parameterized query, escaping, auth guard, allowlist, secure framework default)
+     shown in the context breaks the exploit path.
+3. When context cannot confirm or contradicts a candidate, REJECT it (omit from output) with the reason
+   captured implicitly by not emitting it — do not return a lowered-confidence duplicate. Absence from the
+   response means rejected; a confirmed finding must carry full remediation and stepsToReproduce.
+4. Confidence must reflect cross-file certainty: >= 0.80 only when the full path is corroborated by context;
+   if key context is missing, treat the candidate as unconfirmed rather than emitting at lower confidence.
+5. For chained/cross-file candidates (source in file A, sink in file B), verify both ends exist in the repo
+   context and that the taint actually flows between them (imports, function calls, shared state).
 ${SEVERITY_CALIBRATION_PROMPT}
 
 Return JSON:
@@ -65,7 +81,9 @@ NEVER report: placeholders, env var names only, examples, test fixtures, redacte
 WHY REAL — judge by context, not just shape:
 - A credential is REAL when it is (a) a high-entropy value, (b) in a live-looking format for its provider (AKIA… for AWS, ghp_… for GitHub, sk-… for OpenAI, ya29…/GOCSPX-… for Google, AKIA+base64 secret for AWS), and (c) present in code that appears to be used by a production path (a server that starts it, a client that consumes it, a config referenced by deploy manifests), or in a committed config/credentials file (.env, config.json, serviceAccountKey.json, .npmrc, .pypirc, .netrc, id_rsa, id_ed25519).
 - Also REAL: signing/secrets material that unlocks one thing — JWT signing secrets (HS256/HS384), cookie/session secrets, webhook signing secrets (Stripe, GitHub webhook X-Hub-Signature secrets), OAuth client secrets, database connection strings containing passwords, Redis/AMQP connection URIs with passwords, private keys (RSA/EC/Ed25519/OpenSSH/PGP), Terraform/Helm/CI-CD tokens (GitLab CI_JOB_TOKEN, GITHUB_TOKEN, Vault tokens, Databricks dapi…, npm_, pypi-upload), LLM provider keys, SMTP creds.
-- A credential is NOT real when it is referenced only as an environment variable name (process.env.DB_PASSWORD with no literal), appears inside docs/comments as an example, is short or low-entropy, is a mock/test fixture (jest, mocha, seed scripts), contains the words example/dummy/test/placeholder/todo/fake, is a checksum/hash/commit SHA/public key/certificate, or is a public identifier (account ID, bucket name, ARN) rather than a secret.
+- Also REAL: cloud provider service-account keys (GCP serviceAccountKey.json, Azure client_secret/service principal passwords, AWS secret access keys alongside AKIA access key IDs), certificate private keys (PEM blocks with "BEGIN PRIVATE KEY"/"BEGIN RSA PRIVATE KEY"), Kubernetes service account tokens, Slack/Discord/Telegram bot tokens, Stripe/Plaid/Square/Braintree secret keys, Twilio/SendGrid/Mailgun API keys, New Relic/Datadog/Sentry API keys, and long-lived OAuth refresh tokens.
+- A credential is ALSO real when it is masked only partially (e.g. a hardcoded prefix + the remainder assembled at runtime) or obfuscated (base64/hex of a real key, split literals rejoined in code) — deobfuscate the obvious ones and report the original.
+- A credential is NOT real when it is referenced only as an environment variable name (process.env.DB_PASSWORD with no literal), appears inside docs/comments as an example, is short or low-entropy, is a mock/test fixture (jest, mocha, seed scripts), contains the words example/dummy/test/placeholder/todo/fake, is a checksum/hash/commit SHA/public key/certificate, is a public identifier (account ID, bucket name, ARN) rather than a secret, or is a "demo"/"development" override that cannot reach a production path.
 
 Each real secret MUST have:
 - whyReal: one sentence tying the literal to its context (which file, what it unlocks, why it is reachable/exploitable) — this is the strongest anti-false-positive field.
@@ -139,6 +157,15 @@ user to upload file", "only reachable if Node < 18"). If the advisory states no 
 
 FIXVERSION: use the supplied "fixVersion" or a version the advisory names. Never guess a version number.
 
+PRECISION — keep=false must be justified, not lazy:
+- Do not drop a CVE merely because "the package is old" or "the app is small". Drop only on the concrete
+  criteria above (no imports + low severity, dev-only non-critical, advisory path demonstrably unreachable).
+- When the advisory names a specific vulnerable function/API, verify the call sites from "importEvidence"
+  actually invoke that function (or a call chain into it) before marking reachable=true. A bare import of a
+  package whose vulnerable function is never called is reachable=false, and say which function was expected.
+- For CRITICAL/HIGH keep=true findings, make "remediation" state the exact upgrade target (from
+  fixVersion/introducedBy) and, when possible, the specific configuration change that removes the exposure.
+
 Return JSON: { "triaged": [{ "osvId", "keep": true|false, "reason", "metadata": { "directDependency": bool, "reachable": bool, "exploitPreconditions": "...", "fixVersion": "...", "remediation": "..." } }] }`;
 
 export const MALICIOUS_VALIDATION_PROMPT = `Validate supply-chain risk from EVIDENCE only (metadata, install scripts, typosquat signals, OSV MAL-*).
@@ -176,6 +203,19 @@ metadata you do have, and say the history was unavailable.
 
 ${UNTRUSTED_CONTENT_GUARD}
 
+PRECISION — false negatives are worse than false positives here:
+- A package that has been flagged by OSV as MAL-* or by a reputable registry/publisher disclosure is
+  malicious until proven otherwise — emit it. Do not talk yourself out of a finding because the script
+  "looks normal" or the package "is popular".
+- When metadata itself claims the package was taken down, reported, or "resolved", weigh that as strong
+  evidence of maliciousness, not an excuse to skip it. Registry ownership and a clean, long, stable
+  release history are the only things that can clear a package.
+- Typosquat candidate: compare the name against the legitimate package it imitates (edit distance,
+  prefix/suffix swap, hyphenation, lookalike chars). A near-identical name on a new/active package is a
+  finding by itself even without an install script — name the imitated package.
+- Always emit a confidence 0.80-1.0 and a concrete "evidence" string (exact script line, exact metadata
+  field, exact name comparison) so a human can re-check in seconds.
+
 Return JSON: { "findings": [{ "packageName", "version", "title", "severity", "suspiciousBehavior", "evidence", "whyNotBenign", "installImpact", "remediation", "confidence" }] }`;
 
 export const CONTAINER_CONFIG_PROMPT = `You are a container security expert reviewing Dockerfiles and compose files for dangerous CONFIGURATION (not CVEs — image package vulnerabilities are handled by a separate CVE scanner).
@@ -206,6 +246,10 @@ COMPOSE CHECKS:
 18. **Secrets passed as plain env/args** - environment: or args: with literal passwords/tokens instead of secrets/files; visible in compose and process env. CWE-798.
 19. **Build secrets not masked** - build: args passing secrets that end up in image history/layers. CWE-798.
 20. **Vulnerable/writable service exposure** - ports published to 0.0.0.0 for management or database services that should be internal-only. CWE-668.
+21. **No seccomp/apparmor profile** - no security_opt: seccomp=... or apparmor=...; defaults may be more permissive than needed. CWE-250.
+22. **Writable shared memory / tmpfs** - /dev/shm mounted writable without size limit, or /tmp left world-writable with no tmpfs; enables shared-memory DoS or cross-container tampering. CWE-732.
+23. **User not set / root default in compose** - no user: directive and the image runs as root; same host-level damage as USER root in the Dockerfile. CWE-250.
+24. **Dangerous default command or entrypoint** - ENTRYPOINT/CMD that execs a shell with attacker-influenced args (e.g. sh -c "$UNTRUSTED_VAR"), or a healthcheck/entrypoint that fetches and executes remote content. CWE-78.
 
 ${SEVERITY_CALIBRATION_PROMPT}
 
@@ -241,6 +285,10 @@ KUBERNETES SECURITY CHECKS:
 16. **Unrestricted ingress/exposure** - Service/Ingress exposing management, database, or debug ports (metrics, actuator, 9200, 5432, 3306, 6379, 8080 admin) without auth or to the public
 17. **Insecure Pod Security Admission** - no namespace label (pod-security.kubernetes.io/enforce) at baseline/restricted level, or PodSecurityPolicy-era objects instead of PSA labels
 18. **Image not pinned / untrusted registry** - mutable tags or images from public registries without digest pinning or admission policy (OPA/Kyverno)
+19. **Missing readOnlyRootFilesystem / tmpfs for /tmp** - containers that write nothing to the container FS should set readOnlyRootFilesystem: true; writable /tmp should be an emptyDir/tmpfs so a compromised process cannot modify application code. CWE-732.
+20. **Dangerous ingress controller / annotation trust** - nginx-ingress annotations that allow proxy_pass/redirect to user-controlled hosts, auth bypass annotations (nginx.ingress.kubernetes.io/whitelist-source-range misconfig), or serving filesystem via alias without path sanitization. CWE-644/CWE-601.
+21. **Service account token projection without expiry** - automountServiceAccountToken or projected tokens with no expiration/audience, giving a stolen pod long-lived cluster credentials. CWE-798.
+22. **CronJob/Job with dangerous commands** - scheduled jobs executing curl/wget/eval of remote content, or running privileged with host mounts; a compromised image becomes scheduled root execution. CWE-78.
 
 SEVERITY GUIDELINES:
 - CRITICAL: Immediate compromise risk (privileged, wildcard RBAC, cluster-admin on SA, running as root in untrusted context, docker.sock/hostPath host root, hostPID/hostNetwork)

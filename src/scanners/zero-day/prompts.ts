@@ -102,6 +102,9 @@ Look for endpoints where a user-supplied ID is used to fetch/modify a resource W
 - **Time-of-check-to-time-of-use (TOCTOU)**: Permission checked at request start, but resource state changes before action completes
 - **AI prompt/tool injection**: User-controlled or retrieved content changes system behavior, calls tools, exfiltrates secrets, or bypasses policy
 - **Insecure output handling**: LLM output is used as code, SQL, shell, workflow config, or privileged API input without validation
+- **Host header / cache poisoning**: Host header trusted for password-reset links or cache keys; unkeyed headers (X-Forwarded-Host, X-Original-URL) or path-normalization differences between cache and origin that poison the cache for other users
+- **HTTP parameter pollution**: Duplicate/conflicting parameters parsed differently by proxy vs app, bypassing WAF, authz, or overriding immutable fields
+- **Request smuggling (cross-file)**: Front-end/back-end disagreement on Content-Length vs Transfer-Encoding that lets a smuggled request poison a queue, cache, or another user's session — report when the chain spans the proxy config and the handler
 
 🔴 **Trust Boundary Violations**
 - **Internal API trust**: Backend service trusts data from another service without re-validating

@@ -59,10 +59,38 @@ MEDIUM-SEVERITY PATTERNS (report if explicit misconfiguration):
 - Unpinned action versions in CI/CD (only if the action has known vulnerabilities)
 - Missing deletion protection on critical resources
 
+CLOUD HARDENING PATTERNS (AWS/Azure/GCP) — report with explicit evidence:
+- Publicly accessible storage without policy (S3/GCS/Blob bucket with public-read/write ACL, policy Principal:"*", or no bucket policy restricting access)
+- Missing encryption at rest where the platform offers it (S3 encryption off, EBS unencrypted, RDS/DynamoDB encryption disabled, GCS/Azure equivalents with explicit disable flags)
+- Overly broad security group / firewall rules (0.0.0.0/0 or ::/0 ingress to non-HTTP/S management, DB, cache, or admin ports; allow-all egress without justification)
+- IAM roles/policies without conditions (Action:"*" or Resource:"*" with no Principal restriction, service principals granted admin, broad PassRole on ec2/eks/lambda)
+- Missing or disabled logging/monitoring (CloudTrail disabled or bucket without access logging, VPC flow logs off, Azure diagnostics off, GCP audit log export missing) where the config explicitly disables them
+- Storage buckets without versioning/immutability on sensitive data (S3 versioning disabled on buckets holding PII/backups)
+- Terraform/cloud state or backend exposing secrets (state stored unencrypted, remote state without locking/encryption, backend config with hardcoded keys)
+- KMS/CMK key rotation or deletion protection disabled on sensitive keys
+- Data-at-rest encryption downgrades (explicit encryption: false, kms_key_id removed, or SSL enforced=false on a service)
+
 LOW-SEVERITY PATTERNS (report only if part of a larger attack chain):
 - readOnlyRootFilesystem missing (only if combined with writable mount points or secrets)
 - runAsNonRoot missing (only if combined with writable files or privilege escalation paths)
 - Missing pod security policies (only if misconfigurations allow privilege escalation)
+- Storage buckets without lifecycle/retention or with public list permissions (only if content is sensitive)
+
+WEB SERVER / REVERSE-PROXY CONFIG PATTERNS (nginx, Apache/httpd, Caddy, HAProxy, lighttpd, varnish, Tomcat, Spring configs):
+- Directory listing enabled (autoindex on, Options +Indexes, directory browse) exposing source/secrets/backups
+- Unrestricted HTTP methods on raw locations (nginx put.raw-style location, dav_methods PUT/DELETE, missing method allowlist) allowing arbitrary file writes, deletions, or content uploads on the web root
+- Missing or weak TLS (ssl off on public listener, TLSv1/TLSv1.1 allowed, no redirect to HTTPS, missing HSTS)
+- Sensitive paths exposed without auth (admin panels, /server-status, /nginx_status, /metrics, /.git, /actuator, debug endpoints)
+- Open proxies / unrestricted forward rules (proxy_pass/proxy_request to user-controlled host)
+- Overly permissive access (allow all / deny none, IP allowlist misconfig, missing auth on basic_auth-protected resources)
+- Missing security headers (X-Content-Type-Options, X-Frame-Options/CSP, Referrer-Policy, nosniff)
+- Dangerous default behavior (default virtual host serving the filesystem root, misconfigured rewrite/alias with path traversal, php cgi enabled with arbitrary execution)
+- Error pages or status pages leaking stack traces, versions, or internal paths
+- Excessively large client_max_body_size or upload limits allowing DoS; rate limiting absent on auth endpoints
+- Insecure cipher suites / protocols, missing OCSP stapling, session tickets enabled
+- Secrets stored in config files (passwords, API keys, htpasswd entries) — only if they look like real credentials
+
+Only report findings with a concrete misconfiguration, a real attack path, and an exact fix. Apply the same minimum confidence: 0.85.
 
 Return JSON:
 {

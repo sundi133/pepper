@@ -19,6 +19,7 @@ import {
   LLM_MAX_RESPONSE_TOKENS,
   OLLAMA_MAX_RESPONSE_TOKENS,
   ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
+  ZERO_DAY_LLM_FILES,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 
@@ -60,7 +61,7 @@ export const zeroDayScanner: ScannerPlugin = {
     if (targetFiles.length === 0) return [];
 
     const fileBundles: string[] = [];
-    for (const filePath of targetFiles.slice(0, 48)) {
+    for (const filePath of targetFiles.slice(0, ZERO_DAY_LLM_FILES)) {
       await ctx.waitIfPaused?.();
       if (ctx.signal?.aborted) break;
 
@@ -102,7 +103,7 @@ export const zeroDayScanner: ScannerPlugin = {
         { findings: [] },
       );
 
-      const sentFilePaths = new Set(targetFiles.slice(0, 48));
+      const sentFilePaths = new Set(targetFiles.slice(0, ZERO_DAY_LLM_FILES));
       const findings = (parsed.findings || [])
         .filter(
           (f) =>

@@ -28,6 +28,8 @@ function stackKeyFor(filePath: string, iacType: IacFileType): string {
       return `cfn:${root}`;
     case "ansible":
       return `ansible:${root}`;
+    case "server-config":
+      return `server:${root}`;
     default:
       return `iac:${root}`;
   }

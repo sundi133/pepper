@@ -84,6 +84,21 @@ export const FILE_EXTENSIONS: Record<string, string> = {
   ".hcl": "terraform",
   ".dockerfile": "docker",
   ".proto": "protobuf",
+  ".ejs": "template",
+  ".hbs": "template",
+  ".handlebars": "template",
+  ".njk": "template",
+  ".nunjucks": "template",
+  ".mustache": "template",
+  ".twig": "template",
+  ".pug": "template",
+  ".jade": "template",
+  ".vue": "template",
+  ".svelte": "template",
+  ".erb": "template",
+  ".cshtml": "template",
+  ".jinja": "template",
+  ".jinja2": "template",
 };
 
 export const SKIP_DIRECTORIES = new Set([
@@ -157,7 +172,8 @@ export type IacFileType =
   | "github-actions"
   | "gitlab-ci"
   | "cloudformation"
-  | "ansible";
+  | "ansible"
+  | "server-config";
 
 export function detectIacFileType(filePath: string): IacFileType | null {
   const lower = filePath.toLowerCase();
@@ -198,6 +214,41 @@ export function detectIacFileType(filePath: string): IacFileType | null {
     return "cloudformation";
   if (lower.includes("/ansible/") || lower.includes("/playbooks/"))
     return "ansible";
+
+  // Web server / reverse-proxy / application-server config files that SAST and
+  // the container scanner ignore, but which can expose data (directory listing,
+  // missing TLS, debug/admin endpoints, weak auth). Common names and the
+  // directories they conventionally live in.
+  if (
+    basename === "nginx.conf" ||
+    basename === "httpd.conf" ||
+    basename === "apache2.conf" ||
+    basename === "apache.conf" ||
+    basename === "caddyfile" ||
+    basename === "haproxy.cfg" ||
+    basename === "lighttpd.conf" ||
+    basename === "nginx.conf.template" ||
+    basename === ".htaccess" ||
+    basename === "varnish.vcl" ||
+    basename === "web.config" ||
+    basename === "server.xml" ||
+    basename === "application.properties" ||
+    basename === "application.yml" ||
+    basename === "application.yaml" ||
+    lower.includes("/nginx/") ||
+    lower.includes("/nginx.conf") ||
+    lower.includes("/sites-available/") ||
+    lower.includes("/sites-enabled/") ||
+    lower.includes("/conf.d/") ||
+    lower.includes("/httpd/") ||
+    lower.includes("/apache2/") ||
+    lower.includes("/apache/") ||
+    lower.includes("/caddy/") ||
+    lower.includes("/haproxy/") ||
+    lower.includes("/lighttpd/") ||
+    lower.includes("/varnish/")
+  )
+    return "server-config";
 
   return null;
 }
@@ -414,5 +465,14 @@ export const ZERO_DAY_PRIORITY_FILES = parseInt(
 /** Zero-day: total source files sent to the LLM (priority first, then others). */
 export const ZERO_DAY_MAX_FILES = parseInt(
   process.env.ZERO_DAY_MAX_FILES || "160",
+  10,
+);
+
+/**
+ * Zero-day: how many of the highest-priority files are included in a single
+ * LLM pass (bounded so the prompt stays inside the model context window).
+ */
+export const ZERO_DAY_LLM_FILES = parseInt(
+  process.env.ZERO_DAY_LLM_FILES || "96",
   10,
 );

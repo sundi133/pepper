@@ -173,6 +173,7 @@ export default function LlmSettingsPage() {
   const [settings, setSettings] = useState<LlmSettings>(DEFAULT_SETTINGS);
   const [useCustomModel, setUseCustomModel] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [deletingKey, setDeletingKey] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const customRef = useRef({ url: "", model: "" });
 
@@ -260,6 +261,22 @@ export default function LlmSettingsPage() {
     }
   }
 
+  async function deleteApiKey() {
+    setDeletingKey(true);
+    try {
+      const res = await fetch("/api/settings/llm/key", { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete API key");
+      setSettings((s) => ({ ...s, llmApiKey: "", hasApiKey: false }));
+      setTestResult("idle");
+      setTestError("");
+      toast.success("API key deleted");
+    } catch {
+      toast.error("Failed to delete API key");
+    } finally {
+      setDeletingKey(false);
+    }
+  }
+
   async function updateSettings(
     patch: Partial<
       Pick<LlmSettings, "enableLlmSast" | "enableLlmSecrets" | "vulnDbMode">
@@ -338,6 +355,20 @@ export default function LlmSettingsPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
+          <div className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+            <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+            <div className="min-w-0">
+              <span className="text-muted-foreground">Currently used for scans: </span>
+              <span className="font-semibold">{settings.llmModel}</span>
+              <span className="text-muted-foreground">
+                {" "}via {settings.llmProvider}
+              </span>
+              <Badge variant="secondary" className="ml-2">
+                {settings.hasApiKey ? "DB key" : "Default settings"}
+              </Badge>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label>Provider</Label>
             <Select
@@ -549,6 +580,15 @@ export default function LlmSettingsPage() {
                 ) : (
                   "Test Connection"
                 )}
+              </Button>
+            )}
+            {needsKey && settings.hasApiKey && (
+              <Button
+                variant="destructive"
+                onClick={deleteApiKey}
+                disabled={deletingKey || loading}
+              >
+                {deletingKey ? "Deleting..." : "Delete API Key"}
               </Button>
             )}
             <Button onClick={handleSave} disabled={loading || testing}>

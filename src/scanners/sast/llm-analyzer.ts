@@ -41,6 +41,8 @@ import {
   parseSeverity,
 } from "@/lib/severity-calibration";
 import { SAST_EXCLUDED_EXTENSIONS } from "../shared/extension-filters";
+import { scanMissingHardeningHeaders } from "./hardening-headers";
+import { scanServerConfigPatterns } from "../iac/server-config-patterns";
 
 // Dependency manifest files excluded from SAST analysis (more aggressive filtering)
 const DEPENDENCY_MANIFEST_FILES = new Set([
@@ -207,7 +209,7 @@ Focus on exploitable instances of:
 - HTML injection (stored): user-controlled text saved via db.save/create/insert/repository.save then later rendered as raw HTML/markup (innerHTML, dangerouslySetInnerHTML, v-html, {!! !!}, raw, render) → report CWE-80 (report at the persistence layer with the render sink named)
 - XPath injection: string concatenation into XPath/XQuery ('/users/user[@name="' + input + '"]'), libxml2/libxmljs/php DOMXPath query building → report CWE-643
 - Missing anti-CSRF: cookie/session-based auth on state-changing routes (POST/PUT/PATCH/DELETE) with no CSRF token check, no SameSite=Strict/Lax protection on the session cookie, or commented-out csurf/CSRF middleware → report CWE-352
-- Missing hardening headers: commented-out or removed helmet()/secure-headers, no HSTS/CSP/X-Content-Type-Options/Cache-Control on responses → report CWE-693/CWE-16
+- Missing hardening headers: standalone CWE-693/CWE-16 finding titled with CSP/HSTS/Helmet — NOT an authorization/AdminGuard issue. Flag when helmet()/secure-headers is commented out OR the HTTP bootstrap (NestFactory.create, express(), fastify()) has no Content-Security-Policy / Strict-Transport-Security / X-Content-Type-Options / X-Frame-Options middleware. Do not map this class to CWE-285.
 - Missing rate limiting: commented-out @UseGuards(ThrottlerGuard) or rate-limiter middleware on login/OTP/2FA/password-reset/export/upload endpoints, or no throttling anywhere auth-related → report CWE-770/CWE-307
 - JWT misuse: 'kid' or other JWT header field concatenated into a query or command; algorithm confusion (alg header switching RS256→HS256/none); secret from untrusted source; attacker-controlled key material via header fields x5u/x5c/jku/jwk (rogue key injection — token self-supplies the verification key); invalid signatures accepted (missing or disabled signature verification); weak/brute-forceable HS256 signing secret → report CWE-345/CWE-287 (chained header→sink flows are in scope even across files)
 
@@ -246,7 +248,8 @@ Focus on exploitable instances of:
 **MISSING SECURITY CONTROL (ABSENCE DETECTION):**
 The prompt below intentionally enables reporting MISSING or DISABLED controls — not just present-and-broken code. Absence is a first-class finding class.
 - Report when a security control is commented out, disabled by flag, wrapped in a no-op, or entirely absent where the code path clearly requires it (e.g., auth middleware not applied to a route that mutates data, rate limiting missing on login/OTP/export, helmet/csurf removed, cookie flags absent on session cookies, security headers absent).
-- ONLY report absence when the provided lines give evidence the control is missing: an auth guard applied to sibling handlers but not this one, a commented-out middleware line, a route registered without its guard, a cookie set without Secure/HttpOnly. Do NOT report "missing X" speculatively when the chunk shows no such control ever existed and the framework may provide it elsewhere — state the evidence explicitly and lower confidence.
+- HTTP hardening headers are an exception to speculative-absence caution: if this chunk is the process HTTP bootstrap (NestFactory.create, express(), app.use chain, fastify()) and helmet()/CSP/HSTS are not applied in the visible middleware, report CWE-693 as its own finding. Authorization guards are not a substitute.
+- For other absence classes, ONLY report when the provided lines give evidence the control is missing: an auth guard applied to sibling handlers but not this one, a commented-out middleware line, a route registered without its guard, a cookie set without Secure/HttpOnly. Do NOT report "missing X" speculatively when the chunk shows no such control ever existed and the framework may provide it elsewhere — state the evidence explicitly and lower confidence.
 - Confidence for absence findings should reflect how strong the evidence is: commented-out control or clearly unguarded sensitive handler = 0.7-0.8; weaker inference = 0.65-0.69.
 
 **DATA EXPOSURE & CRYPTO:**
@@ -333,6 +336,14 @@ export async function runLlmSastScanner(
   if (!ctx.orgSettings.enableLlmSast) {
     logger.warn("LLM SAST scanner skipped — enableLlmSast is false");
     return [];
+  }
+
+  const controlFindings = [
+    ...scanServerConfigPatterns(ctx, "SAST_LLM"),
+    ...scanMissingHardeningHeaders(ctx),
+  ];
+  if (controlFindings.length > 0 && ctx.onBatchFindings) {
+    await ctx.onBatchFindings("SAST_LLM", controlFindings);
   }
 
   const client = createLlmClient({
@@ -631,7 +642,7 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
     ctx.onProgress?.(`LLM SAST: ${validated.length} findings across ${totalFiles} files`);
   }
 
-  return validated;
+  return [...controlFindings, ...validated];
 }
 
 const PASS2_OUTPUT_MIN = 0.75; // Pass-2 confirms candidates; output must reach high confidence

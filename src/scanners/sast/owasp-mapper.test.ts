@@ -43,6 +43,12 @@ describe("getOwasp2024Category", () => {
     expect(getOwasp2024Category("CWE-770")).toBe(
       "A05:2021 Security Misconfiguration",
     );
+    expect(getOwasp2024Category("CWE-693")).toBe(
+      "A05:2021 Security Misconfiguration",
+    );
+    expect(getOwasp2024Category("CWE-548")).toBe(
+      "A05:2021 Security Misconfiguration",
+    );
   });
 
   it("returns null for unknown CWEs", () => {

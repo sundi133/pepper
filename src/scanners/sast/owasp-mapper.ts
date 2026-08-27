@@ -71,6 +71,9 @@ const CWE_TO_OWASP_MAP: Record<string, { owasp2024: string; owaspApi?: string; o
   "CWE-326": { owasp2024: "A02:2021 Cryptographic Failures" },
   "CWE-601": { owasp2024: "A01:2021 Broken Access Control" },
   "CWE-770": { owasp2024: "A05:2021 Security Misconfiguration", owaspLlm: "LLM10:2025 Unbounded Consumption" },
+  "CWE-16": { owasp2024: "A05:2021 Security Misconfiguration" },
+  "CWE-548": { owasp2024: "A05:2021 Security Misconfiguration" },
+  "CWE-693": { owasp2024: "A05:2021 Security Misconfiguration" },
   "CWE-918": { owasp2024: "A10:2021 Server-Side Request Forgery (SSRF)", owaspApi: "A07:2023 Server Side Request Forgery" },
   "CWE-1236": { owasp2024: "A03:2021 Injection" },
   "CWE-1427": { owasp2024: "A03:2021 Injection", owaspLlm: "LLM01:2025 Prompt Injection" },
@@ -121,6 +124,9 @@ const CWE_CATEGORY_MAP: Record<string, string> = {
   "CWE-1321": "Prototype Pollution",
   "CWE-400": "DoS",
   "CWE-770": "DoS",
+  "CWE-16": "Misconfiguration",
+  "CWE-548": "Directory Listing",
+  "CWE-693": "Misconfiguration",
   "CWE-1333": "ReDoS",
 };
 

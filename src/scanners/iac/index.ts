@@ -7,6 +7,7 @@ import {
 } from "@/lib/llm-gateway";
 import { RawFinding, ScanContext, ScannerPlugin } from "../types";
 import { groupIacStacks } from "./stacks";
+import { scanServerConfigPatterns } from "./server-config-patterns";
 import { enrichFinding } from "../shared/finding-normalize";
 import { buildDeepRepoContext } from "../shared/repo-context";
 import { applySeverityCalibration } from "@/lib/severity-calibration";
@@ -120,7 +121,16 @@ interface IacLlmFinding {
 export const iacScanner: ScannerPlugin = {
   name: "IAC",
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
-    if (!ctx.orgSettings.enableLlmSast) return [];
+    // SAST_ONLY/FULL already emit these as SAST_LLM; IAC_ONLY still needs them.
+    const patternFindings =
+      ctx.scanType === "IAC_ONLY"
+        ? scanServerConfigPatterns(ctx, "IAC")
+        : [];
+    if (patternFindings.length > 0 && ctx.onBatchFindings) {
+      await ctx.onBatchFindings("IAC", patternFindings);
+    }
+
+    if (!ctx.orgSettings.enableLlmSast) return patternFindings;
 
     const client = createLlmClient({
       provider: ctx.orgSettings.llmProvider,
@@ -138,7 +148,7 @@ export const iacScanner: ScannerPlugin = {
       (fp) => !fp.split(path.sep).some((p) => SKIP_DIRECTORIES.has(p)),
     );
     const stacks = groupIacStacks(filteredList);
-    if (stacks.length === 0) return [];
+    if (stacks.length === 0) return patternFindings;
 
     const repoContext = buildDeepRepoContext(ctx.workDir, ctx.fileList);
 
@@ -190,7 +200,7 @@ export const iacScanner: ScannerPlugin = {
     }
 
     ctx.onProgress?.(`IaC: ${findings.length} stack-level misconfigurations`);
-    return findings;
+    return [...patternFindings, ...findings];
   },
 };
 

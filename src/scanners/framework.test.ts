@@ -135,6 +135,24 @@ describe("scanner framework", () => {
     expect(areRootCauseDuplicates(a, b)).toBe(false);
   });
 
+  it("SAST and IaC directory-listing findings on the same line collapse", () => {
+    const sast = baseFinding({
+      scanner: "SAST_LLM",
+      cweId: "CWE-548",
+      title: "Nginx Directory Listing Enabled (autoindex on)",
+      filePath: "nginx.conf",
+      startLine: 12,
+    });
+    const iac = baseFinding({
+      scanner: "IAC",
+      cweId: "CWE-548",
+      title: "Directory listing enabled",
+      filePath: "nginx.conf",
+      startLine: 12,
+    });
+    expect(areRootCauseDuplicates(sast, iac)).toBe(true);
+  });
+
   it("malicious package heuristic rule IDs are blocked", () => {
     const gated = applyQualityGates([
       baseFinding({

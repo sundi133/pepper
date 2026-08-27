@@ -119,6 +119,19 @@ export function areRootCauseDuplicates(a: RawFinding, b: RawFinding): boolean {
       }
     }
 
+    const sastIacPair =
+      (a.scanner === "SAST_LLM" && b.scanner === "IAC") ||
+      (a.scanner === "IAC" && b.scanner === "SAST_LLM");
+    if (
+      sastIacPair &&
+      a.cweId &&
+      a.cweId === b.cweId &&
+      (a.filePath || "") === (b.filePath || "") &&
+      lineBucket(a.startLine) === lineBucket(b.startLine)
+    ) {
+      return true;
+    }
+
     if (
       (a.scanner === "SECRETS_LLM" && b.scanner === "IAC") ||
       (a.scanner === "IAC" && b.scanner === "SECRETS_LLM")

@@ -55,4 +55,10 @@ describe("SYSTEM_PROMPT detection coverage", () => {
     expect(SYSTEM_PROMPT).toMatch(/autoindex\s+on/i);
     expect(SYSTEM_PROMPT).toMatch(/dav_methods/i);
   });
+
+  it("covers missing hardening headers as CWE-693 not authorization", () => {
+    expect(SYSTEM_PROMPT).toMatch(/CWE-693/);
+    expect(SYSTEM_PROMPT).toMatch(/NOT an authorization\/AdminGuard/i);
+    expect(SYSTEM_PROMPT).toMatch(/Do not map this class to CWE-285/i);
+  });
 });

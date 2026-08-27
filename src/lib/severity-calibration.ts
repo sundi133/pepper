@@ -39,6 +39,8 @@ const CWE_BASELINE: Record<string, SeverityLevel> = {
   "CWE-327": "MEDIUM",
   "CWE-328": "LOW",
   "CWE-352": "MEDIUM",
+  "CWE-16": "MEDIUM",
+  "CWE-693": "MEDIUM",
   "CWE-400": "MEDIUM",
   "CWE-502": "CRITICAL",
   "CWE-601": "MEDIUM",

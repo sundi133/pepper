@@ -96,7 +96,9 @@ async function verifyGithubSignatureWithOrg(
 ): Promise<{ organizationId: string | null } | null> {
   if (!signature) return null;
   const secrets = await listWebhookSecretsWithOrgs("github");
-  if (secrets.length === 0) return { organizationId: null };
+  // Fail closed: no secret configured means no request can be authenticated,
+  // never an implicit "allow" (see requireGithubWebhookAuth).
+  if (secrets.length === 0) return null;
   for (const { secret, organizationId } of secrets) {
     const expected = `sha256=${crypto
       .createHmac("sha256", secret)
@@ -114,7 +116,8 @@ async function verifyBitbucketSignatureWithOrg(
 ): Promise<{ organizationId: string | null } | null> {
   if (!signature) return null;
   const secrets = await listWebhookSecretsWithOrgs("bitbucket");
-  if (secrets.length === 0) return { organizationId: null };
+  // Fail closed: no secret configured means no request can be authenticated.
+  if (secrets.length === 0) return null;
   for (const { secret, organizationId } of secrets) {
     const expected = `sha256=${crypto
       .createHmac("sha256", secret)
@@ -132,7 +135,8 @@ async function verifyAzureDevOpsAuthWithOrg(
   const token = parseBasicAuthPassword(authorization);
   if (!token) return null;
   const secrets = await listWebhookSecretsWithOrgs("azure-devops");
-  if (secrets.length === 0) return { organizationId: null };
+  // Fail closed: no secret configured means no request can be authenticated.
+  if (secrets.length === 0) return null;
   for (const { secret, organizationId } of secrets) {
     if (token === secret) return { organizationId };
   }
@@ -211,8 +215,6 @@ export async function requireGithubWebhookAuth(
 > {
   const result = await verifyGithubSignatureWithOrg(body, signature);
   if (result === null) {
-    const secrets = await listWebhookSecrets("github");
-    if (secrets.length === 0) return { ok: true, organizationId: null };
     return { ok: false, status: 401 };
   }
   return { ok: true, ...result };
@@ -224,7 +226,8 @@ async function verifyGitlabTokenWithOrg(
 ): Promise<{ organizationId: string | null } | null> {
   if (!token) return null;
   const secrets = await listWebhookSecretsWithOrgs("gitlab");
-  if (secrets.length === 0) return { organizationId: null };
+  // Fail closed: no secret configured means no request can be authenticated.
+  if (secrets.length === 0) return null;
   for (const { secret, organizationId } of secrets) {
     if (token === secret) return { organizationId };
   }
@@ -239,8 +242,6 @@ export async function requireGitlabWebhookAuth(
 > {
   const result = await verifyGitlabTokenWithOrg(token);
   if (result === null) {
-    const secrets = await listWebhookSecrets("gitlab");
-    if (secrets.length === 0) return { ok: true, organizationId: null };
     return { ok: false, status: 401 };
   }
   return { ok: true, ...result };
@@ -255,8 +256,6 @@ export async function requireBitbucketWebhookAuth(
 > {
   const result = await verifyBitbucketSignatureWithOrg(body, signature);
   if (result === null) {
-    const secrets = await listWebhookSecrets("bitbucket");
-    if (secrets.length === 0) return { ok: true, organizationId: null };
     return { ok: false, status: 401 };
   }
   return { ok: true, ...result };
@@ -270,8 +269,6 @@ export async function requireAzureDevOpsWebhookAuth(
 > {
   const result = await verifyAzureDevOpsAuthWithOrg(authorization);
   if (result === null) {
-    const secrets = await listWebhookSecrets("azure-devops");
-    if (secrets.length === 0) return { ok: true, organizationId: null };
     return { ok: false, status: 401 };
   }
   return { ok: true, ...result };

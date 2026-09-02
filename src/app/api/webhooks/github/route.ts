@@ -22,10 +22,8 @@ export async function POST(req: NextRequest) {
   const payload = JSON.parse(body) as Record<string, unknown>;
   const fullName = (payload.repository as { full_name?: string } | undefined)
     ?.full_name;
-  const cloneUrl = (payload.repository as { clone_url?: string } | undefined)
-    ?.clone_url;
 
-  if (!fullName || !cloneUrl) {
+  if (!fullName) {
     return NextResponse.json({ message: "Event ignored" });
   }
 
@@ -35,6 +33,15 @@ export async function POST(req: NextRequest) {
   );
   if (!project) {
     return NextResponse.json({ message: "No matching project found" });
+  }
+
+  // Always clone from the project's own stored, trusted repoUrl — never the
+  // webhook payload's clone_url, which is attacker-controlled and would
+  // otherwise let a forged/replayed webhook redirect the org's credentialed
+  // clone to an arbitrary host.
+  const cloneUrl = project.repoUrl;
+  if (!cloneUrl) {
+    return NextResponse.json({ message: "Project has no repo URL configured" });
   }
 
   // PR opened / updated — incremental scan on head branch

@@ -135,7 +135,9 @@ export async function processScanJob(job: Job<ScanJobData>) {
       fs.unlinkSync(archivePath);
     } else if (sourceType === "GIT_CLONE") {
       const { execFileSync } = await import("child_process");
-      const { withGitCredentials } = await import("@/lib/git-repo-url");
+      const { withGitCredentials, sanitizeGitCloneError } = await import(
+        "@/lib/git-repo-url"
+      );
       let repoUrl = job.data.repoUrl || sourceRef;
       const repoLog = job.data.repoUrlDisplay || repoUrl;
       if (job.data.useOrgGithubToken && job.data.orgSettings.orgId) {
@@ -194,21 +196,25 @@ export async function processScanJob(job: Job<ScanJobData>) {
             ? error.message
             : String(error);
         if (!branch || !message.includes("Remote branch")) {
-          throw error;
+          throw sanitizeGitCloneError(error, repoUrl, repoLog);
         }
 
         log.warn(
           { branch, repoUrl: repoLog },
           "Git branch was not found; retrying clone with repository default branch",
         );
-        execFileSync(
-          "git",
-          ["clone", "--depth", "1", repoUrl, repoDir],
-          {
-            timeout: 120000,
-            windowsHide: process.platform === "win32",
-          },
-        );
+        try {
+          execFileSync(
+            "git",
+            ["clone", "--depth", "1", repoUrl, repoDir],
+            {
+              timeout: 120000,
+              windowsHide: process.platform === "win32",
+            },
+          );
+        } catch (retryError) {
+          throw sanitizeGitCloneError(retryError, repoUrl, repoLog);
+        }
       }
 
       if (scanType === "INCREMENTAL") {
@@ -290,7 +296,13 @@ export async function processScanJob(job: Job<ScanJobData>) {
           windowsHide: process.platform === "win32",
         });
       } catch (svnErr) {
-        const msg = svnErr instanceof Error ? svnErr.message : String(svnErr);
+        let msg = svnErr instanceof Error ? svnErr.message : String(svnErr);
+        // execFileSync embeds the full argv (including --password) in a
+        // failed command's message; strip it before it can reach
+        // Scan.errorMessage.
+        if (job.data.svnPassword) {
+          msg = msg.split(job.data.svnPassword).join("[REDACTED]");
+        }
         if (msg.includes("E170013") || msg.includes("Unable to connect")) {
           throw new Error(`SVN connection failed — check URL: ${svnUrl}`);
         }

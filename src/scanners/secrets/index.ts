@@ -7,7 +7,7 @@ import {
 } from "@/lib/llm-gateway";
 import { RawFinding, ScanContext, ScannerPlugin, Chunk } from "../types";
 import { chunkFile } from "../sast/chunker";
-import { maskSecretValue } from "../shared/evidence-redaction";
+import { maskSecretValue, redactSensitiveText } from "../shared/evidence-redaction";
 import { enrichFinding } from "../shared/finding-normalize";
 import { SECRETS_AI_PROMPT } from "../shared/prompts";
 import { applySeverityCalibration } from "@/lib/severity-calibration";
@@ -601,11 +601,25 @@ async function analyzeSecretChunk(
           (f.confidence ?? 0) >= SECRETS_MIN_CONFIDENCE_DEFAULT,
       )
       .map((f) => {
+        // The LLM's free-text justification often quotes the literal secret
+        // to explain "why it's real" — strip the exact known secret value
+        // (most reliable, since we already have it in exposedValue) and run
+        // generic secret-shape redaction on top, before this text is stored
+        // in metadata, used in the finding description, or forwarded to the
+        // second-pass classifier LLM.
+        let safeWhyReal = f.whyReal;
+        if (safeWhyReal) {
+          if (f.exposedValue) {
+            safeWhyReal = safeWhyReal.split(f.exposedValue).join("[REDACTED]");
+          }
+          safeWhyReal = redactSensitiveText(safeWhyReal);
+        }
+
         // Entropy-based validation to reduce false positives
         const entropy = validateSecretCandidate(
           f.exposedValue || "****",
           f.credentialType,
-          f.whyReal,
+          safeWhyReal,
         );
 
         // Adjust confidence based on entropy analysis
@@ -649,10 +663,10 @@ async function analyzeSecretChunk(
             provider: f.provider,
             category: "Secret",
             weaknessClass: "Hardcoded Credential",
-            evidence: f.whyReal,
+            evidence: safeWhyReal,
             impact: f.impact,
             remediation: f.remediation,
-            confidenceReason: f.whyReal,
+            confidenceReason: safeWhyReal,
             entropy: {
               score: entropy.shannonEntropy,
               isHighEntropy: entropy.isHighEntropy,
@@ -670,7 +684,7 @@ async function analyzeSecretChunk(
         return enrichFinding(base, base.metadata as Record<string, unknown>, {
           whatIsWrong: `Exposed ${f.credentialType} in source code or configuration`,
           where,
-          whyExploitable: f.whyReal,
+          whyExploitable: safeWhyReal,
           impact: f.impact,
           fix: f.remediation,
           validation:

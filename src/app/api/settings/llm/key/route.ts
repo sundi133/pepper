@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 
 export async function DELETE() {
   const auth = await requireAuth();
@@ -9,6 +9,9 @@ export async function DELETE() {
   const orgId = getDefaultOrgId(auth.session);
   if (!orgId)
     return NextResponse.json({ error: "No organization" }, { status: 403 });
+
+  const roleAuth = await requireRole(orgId, "ADMIN");
+  if ("error" in roleAuth) return roleAuth.error;
 
   try {
     await prisma.orgSettings.update({

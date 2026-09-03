@@ -53,3 +53,34 @@ export function withAzureDevOpsCredentials(
     return repoUrl;
   }
 }
+
+/**
+ * Strip a credential-bearing clone URL out of a thrown error's message
+ * (and stack) before it can propagate further.
+ *
+ * `execFileSync`'s thrown error embeds the full argv — including the
+ * credentialed clone URL built by `withGitCredentials`/
+ * `withBitbucketCredentials`/`withAzureDevOpsCredentials` — in its
+ * `.message`. That message is persisted as `Scan.errorMessage`, rendered on
+ * the scan detail page, and posted (truncated) as a PR comment, so a raw
+ * clone failure would otherwise leak the org's live OAuth token/app
+ * password/PAT to anyone who can see that scan or PR. Call this at every
+ * git-clone catch site, replacing the credentialed URL with the safe
+ * display URL (`repoUrlDisplay`/`repoLog`) before rethrowing.
+ */
+export function sanitizeGitCloneError(
+  err: unknown,
+  sensitiveUrl: string,
+  safeUrl: string,
+): Error {
+  const original = err instanceof Error ? err : new Error(String(err));
+  if (!sensitiveUrl || sensitiveUrl === safeUrl) return original;
+  const sanitized = new Error(
+    original.message.split(sensitiveUrl).join(safeUrl),
+  );
+  sanitized.name = original.name;
+  if (original.stack) {
+    sanitized.stack = original.stack.split(sensitiveUrl).join(safeUrl);
+  }
+  return sanitized;
+}

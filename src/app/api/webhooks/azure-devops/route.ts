@@ -49,11 +49,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "No matching project found" });
   }
 
-  const repoUrl =
-    repository?.remoteUrl ||
-    repository?.webUrl ||
-    project.repoUrl ||
-    repoId;
+  // Always clone from the project's own stored, trusted repoUrl — never the
+  // webhook payload's remoteUrl/webUrl, which is attacker-controlled and
+  // would otherwise let a forged webhook redirect the org's credentialed
+  // clone to an arbitrary host.
+  const repoUrl = project.repoUrl;
+  if (!repoUrl) {
+    return NextResponse.json({ message: "Project has no repo URL configured" });
+  }
 
   if (eventType === "git.push") {
     for (const update of resource?.refUpdates ?? []) {

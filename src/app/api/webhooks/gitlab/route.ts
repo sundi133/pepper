@@ -18,7 +18,6 @@ export async function POST(req: NextRequest) {
     eventType === "merge_request" &&
     ["open", "update"].includes(payload.object_attributes?.action)
   ) {
-    const repoUrl = payload.project?.git_http_url;
     const branch = payload.object_attributes?.source_branch;
     const baseSha = payload.object_attributes?.last_commit?.id;
     const prNumber = payload.object_attributes?.iid;
@@ -42,6 +41,15 @@ export async function POST(req: NextRequest) {
 
     if (!project) {
       return NextResponse.json({ message: "No matching project found" });
+    }
+
+    // Always clone from the project's own stored, trusted repoUrl — never
+    // the webhook payload's git_http_url, which is attacker-controlled and
+    // would otherwise let a forged webhook redirect the clone to an
+    // arbitrary host.
+    const repoUrl = project.repoUrl;
+    if (!repoUrl) {
+      return NextResponse.json({ message: "Project has no repo URL configured" });
     }
 
     // Store the GitLab project ID so the PR bot can post MR notes

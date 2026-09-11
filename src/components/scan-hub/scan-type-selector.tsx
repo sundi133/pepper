@@ -18,7 +18,8 @@ const ALL_SCANNERS_LIST =
 const SCAN_DESCRIPTIONS: Record<string, string> = {
   FULL: "All scanners run across the full codebase.",
   QUICK: "Pattern-based SAST scan only — fast results.",
-  INCREMENTAL: "Only scan files changed relative to a baseline.",
+  INCREMENTAL:
+    "Changed files vs a baseline, including IaC, Kubernetes, and container configs.",
 };
 
 export function ScanTypeSelector({

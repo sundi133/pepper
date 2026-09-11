@@ -5,6 +5,7 @@ import {
   parseDiffNameStatus,
   type DiffFile,
 } from "@/scanners/diff-parser";
+import { filesInTouchedIacStacks } from "@/scanners/iac/stacks";
 
 /** Basenames and extensions treated as dependency manifests for incremental SCA. */
 export const SCA_MANIFEST_BASENAMES = new Set([
@@ -85,7 +86,18 @@ export function applyIncrementalFileFilter(
   }));
   const matched = filterToChangedFiles(allFiles, diffFiles);
   const scaFiles = matched.filter(isScaManifestPath);
+  const scaSet = new Set(scaFiles.map(normalizeRepoPath));
+  const seen = new Set(
+    matched.filter((f) => !isScaManifestPath(f)).map(normalizeRepoPath),
+  );
   const sastAndSecretsFiles = matched.filter((f) => !isScaManifestPath(f));
+
+  for (const filePath of filesInTouchedIacStacks(allFiles, matched)) {
+    const key = normalizeRepoPath(filePath);
+    if (seen.has(key) || scaSet.has(key)) continue;
+    seen.add(key);
+    sastAndSecretsFiles.push(filePath);
+  }
 
   return {
     sastAndSecretsFiles,

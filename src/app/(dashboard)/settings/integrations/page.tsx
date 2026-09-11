@@ -410,7 +410,8 @@ export default function IntegrationsPage() {
             </p>
             <p>
               6. PR <strong>opened</strong> / <strong>synchronize</strong> queue{" "}
-              <code>INCREMENTAL</code> scans (changed files only). Merge or push
+              <code>INCREMENTAL</code> scans (changed files, including IaC / K8s /
+              containers). Merge or push
               to the default branch queues <code>SAST_ONLY</code> (override with{" "}
               <code>GITHUB_WEBHOOK_MAIN_SCAN_TYPE=FULL</code> on the server).
             </p>
@@ -617,7 +618,8 @@ export default function IntegrationsPage() {
             </p>
             <p>
               6. Connect Bitbucket above for private clone and PR comments.
-              PR events queue <code>INCREMENTAL</code> scans (changed files only).
+              PR events queue <code>INCREMENTAL</code> scans (changed files,
+              including IaC / K8s / containers).
               Default-branch push queues <code>SAST_ONLY</code> (override with{" "}
               <code>GITHUB_WEBHOOK_MAIN_SCAN_TYPE=FULL</code> on the server).
             </p>
@@ -804,7 +806,8 @@ export default function IntegrationsPage() {
             </p>
             <p>
               6. Connect Azure DevOps above for private clone and PR feedback.
-              PR events queue <code>INCREMENTAL</code> scans (changed files only).
+              PR events queue <code>INCREMENTAL</code> scans (changed files,
+              including IaC / K8s / containers).
               Default-branch push queues <code>SAST_ONLY</code> (override with{" "}
               <code>GITHUB_WEBHOOK_MAIN_SCAN_TYPE=FULL</code> on the server).
             </p>

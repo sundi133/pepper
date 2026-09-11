@@ -45,4 +45,19 @@ describe("incremental-scan-files", () => {
     expect(result.sastAndSecretsFiles).toEqual(all);
     expect(result.scaFiles).toEqual(["package.json"]);
   });
+
+  it("expands a changed IaC file to the rest of its stack", () => {
+    const all = [
+      "src/index.ts",
+      "infra/main.tf",
+      "infra/variables.tf",
+      "k8s/deployment.yaml",
+    ];
+    const result = applyIncrementalFileFilter(all, ["infra/variables.tf"]);
+    expect(result.sastAndSecretsFiles).toEqual(
+      expect.arrayContaining(["infra/variables.tf", "infra/main.tf"]),
+    );
+    expect(result.sastAndSecretsFiles).not.toContain("src/index.ts");
+    expect(result.sastAndSecretsFiles).not.toContain("k8s/deployment.yaml");
+  });
 });

@@ -197,7 +197,7 @@ Configure inbound webhooks in **Settings → Integrations** (webhook URL, secret
 | Bitbucket Cloud | `{NEXTAUTH_URL}/api/webhooks/bitbucket` | [Manage webhooks](https://support.atlassian.com/bitbucket-cloud/docs/manage-webhooks/) — **Repository push**, **PR created**, **PR updated** |
 | Azure DevOps | `{NEXTAUTH_URL}/api/webhooks/azure-devops` | [Web Hooks service](https://learn.microsoft.com/en-us/azure/devops/service-hooks/services/webhook) — **Code pushed**, **PR created**, **PR updated**; Basic auth password = Pepper secret |
 
-**Pull request / MR events** queue an **INCREMENTAL** scan (only changed files vs base). **Push to the default branch** queues `SAST_ONLY` by default (`GITHUB_WEBHOOK_MAIN_SCAN_TYPE` can set `FULL`).
+**Pull request / MR events** queue an **INCREMENTAL** scan (changed files vs base, including IaC / Kubernetes / container configs in the diff). **Push to the default branch** queues `SAST_ONLY` by default (`GITHUB_WEBHOOK_MAIN_SCAN_TYPE` can set `FULL`).
 
 1. Set the matching secret in **Webhook secrets** on the integrations page (or env: `GITHUB_WEBHOOK_SECRET`, `BITBUCKET_WEBHOOK_SECRET`, `AZURE_DEVOPS_WEBHOOK_SECRET`).
 2. Connect the provider (GitHub OAuth, Bitbucket app password, or Azure PAT) for private clone and PR feedback.

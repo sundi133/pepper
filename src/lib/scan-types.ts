@@ -16,7 +16,7 @@ export const MANUAL_SCAN_TYPE_OPTIONS: ReadonlyArray<{
     value: "INCREMENTAL",
     label: "PR Diff",
     description:
-      "Scans only files changed in a pull request or between two commits. Supply a PR number or base SHA to diff against. Great for CI pipelines — surface new issues without re-triaging the full backlog.",
+      "Scans only files changed in a pull request or between two commits (SAST, SCA, secrets, IaC, Kubernetes, containers, zero-day). Supply a PR number or base SHA to diff against.",
   },
   {
     value: "SAST_ONLY",

@@ -33,16 +33,18 @@ export function getScanners(
 ): ScannerPlugin[] {
   const scanners: ScannerPlugin[] = [];
 
-  // INCREMENTAL: PR/MR webhooks — SAST/SCA/secrets on changed files only (see incremental-scan-files).
+  // INCREMENTAL: PR/MR webhooks — changed files only (see incremental-scan-files).
   const includeSast = ["FULL", "SAST_ONLY", "INCREMENTAL"].includes(scanType);
   const includeSca = ["FULL", "SCA_ONLY", "INCREMENTAL"].includes(scanType);
   const includeSecrets = ["FULL", "SECRETS_ONLY", "INCREMENTAL"].includes(
     scanType,
   );
-  const includeIac = ["FULL", "IAC_ONLY"].includes(scanType);
+  const includeIac = ["FULL", "IAC_ONLY", "INCREMENTAL"].includes(scanType);
   const includeZeroDay = ["FULL", "ZERO_DAY_ONLY", "INCREMENTAL"].includes(scanType);
-  const includeContainer = ["FULL", "CONTAINER_ONLY"].includes(scanType);
-  const includeK8s = ["FULL", "K8S_ONLY"].includes(scanType);
+  const includeContainer = ["FULL", "CONTAINER_ONLY", "INCREMENTAL"].includes(
+    scanType,
+  );
+  const includeK8s = ["FULL", "K8S_ONLY", "INCREMENTAL"].includes(scanType);
 
   if (includeSast && orgSettings.enableLlmSast) {
     scanners.push(sastLlmScanner);

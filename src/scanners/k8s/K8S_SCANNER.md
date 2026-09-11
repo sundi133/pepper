@@ -103,7 +103,7 @@ K8S_MIN_CONFIDENCE=0.80  # Minimum confidence threshold (default: 0.80)
 
 The K8S scanner is fully integrated into the scanner pipeline:
 
-- Activated with scan types: `FULL`, `K8S_ONLY`
+- Activated with scan types: `FULL`, `K8S_ONLY`, `INCREMENTAL` (changed manifests only)
 - Requires `enableLlmSast: true` in org settings
 - Runs in parallel with other scanners
 - Deduplicates findings across all scanners

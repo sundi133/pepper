@@ -59,3 +59,32 @@ export function groupIacStacks(
 
   return [...map.values()].filter((s) => s.files.length > 0);
 }
+
+function normPath(filePath: string): string {
+  return filePath.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+/**
+ * When a PR touches one IaC file, include the rest of that stack so
+ * Dockerfile+compose / Terraform module+vars still analyze together.
+ */
+export function filesInTouchedIacStacks(
+  allFiles: string[],
+  changedFiles: string[],
+): string[] {
+  if (changedFiles.length === 0) return [];
+  const changed = new Set(changedFiles.map(normPath));
+  const stacks = groupIacStacks(allFiles.map(normPath));
+  const extra: string[] = [];
+  const seen = new Set<string>();
+  for (const stack of stacks) {
+    if (!stack.files.some((f) => changed.has(normPath(f.filePath)))) continue;
+    for (const f of stack.files) {
+      const key = normPath(f.filePath);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      extra.push(f.filePath);
+    }
+  }
+  return extra;
+}

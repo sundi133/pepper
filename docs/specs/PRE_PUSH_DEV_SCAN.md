@@ -187,16 +187,28 @@ network. Nothing here requires Anthropic-hosted infrastructure.
 
 ## 10. Phased delivery
 
-| Phase | Scope | Depends on |
+| Phase | Scope | Status |
 |---|---|---|
-| 0 | `pepper scan --local` over existing `/api/precommit/scan` (secrets/SAST-pattern, seconds, offline-capable) | nothing new |
-| 1 | `pepper scan` → cloud `POST /api/scans` upload, poll, terminal summary | #81 (done) |
-| 2 | `--download` (SARIF/PDF/SBOM/VEX via existing artifact endpoints) | phase 1 |
-| 3 | `--diff` change-only packaging + dependency-manifest inclusion | phase 1 |
-| 4 | `pepper install-hook` pre-push git hook + `--gate` push blocking | phase 1–3 |
-| 5 | Ephemeral dev-scan handling so dev scans don't clobber the project scan | server §7 |
+| 0 | `pepper scan --local` over existing `/api/precommit/scan` (secrets/SAST-pattern, seconds, offline-capable) | not started |
+| 1 | `pepper scan` → cloud `POST /api/scans` upload, poll, terminal summary | **done** (`scripts/pepper-scan.mjs`) |
+| 2 | `--download` (SARIF/PDF/SBOM/VEX via existing artifact endpoints) | **done** |
+| 3 | `--diff` change-only packaging + dependency-manifest inclusion | **done** |
+| 4 | `pepper-scan install-hook` pre-push git hook + `--gate` push blocking | **done** |
+| 5 | Ephemeral dev-scan handling so dev scans don't clobber the project scan | **done** (`Project.ephemeral`, `resolveEphemeralProject`) |
 
-Phases 0–2 deliver the core ask. 3–5 are polish/enforcement.
+Phase 0 (the pure-local fast path) is the remaining piece. 1–5 are implemented.
+
+### Installed CLI usage
+
+```bash
+pepper-scan.mjs                          # full cloud scan of the pushed commits
+pepper-scan.mjs --diff origin/main       # scan only changes vs base (+ manifests)
+pepper-scan.mjs --download ./report      # SARIF / PDF / SBOM / VEX
+pepper-scan.mjs --gate                   # exit 1 on gate failure (advisory otherwise)
+pepper-scan.mjs install-hook             # non-blocking pre-push hook (fire-and-forget)
+pepper-scan.mjs install-hook --gate      # blocking pre-push hook
+# skip a hooked push once: git push --no-verify   (or PEPPER_SKIP=1 git push)
+```
 
 ## 11. Open questions for review
 

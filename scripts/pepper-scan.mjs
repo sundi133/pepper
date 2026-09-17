@@ -53,13 +53,21 @@ function loadConfig() {
 
 function parseArgs(argv) {
   const opts = {
+    command: "scan",
     type: null,
     download: null,
     gate: false,
     wait: true,
     json: false,
+    diff: null,
   };
-  for (let i = 0; i < argv.length; i++) {
+  // A leading bare word (not a flag) is a subcommand, e.g. `install-hook`.
+  let start = 0;
+  if (argv[0] && !argv[0].startsWith("-")) {
+    opts.command = argv[0];
+    start = 1;
+  }
+  for (let i = start; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--type") opts.type = argv[++i]?.toUpperCase();
     else if (a.startsWith("--type=")) opts.type = a.slice(7).toUpperCase();
@@ -68,8 +76,27 @@ function parseArgs(argv) {
     else if (a === "--gate") opts.gate = true;
     else if (a === "--wait=false" || a === "--no-wait") opts.wait = false;
     else if (a === "--json") opts.json = true;
+    else if (a === "--diff") opts.diff = argv[++i] || "@{upstream}";
+    else if (a.startsWith("--diff=")) opts.diff = a.slice(7);
   }
   return opts;
+}
+
+/** package.json script hooks that identify a dependency manifest/lockfile. */
+const MANIFEST_BASENAMES = new Set([
+  "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+  "requirements.txt", "Pipfile.lock", "poetry.lock", "pyproject.toml",
+  "go.mod", "Cargo.toml", "Cargo.lock", "pom.xml", "build.gradle",
+  "build.gradle.kts", "Gemfile.lock", "composer.json", "composer.lock",
+  "packages.config", "pubspec.yaml", "mix.lock", "Package.resolved",
+]);
+const MANIFEST_EXTS = new Set([".csproj", ".fsproj", ".vbproj"]);
+
+function isManifest(file) {
+  const base = file.split("/").pop() || "";
+  if (MANIFEST_BASENAMES.has(base)) return true;
+  const dot = base.lastIndexOf(".");
+  return dot > -1 && MANIFEST_EXTS.has(base.slice(dot));
 }
 
 // ─── Git ─────────────────────────────────────────────────────────────────────
@@ -116,13 +143,48 @@ function projectName(remote, root) {
   return `${base} (dev scan)`;
 }
 
+/**
+ * Files to scan in --diff mode: what changed vs the base, plus every dependency
+ * manifest/lockfile (unchanged or not) so the cloud SCA still sees the full
+ * dependency set. Pure so it can be tested without a repo.
+ */
+function diffFileSet(changed, tracked) {
+  const set = new Set(changed.filter(Boolean));
+  for (const f of tracked) if (isManifest(f)) set.add(f);
+  return [...set];
+}
+
+function changedFiles(base) {
+  // ACMR = added/copied/modified/renamed; deletions are not scannable.
+  const out = git([
+    "diff",
+    "--name-only",
+    "--diff-filter=ACMR",
+    `${base}...HEAD`,
+  ]);
+  return out ? out.split("\n") : [];
+}
+
+function trackedFiles() {
+  const out = git(["ls-files"]);
+  return out ? out.split("\n") : [];
+}
+
+const TMP = process.env.TMPDIR || "/tmp";
+
 /** Tarball of the exact tree that will be pushed: tracked files at HEAD. */
 function archiveHead(commit) {
-  const out = join(
-    process.env.TMPDIR || "/tmp",
-    `pepper-scan-${commit.slice(0, 12)}.tar.gz`,
-  );
+  const out = join(TMP, `pepper-scan-${commit.slice(0, 12)}.tar.gz`);
   git(["archive", "--format=tar.gz", "-o", out, "HEAD"]);
+  return out;
+}
+
+/** Tarball of a specific set of paths at HEAD (for --diff). */
+function archiveFiles(commit, paths) {
+  if (paths.length === 0) return archiveHead(commit);
+  const out = join(TMP, `pepper-scan-${commit.slice(0, 12)}-diff.tar.gz`);
+  // Pass paths as pathspecs; only those that exist at HEAD are included.
+  git(["archive", "--format=tar.gz", "-o", out, "HEAD", "--", ...paths]);
   return out;
 }
 
@@ -141,8 +203,30 @@ async function api(cfg, path, init = {}) {
   return res;
 }
 
-async function createScan(cfg, ctx, scanType) {
-  const tarball = archiveHead(ctx.commit);
+async function createScan(cfg, ctx, scanType, diffBase) {
+  let tarball;
+  let resolved = null;
+  if (diffBase) {
+    try {
+      resolved = git(["rev-parse", diffBase]);
+    } catch {
+      // New branch / no upstream: fall back to a full scan rather than failing,
+      // so a pre-push hook still works on the first push of a branch.
+      process.stderr.write(
+        `pepper: --diff base '${diffBase}' not found; scanning full tree\n`,
+      );
+    }
+  }
+  if (resolved) {
+    const files = diffFileSet(changedFiles(resolved), trackedFiles());
+    if (files.length === 0) {
+      process.stderr.write("pepper: no changed files vs base; nothing to scan\n");
+      process.exit(0);
+    }
+    tarball = archiveFiles(ctx.commit, files);
+  } else {
+    tarball = archiveHead(ctx.commit);
+  }
   const buf = readFileSync(tarball);
   const form = new FormData();
   form.append("file", new Blob([buf]), "source.tar.gz");
@@ -222,11 +306,62 @@ async function download(cfg, scanId, dir) {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-export { parseArgs, projectName };
+export { parseArgs, projectName, diffFileSet, isManifest, hookScript };
+
+/** Body of the generated .git/hooks/pre-push. */
+function hookScript(cliPath, gate) {
+  const flags = gate ? "--diff @{upstream} --gate" : "--diff @{upstream} --wait=false";
+  // Advisory install ends with `|| true` so it can never block a push; the gate
+  // install omits it so a failed gate (exit 1) refuses the push.
+  const tail = gate ? "" : " || true";
+  return `#!/usr/bin/env bash
+# Pepper pre-push scan (installed by 'pepper-scan install-hook').
+# Skip once with: git push --no-verify
+[ -n "$PEPPER_SKIP" ] && exit 0
+node "${cliPath}" ${flags}${tail}
+`;
+}
+
+function installHook(opts) {
+  let hooksDir;
+  try {
+    hooksDir = git(["rev-parse", "--git-path", "hooks"]);
+  } catch {
+    fail("not inside a git repository");
+  }
+  const root = git(["rev-parse", "--show-toplevel"]);
+  const abs = hooksDir.startsWith("/") ? hooksDir : join(root, hooksDir);
+  mkdirSync(abs, { recursive: true });
+  const hookPath = join(abs, "pre-push");
+  const cliPath = new URL(import.meta.url).pathname;
+
+  if (existsSync(hookPath)) {
+    const current = readFileSync(hookPath, "utf8");
+    if (!current.includes("Pepper pre-push scan")) {
+      fail(
+        `a pre-push hook already exists at ${hookPath}; ` +
+          "remove or merge it before installing",
+      );
+    }
+  }
+  writeFileSync(hookPath, hookScript(cliPath, opts.gate), { mode: 0o755 });
+  process.stdout.write(
+    `Installed pre-push hook → ${hookPath}\n` +
+      `  mode: ${opts.gate ? "gate (blocks push on gate failure)" : "advisory (non-blocking)"}\n` +
+      `  skip once: git push --no-verify  ·  or  PEPPER_SKIP=1 git push\n`,
+  );
+}
 
 async function main() {
-  const cfg = loadConfig();
   const opts = parseArgs(process.argv.slice(2));
+
+  if (opts.command === "install-hook") {
+    installHook(opts);
+    return;
+  }
+  if (opts.command !== "scan") fail(`unknown command '${opts.command}'`);
+
+  const cfg = loadConfig();
   if (!cfg.key) fail("PEPPER_API_KEY not set (env or ~/.pepper/config)");
 
   const scanType = opts.type || cfg.scanType || "FULL";
@@ -236,7 +371,7 @@ async function main() {
     `pepper · ${scanType} scan of ${ctx.branch}@${ctx.commit.slice(0, 8)} → ${cfg.url}\n`,
   );
 
-  const scanId = await createScan(cfg, ctx, scanType);
+  const scanId = await createScan(cfg, ctx, scanType, opts.diff);
   const scanUrl = `${cfg.url}/scans/${scanId}`;
 
   if (!opts.wait) {

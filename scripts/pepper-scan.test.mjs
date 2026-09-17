@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { parseArgs, projectName } from "./pepper-scan.mjs";
+import {
+  parseArgs,
+  projectName,
+  diffFileSet,
+  isManifest,
+  hookScript,
+} from "./pepper-scan.mjs";
 
 describe("parseArgs", () => {
   it("defaults to a waiting, advisory full scan", () => {
@@ -54,5 +60,80 @@ describe("projectName", () => {
     for (const remote of ["https://x/y.git", "git@h:o/r.git", ""]) {
       expect(projectName(remote, "/tmp/fallback")).toMatch(/\(dev scan\)$/);
     }
+  });
+});
+
+describe("subcommand parsing", () => {
+  it("defaults to scan and reads --diff", () => {
+    expect(parseArgs([]).command).toBe("scan");
+    expect(parseArgs(["--diff", "origin/main"]).diff).toBe("origin/main");
+    expect(parseArgs(["--diff=origin/main"]).diff).toBe("origin/main");
+    expect(parseArgs(["--diff"]).diff).toBe("@{upstream}");
+  });
+
+  it("treats a leading bare word as a subcommand", () => {
+    const o = parseArgs(["install-hook", "--gate"]);
+    expect(o.command).toBe("install-hook");
+    expect(o.gate).toBe(true);
+  });
+});
+
+describe("isManifest", () => {
+  it("recognises manifests and lockfiles across ecosystems", () => {
+    for (const f of [
+      "package.json", "a/b/package-lock.json", "requirements.txt",
+      "go.mod", "Cargo.lock", "pom.xml", "Gemfile.lock", "composer.json",
+      "src/App.csproj", "pubspec.yaml",
+    ]) {
+      expect(isManifest(f)).toBe(true);
+    }
+  });
+
+  it("does not treat source files as manifests", () => {
+    for (const f of ["index.ts", "main.py", "README.md", "a/b.json"]) {
+      expect(isManifest(f)).toBe(false);
+    }
+  });
+});
+
+describe("diffFileSet", () => {
+  it("includes changed files plus every manifest, unchanged or not", () => {
+    // SCA needs the manifests even when a change doesn't touch them.
+    const changed = ["src/a.ts", "src/b.ts"];
+    const tracked = ["src/a.ts", "package.json", "go.mod", "src/z.ts"];
+    const set = diffFileSet(changed, tracked);
+    expect(set).toContain("src/a.ts");
+    expect(set).toContain("src/b.ts");
+    expect(set).toContain("package.json");
+    expect(set).toContain("go.mod");
+    expect(set).not.toContain("src/z.ts");
+  });
+
+  it("does not duplicate a changed manifest", () => {
+    const set = diffFileSet(["package.json"], ["package.json"]);
+    expect(set.filter((f) => f === "package.json")).toHaveLength(1);
+  });
+
+  it("is empty when nothing changed and there are no manifests", () => {
+    expect(diffFileSet([], ["src/a.ts"])).toEqual([]);
+  });
+});
+
+describe("hookScript", () => {
+  it("advisory install can never block a push", () => {
+    const s = hookScript("/x/cli.mjs", false);
+    expect(s).toContain("--wait=false");
+    expect(s).toContain("|| true");
+    expect(s).not.toContain("--gate");
+  });
+
+  it("gate install blocks on gate failure", () => {
+    const s = hookScript("/x/cli.mjs", true);
+    expect(s).toContain("--gate");
+    expect(s).not.toContain("|| true");
+  });
+
+  it("honours a skip escape hatch", () => {
+    expect(hookScript("/x/cli.mjs", false)).toContain("PEPPER_SKIP");
   });
 });

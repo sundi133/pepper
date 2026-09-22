@@ -32,6 +32,7 @@ export async function listAzureDevOpsRepositoriesInOrganization(
   connectedRepoIds: Set<string>,
 ): Promise<AzureDevOpsRepoListItem[]> {
   const items: AzureDevOpsRepoListItem[] = [];
+  const seenIds = new Set<string>();
   let skip = 0;
   const top = 100;
 
@@ -50,11 +51,18 @@ export async function listAzureDevOpsRepositoriesInOrganization(
     const batch = res.data?.value ?? [];
     if (batch.length === 0) break;
 
+    let added = 0;
     for (const r of batch) {
       if (!r.id || !r.name || !r.project?.name) continue;
+      // ADO's list-repositories endpoint does NOT honour $top/$skip — it
+      // returns the full set on every call — so dedupe by id to avoid
+      // appending the same repositories once per page for large orgs.
+      if (seenIds.has(r.id)) continue;
       const projectName = r.project.name;
       const cloneUrl = r.remoteUrl?.trim() || r.webUrl?.trim() || "";
       if (!cloneUrl) continue;
+      seenIds.add(r.id);
+      added++;
       items.push({
         id: r.id,
         fullName: `${projectName}/${r.name}`,
@@ -68,7 +76,9 @@ export async function listAzureDevOpsRepositoriesInOrganization(
       });
     }
 
-    if (batch.length < top) break;
+    // Stop once a page adds no new repositories (paging ignored) or we clearly
+    // reached the final short page.
+    if (added === 0 || batch.length < top) break;
     skip += top;
   }
 

@@ -23,8 +23,14 @@ export function azureDevOpsHttpsCloneUrl(
 }
 
 /**
- * Parse `project/repo`, `org/project/repo`, or
- * `https://dev.azure.com/org/project/_git/repo`.
+ * Parse a repository reference in any of the forms Pepper accepts:
+ *   - `project/repo` (org taken from the connected account)
+ *   - `org/project/repo`
+ *   - `https://dev.azure.com/{org}/{project}/_git/{repo}`
+ *   - legacy `https://{org}.visualstudio.com/[{collection}/]{project}/_git/{repo}`
+ *
+ * URL host matching is exact (no substring test) so a look-alike host such as
+ * `dev.azure.com.attacker.example` is rejected.
  */
 export function parseAzureDevOpsRepoInput(
   input: string,
@@ -33,20 +39,51 @@ export function parseAzureDevOpsRepoInput(
   const trimmed = input.trim();
   if (!trimmed) return null;
 
+  const dec = (s: string): string => {
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
+  };
+
   try {
     if (/^https?:\/\//i.test(trimmed)) {
       const u = new URL(trimmed);
-      if (!u.hostname.includes("dev.azure.com")) return null;
-      const parts = u.pathname.replace(/^\/+|\/+$/g, "").split("/");
-      // org / project / _git / repo
+      const host = u.hostname.toLowerCase();
+      const parts = u.pathname
+        .replace(/^\/+|\/+$/g, "")
+        .split("/")
+        .filter(Boolean);
       const gitIdx = parts.indexOf("_git");
-      if (gitIdx >= 2 && parts[gitIdx + 1]) {
-        return {
-          organization: parts[0],
-          project: parts[gitIdx - 1],
-          repo: parts[gitIdx + 1].replace(/\.git$/i, ""),
-        };
+      const repoSeg =
+        gitIdx >= 0 ? parts[gitIdx + 1]?.replace(/\.git$/i, "") : undefined;
+
+      // Modern: dev.azure.com/{org}/{project}/_git/{repo}
+      if (host === "dev.azure.com") {
+        if (gitIdx >= 2 && repoSeg) {
+          return {
+            organization: dec(parts[0]),
+            project: dec(parts[gitIdx - 1]),
+            repo: dec(repoSeg),
+          };
+        }
+        return null;
       }
+
+      // Legacy: {org}.visualstudio.com/[{collection}/]{project}/_git/{repo}
+      if (host.endsWith(".visualstudio.com")) {
+        const org = host.slice(0, -".visualstudio.com".length);
+        if (org && gitIdx >= 1 && repoSeg) {
+          return {
+            organization: org,
+            project: dec(parts[gitIdx - 1]),
+            repo: dec(repoSeg),
+          };
+        }
+        return null;
+      }
+
       return null;
     }
   } catch {

@@ -43,6 +43,11 @@ import {
 } from "@/lib/code-signing";
 import { decryptSecret } from "@/lib/token-encryption";
 import { computeRiskScore } from "@/lib/risk-score";
+import { validateExploitability } from "@/scanners/shared/exploit-validation";
+import {
+  ENABLE_EXPLOIT_VALIDATION,
+  EXPLOIT_VALIDATION_MIN_SEVERITY,
+} from "@/lib/constants";
 
 // prisma is imported from @/lib/prisma
 
@@ -917,6 +922,12 @@ Schema:
       }
     }
 
+    // 5b. Adversarial exploit-validation pass (opt-in, default off).
+    // Red-teams AI findings (SAST_LLM + ZERO_DAY) to confirm exploitability,
+    // drop clear false positives, and attach concrete attack paths. Runs before
+    // the gate so counts reflect the validated set. Never throws to the caller.
+    await runExploitValidation(scanId, orgSettings, workDir, log);
+
     // 6. Evaluate build gate (read current counts from DB since they were set incrementally)
     let gateResult: "PASSED" | "FAILED" = "PASSED";
     if (buildGate) {
@@ -1227,6 +1238,158 @@ function countSeverities(findings: RawFinding[]) {
     counts[f.severity]++;
   }
   return counts;
+}
+
+const SEVERITY_RANK: Record<string, number> = {
+  INFO: 0,
+  LOW: 1,
+  MEDIUM: 2,
+  HIGH: 3,
+  CRITICAL: 4,
+};
+
+/**
+ * Opt-in adversarial exploit-validation pass over AI findings.
+ *
+ * Gated by ENABLE_EXPLOIT_VALIDATION (default off) and the org's LLM SAST
+ * config. Reads OPEN SAST_LLM/ZERO_DAY findings at or above
+ * EXPLOIT_VALIDATION_MIN_SEVERITY, red-teams each for real exploitability, then:
+ *   - marks clear false positives FALSE_POSITIVE (not deleted — audit trail),
+ *   - annotates survivors with validated confidence + attack path,
+ *   - recomputes severity counts so the build gate sees the validated set.
+ *
+ * Every failure path leaves findings untouched: this pass only ever *removes*
+ * false positives the model is confident about, and never deletes a finding on
+ * a model error. It must never throw to the caller.
+ */
+async function runExploitValidation(
+  scanId: string,
+  orgSettings: ScanJobData["orgSettings"],
+  workDir: string,
+  log: ReturnType<typeof createScanLogger>,
+): Promise<void> {
+  if (!ENABLE_EXPLOIT_VALIDATION) return;
+  if (!orgSettings.enableLlmSast) return;
+  const isOllama = orgSettings.llmProvider?.toLowerCase() === "ollama";
+  if (!orgSettings.llmApiKey?.trim() && !isOllama) return;
+
+  try {
+    const minRank = SEVERITY_RANK[EXPLOIT_VALIDATION_MIN_SEVERITY.toUpperCase()] ?? 3;
+    const severities = Object.keys(SEVERITY_RANK).filter(
+      (s) => SEVERITY_RANK[s] >= minRank,
+    );
+
+    const candidates = await prisma.finding.findMany({
+      where: {
+        scanId,
+        scanner: { in: ["SAST_LLM", "ZERO_DAY"] },
+        severity: { in: severities as never },
+        status: "OPEN",
+      },
+      select: {
+        id: true,
+        scanner: true,
+        severity: true,
+        title: true,
+        description: true,
+        filePath: true,
+        startLine: true,
+        endLine: true,
+        snippet: true,
+        cweId: true,
+        confidence: true,
+        metadata: true,
+      },
+    });
+    if (candidates.length === 0) return;
+
+    log.info(
+      { candidates: candidates.length },
+      "Exploit validation — red-teaming AI findings",
+    );
+
+    const outcome = await validateExploitability(
+      candidates.map((c) => ({ ...c, scanner: String(c.scanner), severity: String(c.severity) })),
+      {
+        provider: orgSettings.llmProvider,
+        baseUrl: orgSettings.llmBaseUrl,
+        apiKey: orgSettings.llmApiKey,
+        model: orgSettings.llmModel,
+      },
+      { workDir },
+    );
+
+    // Drop clear false positives — mark, do not delete, so the decision is auditable.
+    if (outcome.drop.length > 0) {
+      await prisma.finding.updateMany({
+        where: { id: { in: outcome.drop.map((d) => d.id) } },
+        data: {
+          status: "FALSE_POSITIVE",
+          statusNote: "Suppressed by exploit-validation — no reachable attack path",
+          statusUpdatedAt: new Date(),
+        },
+      });
+    }
+
+    // Annotate survivors with validated confidence + attack path.
+    for (const k of outcome.keep) {
+      const orig = candidates.find((c) => c.id === k.id);
+      if (!orig) continue;
+      const meta =
+        orig.metadata && typeof orig.metadata === "object"
+          ? (orig.metadata as Record<string, unknown>)
+          : {};
+      await prisma.finding.update({
+        where: { id: k.id },
+        data: {
+          confidence: k.confidence,
+          metadata: {
+            ...meta,
+            exploitValidated: k.confirmed,
+            ...(k.attackPath ? { attackPath: k.attackPath } : {}),
+            ...(k.reason ? { exploitValidationReason: k.reason } : {}),
+          },
+        },
+      });
+    }
+
+    // Recompute severity counts from OPEN findings so the gate reads the
+    // post-validation totals (incremental counts were set before drops).
+    const grouped = await prisma.finding.groupBy({
+      by: ["severity"],
+      where: { scanId, status: "OPEN" },
+      _count: { _all: true },
+    });
+    const counts: Record<string, number> = {
+      CRITICAL: 0,
+      HIGH: 0,
+      MEDIUM: 0,
+      LOW: 0,
+      INFO: 0,
+    };
+    for (const g of grouped) counts[String(g.severity)] = g._count._all;
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: {
+        criticalCount: counts.CRITICAL,
+        highCount: counts.HIGH,
+        mediumCount: counts.MEDIUM,
+        lowCount: counts.LOW,
+        infoCount: counts.INFO,
+      },
+    });
+
+    log.info(
+      {
+        dropped: outcome.drop.length,
+        kept: outcome.keep.length,
+        confirmed: outcome.keep.filter((k) => k.confirmed).length,
+      },
+      "Exploit validation complete",
+    );
+  } catch (err) {
+    log.warn({ err }, "Exploit validation failed — findings left untouched");
+  }
 }
 
 async function scanHasNewFindings(

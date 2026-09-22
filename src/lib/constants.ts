@@ -280,6 +280,37 @@ export const OLLAMA_MAX_RESPONSE_TOKENS = parseInt(
   process.env.OLLAMA_MAX_RESPONSE_TOKENS || "6144",
 );
 
+// ─── Exploit validation (adversarial pass over AI findings) ──────────────────
+// Off by default: enabling it changes which SAST/ZERO_DAY findings survive, so
+// it is opt-in per install until validated in the field.
+export const ENABLE_EXPLOIT_VALIDATION =
+  process.env.ENABLE_EXPLOIT_VALIDATION === "true";
+
+/** Findings per validation LLM request. */
+export const EXPLOIT_VALIDATION_BATCH = parseInt(
+  process.env.EXPLOIT_VALIDATION_BATCH || "10",
+  10,
+);
+
+/** Lines of code context read around each finding for the validator. */
+export const EXPLOIT_VALIDATION_CONTEXT_LINES = parseInt(
+  process.env.EXPLOIT_VALIDATION_CONTEXT_LINES || "40",
+  10,
+);
+
+/**
+ * A disproved finding is only removed when the validator's confidence is at
+ * least this high; below it the finding is kept for human review. Conservative
+ * by design — the pass must not delete real findings on a weak hunch.
+ */
+export const EXPLOIT_VALIDATION_DROP_CONFIDENCE = parseFloat(
+  process.env.EXPLOIT_VALIDATION_DROP_CONFIDENCE || "0.8",
+);
+
+/** Only validate findings at or above this severity (cost control). */
+export const EXPLOIT_VALIDATION_MIN_SEVERITY =
+  process.env.EXPLOIT_VALIDATION_MIN_SEVERITY || "HIGH";
+
 /** Parallel LLM file/chunk requests inside a scanner (SAST / IaC / zero-day). */
 export const MAX_LLM_CONCURRENCY = parseInt(
   process.env.MAX_LLM_CONCURRENCY || "4",

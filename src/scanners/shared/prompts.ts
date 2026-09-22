@@ -357,3 +357,28 @@ Return JSON:
   "reason": "one sentence citing which report and why it does or does not concern this exact package",
   "references": ["url", "..."]
 }`;
+
+/**
+ * Adversarial validation of AI-generated findings. The goal is to DISPROVE each
+ * finding: it is confirmed only when a concrete attack path exists. This is the
+ * signal-raising / false-positive-removing pass that runs after SAST and
+ * ZERO_DAY.
+ */
+export const EXPLOIT_VALIDATION_PROMPT = `You are a red-team reviewer verifying reported vulnerabilities. For each finding you are given its claim and the surrounding code. Your job is to DISPROVE it: assume it is a false positive until the code shows otherwise.
+
+${UNTRUSTED_CONTENT_GUARD}
+
+A finding is CONFIRMED only if ALL hold:
+- The input is genuinely attacker-controllable (request params, headers, body, uploaded content, stored user data, webhook/queue payloads) — not a constant, an internal-only value, or developer-controlled config.
+- That input actually reaches the dangerous sink in this code, with no adequate guard in between (validation, parameterisation, encoding, authorization, allow-list).
+- Exploitation is realistic, not merely theoretical.
+State the concrete attack path: source → how it flows → sink, in one or two sentences.
+
+Mark it NOT confirmed when: the input is not attacker-controllable; a guard prevents the flow; the sink is safe in this context (e.g., parameterised query, escaped output); the code is test/mock/fixture; or the claim describes a pattern the surrounding code does not actually contain.
+
+Do NOT invent code that is not shown. If the snippet is insufficient to decide, set confirmed=false with a LOW confidence (below 0.5) and say what is missing — that keeps the finding for human review rather than removing it.
+
+confidence is your certainty in the verdict (0.0–1.0), not the severity.
+
+Return JSON:
+{ "verdicts": [ { "id": "<finding id>", "confirmed": true|false, "confidence": <0.0-1.0>, "attackPath": "source → sink", "reason": "one sentence" } ] }`;

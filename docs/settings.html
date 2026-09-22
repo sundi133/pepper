@@ -51,7 +51,7 @@
       <table>
         <thead><tr><th>Field</th><th>Description</th></tr></thead>
         <tbody>
-          <tr><td><strong>Provider</strong></td><td>Preset: OpenAI, OpenRouter, Azure, Ollama, or custom. Sets default base URL and model.</td></tr>
+          <tr><td><strong>Provider</strong></td><td>Preset: OpenAI, OpenRouter, Azure OpenAI, <strong>Azure AI Foundry</strong>, Ollama, vLLM, or custom. Sets default base URL and model.</td></tr>
           <tr><td><strong>Base URL</strong></td><td>OpenAI-compatible API root (e.g. <code>https://api.openai.com/v1</code>, <code>https://openrouter.ai/api/v1</code>, <code>http://localhost:11434</code> for Ollama).</td></tr>
           <tr><td><strong>Model</strong></td><td>Model ID sent to the API (e.g. <code>gpt-4o-mini</code>, <code>google/gemini-2.5-flash</code>, <code>qwen2.5-coder:7b</code>).</td></tr>
           <tr><td><strong>API key</strong></td><td>Stored encrypted per organization. Leave blank on save to keep existing key. Env fallback: <code>LLM_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>OPENROUTER_API_KEY</code>.</td></tr>

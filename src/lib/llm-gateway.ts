@@ -115,6 +115,7 @@ export type LlmClient =
   | { type: "ollama"; client: Ollama; model: string }
   | { type: "anthropic"; client: Anthropic; model: string }
   | { type: "openrouter"; client: OpenAI; model: string }
+  | { type: "azure"; client: OpenAI; model: string }
   | { type: "openai"; client: OpenAI; model: string };
 
 export function createLlmClient(config: LlmConfig): LlmClient {
@@ -147,12 +148,99 @@ export function createLlmClient(config: LlmConfig): LlmClient {
     };
   }
 
-  // OpenAI, Azure, vLLM, and any OpenAI-compatible provider
+  // Azure AI Foundry: OpenAI-compatible endpoint (…/services.ai.azure.com/
+  // openai/v1) with Bearer auth, hosting a heterogeneous model catalog
+  // (gpt, grok, glm, qwen, kimi, …). Kept separate from the classic "azure"
+  // (Azure OpenAI) option, which uses a different URL/protocol, so neither
+  // changes the other.
+  if (provider === "azure-foundry" || provider === "azure_foundry") {
+    return {
+      type: "azure",
+      client: createOpenAIClient(config),
+      model: config.model,
+    };
+  }
+
+  // OpenAI, classic Azure OpenAI, vLLM, and any OpenAI-compatible provider
   return {
     type: "openai",
     client: createOpenAIClient(config),
     model: config.model,
   };
+}
+
+/**
+ * Chat call tolerant of Azure AI Foundry's heterogeneous model catalog.
+ *
+ * Foundry serves many model families behind one OpenAI-compatible endpoint and
+ * they disagree on parameters, so a single fixed request 400s on some of them.
+ * Send the modern parameters and, on a parameter error, adapt and retry rather
+ * than failing the scan:
+ *   - max_completion_tokens ↔ max_tokens — newer models (gpt-6, o-series) reject
+ *     the old name; some third-party models reject the new one.
+ *   - drop temperature — reasoning models allow only the default.
+ * JSON is enforced through the prompt, not response_format, because not every
+ * Foundry-hosted model supports response_format.
+ *
+ * `create` is injected so the retry logic is unit-testable without a network.
+ */
+export async function foundryChat(
+  create: (params: Record<string, unknown>) => Promise<{
+    choices?: Array<{ message?: { content?: string | null } }>;
+  }>,
+  args: {
+    model: string;
+    system: string;
+    user: string;
+    maxTokens: number;
+    temperature: number;
+  },
+): Promise<string> {
+  const messages = [
+    {
+      role: "system",
+      content: `${args.system}\n\nIMPORTANT: respond with valid JSON only. No markdown, no code fences, no prose.`,
+    },
+    { role: "user", content: args.user },
+  ];
+  let params: Record<string, unknown> = {
+    model: args.model,
+    messages,
+    max_completion_tokens: args.maxTokens,
+    temperature: args.temperature,
+  };
+
+  // At most one retry per adaptable parameter.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const res = await create(params);
+      return res.choices?.[0]?.message?.content || "{}";
+    } catch (err) {
+      const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+      if (
+        "max_completion_tokens" in params &&
+        /max_tokens/.test(msg) &&
+        /unsupported|unknown|not supported|unrecognized|use ['"]?max_tokens|instead/.test(msg)
+      ) {
+        const { max_completion_tokens, ...rest } = params;
+        params = { ...rest, max_tokens: max_completion_tokens };
+        continue;
+      }
+      if ("max_tokens" in params && /max_completion_tokens/.test(msg)) {
+        const { max_tokens, ...rest } = params;
+        params = { ...rest, max_completion_tokens: max_tokens };
+        continue;
+      }
+      if ("temperature" in params && /temperature/.test(msg)) {
+        const { temperature, ...rest } = params;
+        params = rest;
+        continue;
+      }
+      // Any other error degrades to "{}" like the other provider paths.
+      return "{}";
+    }
+  }
+  return "{}";
 }
 
 // ─── Unified Analysis Function ────────────────────────────────────────
@@ -197,6 +285,20 @@ export async function analyzeWithLlm(
     } catch {
       return "{}";
     }
+  }
+
+  // Azure AI Foundry path — tolerant of its heterogeneous model catalog.
+  if (llmClient.type === "azure") {
+    return foundryChat(
+      (params) => llmClient.client.chat.completions.create(params as never),
+      {
+        model: model || llmClient.model,
+        system: systemPrompt,
+        user: userContent,
+        maxTokens: options?.maxTokens ?? 8192,
+        temperature,
+      },
+    );
   }
 
   // OpenRouter path — many models don't support response_format, so we
@@ -288,12 +390,18 @@ export async function* streamChatWithLlm(
     return;
   }
 
-  // OpenAI-compatible (openai + openrouter)
+  // OpenAI-compatible (openai + openrouter + azure foundry).
+  // Foundry's newer models use max_completion_tokens; older ones and the other
+  // providers use max_tokens. Send both is invalid, so pick by client type.
+  const tokenParam =
+    llmClient.type === "azure"
+      ? { max_completion_tokens: maxTokens }
+      : { max_tokens: maxTokens };
   const stream = await llmClient.client.chat.completions.create({
     model: llmClient.model,
     messages,
     temperature,
-    max_tokens: maxTokens,
+    ...tokenParam,
     stream: true,
   });
   for await (const chunk of stream) {

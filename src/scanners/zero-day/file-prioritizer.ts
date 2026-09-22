@@ -36,6 +36,12 @@ const HIGH_PATTERNS = [
   /(^|[/_.-])(upload|download|export|import|user|account|profile|tenant|org|member|invite|role)([/_.-]|$)/i,
   // Data access (race condition targets)
   /(^|[/_.-])(serialize|serializer|deserialize|database|query|repository|model)([/_.-]|$)/i,
+  // Unsafe deserialization / gadget-chain targets (CWE-502)
+  /(^|[/_.-])(unserialize|unmarshal|unpickle|pickle|marshal)([/_.-]|$)/i,
+  // Native / memory-unsafe code (CWE-120/125/416/787 targets): C/C++/ObjC
+  // sources and FFI boundaries need dataflow reasoning per-file lint skips.
+  /\.(c|cc|cpp|cxx|h|hpp|hh|m|mm)$/i,
+  /(^|[/_.-])(native|ffi|jni|cgo|ctypes|unsafe|addon|binding|codec|decoder|parser)([/_.-]|$)/i,
   // Background processing (race condition targets)
   /(^|[/_.-])(service|worker|queue|job|event|consumer)([/_.-]|$)/i,
   // Business logic flows

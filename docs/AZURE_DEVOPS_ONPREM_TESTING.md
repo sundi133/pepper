@@ -10,6 +10,54 @@ verifying the **full webhook → scan → PR-feedback loop** end to end.
 
 ---
 
+## 0. Where should Pepper run? (deployment architecture)
+
+Connecting on-prem ADO Server is not just a form field — Pepper needs **two-way
+network reachability** with the Server:
+
+```
+             ┌──────────────────────────────────────────┐
+   Pepper ──▶│ 1. API calls (connectionData, repos, PR)  │──▶ ADO Server
+   (worker)  │ 2. git clone of your source               │    https://ado.corp
+             └──────────────────────────────────────────┘
+   Pepper ◀──┤ 3. Service-hook webhooks (push / PR)      │◀── ADO Server
+             └──────────────────────────────────────────┘
+```
+
+Directions 1 & 2 mean **Pepper must reach the Server** (including cloning your
+source); direction 3 means **the Server must reach Pepper's URL**.
+
+**Recommendation for on-prem ADO Server: self-host Pepper inside the same
+network.** An internal-only Server (RFC1918, no public ingress — the normal case)
+is *not* reachable from a public SaaS, and most security teams will not let an
+external service pull internal source. Self-hosting keeps API, clone, and
+webhooks entirely inside your network.
+
+| Your ADO Server is… | Run Pepper… |
+|---|---|
+| Internal-only (typical on-prem) | **Self-hosted on-prem**, on a host that can reach `https://ado.corp`. A public Pepper SaaS cannot clone internal repos. |
+| Reachable from where Pepper runs (public URL / DMZ / site-to-site VPN) | Either a self-hosted or a hosted Pepper, as long as it can reach the Server and the Server can reach Pepper's webhook URL. |
+
+### TLS / internal CA (the #1 on-prem blocker)
+
+ADO Server usually presents a **self-signed or internal-CA** certificate. Both
+Pepper's API calls (Node `fetch`) and the worker's `git clone` will reject an
+untrusted CA. Point both at your CA bundle:
+
+```bash
+# Pepper app + worker (Node): trust the internal CA
+export NODE_EXTRA_CA_CERTS=/etc/pepper/certs/internal-ca.pem
+# git clone (worker): trust the same CA
+git config --global http.sslCAInfo /etc/pepper/certs/internal-ca.pem
+```
+
+In Docker, mount the CA and set `NODE_EXTRA_CA_CERTS` on the app **and** worker
+services. Plain **HTTP** also works end to end on a trusted network. For a
+throwaway test only, `GIT_SSL_NO_VERIFY=true` skips git verification — never in
+production.
+
+---
+
 ## 1. Connect Azure DevOps Server
 
 Settings → Integrations → **Azure DevOps Services** → Connect:
@@ -70,7 +118,57 @@ Azure DevOps Server can't HMAC-sign webhooks, so Pepper authenticates them with
 
 ---
 
-## 3. Test the full loop without waiting for a real push
+## 3. Test locally with the mock server (no Windows/ADO Server needed)
+
+Azure DevOps Server only runs on Windows, so to exercise the **on-prem code path**
+on a dev machine, Pepper ships a **mock ADO Server**. It implements the ADO REST
+endpoints Pepper calls *and* serves a real sample git repo over smart HTTP, so
+the entire path works: connect (with a Server URL) → import → `git clone` → SAST
+scan → PR status + inline threads printed back to the mock's console.
+
+**Requirements:** `git` on PATH, and Pepper running locally (app + worker +
+Postgres/Redis/MinIO).
+
+```bash
+# 1. Start the mock (prints the exact values to paste into Pepper)
+node scripts/ado-server-mock.mjs           # http://localhost:8088
+```
+
+```
+Server URL   : http://localhost:8088
+Collection   : DefaultCollection
+Project/Repo : TestProject/testrepo
+Repo GUID    : 11111111-2222-3333-4444-555555555555
+```
+
+2. **Connect** in Pepper → Settings → Integrations → Azure DevOps:
+   - **Organization / collection** = `DefaultCollection`
+   - **Server URL** = `http://localhost:8088`
+   - **Personal Access Token** = any non-empty value (the mock ignores it)
+
+   > Pepper's worker must be able to reach `localhost:8088`. If the worker runs
+   > in Docker, start the mock so it's reachable from the container (e.g. bind to
+   > the host and connect via `http://host.docker.internal:8088`, using that as
+   > the Server URL).
+
+3. **Import** the repo (Scan Hub → Azure DevOps) — this clones the sample repo
+   over smart HTTP and queues a scan. The sample `src/login.js` contains SQL,
+   command, and code-injection sinks, so SAST reports findings.
+
+4. **Test PR feedback** by firing a PR webhook at Pepper (next section) with
+   `--repo-id 11111111-2222-3333-4444-555555555555`. When the scan completes,
+   the mock console prints the PR status check and inline threads Pepper posts:
+   ```
+   ✅ PR status → state=failed "Build gate failed — 2 high"
+   📌 PR inline thread → /src/login.js:5
+   ```
+
+This validates connect, the on-prem `{Server URL}/{collection}` base, cloning,
+scanning, and PR posting — everything the real Server path does.
+
+---
+
+## 4. Test the full loop without waiting for a real push
 
 Use the bundled tester to fire a realistic ADO service-hook payload at a running
 Pepper and confirm a scan is queued. You need the **repository GUID** of a
@@ -101,7 +199,7 @@ A successful call returns a `scanId` and `status`. If you get:
 
 ---
 
-## 4. Verify end to end
+## 5. Verify end to end
 
 1. **Scan runs:** open **Scans** in Pepper — the queued scan should move to
    RUNNING then COMPLETED, with findings and a build-gate result.

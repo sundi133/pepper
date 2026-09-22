@@ -141,6 +141,24 @@ Look for endpoints where a user-supplied ID is used to fetch/modify a resource W
 - **AI cost exhaustion**: Public endpoints trigger unbounded LLM calls, long prompts, tool loops, or expensive report generation
 - **Tenant noisy-neighbor abuse**: One tenant can consume shared queues, workers, storage, vector DB, or rate-limit budgets
 
+🔴 **Unsafe Deserialization & Gadget Chains (CWE-502)**
+The bug is not merely "deserializes untrusted data" — it is that an unsafe deserializer reconstructs attacker-chosen TYPES, and a "gadget" (a magic method that runs during or after deserialization) turns that into code execution, SSRF, file write, or DoS. Reason about the chain: attacker-controlled bytes → unsafe sink → a magic method / type reachable in this codebase or its dependencies → impact. Report even within one file when it needs gadget/type reasoning that pattern SAST misses. Per language:
+- **Java (CWE-502)**: \`ObjectInputStream.readObject/readUnshared\`, \`XMLDecoder.readObject\`, Kryo/XStream without allow-lists, SnakeYAML \`new Yaml().load(...)\` (not \`SafeConstructor\`), Jackson polymorphic typing (\`enableDefaultTyping()\`, \`@JsonTypeInfo\`), \`readExternal\`. Note gadget libraries on the classpath (commons-collections, spring-core, groovy, commons-beanutils) — their presence makes an otherwise-abstract sink concretely exploitable.
+- **Python (CWE-502)**: \`pickle.loads\`/\`cPickle\`, \`yaml.load\` without \`SafeLoader\`, \`marshal.loads\`, \`dill\`, \`jsonpickle.decode\`, \`shelve\`; classes defining \`__reduce__\`/\`__reduce_ex__\`/\`__setstate__\` as gadgets. \`phar://\`-style is N/A but flag \`__reduce__\` returning \`os.system\`/\`subprocess\`.
+- **.NET (CWE-502)**: \`BinaryFormatter\`, \`NetDataContractSerializer\`, \`LosFormatter\`, \`ObjectStateFormatter\`, \`SoapFormatter\`, \`JavaScriptSerializer\` with a \`SimpleTypeResolver\`, \`Json.NET\` with \`TypeNameHandling.All/Auto\`, \`DataContractSerializer\`/\`XmlSerializer\` bound to an attacker-chosen type; ViewState without MAC.
+- **PHP (CWE-502)**: \`unserialize()\` on request data; POP chains via \`__wakeup\`/\`__destruct\`/\`__toString\`; \`phar://\` stream deserialization triggered by file operations on attacker paths.
+- **Ruby (CWE-502)**: \`Marshal.load\`, \`YAML.load\`/\`Psych.load\` (not \`safe_load\`), \`Oj.load\` with \`mode: :object\`, \`Object#send\` driven by deserialized data.
+- **Node/JS (CWE-502/CWE-1321)**: \`node-serialize\`/\`funcster\` unserialize of IIFE payloads; prototype pollution (\`__proto__\`/\`constructor.prototype\` reached via \`merge\`/\`extend\`/\`set\`) that later feeds a gadget sink (template, \`child_process\`, config). Name the pollution source and the gadget sink.
+
+🔴 **Native Memory Safety (C / C++ / unsafe Rust / Cgo / FFI)**
+Memory-corruption classes that per-file lint misses because they need dataflow from an attacker-controlled length/offset/pointer to an unsafe operation. Require a plausible untrusted source (network read, file, argv, IPC, FFI boundary) reaching the sink; do NOT flag safe fixed-size or constant-bounded uses.
+- **Buffer overflow / OOB write (CWE-120/CWE-787)**: \`strcpy\`/\`strcat\`/\`sprintf\`/\`gets\`; \`memcpy\`/\`memmove\`/\`strncpy\` with an attacker-influenced length; writing to a stack/heap buffer indexed by untrusted input.
+- **OOB read (CWE-125)**: reads past a buffer using an unchecked length/index; missing NUL-termination assumptions.
+- **Integer overflow → undersized allocation (CWE-190→CWE-787)**: \`malloc(n * size)\` / \`alloca\` where \`n\` is attacker-controlled and the multiply can wrap, then the buffer is filled to the intended size.
+- **Use-after-free / double-free (CWE-416/CWE-415)**: a freed pointer reused or freed twice due to ownership/error-path confusion.
+- **Format string (CWE-134)**: \`printf\`/\`syslog\`/\`fprintf\` with a user-controlled format argument.
+- **unsafe Rust / FFI**: \`unsafe\` blocks doing raw-pointer deref, \`slice::from_raw_parts\` with a length from untrusted input, \`transmute\`, \`get_unchecked\`, or trusting a length/pointer returned across an FFI/Cgo boundary.
+
 ═══════════════════════════════════════════════════════════════
 OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════
@@ -151,7 +169,7 @@ For each finding respond with:
     {
       "title": "Clear vulnerability title",
       "severity": "CRITICAL|HIGH|MEDIUM|LOW",
-      "category": "IDOR|Business Logic|Race Condition|Trust Boundary|State Management|Auth Logic|Multi-tenant|Dynamic Attack|Crypto|Resource Exhaustion|Parameter Tampering",
+      "category": "IDOR|Business Logic|Race Condition|Trust Boundary|State Management|Auth Logic|Multi-tenant|Dynamic Attack|Crypto|Resource Exhaustion|Parameter Tampering|Deserialization|Memory Safety",
       "description": "Plain-language: what is wrong, why pattern-based SAST misses it, and business impact. Do NOT paste large source blocks, fenced code, or a 'Code evidence' section — the UI shows file path and line range separately.",
       "startLine": <exact line number>,
       "endLine": <exact line number>,
@@ -175,4 +193,5 @@ CRITICAL RULES:
 - If no findings: return {"findings": []}
 - Do NOT duplicate issues that a single-file, in-file injection SAST pass would already catch
 - DO report injections that only become exploitable through a cross-file chain (source in one file, sink in another) — these are exactly what per-file SAST misses
+- DO report Deserialization/gadget-chain and Native Memory Safety issues even when they sit in one file, because they require type/gadget or dataflow reasoning that pattern SAST cannot do — but only with a concrete untrusted source, the specific unsafe sink named, and (for gadgets) the magic method or type that carries the chain
 - FOCUS on authorization and business logic — these are the #1 real-world vulnerability class`;

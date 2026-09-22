@@ -194,7 +194,13 @@
           CWE, and a remediation hint, then filters by a confidence floor.</li>
         <li><strong>Zero-day engine</strong> (<code>ZERO_DAY</code>) — a separate LLM pass
           that scores files by their <em>likelihood</em> of containing a novel logic flaw,
-          then deeply analyses the top-ranked ones.</li>
+          then deeply analyses the top-ranked ones. Beyond business-logic, IDOR, race
+          conditions and auth bypass, it also reasons about <strong>unsafe deserialization
+          and gadget chains</strong> (Java, Python, .NET, PHP, Ruby, Node) and
+          <strong>native memory-safety</strong> flaws (C/C++, unsafe Rust, FFI: buffer
+          overflow, use-after-free, integer-overflow allocation, format string) —
+          classes that need type/gadget or dataflow reasoning a per-file pattern pass
+          cannot do.</li>
       </ul>
 
       <h2 id="dast">5 · Dynamic Application Security Testing (DAST)</h2>

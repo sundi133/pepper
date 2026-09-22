@@ -5,6 +5,8 @@ import GitHubProvider from "next-auth/providers/github";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 import { isHcaptchaEnabled, verifyHcaptchaToken } from "./hcaptcha";
+import { isSamlEnabled } from "./saml/config";
+import { verifySamlHandoffToken } from "./saml/handoff";
 
 export const authOptions: NextAuthOptions = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -44,6 +46,31 @@ export const authOptions: NextAuthOptions = {
         return { id: user.id, email: user.email, name: user.name };
       },
     }),
+    // SAML SSO: a validated assertion is exchanged (server-side, in the ACS
+    // route) for a short-lived signed handoff token; this provider verifies the
+    // token and establishes the NextAuth session. Only registered when SSO is
+    // enabled and configured, so default installs are unaffected.
+    ...(isSamlEnabled()
+      ? [
+          CredentialsProvider({
+            id: "saml",
+            name: "SSO",
+            credentials: {
+              token: { label: "SSO token", type: "text" },
+            },
+            async authorize(credentials) {
+              const userId = verifySamlHandoffToken(credentials?.token);
+              if (!userId) return null;
+              const user = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { id: true, email: true, name: true },
+              });
+              if (!user) return null;
+              return { id: user.id, email: user.email, name: user.name };
+            },
+          }),
+        ]
+      : []),
     ...(process.env.GITHUB_ID
       ? [
           GitHubProvider({

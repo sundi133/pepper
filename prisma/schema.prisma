@@ -70,6 +70,9 @@ model OrgAzureDevOpsConnection {
   id                  String   @id @default(cuid())
   organizationId      String   @unique
   azureOrganization   String
+  /// Self-hosted Azure DevOps Server base (host + optional virtual dir up to
+  /// the collection). Null for the hosted service (dev.azure.com).
+  azureServerUrl      String?
   azureUser           String?
   patEnc              String   @db.Text
   createdAt           DateTime @default(now())

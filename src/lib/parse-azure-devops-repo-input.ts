@@ -23,6 +23,21 @@ export function azureDevOpsHttpsCloneUrl(
 }
 
 /**
+ * Clone URL for an on-prem Azure DevOps Server repo:
+ *   {serverUrl}/{collection}/{project}/_git/{repo}
+ * `serverUrl` is the host (+ optional virtual dir) up to the collection.
+ */
+export function azureDevOpsServerCloneUrl(
+  serverUrl: string,
+  collection: string,
+  project: string,
+  repo: string,
+): string {
+  const base = serverUrl.trim().replace(/\/+$/, "");
+  return `${base}/${encodeURIComponent(collection)}/${encodeURIComponent(project)}/_git/${encodeURIComponent(repo)}`;
+}
+
+/**
  * Parse a repository reference in any of the forms Pepper accepts:
  *   - `project/repo` (org taken from the connected account)
  *   - `org/project/repo`
@@ -31,10 +46,16 @@ export function azureDevOpsHttpsCloneUrl(
  *
  * URL host matching is exact (no substring test) so a look-alike host such as
  * `dev.azure.com.attacker.example` is rejected.
+ *
+ * When `serverBaseUrl` is set (on-prem Azure DevOps Server), a URL whose origin
+ * matches it is parsed generically off the `_git` segment, with the collection
+ * taken from `defaultOrganization` (the connected collection) — this is robust
+ * regardless of how many virtual-directory segments precede the collection.
  */
 export function parseAzureDevOpsRepoInput(
   input: string,
   defaultOrganization?: string,
+  serverBaseUrl?: string,
 ): ParsedAzureDevOpsRepo | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
@@ -58,6 +79,24 @@ export function parseAzureDevOpsRepoInput(
       const gitIdx = parts.indexOf("_git");
       const repoSeg =
         gitIdx >= 0 ? parts[gitIdx + 1]?.replace(/\.git$/i, "") : undefined;
+
+      // On-prem Azure DevOps Server: match the configured server origin and
+      // extract project + repo around `_git`; collection comes from the
+      // connection.
+      if (serverBaseUrl && defaultOrganization) {
+        try {
+          const serverOrigin = new URL(serverBaseUrl).origin;
+          if (u.origin === serverOrigin && gitIdx >= 1 && repoSeg) {
+            return {
+              organization: defaultOrganization,
+              project: dec(parts[gitIdx - 1]),
+              repo: dec(repoSeg),
+            };
+          }
+        } catch {
+          /* fall through to hosted-service parsing */
+        }
+      }
 
       // Modern: dev.azure.com/{org}/{project}/_git/{repo}
       if (host === "dev.azure.com") {

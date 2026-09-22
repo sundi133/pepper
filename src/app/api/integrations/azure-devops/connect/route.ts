@@ -33,7 +33,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
 
-  let body: { azureOrganization?: unknown; pat?: unknown };
+  let body: {
+    azureOrganization?: unknown;
+    pat?: unknown;
+    azureServerUrl?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
@@ -45,6 +49,8 @@ export async function POST(req: NextRequest) {
       ? body.azureOrganization.trim()
       : "";
   const pat = typeof body.pat === "string" ? body.pat.trim() : "";
+  const azureServerUrlRaw =
+    typeof body.azureServerUrl === "string" ? body.azureServerUrl.trim() : "";
 
   if (!azureOrganization || !pat) {
     return NextResponse.json(
@@ -53,12 +59,41 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Optional on-prem Azure DevOps Server base URL. Validate it is an http(s)
+  // origin (+ optional virtual dir) so a bad value can't produce a malformed
+  // API base. Empty means the hosted service (dev.azure.com).
+  let azureServerUrl: string | null = null;
+  if (azureServerUrlRaw) {
+    try {
+      const u = new URL(azureServerUrlRaw);
+      if (u.protocol !== "https:" && u.protocol !== "http:") {
+        throw new Error("bad protocol");
+      }
+      azureServerUrl = azureServerUrlRaw.replace(/\/+$/, "");
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            "azureServerUrl must be a full URL like https://tfs.company.com or https://tfs.company.com/tfs",
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   // Probe the connection: `/_apis/connectionData` returns the
   // authenticated user's identity info. Cheap, available with the
-  // minimum scope, and fails fast on bad PATs.
+  // minimum scope, and fails fast on bad PATs. Works for both cloud and Server.
   const probe = await azureGet<{
     authenticatedUser?: { providerDisplayName?: string };
-  }>({ organization: azureOrganization, pat }, "/_apis/connectionData");
+  }>(
+    {
+      organization: azureOrganization,
+      pat,
+      ...(azureServerUrl ? { serverUrl: azureServerUrl } : {}),
+    },
+    "/_apis/connectionData",
+  );
 
   if (!probe.ok) {
     return NextResponse.json(
@@ -79,11 +114,13 @@ export async function POST(req: NextRequest) {
     azureOrganization,
     pat,
     azureUser,
+    azureServerUrl,
   });
 
   return NextResponse.json({
     connected: true,
     azureOrganization,
+    azureServerUrl,
     azureUser,
   });
 }

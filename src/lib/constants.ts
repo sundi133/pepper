@@ -507,3 +507,47 @@ export const ZERO_DAY_LLM_FILES = parseInt(
   process.env.ZERO_DAY_LLM_FILES || "96",
   10,
 );
+
+// ─── SAML SSO (single global IdP, on-prem) ───────────────────────────────────
+// Opt-in enterprise single sign-on. Off by default so existing email/password
+// and GitHub login are unchanged. When enabled, users authenticate against one
+// org-wide SAML 2.0 IdP (Okta, Entra/Azure AD, OneLogin, Ping, …); the SP
+// endpoints live under /api/auth/saml/*. See .env.example for setup.
+export const ENABLE_SAML_SSO = process.env.ENABLE_SAML_SSO === "true";
+
+/** IdP SSO URL that AuthnRequests are sent to (IdP "entryPoint"/SSO URL). */
+export const SAML_ENTRY_POINT = process.env.SAML_ENTRY_POINT || "";
+
+/**
+ * IdP token-signing certificate(s), PEM body or full PEM. Multiple certs may be
+ * separated by commas to allow rotation. Required to validate assertions.
+ */
+export const SAML_IDP_CERT = process.env.SAML_IDP_CERT || "";
+
+/** SP entity id (issuer). Defaults to `${NEXTAUTH_URL}/api/auth/saml/metadata`. */
+export const SAML_ISSUER = process.env.SAML_ISSUER || "";
+
+/** SAML attribute holding the user's group memberships (for role mapping). */
+export const SAML_GROUP_ATTR = process.env.SAML_GROUP_ATTR || "groups";
+
+/** SAML attribute holding the user's email (falls back to nameID). */
+export const SAML_EMAIL_ATTR = process.env.SAML_EMAIL_ATTR || "";
+
+/** SAML attribute holding the user's display name. */
+export const SAML_NAME_ATTR = process.env.SAML_NAME_ATTR || "";
+
+/**
+ * JSON object mapping IdP group name → Pepper role, e.g.
+ * {"pepper-admins":"ADMIN","appsec":"SECURITY","engineers":"DEVELOPER"}.
+ */
+export const SAML_ROLE_MAP = process.env.SAML_ROLE_MAP || "";
+
+/** Role assigned when no group matches SAML_ROLE_MAP. */
+export const SAML_DEFAULT_ROLE = process.env.SAML_DEFAULT_ROLE || "VIEWER";
+
+/**
+ * Slug of the organization SSO users are provisioned into. When unset, the
+ * oldest (first-created) organization is used — the norm for single-tenant
+ * on-prem installs.
+ */
+export const SAML_DEFAULT_ORG_SLUG = process.env.SAML_DEFAULT_ORG_SLUG || "";

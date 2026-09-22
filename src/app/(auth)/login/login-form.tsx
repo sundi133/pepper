@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { getSourceCodeUrl } from "@/lib/app-source";
-import { Code2, Github, Shield } from "lucide-react";
+import { Code2, Github, KeyRound, Shield } from "lucide-react";
 
 const LOGIN_SNIPPET = `// Credential sign-in (illustrative)
 import { signIn } from "next-auth/react";
@@ -33,11 +33,30 @@ async function onSubmit(email: string, password: string) {
   });
 }`;
 
-export function LoginForm({ captchaSiteKey }: { captchaSiteKey: string }) {
+function ssoErrorMessage(error: string | undefined): string {
+  if (error === "sso_no_email") {
+    return "Your SSO account has no email address. Ask your IdP admin to release an email claim.";
+  }
+  if (error === "sso") {
+    return "Single sign-on failed. Please try again or use your password.";
+  }
+  return "";
+}
+
+export function LoginForm({
+  captchaSiteKey,
+  samlEnabled = false,
+  initialError,
+}: {
+  captchaSiteKey: string;
+  samlEnabled?: boolean;
+  initialError?: string;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
+  // Seed from any ?error=sso… redirected back by the ACS route.
+  const [message, setMessage] = useState(() => ssoErrorMessage(initialError));
   const [loading, setLoading] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
   const captchaRef = useRef<HcaptchaFieldHandle>(null);
@@ -165,6 +184,29 @@ export function LoginForm({ captchaSiteKey }: { captchaSiteKey: string }) {
                   {loading ? "Signing in…" : "Sign in"}
                 </Button>
               </form>
+              {samlEnabled ? (
+                <>
+                  <div className="my-4 flex items-center gap-3">
+                    <span className="h-px flex-1 bg-border" />
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                      or
+                    </span>
+                    <span className="h-px flex-1 bg-border" />
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="h-11 w-full gap-2"
+                    asChild
+                  >
+                    {/* Full navigation to the SAML API route, not client routing. */}
+                    {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+                    <a href="/api/auth/saml/login">
+                      <KeyRound className="h-4 w-4" aria-hidden />
+                      Sign in with SSO
+                    </a>
+                  </Button>
+                </>
+              ) : null}
               <p className="mt-4 text-center text-sm text-muted-foreground">
                 No account?{" "}
                 <Link

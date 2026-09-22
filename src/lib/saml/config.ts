@@ -17,6 +17,7 @@ import {
   SAML_ROLE_MAP,
   SAML_DEFAULT_ROLE,
   SAML_DEFAULT_ORG_SLUG,
+  SAML_WANT_ASSERTIONS_SIGNED,
 } from "@/lib/constants";
 import { isRole, parseRoleMap, type Role } from "./role-mapping";
 
@@ -36,10 +37,25 @@ export function samlIssuer(): string {
 }
 
 /** One or more IdP signing certs (comma-separated env → array for rotation). */
+/**
+ * Normalize a certificate to PEM. IdP metadata (and most copy-paste flows) give
+ * the bare base64 body of the X509Certificate; node-saml requires full PEM, so
+ * wrap a headerless body in BEGIN/END lines at 64 chars. A value that is already
+ * PEM is returned unchanged.
+ */
+function toPem(cert: string): string {
+  const c = cert.trim();
+  if (c.includes("BEGIN CERTIFICATE")) return c;
+  const body = c.replace(/\s+/g, "");
+  const wrapped = body.match(/.{1,64}/g)?.join("\n") ?? body;
+  return `-----BEGIN CERTIFICATE-----\n${wrapped}\n-----END CERTIFICATE-----`;
+}
+
 function idpCerts(): string[] {
   return SAML_IDP_CERT.split(",")
     .map((c) => c.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map(toPem);
 }
 
 /**
@@ -63,6 +79,7 @@ export interface SamlRuntimeConfig {
     callbackUrl: string;
     idpCert: string | string[];
     wantAssertionsSigned: boolean;
+    wantAuthnResponseSigned: boolean;
     audience: string | false;
     identifierFormat: string | null;
   };
@@ -93,7 +110,10 @@ export function getSamlConfig(): SamlRuntimeConfig {
       issuer: samlIssuer(),
       callbackUrl: samlAcsUrl(),
       idpCert: certs.length === 1 ? certs[0] : certs,
-      wantAssertionsSigned: true,
+      // Require a signature: on the assertion (secure default), or — when the
+      // IdP signs only the response — on the response instead.
+      wantAssertionsSigned: SAML_WANT_ASSERTIONS_SIGNED,
+      wantAuthnResponseSigned: !SAML_WANT_ASSERTIONS_SIGNED,
       audience: samlIssuer(),
       identifierFormat: null,
     },

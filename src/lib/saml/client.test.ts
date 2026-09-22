@@ -9,6 +9,7 @@ const baseCfg: SamlRuntimeConfig = {
     callbackUrl: "https://app/acs",
     idpCert: "cert",
     wantAssertionsSigned: true,
+    wantAuthnResponseSigned: false,
     audience: "sp",
     identifierFormat: null,
   },

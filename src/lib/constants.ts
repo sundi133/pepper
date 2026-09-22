@@ -551,3 +551,11 @@ export const SAML_DEFAULT_ROLE = process.env.SAML_DEFAULT_ROLE || "VIEWER";
  * on-prem installs.
  */
 export const SAML_DEFAULT_ORG_SLUG = process.env.SAML_DEFAULT_ORG_SLUG || "";
+
+/**
+ * Require the SAML <Assertion> itself to be signed (the secure default). Some
+ * IdPs (e.g. SimpleSAMLphp defaults) sign only the <Response>; set this to
+ * "false" for those, in which case a signed response is required instead.
+ */
+export const SAML_WANT_ASSERTIONS_SIGNED =
+  process.env.SAML_WANT_ASSERTIONS_SIGNED !== "false";

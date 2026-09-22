@@ -65,6 +65,11 @@ const PROVIDER_DEFAULTS: Record<
     model: "gpt-4o-mini",
     doc: "portal.azure.com",
   },
+  "azure-foundry": {
+    url: "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1",
+    model: "gpt-6-astra",
+    doc: "ai.azure.com",
+  },
   ollama: {
     url: "http://host.docker.internal:11434",
     model: "qwen2.5:3b",
@@ -115,6 +120,10 @@ const PROVIDER_MODELS: Record<string, { top: string[]; budget: string[] }> = {
     top: ["gpt-4o", "gpt-4.1"],
     budget: ["gpt-4o-mini", "gpt-4.1-mini"],
   },
+  "azure-foundry": {
+    top: ["gpt-6-astra", "grok-4.6", "zai-org--glm-4.7", "Kimi-K2.6"],
+    budget: ["qwen--qwen3.8-27b"],
+  },
   ollama: {
     top: ["qwen2.5:7b", "llama3.2:7b", "mistral:7b"],
     budget: ["qwen2.5:3b", "llama3.2:3b", "phi4:latest"],
@@ -155,6 +164,7 @@ function ProviderIcon({ provider }: { provider: string }) {
     anthropic: "🧠",
     openrouter: "🔀",
     azure: "☁️",
+    "azure-foundry": "🧪",
     ollama: "🦙",
     vllm: "⚙️",
     opencode: "🌀",
@@ -384,6 +394,7 @@ export default function LlmSettingsPage() {
                     {settings.llmProvider === "anthropic" && "Anthropic (Claude)"}
                     {settings.llmProvider === "openrouter" && "OpenRouter (Multi-model)"}
                     {settings.llmProvider === "azure" && "Azure OpenAI"}
+                    {settings.llmProvider === "azure-foundry" && "Azure AI Foundry"}
                     {settings.llmProvider === "vllm" && "vLLM"}
                     {settings.llmProvider === "opencode" && "OpenCode Zen (Free)"}
                     {settings.llmProvider === "custom" && "Custom Endpoint"}
@@ -405,6 +416,9 @@ export default function LlmSettingsPage() {
                 </SelectItem>
                 <SelectItem value="azure">
                   <ProviderIcon provider="azure" />Azure OpenAI
+                </SelectItem>
+                <SelectItem value="azure-foundry">
+                  <ProviderIcon provider="azure-foundry" />Azure AI Foundry
                 </SelectItem>
                 <SelectItem value="vllm">
                   <ProviderIcon provider="vllm" />vLLM

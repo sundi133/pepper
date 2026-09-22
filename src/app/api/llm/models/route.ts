@@ -24,6 +24,15 @@ const PRESETS: Record<string, string[]> = {
   ],
   openrouter: [],
   ollama: [],
+  // Deployment names vary per Foundry resource, so these are only a hint; the
+  // live /models call (or a manually typed model) takes precedence.
+  "azure-foundry": [
+    "gpt-6-astra",
+    "grok-4.6",
+    "zai-org--glm-4.7",
+    "qwen--qwen3.8-27b",
+    "Kimi-K2.6",
+  ],
 };
 
 async function listModels(cfg: LlmConfig): Promise<string[]> {

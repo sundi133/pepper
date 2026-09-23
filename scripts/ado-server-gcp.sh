@@ -48,6 +48,13 @@ require_project() {
   [ -n "$PROJECT" ] || die "set PROJECT=<gcp-project> (or 'gcloud config set project')"
 }
 
+vm_exists() { gc compute instances describe "$VM_NAME" --zone="$ZONE" >/dev/null 2>&1; }
+require_vm() {
+  vm_exists || die "VM '$VM_NAME' not found in $PROJECT/$ZONE.
+  Create it first:  ADO_INSTALLER=<iso> PROJECT=$PROJECT $0 up
+  (or set ZONE=<zone> if you created it in a different zone)"
+}
+
 # ── Windows startup script (PowerShell) ──────────────────────────────────────
 # Runs on first boot. Emits [ADO-SETUP] markers to the serial console so
 # `status` can report progress. Idempotent-ish: skips steps already done.
@@ -144,18 +151,19 @@ EOF
 }
 
 cmd_status() {
-  require_project
+  require_project; require_vm
   echo "→ recent [ADO-SETUP] markers from the serial console:"
   gc compute instances get-serial-port-output "$VM_NAME" --zone="$ZONE" 2>/dev/null \
     | grep "\[ADO-SETUP\]" | tail -20 || echo "  (no markers yet — boot/serial not ready)"
 }
 
 cmd_rdp() {
-  require_project; need gcloud
+  require_project; need gcloud; require_vm
   echo "→ resetting Windows password for '$ADO_USER' (save it):"
   gc compute reset-windows-password "$VM_NAME" --zone="$ZONE" --user="$ADO_USER" || true
   echo "→ opening IAP tunnel; RDP to localhost:13389 (Ctrl-C to close)"
-  exec gc compute start-iap-tunnel "$VM_NAME" 3389 \
+  # Note: 'gc' is a shell function, so it cannot be exec'd — call it directly.
+  gc compute start-iap-tunnel "$VM_NAME" 3389 \
     --local-host-port=localhost:13389 --zone="$ZONE"
 }
 
@@ -215,8 +223,8 @@ cmd_seed() {
   echo "✓ seeded ${proj}/${repo} (repoId ${repoId}). Connect Pepper to Server URL ${url}, collection ${COLLECTION}."
 }
 
-cmd_stop()  { require_project; gc compute instances stop  "$VM_NAME" --zone="$ZONE"; }
-cmd_start() { require_project; gc compute instances start "$VM_NAME" --zone="$ZONE"; }
+cmd_stop()  { require_project; require_vm; gc compute instances stop  "$VM_NAME" --zone="$ZONE"; }
+cmd_start() { require_project; require_vm; gc compute instances start "$VM_NAME" --zone="$ZONE"; }
 
 cmd_down() {
   require_project

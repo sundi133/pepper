@@ -13,6 +13,7 @@ export class AzureDevOpsCredentialsInvalidError extends Error {
 export interface AzureDevOpsConnectionStatus {
   connected: boolean;
   azureOrganization: string | null;
+  azureServerUrl: string | null;
   azureUser: string | null;
   connectedAt: string | null;
 }
@@ -22,12 +23,18 @@ export async function getAzureDevOpsConnectionStatus(
 ): Promise<AzureDevOpsConnectionStatus> {
   const row = await prisma.orgAzureDevOpsConnection.findUnique({
     where: { organizationId },
-    select: { azureOrganization: true, azureUser: true, createdAt: true },
+    select: {
+      azureOrganization: true,
+      azureServerUrl: true,
+      azureUser: true,
+      createdAt: true,
+    },
   });
   if (!row) {
     return {
       connected: false,
       azureOrganization: null,
+      azureServerUrl: null,
       azureUser: null,
       connectedAt: null,
     };
@@ -35,6 +42,7 @@ export async function getAzureDevOpsConnectionStatus(
   return {
     connected: true,
     azureOrganization: row.azureOrganization,
+    azureServerUrl: row.azureServerUrl ?? null,
     azureUser: row.azureUser ?? null,
     connectedAt: row.createdAt.toISOString(),
   };
@@ -46,13 +54,14 @@ export async function getOrgAzureDevOpsAuth(
 ): Promise<AzureDevOpsAuth | null> {
   const row = await prisma.orgAzureDevOpsConnection.findUnique({
     where: { organizationId },
-    select: { azureOrganization: true, patEnc: true },
+    select: { azureOrganization: true, azureServerUrl: true, patEnc: true },
   });
   if (!row?.patEnc) return null;
   try {
     return {
       organization: row.azureOrganization,
       pat: decryptSecret(row.patEnc),
+      ...(row.azureServerUrl ? { serverUrl: row.azureServerUrl } : {}),
     };
   } catch {
     return null;
@@ -64,18 +73,22 @@ export async function saveOrgAzureDevOpsConnection(params: {
   azureOrganization: string;
   pat: string;
   azureUser?: string | null;
+  azureServerUrl?: string | null;
 }): Promise<void> {
   const patEnc = encryptSecret(params.pat);
+  const azureServerUrl = params.azureServerUrl?.trim() || null;
   await prisma.orgAzureDevOpsConnection.upsert({
     where: { organizationId: params.organizationId },
     create: {
       organizationId: params.organizationId,
       azureOrganization: params.azureOrganization,
+      azureServerUrl,
       azureUser: params.azureUser ?? null,
       patEnc,
     },
     update: {
       azureOrganization: params.azureOrganization,
+      azureServerUrl,
       azureUser: params.azureUser ?? null,
       patEnc,
     },

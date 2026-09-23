@@ -60,6 +60,7 @@ export default function IntegrationsPage() {
   const [azureForm, setAzureForm] = useState({
     azureOrganization: "",
     pat: "",
+    azureServerUrl: "",
   });
 
   async function refreshAzure() {
@@ -85,6 +86,7 @@ export default function IntegrationsPage() {
     e.preventDefault();
     const azureOrganization = azureForm.azureOrganization.trim();
     const pat = azureForm.pat.trim();
+    const azureServerUrl = azureForm.azureServerUrl.trim();
     if (!azureOrganization || !pat) {
       toast.error("Organization and PAT are required");
       return;
@@ -94,14 +96,18 @@ export default function IntegrationsPage() {
       const res = await fetch("/api/integrations/azure-devops/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ azureOrganization, pat }),
+        body: JSON.stringify({
+          azureOrganization,
+          pat,
+          ...(azureServerUrl ? { azureServerUrl } : {}),
+        }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
         throw new Error(data.error || "Failed to connect Azure DevOps");
       }
       toast.success("Azure DevOps connected");
-      setAzureForm({ azureOrganization: "", pat: "" });
+      setAzureForm({ azureOrganization: "", pat: "", azureServerUrl: "" });
       setAzureFormOpen(false);
       await refreshAzure();
     } catch (err) {
@@ -669,7 +675,9 @@ export default function IntegrationsPage() {
               className="space-y-3"
             >
               <div className="space-y-1">
-                <Label htmlFor="azure-org">Azure DevOps organization</Label>
+                <Label htmlFor="azure-org">
+                  Organization / collection
+                </Label>
                 <Input
                   id="azure-org"
                   value={azureForm.azureOrganization}
@@ -684,8 +692,33 @@ export default function IntegrationsPage() {
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  The <code>dev.azure.com/&lt;org&gt;</code> segment from your
-                  ADO URL.
+                  Cloud: the <code>dev.azure.com/&lt;org&gt;</code> segment. On-prem
+                  Server: the collection name (e.g. <code>DefaultCollection</code>).
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="azure-server-url">
+                  Server URL{" "}
+                  <span className="text-muted-foreground">
+                    (on-prem only — optional)
+                  </span>
+                </Label>
+                <Input
+                  id="azure-server-url"
+                  value={azureForm.azureServerUrl}
+                  onChange={(e) =>
+                    setAzureForm((f) => ({
+                      ...f,
+                      azureServerUrl: e.target.value,
+                    }))
+                  }
+                  placeholder="https://tfs.company.com or https://tfs.company.com/tfs"
+                  autoComplete="off"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave blank for Azure DevOps Services (cloud). For self-hosted
+                  Azure DevOps Server, enter the host and any virtual directory
+                  up to the collection.
                 </p>
               </div>
               <div className="space-y-1">
@@ -717,7 +750,11 @@ export default function IntegrationsPage() {
                   variant="ghost"
                   onClick={() => {
                     setAzureFormOpen(false);
-                    setAzureForm({ azureOrganization: "", pat: "" });
+                    setAzureForm({
+                      azureOrganization: "",
+                      pat: "",
+                      azureServerUrl: "",
+                    });
                   }}
                   disabled={azureSubmitting}
                 >

@@ -1,9 +1,62 @@
 import { describe, expect, it } from "vitest";
 import {
   azureDevOpsHttpsCloneUrl,
+  azureDevOpsServerCloneUrl,
   parseAzureDevOpsRef,
   parseAzureDevOpsRepoInput,
 } from "./parse-azure-devops-repo-input";
+
+describe("azureDevOpsServerCloneUrl", () => {
+  it("builds an on-prem Server clone URL", () => {
+    expect(
+      azureDevOpsServerCloneUrl(
+        "https://tfs.company.com/tfs/",
+        "DefaultCollection",
+        "Web Team",
+        "api",
+      ),
+    ).toBe("https://tfs.company.com/tfs/DefaultCollection/Web%20Team/_git/api");
+  });
+});
+
+describe("parseAzureDevOpsRepoInput — on-prem Server", () => {
+  const server = "https://tfs.company.com/tfs";
+
+  it("parses a Server _git URL, taking the collection from the connection", () => {
+    expect(
+      parseAzureDevOpsRepoInput(
+        "https://tfs.company.com/tfs/DefaultCollection/Payments/_git/api",
+        "DefaultCollection",
+        server,
+      ),
+    ).toEqual({
+      organization: "DefaultCollection",
+      project: "Payments",
+      repo: "api",
+    });
+  });
+
+  it("still accepts project/repo shorthand against the collection", () => {
+    expect(
+      parseAzureDevOpsRepoInput("Payments/api", "DefaultCollection", server),
+    ).toEqual({
+      organization: "DefaultCollection",
+      project: "Payments",
+      repo: "api",
+    });
+  });
+
+  it("ignores a URL whose origin does not match the configured server", () => {
+    // Different host → not the on-prem branch; falls through and is rejected.
+    expect(
+      parseAzureDevOpsRepoInput(
+        "https://other.example/tfs/DefaultCollection/Payments/_git/api",
+        "DefaultCollection",
+        server,
+      ),
+    ).toBeNull();
+  });
+});
 
 describe("parseAzureDevOpsRef", () => {
   it("strips refs/heads/", () => {

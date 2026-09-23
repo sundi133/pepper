@@ -65,27 +65,51 @@ function Mark(\$m) { Write-Host "[ADO-SETUP] \$m"; Add-Content C:\\ado-setup.log
 New-Item -ItemType Directory -Force -Path C:\\ado | Out-Null
 if (Test-Path C:\\ado\\DONE) { Mark "already configured; nothing to do"; exit 0 }
 
+function Find-Tfs {
+  \$hits = @()
+  foreach (\$root in @("C:\\Program Files\\Azure DevOps Server 2022","C:\\Program Files\\Azure DevOps Server 2020")) {
+    if (Test-Path \$root) { \$hits += Get-ChildItem \$root -Recurse -Filter TfsConfig.exe -ErrorAction SilentlyContinue }
+  }
+  if (-not \$hits) { \$hits = Get-ChildItem "C:\\Program Files" -Recurse -Filter TfsConfig.exe -ErrorAction SilentlyContinue }
+  return (\$hits | Select-Object -First 1)
+}
+
 try {
-  Mark "downloading installer from ${BUCKET}/${ISO_OBJECT}"
-  & gsutil cp "${BUCKET}/${ISO_OBJECT}" C:\\ado\\ado.iso
-  Mark "mounting ISO"
-  \$vol = (Mount-DiskImage -ImagePath C:\\ado\\ado.iso -PassThru | Get-Volume).DriveLetter
+  # ── Installer ISO (idempotent) ──
+  if (-not (Test-Path C:\\ado\\ado.iso)) {
+    Mark "downloading installer from ${BUCKET}/${ISO_OBJECT}"
+    & gsutil cp "${BUCKET}/${ISO_OBJECT}" C:\\ado\\ado.iso
+  } else { Mark "installer already present" }
+  \$img = Get-DiskImage -ImagePath C:\\ado\\ado.iso
+  if (-not \$img.Attached) { \$img = Mount-DiskImage -ImagePath C:\\ado\\ado.iso -PassThru }
+  \$vol = (\$img | Get-Volume).DriveLetter
   \$setup = Get-ChildItem "\${vol}:\\" -Filter *.exe | Select-Object -First 1
-  if (-not \$setup) { throw "no installer .exe found on the ISO" }
 
-  Mark "installing SQL Server Express (LocalDB is insufficient for ADO)"
-  # ADO Server 2022 needs SQL Server 2019+. Install Express unattended.
-  \$sqlUrl = "https://download.microsoft.com/download/3/8/d/38de7036-2433-4207-8eae-06e247e17b25/SQLEXPR_x64_ENU.exe"
-  Invoke-WebRequest -Uri \$sqlUrl -OutFile C:\\ado\\sqlexpr.exe
-  Start-Process C:\\ado\\sqlexpr.exe -ArgumentList "/qs","/x:C:\\ado\\sqlx" -Wait
-  Start-Process C:\\ado\\sqlx\\setup.exe -ArgumentList "/q","/ACTION=Install","/FEATURES=SQLEngine","/INSTANCENAME=MSSQLSERVER","/SQLSYSADMINACCOUNTS=BUILTIN\\Administrators","/IACCEPTSQLSERVERLICENSETERMS","/TCPENABLED=1" -Wait
-  Mark "SQL Express installed"
+  # ── SQL Server Express (idempotent) ──
+  if (Get-Service MSSQLSERVER -ErrorAction SilentlyContinue) {
+    Mark "SQL Express already installed"
+  } else {
+    Mark "installing SQL Server Express (LocalDB is insufficient for ADO)"
+    \$sqlUrl = "https://download.microsoft.com/download/3/8/d/38de7036-2433-4207-8eae-06e247e17b25/SQLEXPR_x64_ENU.exe"
+    Invoke-WebRequest -Uri \$sqlUrl -OutFile C:\\ado\\sqlexpr.exe
+    Start-Process C:\\ado\\sqlexpr.exe -ArgumentList "/qs","/x:C:\\ado\\sqlx" -Wait
+    Start-Process C:\\ado\\sqlx\\setup.exe -ArgumentList "/q","/ACTION=Install","/FEATURES=SQLEngine","/INSTANCENAME=MSSQLSERVER","/SQLSYSADMINACCOUNTS=BUILTIN\\Administrators","/IACCEPTSQLSERVERLICENSETERMS","/TCPENABLED=1" -Wait
+    Mark "SQL Express installed"
+  }
 
-  Mark "running ADO Server installer (quiet)"
-  Start-Process \$setup.FullName -ArgumentList "/quiet" -Wait
-  \$tfsConfig = Get-ChildItem "C:\\Program Files\\Azure DevOps Server 2022\\Tools\\TfsConfig.exe" -ErrorAction SilentlyContinue
-  if (-not \$tfsConfig) { \$tfsConfig = Get-ChildItem "C:\\Program Files\\Azure DevOps Server *\\Tools\\TfsConfig.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 }
-  if (-not \$tfsConfig) { throw "TfsConfig.exe not found after install" }
+  # ── ADO Server product (idempotent) ──
+  \$tfsConfig = Find-Tfs
+  if (-not \$tfsConfig) {
+    if (-not \$setup) { throw "no installer .exe found on the mounted ISO" }
+    Mark "running ADO Server installer: \$(\$setup.Name) /quiet"
+    Start-Process \$setup.FullName -ArgumentList "/quiet" -Wait -PassThru | Out-Null
+    \$tfsConfig = Find-Tfs
+  } else { Mark "ADO Server already installed" }
+  if (-not \$tfsConfig) {
+    \$dirs = (Get-ChildItem 'C:\\Program Files' -Directory -ErrorAction SilentlyContinue | Where-Object { \$_.Name -like '*DevOps*' -or \$_.Name -like '*Team*' } | Select-Object -Expand FullName) -join '; '
+    throw "TfsConfig.exe not found. Program Files DevOps dirs: [\$dirs]"
+  }
+  Mark "using config tool: \$(\$tfsConfig.FullName)"
 
   Mark "configuring Basic deployment (this can take 10-20 min)"
   & \$tfsConfig.FullName unattend /configure /type:NewServerBasic /continue 2>&1 | Tee-Object -Append C:\\ado-setup.log

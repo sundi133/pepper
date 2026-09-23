@@ -97,7 +97,7 @@ try {
   Mark "READY  http://<vm>:${ADO_PORT}/${COLLECTION}"
 }
 catch {
-  Mark "FAILED: \$(\$_.Exception.Message)  — RDP in and finish the ADO config wizard"
+  Mark "FAILED: \$(\$_.Exception.Message) - RDP in and finish the ADO config wizard"
   exit 1
 }
 PS1
@@ -223,6 +223,20 @@ cmd_seed() {
   echo "✓ seeded ${proj}/${repo} (repoId ${repoId}). Connect Pepper to Server URL ${url}, collection ${COLLECTION}."
 }
 
+# Re-push the (possibly edited) startup script to a running VM and re-run it by
+# resetting. Useful when the first boot's startup script failed.
+cmd_reapply() {
+  require_project; require_vm
+  local tmp; tmp="$(mktemp)"; startup_ps1 > "$tmp"
+  echo "→ updating startup-script metadata"
+  gc compute instances add-metadata "$VM_NAME" --zone="$ZONE" \
+    --metadata-from-file=windows-startup-script-ps1="$tmp"
+  rm -f "$tmp"
+  echo "→ resetting VM to re-run the startup script"
+  gc compute instances reset "$VM_NAME" --zone="$ZONE"
+  echo "✓ reset. Track with: $0 status  (Windows first-boot ~3-5 min)"
+}
+
 cmd_stop()  { require_project; require_vm; gc compute instances stop  "$VM_NAME" --zone="$ZONE"; }
 cmd_start() { require_project; require_vm; gc compute instances start "$VM_NAME" --zone="$ZONE"; }
 
@@ -241,6 +255,7 @@ case "${1:-}" in
   status) cmd_status ;;
   rdp)    cmd_rdp ;;
   seed)   cmd_seed ;;
+  reapply) cmd_reapply ;;
   stop)   cmd_stop ;;
   start)  cmd_start ;;
   down)   cmd_down ;;

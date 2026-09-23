@@ -110,7 +110,18 @@ export async function verifyAzureDevOpsAuth(
     auth,
     "/_apis/connectionData",
   );
-  return res.ok;
+  if (res.ok) return true;
+  // Azure DevOps Server may reject api-version on connectionData (400); retry
+  // without it before treating the credentials as invalid.
+  if (res.status === 400) {
+    const retry = await azureGet<{ authenticatedUser?: unknown }>(
+      auth,
+      "/_apis/connectionData",
+      "",
+    );
+    return retry.ok;
+  }
+  return false;
 }
 
 export async function getOrgAzureDevOpsAuthOrThrow(

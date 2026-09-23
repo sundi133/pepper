@@ -63,7 +63,9 @@ function buildUrl(
 ): string {
   const base = azureApiBase(auth);
   const url = new URL(`${base}${path.startsWith("/") ? path : `/${path}`}`);
-  if (!url.searchParams.has("api-version")) {
+  // An empty apiVersion means "omit it": some Azure DevOps Server endpoints
+  // (notably /_apis/connectionData) return 400 when api-version is present.
+  if (apiVersion && !url.searchParams.has("api-version")) {
     url.searchParams.set("api-version", apiVersion);
   }
   return url.toString();

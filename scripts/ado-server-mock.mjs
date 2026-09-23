@@ -40,6 +40,7 @@ function parseArgs(argv) {
     else if (argv[i] === "--collection") a.collection = n();
     else if (argv[i] === "--project") a.project = n();
     else if (argv[i] === "--repo") a.repo = n();
+    else if (argv[i] === "--advertise-base") a.advertiseBase = n();
   }
   return a;
 }
@@ -104,7 +105,11 @@ buildSampleRepo();
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const base = `http://localhost:${cfg.port}`;
-const cloneUrl = `${base}/${cfg.collection}/${cfg.project}/_git/${cfg.repo}`;
+// The URL advertised to Pepper for cloning/remoteUrl. When Pepper runs in
+// Docker and the mock runs on the host, pass --advertise-base
+// http://host.docker.internal:<port> so the container can reach it.
+const advertiseBase = cfg.advertiseBase || base;
+const cloneUrl = `${advertiseBase}/${cfg.collection}/${cfg.project}/_git/${cfg.repo}`;
 
 function json(res, status, body) {
   const s = JSON.stringify(body);

@@ -114,8 +114,13 @@ export async function POST(
     },
   });
 
+  const isGitClone = sourceType === "GIT_CLONE";
   const useOrgGithubToken =
-    sourceType === "GIT_CLONE" && originalScan.project.connectedViaGithub;
+    isGitClone && originalScan.project.connectedViaGithub;
+  const useOrgBitbucketToken =
+    isGitClone && originalScan.project.connectedViaBitbucket;
+  const useOrgAzureDevOpsToken =
+    isGitClone && originalScan.project.connectedViaAzure;
 
   const jobData: ScanJobData = {
     scanId: scan.id,
@@ -130,6 +135,8 @@ export async function POST(
     repoUrlDisplay:
       sourceType === "GIT_CLONE" ? originalScan.sourceRef : undefined,
     useOrgGithubToken,
+    useOrgBitbucketToken,
+    useOrgAzureDevOpsToken,
     svnUrl: sourceType === "SVN_CHECKOUT" ? originalScan.sourceRef : undefined,
     branch,
     orgSettings: buildOrgSettingsForJob(orgSettings, orgId),

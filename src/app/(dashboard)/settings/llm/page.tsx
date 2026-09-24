@@ -51,8 +51,9 @@ const PROVIDER_DEFAULTS: Record<
     doc: "platform.openai.com/api-keys",
   },
   anthropic: {
-    url: "https://api.anthropic.com/v1",
-    model: "claude-sonnet-5",
+    // API root — the SDK appends /v1/messages itself.
+    url: "https://api.anthropic.com",
+    model: "claude-opus-5",
     doc: "console.anthropic.com/settings/keys",
   },
   openrouter: {
@@ -99,7 +100,7 @@ const PROVIDER_MODELS: Record<string, { top: string[]; budget: string[] }> = {
   },
   anthropic: {
     top: ["claude-opus-5", "claude-sonnet-5"],
-    budget: ["claude-haiku-4-5-20251001"],
+    budget: ["claude-haiku-4-5"],
   },
   openrouter: {
     top: [

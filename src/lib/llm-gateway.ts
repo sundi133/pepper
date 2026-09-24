@@ -109,6 +109,50 @@ function createOpenAIClient(config: LlmConfig): OpenAI {
   });
 }
 
+// ─── Anthropic helpers ────────────────────────────────────────────────
+
+/**
+ * The Anthropic SDK's baseURL is the API *root*; it appends `/v1/messages`
+ * itself. A configured `https://api.anthropic.com/v1` therefore produced
+ * `/v1/v1/messages` → 404 not_found_error on every call. Strip a trailing
+ * `/v1` (and slashes) so both forms work. Returns undefined for "use default".
+ */
+export function normalizeAnthropicBaseUrl(url?: string | null): string | undefined {
+  const trimmed = url?.trim().replace(/\/+$/, "");
+  if (!trimmed) return undefined;
+  return trimmed.replace(/\/v1$/i, "");
+}
+
+/**
+ * Sampling parameters (`temperature`/`top_p`/`top_k`) are rejected with a 400
+ * on Claude Sonnet 5, Opus 5 / 5.5, Opus 4.7 / 4.8, and Fable. Only send them
+ * to the older families known to accept them; unknown (newer) models get none.
+ */
+export function anthropicAcceptsTemperature(model: string): boolean {
+  return /^claude-(3[-.]|haiku-4-5|sonnet-4-[56]|opus-4-[156]|(sonnet|opus)-4-20\d{6})/.test(
+    model,
+  );
+}
+
+/**
+ * Concatenate the text blocks of a Messages response. Current models think by
+ * default, so content[0] is often a `thinking` block — reading only the first
+ * block returned "{}" even when the model answered.
+ */
+export function anthropicResponseText(
+  content: ReadonlyArray<{ type: string; text?: string }>,
+): string {
+  return content
+    .filter((b) => b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text)
+    .join("");
+}
+
+// Thinking tokens count toward max_tokens on models that think by default, so
+// a small ceiling can be consumed before any JSON is written. Raising the
+// ceiling costs nothing (billing is on tokens actually generated).
+const ANTHROPIC_MIN_MAX_TOKENS = 16000;
+
 // ─── Unified Client Type ──────────────────────────────────────────────
 
 export type LlmClient =
@@ -130,11 +174,12 @@ export function createLlmClient(config: LlmConfig): LlmClient {
   }
 
   if (provider === "anthropic") {
+    const baseURL = normalizeAnthropicBaseUrl(config.baseUrl);
     return {
       type: "anthropic",
       client: new Anthropic({
         apiKey: config.apiKey || "",
-        ...(config.baseUrl ? { baseURL: config.baseUrl } : {}),
+        ...(baseURL ? { baseURL } : {}),
       }),
       model: config.model,
     };
@@ -272,17 +317,37 @@ export async function analyzeWithLlm(
 
   // Anthropic path — uses native Messages API
   if (llmClient.type === "anthropic") {
+    const useModel = model || llmClient.model;
     try {
       const response = await llmClient.client.messages.create({
-        model: model || llmClient.model,
+        model: useModel,
         system: systemPrompt,
         messages: [{ role: "user", content: userContent }],
-        temperature,
-        max_tokens: options?.maxTokens ?? 8192,
+        ...(anthropicAcceptsTemperature(useModel) ? { temperature } : {}),
+        max_tokens: Math.max(options?.maxTokens ?? 0, ANTHROPIC_MIN_MAX_TOKENS),
       });
-      const block = response.content[0];
-      return block.type === "text" ? block.text : "{}";
-    } catch {
+      if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") {
+        logger.warn(
+          {
+            model: useModel,
+            stopReason: response.stop_reason,
+            stopDetails: response.stop_details ?? undefined,
+          },
+          "Anthropic response did not complete normally",
+        );
+      }
+      return anthropicResponseText(response.content) || "{}";
+    } catch (err) {
+      // Degrade to "{}" like the other providers, but never silently — a bad
+      // model ID, base URL, or key must be visible in the worker logs.
+      if (err instanceof Anthropic.APIError) {
+        logger.warn(
+          { model: useModel, status: err.status, error: err.message },
+          "Anthropic API call failed",
+        );
+      } else {
+        logger.warn({ model: useModel, err }, "Anthropic call failed");
+      }
       return "{}";
     }
   }
@@ -379,8 +444,9 @@ export async function* streamChatWithLlm(
       model: llmClient.model,
       system: systemMsg?.content,
       messages: nonSystemMsgs,
-      temperature,
-      max_tokens: maxTokens,
+      ...(anthropicAcceptsTemperature(llmClient.model) ? { temperature } : {}),
+      // Streaming has no HTTP-timeout concern; leave room for default thinking.
+      max_tokens: Math.max(maxTokens, ANTHROPIC_MIN_MAX_TOKENS),
     });
     for await (const event of stream) {
       if (event.type === "content_block_delta" && event.delta.type === "text_delta") {

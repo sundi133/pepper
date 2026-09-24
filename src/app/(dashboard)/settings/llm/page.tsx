@@ -52,7 +52,7 @@ const PROVIDER_DEFAULTS: Record<
   },
   anthropic: {
     url: "https://api.anthropic.com/v1",
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     doc: "console.anthropic.com/settings/keys",
   },
   openrouter: {
@@ -98,14 +98,14 @@ const PROVIDER_MODELS: Record<string, { top: string[]; budget: string[] }> = {
     budget: ["gpt-4o-mini", "gpt-4.1-mini", "o3-mini"],
   },
   anthropic: {
-    top: ["claude-opus-4-6", "claude-sonnet-4-6"],
+    top: ["claude-opus-5", "claude-sonnet-5"],
     budget: ["claude-haiku-4-5-20251001"],
   },
   openrouter: {
     top: [
       "google/gemini-2.5-flash",
       "google/gemini-2.5-pro",
-      "anthropic/claude-sonnet-4-6",
+      "anthropic/claude-sonnet-5",
       "moonshotai/kimi-k3",
       "z-ai/glm-5.2",
     ],

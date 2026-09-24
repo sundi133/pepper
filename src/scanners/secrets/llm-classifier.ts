@@ -115,8 +115,8 @@ export async function classifySecrets(
   } catch (err) {
     logger.error(
       { err, findingCount: findings.length },
-      "Secrets LLM classification failed — keeping all findings unfiltered",
+      "Secrets LLM classification failed — returning empty to avoid false positives",
     );
-    return findings;
+    return [];
   }
 }

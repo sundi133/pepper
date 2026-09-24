@@ -49,6 +49,7 @@ export async function GET(
 
   const { searchParams } = new URL(req.url);
   const format = searchParams.get("format") || "csv";
+  const isPauseExport = searchParams.get("pause") === "true";
 
   if (format === "json") {
     return NextResponse.json(
@@ -119,11 +120,20 @@ export async function GET(
 
   if (format === "pdf") {
     try {
-      const pdfBuffer = await buildPdfReport(scan, findings);
+      // Add pause status to scan metadata for report
+      const scanForReport = isPauseExport
+        ? { ...scan, status: `${scan.status} (Paused)` }
+        : scan;
+
+      const pdfBuffer = await buildPdfReport(scanForReport, findings);
+      const filename = isPauseExport
+        ? `${projectSlug}-paused-report-${timestamp}.pdf`
+        : `${projectSlug}-report-${timestamp}.pdf`;
+
       return new NextResponse(new Uint8Array(pdfBuffer), {
         headers: {
           "Content-Type": "application/pdf",
-          "Content-Disposition": `inline; filename="${projectSlug}-report-${timestamp}.pdf"`,
+          "Content-Disposition": `inline; filename="${filename}"`,
           "Cache-Control": "no-store",
         },
       });

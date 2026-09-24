@@ -443,6 +443,16 @@ export default function ScanDetailPage() {
                 {resuming ? "Resuming..." : isStopped ? "Restart" : "Resume"}
               </Button>
             )}
+            {isPaused && (
+              <Button
+                variant="ghost"
+                className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
+                onClick={() =>
+                  window.open(`/api/scans/${scanId}/findings/export?format=pdf&pause=true`, "_blank")
+                }
+                title="Export findings at pause point"
+              >📄 Export Paused Report</Button>
+            )}
             {canManageScan && isActive && (
               <Button
                 variant="outline"

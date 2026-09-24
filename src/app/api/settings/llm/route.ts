@@ -41,6 +41,16 @@ export async function GET() {
   });
 }
 
+// Hosted providers that always need their own key.
+const KEYED_PROVIDERS = new Set([
+  "openai",
+  "anthropic",
+  "openrouter",
+  "azure",
+  "azure-foundry",
+  "opencode",
+]);
+
 const updateSchema = z.object({
   llmProvider: z
     .enum(["ollama", "openai", "anthropic", "openrouter", "azure", "azure-foundry", "vllm", "opencode", "custom"])
@@ -69,9 +79,35 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const data = updateSchema.parse(body);
 
-    // Don't update llmApiKey if empty string (means "keep existing")
+    // Empty key normally means "keep existing" — but NOT across a provider
+    // change: the stored key belongs to the old provider (e.g. an OpenRouter
+    // sk-or-… key sent to Anthropic → 401, every scan returns 0 findings).
+    const existing = await prisma.orgSettings.findUnique({
+      where: { organizationId: orgId },
+      select: { llmProvider: true, llmApiKey: true },
+    });
+    const providerChanged =
+      !!data.llmProvider &&
+      !!existing?.llmProvider &&
+      data.llmProvider !== existing.llmProvider;
+    if (providerChanged && !data.llmApiKey && existing?.llmApiKey) {
+      if (KEYED_PROVIDERS.has(data.llmProvider!)) {
+        return NextResponse.json(
+          {
+            error: `Enter the API key for ${data.llmProvider} — the saved key belongs to ${existing.llmProvider} and won't work with the new provider.`,
+            code: "API_KEY_REQUIRED_FOR_PROVIDER",
+          },
+          { status: 400 },
+        );
+      }
+      // Keyless/local providers (ollama, vllm, custom): drop the stale key.
+      data.llmApiKey = undefined;
+    }
+
     const updateData: Record<string, unknown> = { ...data };
-    if (data.llmApiKey === "") {
+    if (providerChanged && !data.llmApiKey && existing?.llmApiKey) {
+      updateData.llmApiKey = null;
+    } else if (data.llmApiKey === "" || data.llmApiKey === undefined) {
       delete updateData.llmApiKey;
     } else if (data.llmApiKey) {
       // Encrypt before storing — use "enc:" prefix so readers can distinguish

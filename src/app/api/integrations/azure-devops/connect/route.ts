@@ -84,16 +84,18 @@ export async function POST(req: NextRequest) {
   // Probe the connection: `/_apis/connectionData` returns the
   // authenticated user's identity info. Cheap, available with the
   // minimum scope, and fails fast on bad PATs. Works for both cloud and Server.
-  const probe = await azureGet<{
-    authenticatedUser?: { providerDisplayName?: string };
-  }>(
-    {
-      organization: azureOrganization,
-      pat,
-      ...(azureServerUrl ? { serverUrl: azureServerUrl } : {}),
-    },
-    "/_apis/connectionData",
-  );
+  const probeAuth = {
+    organization: azureOrganization,
+    pat,
+    ...(azureServerUrl ? { serverUrl: azureServerUrl } : {}),
+  };
+  type ConnData = { authenticatedUser?: { providerDisplayName?: string } };
+  let probe = await azureGet<ConnData>(probeAuth, "/_apis/connectionData");
+  // Some Azure DevOps Server versions reject api-version on connectionData with
+  // a 400 — retry without it before deciding the credentials are bad.
+  if (!probe.ok && probe.status === 400) {
+    probe = await azureGet<ConnData>(probeAuth, "/_apis/connectionData", "");
+  }
 
   if (!probe.ok) {
     return NextResponse.json(

@@ -46,8 +46,12 @@ export function withAzureDevOpsCredentials(
   try {
     const u = new URL(repoUrl);
     if (u.protocol !== "http:" && u.protocol !== "https:") return repoUrl;
-    u.username = "";
-    u.password = encodeURIComponent(token);
+    // Put the PAT in the USERNAME (password empty). git refuses to send an
+    // empty username, so the `:PAT@` form makes it prompt ("could not read
+    // Username") against any auth-required Azure DevOps (cloud or Server). The
+    // `PAT@` form works: git sends Basic base64("<PAT>:"), which ADO accepts.
+    u.username = encodeURIComponent(token);
+    u.password = "";
     return u.toString();
   } catch {
     return repoUrl;

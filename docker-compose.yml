@@ -93,6 +93,11 @@ services:
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_USE_SSL: "false"
       MINIO_BUCKET: pepper-artifacts
+      # Must match the API's key: the worker decrypts org tokens (GitHub /
+      # Bitbucket / Azure DevOps PATs) to clone private repos. Without it,
+      # getOrg*Auth returns null and clones fail with "could not read Username".
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-change-me}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       MAX_LLM_CONCURRENCY: ${MAX_LLM_CONCURRENCY:-5}
       OLLAMA_HOST: http://host.docker.internal:11434

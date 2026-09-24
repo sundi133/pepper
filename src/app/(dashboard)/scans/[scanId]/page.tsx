@@ -972,6 +972,8 @@ function formatScanMetadataLine(scan: {
   commitSha?: string | null;
   prNumber?: number | null;
   createdAt: string;
+  filesScanned?: number | null;
+  depsScanned?: number | null;
 }): string {
   const parts: string[] = [];
   if (scan.sourceType === "SVN_CHECKOUT") {
@@ -984,6 +986,12 @@ function formatScanMetadataLine(scan: {
       parts.push(`Commit: ${scan.commitSha.substring(0, 8)}`);
   }
   parts.push(`Created: ${new Date(scan.createdAt).toLocaleString()}`);
+  if (scan.filesScanned)
+    parts.push(
+      `${scan.filesScanned.toLocaleString()} file${scan.filesScanned === 1 ? "" : "s"} scanned`,
+    );
+  if (scan.depsScanned)
+    parts.push(`${scan.depsScanned.toLocaleString()} deps`);
   return parts.join(" · ");
 }
 

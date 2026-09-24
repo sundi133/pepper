@@ -51,8 +51,9 @@ const PROVIDER_DEFAULTS: Record<
     doc: "platform.openai.com/api-keys",
   },
   anthropic: {
-    url: "https://api.anthropic.com/v1",
-    model: "claude-sonnet-4-6",
+    // API root — the SDK appends /v1/messages itself.
+    url: "https://api.anthropic.com",
+    model: "claude-opus-5",
     doc: "console.anthropic.com/settings/keys",
   },
   openrouter: {
@@ -98,14 +99,14 @@ const PROVIDER_MODELS: Record<string, { top: string[]; budget: string[] }> = {
     budget: ["gpt-4o-mini", "gpt-4.1-mini", "o3-mini"],
   },
   anthropic: {
-    top: ["claude-opus-4-6", "claude-sonnet-4-6"],
-    budget: ["claude-haiku-4-5-20251001"],
+    top: ["claude-opus-5", "claude-sonnet-5"],
+    budget: ["claude-haiku-4-5"],
   },
   openrouter: {
     top: [
       "google/gemini-2.5-flash",
       "google/gemini-2.5-pro",
-      "anthropic/claude-sonnet-4-6",
+      "anthropic/claude-sonnet-5",
       "moonshotai/kimi-k3",
       "z-ai/glm-5.2",
     ],
@@ -201,10 +202,13 @@ export default function LlmSettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(nextSettings),
       });
-      if (!res.ok) throw new Error("Failed to save");
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "Failed to save settings");
+      }
       if (!silent) toast.success("Settings saved");
-    } catch {
-      toast.error("Failed to save settings");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
       setLoading(false);
     }

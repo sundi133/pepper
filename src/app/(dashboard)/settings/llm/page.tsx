@@ -202,10 +202,13 @@ export default function LlmSettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(nextSettings),
       });
-      if (!res.ok) throw new Error("Failed to save");
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "Failed to save settings");
+      }
       if (!silent) toast.success("Settings saved");
-    } catch {
-      toast.error("Failed to save settings");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
       setLoading(false);
     }

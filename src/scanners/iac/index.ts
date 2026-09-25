@@ -9,6 +9,7 @@ import { RawFinding, ScanContext, ScannerPlugin } from "../types";
 import { groupIacStacks } from "./stacks";
 import { enrichFinding } from "../shared/finding-normalize";
 import { buildDeepRepoContext } from "../shared/repo-context";
+import { UNTRUSTED_CONTENT_GUARD } from "../shared/prompts";
 import { applySeverityCalibration } from "@/lib/severity-calibration";
 import {
   SKIP_DIRECTORIES,
@@ -20,9 +21,11 @@ import {
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 
-const IAC_STACK_PROMPT = `You are an expert IaC security auditor performing STACK-LEVEL analysis.
+export const IAC_STACK_PROMPT = `You are an expert IaC security auditor performing STACK-LEVEL analysis.
 Analyze ALL files in the stack together (Dockerfile+compose, Terraform module+vars, K8s+Helm, CI+deploy configs).
 Do NOT report hardcoded secrets — those belong to the secrets scanner.
+
+${UNTRUSTED_CONTENT_GUARD}
 
 IMPORTANT: Filter strictly for ACTIONABLE findings only. Avoid:
 - Generic best practices without concrete security impact (e.g., missing HEALTHCHECK, missing NetworkPolicy in dev clusters)

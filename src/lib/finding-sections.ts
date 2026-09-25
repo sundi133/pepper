@@ -65,6 +65,27 @@ export const FINDING_SECTIONS = [
   },
 ];
 
+/** Lookup of every known section id → the scanner names it covers. */
+export const FINDING_SECTION_SCANNERS: Record<string, string[]> = Object.fromEntries(
+  FINDING_SECTIONS.map((section) => [section.id, section.scanners]),
+);
+
+/** True when `id` is one of the known FINDING_SECTIONS ids. */
+export function isKnownSection(id: string): boolean {
+  return id in FINDING_SECTION_SCANNERS;
+}
+
+/**
+ * Resolve a comma-separated list of section ids into the scanner names that
+ * belong to them. Unknown ids are dropped, and each scanner is de-duplicated.
+ * An empty input (or all-unknown input) resolves to `[]`, which consumers
+ * treat as "no filter — include everything".
+ */
+export function resolveSectionScanners(sections: string): string[] {
+  const ids = sections.split(",").map((s) => s.trim()).filter(isKnownSection);
+  return [...new Set(ids.flatMap((id) => FINDING_SECTION_SCANNERS[id]))];
+}
+
 /**
  * Group the loaded findings into sections.
  *

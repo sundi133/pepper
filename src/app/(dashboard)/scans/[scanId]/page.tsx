@@ -56,6 +56,13 @@ import {
   ChevronDown,
   Download,
   FileDown,
+  FileText,
+  Code2,
+  BarChart3,
+  ClipboardCheck,
+  Globe,
+  FileSpreadsheet,
+  ArrowUpRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -504,6 +511,11 @@ export default function ScanDetailPage() {
             )}
             {hasReportableFindings && (
               <div className="ml-1 flex items-center gap-0.5 border-l border-slate-200 pl-2 dark:border-slate-700">
+                <ReportsMenu
+                  scanId={scanId}
+                  canOpenCompliance={scan.status === "COMPLETED"}
+                  onOpenCompliance={() => router.push(`/scans/${scanId}/compliance`)}
+                />
                 <Button
                   variant="ghost"
                   className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
@@ -1092,3 +1104,166 @@ function formatScanMetadataLine(scan: {
   return parts.join(" · ");
 }
 
+type ReportFormat = "pdf" | "html" | "csv";
+
+const FORMAT_META: Record<ReportFormat, { label: string; icon: typeof FileText }> = {
+  pdf: { label: "PDF", icon: FileText },
+  html: { label: "HTML", icon: Globe },
+  csv: { label: "CSV", icon: FileSpreadsheet },
+};
+
+type ReportOption = {
+  key: string;
+  title: string;
+  audience: string;
+  description: string;
+  icon: typeof FileText;
+  tone: string;
+  formats: ReportFormat[];
+  url: (fmt: ReportFormat) => string;
+};
+
+const AUDIENCE_TAG =
+  "rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400";
+
+function FormatChip({ format, onSelect }: { format: ReportFormat; onSelect: () => void }) {
+  const { label, icon: Icon } = FORMAT_META[format];
+  return (
+    <DropdownMenuItem
+      onSelect={onSelect}
+      className="h-7 gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-0 text-xs font-medium text-slate-700 shadow-xs data-[highlighted]:border-indigo-300 data-[highlighted]:bg-indigo-50 data-[highlighted]:text-indigo-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:data-[highlighted]:border-indigo-700 dark:data-[highlighted]:bg-indigo-950/60 dark:data-[highlighted]:text-indigo-300"
+    >
+      <Icon className="size-3.5" />
+      {label}
+    </DropdownMenuItem>
+  );
+}
+
+function ReportCard({ option }: { option: ReportOption }) {
+  const Icon = option.icon;
+  return (
+    <div className="flex gap-3 rounded-lg p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/60">
+      <div
+        className={cn(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset",
+          option.tone,
+        )}
+      >
+        <Icon className="size-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {option.title}
+          </span>
+          <span className={AUDIENCE_TAG}>{option.audience}</span>
+        </div>
+        <p className="mt-0.5 text-xs leading-snug text-slate-500 dark:text-slate-400">
+          {option.description}
+        </p>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {option.formats.map((fmt) => (
+            <FormatChip
+              key={fmt}
+              format={fmt}
+              onSelect={() => window.open(option.url(fmt), "_blank")}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportsMenu({
+  scanId,
+  canOpenCompliance,
+  onOpenCompliance,
+}: {
+  scanId: string;
+  canOpenCompliance: boolean;
+  onOpenCompliance: () => void;
+}) {
+  const downloadable: ReportOption[] = [
+    {
+      key: "developer",
+      title: "Developer report",
+      audience: "For engineers",
+      description: "Full technical findings with repro steps, impact and fixes.",
+      icon: Code2,
+      tone: "bg-indigo-50 text-indigo-600 ring-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-400 dark:ring-indigo-900",
+      formats: ["pdf", "html", "csv"],
+      url: (fmt) => `/api/scans/${scanId}/findings/export?format=${fmt}`,
+    },
+    {
+      key: "executive",
+      title: "Executive report",
+      audience: "For leadership",
+      description: "Risk posture, top business risks and a remediation roadmap.",
+      icon: BarChart3,
+      tone: "bg-amber-50 text-amber-600 ring-amber-100 dark:bg-amber-950/40 dark:text-amber-400 dark:ring-amber-900",
+      formats: ["pdf", "html"],
+      url: (fmt) => `/api/scans/${scanId}/reports/executive?format=${fmt}`,
+    },
+  ];
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          className="group h-8 gap-1.5 border-slate-300 px-2.5 text-xs text-slate-600 data-[state=open]:border-indigo-300 data-[state=open]:bg-indigo-50 data-[state=open]:text-indigo-700 dark:border-slate-700 dark:text-slate-400 dark:data-[state=open]:border-indigo-800 dark:data-[state=open]:bg-indigo-950/50 dark:data-[state=open]:text-indigo-300"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Reports
+          <ChevronDown className="h-3 w-3 opacity-70 transition-transform duration-150 group-data-[state=open]:rotate-180" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        sideOffset={6}
+        className="w-[min(380px,calc(100vw-2rem))] rounded-xl p-0 shadow-lg"
+      >
+        <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            Download reports
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Pick the audience, then a format. Opens in a new tab.
+          </p>
+        </div>
+        <div className="space-y-0.5 p-1.5">
+          {downloadable.map((opt) => (
+            <ReportCard key={opt.key} option={opt} />
+          ))}
+        </div>
+        <DropdownMenuSeparator className="m-0" />
+        <div className="p-1.5">
+          <DropdownMenuItem
+            disabled={!canOpenCompliance}
+            onSelect={onOpenCompliance}
+            className="group items-start gap-3 rounded-lg p-3 data-[highlighted]:bg-emerald-50/70 dark:data-[highlighted]:bg-emerald-950/30"
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-900">
+              <ClipboardCheck className="size-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  Compliance report
+                </span>
+                <span className={AUDIENCE_TAG}>For auditors</span>
+              </div>
+              <p className="mt-0.5 text-xs leading-snug text-slate-500 dark:text-slate-400">
+                {canOpenCompliance
+                  ? "Map findings to ISO 27001, SOC 2, PCI DSS and more, then export PDF / HTML."
+                  : "Available once the scan has completed."}
+              </p>
+            </div>
+            <ArrowUpRight className="mt-0.5 size-4 text-slate-400 transition-transform group-data-[highlighted]:-translate-y-0.5 group-data-[highlighted]:translate-x-0.5 group-data-[highlighted]:text-emerald-600" />
+          </DropdownMenuItem>
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

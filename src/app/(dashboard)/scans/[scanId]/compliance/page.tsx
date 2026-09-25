@@ -188,6 +188,9 @@ export default function ComplianceReportPage() {
     totalFindings?: number;
   } | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
+  // Model the server actually used (null for crosswalk-only runs). Part of the
+  // cache key the export endpoint reads from.
+  const [streamModel, setStreamModel] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -204,6 +207,7 @@ export default function ComplianceReportPage() {
     setStreamedReports([]);
     setStreamMeta(null);
     setStreamError(null);
+    setStreamModel(null);
     // The model override only applies to agentic (deep) mode.
     const modelParam =
       m === "deep" && mdl ? `&model=${encodeURIComponent(mdl)}` : "";
@@ -213,6 +217,7 @@ export default function ComplianceReportPage() {
     esRef.current = es;
     es.addEventListener("start", (e) => {
       const d = JSON.parse((e as MessageEvent).data);
+      setStreamModel(d.model ?? null);
       setProgressLog((l) => [
         ...l,
         {
@@ -323,6 +328,20 @@ export default function ComplianceReportPage() {
     },
     { label: "Compliance" },
   ];
+
+  function handleExportReport(format: "pdf" | "html") {
+    const slugs = visibleReports
+      .map((r) => r.slug)
+      .filter((s): s is string => !!s);
+    if (slugs.length === 0) return;
+    const qs = new URLSearchParams({
+      format,
+      mode,
+      frameworks: slugs.join(","),
+    });
+    if (streamModel) qs.set("model", streamModel);
+    window.open(`/api/scans/${scanId}/compliance/export?${qs}`, "_blank");
+  }
 
   function handleExportCsv() {
     const lines = [
@@ -482,6 +501,14 @@ export default function ComplianceReportPage() {
               <Button variant="outline" size="sm" onClick={handleRegenerate}>
                 <RefreshCw className="mr-2 h-3.5 w-3.5" />
                 Regenerate
+              </Button>
+              <Button variant="outline" onClick={() => handleExportReport("pdf")}>
+                <Download className="mr-2 h-4 w-4" />
+                Export PDF
+              </Button>
+              <Button variant="outline" onClick={() => handleExportReport("html")}>
+                <Download className="mr-2 h-4 w-4" />
+                Export HTML
               </Button>
               <Button variant="outline" onClick={handleExportCsv}>
                 <Download className="mr-2 h-4 w-4" />

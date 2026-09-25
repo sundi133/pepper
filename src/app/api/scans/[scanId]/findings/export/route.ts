@@ -7,6 +7,7 @@ import {
 } from "@/lib/finding-report";
 import { SCANNER_LABELS } from "@/lib/constants";
 import { buildPdfReport } from "@/lib/pdf-report";
+import { isKnownSection } from "@/lib/finding-sections";
 
 type ReportFinding = {
   id: string;
@@ -50,6 +51,12 @@ export async function GET(
   const { searchParams } = new URL(req.url);
   const format = searchParams.get("format") || "csv";
   const isPauseExport = searchParams.get("pause") === "true";
+  // Comma-separated section ids (SAST,SECRETS,...). Unknown ids are dropped so
+  // a stale or tampered value can never crash the report builder.
+  const sections = (searchParams.get("sections") || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(isKnownSection);
 
   if (format === "json") {
     return NextResponse.json(
@@ -125,7 +132,9 @@ export async function GET(
         ? { ...scan, status: `${scan.status} (Paused)` }
         : scan;
 
-      const pdfBuffer = await buildPdfReport(scanForReport, findings);
+      const pdfBuffer = await buildPdfReport(scanForReport, findings, {
+        sections,
+      });
       const filename = isPauseExport
         ? `${projectSlug}-paused-report-${timestamp}.pdf`
         : `${projectSlug}-report-${timestamp}.pdf`;

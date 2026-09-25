@@ -7,6 +7,15 @@ import { useScanPolling, useFindings } from "@/hooks/use-scan-polling";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   FINDING_SECTIONS,
   groupFindingsBySection,
 } from "@/lib/finding-sections";
@@ -44,6 +53,9 @@ import {
   Siren,
   Shield,
   CheckCircle2,
+  ChevronDown,
+  Download,
+  FileDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -91,6 +103,9 @@ export default function ScanDetailPage() {
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const [now, setNow] = useState(Date.now());
   const [activeSection, setActiveSection] = useState<string>("");
+  // Section ids (SAST, SECRETS, …) the user wants in the PDF export. An empty
+  // array means "all sections" (the existing behavior).
+  const [exportSections, setExportSections] = useState<string[]>([]);
 
   const orgRole = session?.user?.memberships?.[0]?.role;
   const canRescan = orgRole && ["ADMIN", "SECURITY", "DEVELOPER"].includes(orgRole);
@@ -258,6 +273,30 @@ export default function ScanDetailPage() {
   );
   const visibleFindingCount = String(scannerCountTotal || totalFindings);
   const findingSections = groupFindingsBySection(visibleFindings, scannerCounts);
+
+  // Sections the PDF export offers. `findingSections` only lists sections with
+  // findings (with totals); fall back to the full static list for empty scans so
+  // the menu is never empty. "OTHER" is excluded — it has no scanners to match.
+  const exportableSections = (findingSections.length > 0
+    ? findingSections
+    : FINDING_SECTIONS.map((section) => ({
+        ...section,
+        findings: [] as Finding[],
+        total: 0,
+      }))
+  ).filter((section) => section.scanners.length > 0);
+
+  const toggleExportSection = (id: string, checked: boolean) => {
+    setExportSections((current) =>
+      checked ? [...current, id] : current.filter((s) => s !== id),
+    );
+  };
+
+  const openPdfExport = (sections: string[]) => {
+    const params = new URLSearchParams({ format: "pdf" });
+    if (sections.length > 0) params.set("sections", sections.join(","));
+    window.open(`/api/scans/${scanId}/findings/export?${params.toString()}`, "_blank");
+  };
 
   const fixPrSource = {
     scanId: scan.id,
@@ -472,13 +511,61 @@ export default function ScanDetailPage() {
                     window.open(`/api/scans/${scanId}/findings/export?format=csv`, "_blank")
                   }
                 >CSV</Button>
-                <Button
-                  variant="ghost"
-                  className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
-                  onClick={() =>
-                    window.open(`/api/scans/${scanId}/findings/export?format=pdf`, "_blank")
-                  }
-                >PDF</Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
+                      aria-label="Export PDF — choose section types"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      PDF
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="min-w-[16rem] max-h-[22rem] overflow-y-auto"
+                  >
+                    <DropdownMenuLabel>PDF Section Types</DropdownMenuLabel>
+                    <DropdownMenuItem
+                      className="cursor-pointer"
+                      onClick={() => openPdfExport([])}
+                    >
+                      <FileDown className="mr-2 h-4 w-4" aria-hidden />
+                      All sections
+                      {exportSections.length === 0 ? (
+                        <Check className="ml-auto h-4 w-4" aria-hidden />
+                      ) : null}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Include specific sections</DropdownMenuLabel>
+                    {exportableSections.map((section) => (
+                      <DropdownMenuCheckboxItem
+                        key={section.id}
+                        checked={exportSections.includes(section.id)}
+                        onCheckedChange={(checked) =>
+                          toggleExportSection(section.id, checked)
+                        }
+                        onSelect={(event) => event.preventDefault()}
+                        className="cursor-pointer text-xs"
+                      >
+                        {section.title}
+                        <span className="ml-auto text-muted-foreground text-xs">
+                          {section.total}
+                        </span>
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="cursor-pointer text-indigo-600"
+                      onClick={() => openPdfExport(exportSections)}
+                    >
+                      <Download className="mr-2 h-4 w-4" aria-hidden />
+                      Export PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 {scan.status === "COMPLETED" && (
                   <Button
                     variant="ghost"

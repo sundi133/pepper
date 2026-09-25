@@ -1,5 +1,6 @@
 import { SCANNER_LABELS } from "./constants";
 import { getCweCategory, getOwasp2024Code } from "@/scanners/sast/owasp-mapper";
+import { FINDING_SECTIONS } from "./finding-sections";
 
 // ─── Types ──────────────────────────────────────────────────────────
 type ScanData = {
@@ -169,7 +170,19 @@ function riskLevel(criticalCount: number, highCount: number): { label: string; c
 
 // ─── PDF Builder ────────────────────────────────────────────────────
 
-export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise<Buffer> {
+export type PdfReportOptions = {
+  /**
+   * Section ids (see FINDING_SECTIONS) the report should cover, e.g.
+   * ["SAST", "SECRETS"]. Empty/omitted means "all sections".
+   */
+  sections?: string[];
+};
+
+export function buildPdfReport(
+  scan: ScanData,
+  findings: FindingData[],
+  options?: PdfReportOptions,
+): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     try {
     // Dynamic require to avoid webpack bundling pdfkit's fs-dependent font loading
@@ -197,8 +210,32 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
     const marginR = 50;
     const contentW = pageW - marginL - marginR;
     const projectName = scan.project?.name || "Scan";
-    const totalFindings = scan.criticalCount + scan.highCount + scan.mediumCount + scan.lowCount + scan.infoCount;
-    const risk = riskLevel(scan.criticalCount, scan.highCount);
+
+    // When specific sections (e.g. SAST, SECRETS) are requested, only include
+    // findings from the scanners those sections cover. The executive brief and
+    // summary cards below are then derived from the filtered set, so the report
+    // describes exactly what it contains instead of the whole scan.
+    const selectedSections = options?.sections?.length
+      ? options.sections
+          .map((id) => FINDING_SECTIONS.find((section) => section.id === id))
+          .filter((section) => section !== undefined)
+      : [];
+    const sectionScannerSet = selectedSections.length
+      ? new Set<string>(selectedSections.flatMap((section) => section.scanners))
+      : null;
+    const reportFindings = sectionScannerSet
+      ? findings.filter((f) => sectionScannerSet.has(f.scanner))
+      : findings;
+
+    const criticalCount = reportFindings.filter((f) => f.severity.toUpperCase() === "CRITICAL").length;
+    const highCount = reportFindings.filter((f) => f.severity.toUpperCase() === "HIGH").length;
+    const mediumCount = reportFindings.filter((f) => f.severity.toUpperCase() === "MEDIUM").length;
+    const lowCount = reportFindings.filter((f) => f.severity.toUpperCase() === "LOW").length;
+    const totalFindings = reportFindings.length;
+    const risk = riskLevel(criticalCount, highCount);
+    const sectionsLabel = selectedSections.length
+      ? selectedSections.map((section) => section.title).join(", ")
+      : null;
 
     // ════════════════════════════════════════════════════════════════
     // PAGE 1: HEADER
@@ -238,7 +275,7 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
       .text(risk.label, marginL + 15 + 8, y + 18, { width: badgeW - 16 });
 
     // Summary text
-    const briefText = `The assessment identified ${scan.criticalCount} critical and ${scan.highCount} high severity findings across ${totalFindings} total issues. ${scan.criticalCount > 0 ? "Prioritized remediation is advised before the next release." : "Review recommended before deployment."}`;
+    const briefText = `The assessment identified ${criticalCount} critical and ${highCount} high severity findings across ${totalFindings} total issues. ${criticalCount > 0 ? "Prioritized remediation is advised before the next release." : "Review recommended before deployment."}`;
     doc.fontSize(9).fillColor(COLORS.textPrimary)
       .text(briefText, marginL + badgeW + 30, y + 14, { width: contentW - badgeW - 50 });
 
@@ -248,10 +285,10 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
     const cardW = (contentW - 40) / 5;
     const cards = [
       { count: totalFindings, label: "FINDINGS", color: COLORS.textPrimary },
-      { count: scan.criticalCount, label: "CRITICAL", color: COLORS.critical },
-      { count: scan.highCount, label: "HIGH", color: COLORS.high },
-      { count: scan.mediumCount, label: "MEDIUM", color: COLORS.medium },
-      { count: scan.lowCount, label: "LOW", color: COLORS.low },
+      { count: criticalCount, label: "CRITICAL", color: COLORS.critical },
+      { count: highCount, label: "HIGH", color: COLORS.high },
+      { count: mediumCount, label: "MEDIUM", color: COLORS.medium },
+      { count: lowCount, label: "LOW", color: COLORS.low },
     ];
 
     cards.forEach((card, i) => {
@@ -271,7 +308,7 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
     y += 10;
 
     const catCounts = new Map<string, number>();
-    for (const f of findings) {
+    for (const f of reportFindings) {
       const cat = findingCategory(f);
       catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
     }
@@ -304,7 +341,7 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
     const severityOrder: Record<string, number> = {
       CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4,
     };
-    const sortedFindings = [...findings].sort((a, b) => {
+    const sortedFindings = [...reportFindings].sort((a, b) => {
       const aOrder = severityOrder[a.severity.toUpperCase()] ?? 999;
       const bOrder = severityOrder[b.severity.toUpperCase()] ?? 999;
       return aOrder - bOrder;
@@ -376,11 +413,16 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
         `${scan.filesScanned} files and ${scan.depsScanned} dependencies scanned. Gate result: ${scan.gateResult}.`,
         marginL, y, { width: contentW },
       );
+    if (sectionsLabel) {
+      y += 18;
+      doc.fontSize(8).fillColor(COLORS.textSecondary)
+        .text(`Included sections: ${sectionsLabel}.`, marginL, y, { width: contentW });
+    }
     y += 20;
 
     // Scanner coverage badges
     const scannerCounts = new Map<string, number>();
-    for (const f of findings) {
+    for (const f of reportFindings) {
       scannerCounts.set(f.scanner, (scannerCounts.get(f.scanner) || 0) + 1);
     }
     const allScanners = Object.keys(SCANNER_LABELS) as (keyof typeof SCANNER_LABELS)[];
@@ -406,7 +448,7 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
     y += 10;
 
     const owaspCounts = new Map<string, number>();
-    for (const f of findings) {
+    for (const f of reportFindings) {
       const o = findingOwasp(f);
       if (o) owaspCounts.set(o, (owaspCounts.get(o) || 0) + 1);
     }
@@ -444,8 +486,8 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
     y = drawSectionHeader(doc, "REMEDIATION ROADMAP", marginL, y, contentW);
     y += 10;
 
-    const criticalFindings = findings.filter((f) => f.severity === "CRITICAL" || f.severity === "HIGH");
-    const mediumFindings = findings.filter((f) => f.severity === "MEDIUM");
+    const criticalFindings = reportFindings.filter((f) => f.severity === "CRITICAL" || f.severity === "HIGH");
+    const mediumFindings = reportFindings.filter((f) => f.severity === "MEDIUM");
 
     const colW = (contentW - 20) / 3;
     const roadmapHeaders = [
@@ -522,7 +564,7 @@ export function buildPdfReport(scan: ScanData, findings: FindingData[]): Promise
     y = drawSectionHeader(doc, "TECHNICAL FINDINGS \u2014 DETAILED EVIDENCE", marginL, y, contentW);
     y += 10;
 
-    for (const f of findings) {
+    for (const f of reportFindings) {
       if (y > 580) { doc.addPage(); y = 50; }
       y = drawFindingCard(doc, f, marginL, y, contentW);
       y += 15;

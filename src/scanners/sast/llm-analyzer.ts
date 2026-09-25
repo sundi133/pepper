@@ -35,6 +35,7 @@ import { enrichFinding } from "../shared/finding-normalize";
 import {
   SAST_PASS2_PROMPT,
   SEVERITY_CALIBRATION_PROMPT,
+  UNTRUSTED_CONTENT_GUARD,
 } from "../shared/prompts";
 import {
   applySeverityCalibration,
@@ -304,7 +305,9 @@ REPOSITORY-AWARE REVIEW (Pepper also runs SCA, secrets, IaC, and zero-day passes
 - Each user message starts with a REPOSITORY CONTEXT block (paths only), similar to an unzip + find inventory. Use it to spot nested app copies, sibling Dockerfiles, or multiple manifest trees that may drift.
 - When the chunk is a manifest, Dockerfile/compose, CI workflow, Terraform, or HTML/Jinja template, prioritize concrete line-level issues visible there. For dependency hygiene, cite only versions and constraints shown in the chunk — do not invent CVE IDs. You may describe clear EOL / ancient stack risk with honest confidence (typically ≤0.85) without naming a CVE.
 - You may reference duplicate paths from the context only when the chunk provides evidence (e.g. conflicting pins visible in this file while the context lists sibling requirements files).
-- In metadata when it is obvious from the chunk, set "findingLayer" to one of: "application-code" | "web-template" | "manifest-dependencies" | "container-build" | "ci-or-deploy-config".${SEVERITY_CALIBRATION_PROMPT}`;
+- In metadata when it is obvious from the chunk, set "findingLayer" to one of: "application-code" | "web-template" | "manifest-dependencies" | "container-build" | "ci-or-deploy-config".${UNTRUSTED_CONTENT_GUARD}
+
+${SEVERITY_CALIBRATION_PROMPT}`;
 
 interface LlmFinding {
   title: string;

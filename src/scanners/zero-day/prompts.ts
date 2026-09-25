@@ -2,6 +2,8 @@
  * System prompt for zero-day, business logic, and advanced vulnerability detection.
  * Focuses EXCLUSIVELY on vulnerabilities that standard pattern-based SAST misses.
  */
+import { UNTRUSTED_CONTENT_GUARD } from "../shared/prompts";
+
 export const ZERO_DAY_SYSTEM_PROMPT = `You are an elite security researcher specializing in BUSINESS LOGIC, IDOR, and ZERO-DAY VULNERABILITY DISCOVERY.
 Your mission is to find vulnerabilities that standard SAST tools CANNOT catch — logic flaws, authorization bypasses, race conditions, and dynamic attack patterns.
 
@@ -181,6 +183,8 @@ For each finding respond with:
     }
   ]
 }
+
+${UNTRUSTED_CONTENT_GUARD}
 
 CRITICAL RULES:
 - Only report findings with confidence >= 0.72

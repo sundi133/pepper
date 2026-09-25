@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { groupFindingsBySection, FINDING_SECTIONS } from "./finding-sections";
+import {
+  groupFindingsBySection,
+  FINDING_SECTIONS,
+  isKnownSection,
+  resolveSectionScanners,
+} from "./finding-sections";
 
 const f = (scanner: string) => ({ scanner });
 
@@ -143,5 +148,50 @@ describe("every scanner has a home", () => {
     for (const scanner of ALL_SCANNERS) counts[scanner] = 3;
     const sections = groupFindingsBySection([], counts);
     expect(sections.find((s) => s.id === "OTHER")).toBeUndefined();
+  });
+})
+
+describe("section id helpers for PDF export", () => {
+  it("recognizes every known section id", () => {
+    for (const section of FINDING_SECTIONS) {
+      expect(isKnownSection(section.id)).toBe(true);
+    }
+    expect(isKnownSection("SAST")).toBe(true);
+    expect(isKnownSection("SECRETS")).toBe(true);
+  });
+
+  it("rejects unknown section ids", () => {
+    expect(isKnownSection("")).toBe(false);
+    expect(isKnownSection("NOPE")).toBe(false);
+    expect(isKnownSection("secret")).toBe(false); // case-sensitive
+  });
+
+  it("resolves a comma-separated list to its scanners", () => {
+    const saast = FINDING_SECTIONS.find((s) => s.id === "SAST")!.scanners;
+    const secrets = FINDING_SECTIONS.find((s) => s.id === "SECRETS")!.scanners;
+    expect(resolveSectionScanners("SAST,SECRETS")).toEqual(
+      [...saast, ...secrets],
+    );
+  });
+
+  it("drops unknown ids and trims whitespace", () => {
+    expect(resolveSectionScanners(" SAST , NOPE , SCA ")).toEqual(
+      FINDING_SECTIONS.find((s) => s.id === "SAST")!.scanners.concat(
+        FINDING_SECTIONS.find((s) => s.id === "SCA")!.scanners,
+      ),
+    );
+  });
+
+  it("deduplicates scanners shared across selections", () => {
+    // Sections never share scanners today, but a future id aliasing the same
+    // scanner must not double-count it for the report filter.
+    expect(resolveSectionScanners("SAST,SAST")).toEqual(
+      FINDING_SECTIONS.find((s) => s.id === "SAST")!.scanners,
+    );
+  });
+
+  it("returns an empty list for no selection", () => {
+    expect(resolveSectionScanners("")).toEqual([]);
+    expect(resolveSectionScanners("UNKNOWN")).toEqual([]);
   });
 })

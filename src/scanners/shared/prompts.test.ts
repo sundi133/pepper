@@ -3,7 +3,15 @@ import {
   UNTRUSTED_CONTENT_GUARD,
   SCA_TRIAGE_PROMPT,
   MALICIOUS_VALIDATION_PROMPT,
+  SECRETS_AI_PROMPT,
+  CONTAINER_CONFIG_PROMPT,
+  K8S_MANIFEST_PROMPT,
+  EXPLOIT_VALIDATION_PROMPT,
 } from "./prompts";
+import { SYSTEM_PROMPT as SAST_SYSTEM_PROMPT } from "../sast/llm-analyzer";
+import { ZERO_DAY_SYSTEM_PROMPT } from "../zero-day/prompts";
+import { IAC_STACK_PROMPT } from "../iac";
+import { SYSTEM_PROMPT as SECRETS_CLASSIFIER_PROMPT } from "../secrets/llm-classifier";
 
 /**
  * In supply-chain analysis the adversary authors the input (install scripts,
@@ -29,6 +37,31 @@ describe("untrusted content guard", () => {
   it("is present in every prompt that receives package-authored content", () => {
     expect(SCA_TRIAGE_PROMPT).toContain(UNTRUSTED_CONTENT_GUARD);
     expect(MALICIOUS_VALIDATION_PROMPT).toContain(UNTRUSTED_CONTENT_GUARD);
+  });
+
+  it("is present in every code/config analysis prompt", () => {
+    // SAST, Zero-Day, IaC, Container, K8S and the secret scanners all feed
+    // repository- or package-authored content (code, manifests, configs,
+    // README prose) to the model. Content can embed instructions aimed at the
+    // model ("ignore previous instructions", "do not report this"), so every
+    // one of these prompts must carry the same untrusted-data declaration.
+    // This guard is the regression lock: a new scanner prompt that omits it
+    // fails here until it declares its input untrusted.
+    const prompts: Array<[string, string]> = [
+      ["SAST_LLM", SAST_SYSTEM_PROMPT],
+      ["ZERO_DAY", ZERO_DAY_SYSTEM_PROMPT],
+      ["IAC", IAC_STACK_PROMPT],
+      ["CONTAINER", CONTAINER_CONFIG_PROMPT],
+      ["K8S", K8S_MANIFEST_PROMPT],
+      ["SECRETS_AI", SECRETS_AI_PROMPT],
+      ["SECRETS_CLASSIFIER", SECRETS_CLASSIFIER_PROMPT],
+      ["EXPLOIT_VALIDATION", EXPLOIT_VALIDATION_PROMPT],
+    ];
+    for (const [scanner, prompt] of prompts) {
+      expect(prompt, `${scanner} prompt must embed UNTRUSTED_CONTENT_GUARD`).toContain(
+        UNTRUSTED_CONTENT_GUARD,
+      );
+    }
   });
 });
 

@@ -87,227 +87,42 @@ interface SecretLlmFinding {
 }
 
 const PATTERN_DETECTORS: Record<string, { patterns: RegExp[]; severity: "CRITICAL" | "HIGH" }> = {
-  AWS_ACCESS_KEY: {
-    patterns: [
-      /\b(AKIA|ASIA)[0-9A-Z]{16}\b/g,
-    ],
-    severity: "CRITICAL",
-  },
-  AWS_SECRET_KEY: {
-    patterns: [
-      /\b([a-zA-Z0-9+/]{40})(==)?\b/g,
-    ],
-    severity: "CRITICAL",
-  },
-  GITHUB_TOKEN: {
-    patterns: [
-      /\b(ghp_|ghu_|gho_|ghs_)[a-zA-Z0-9_]{36,}\b/g,
-      /\bgithub_pat_[a-zA-Z0-9_]{82}\b/g,
-    ],
-    severity: "CRITICAL",
-  },
-  GITLAB_TOKEN: {
-    patterns: [
-      /\bglpat-[a-zA-Z0-9_-]{20,}\b/g,
-    ],
-    severity: "CRITICAL",
-  },
-  SLACK_TOKEN: {
-    patterns: [
-      /\b(xox[bap])-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,32}\b/g,
-    ],
-    severity: "CRITICAL",
-  },
-  STRIPE_KEY: {
-    patterns: [
-      /\b(sk|pk)_(live|test)_[a-zA-Z0-9]{24,}\b/g,
-    ],
-    severity: "CRITICAL",
-  },
-  PRIVATE_KEY: {
-    patterns: [
-      /-----BEGIN (RSA|DSA|EC|OPENSSH|PGP|ENCRYPTED) PRIVATE KEY/gi,
-    ],
-    severity: "CRITICAL",
-  },
-  JWT_TOKEN: {
-    patterns: [
-      /\beyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.([a-zA-Z0-9_-]+)?\b/g,
-    ],
+  AWS_ACCESS_KEY: { patterns: [/\b(AKIA|ASIA)[0-9A-Z]{16}\b/g], severity: "CRITICAL" },
+  GITHUB_TOKEN: { patterns: [/\b(ghp|ghu|gho|ghs)_[a-zA-Z0-9_]{36,}\b/g], severity: "CRITICAL" },
+  GITLAB_TOKEN: { patterns: [/\bglpat-[a-zA-Z0-9_-]{20,}\b/g], severity: "CRITICAL" },
+  SLACK_TOKEN: { patterns: [/\b(xox[bap])-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,32}\b/g], severity: "CRITICAL" },
+  STRIPE_KEY: { patterns: [/\b(sk|pk)_(live|test)_[a-zA-Z0-9]{24,}\b/g], severity: "CRITICAL" },
+  PRIVATE_KEY: { patterns: [/-----BEGIN (RSA|DSA|EC|OPENSSH|PGP) PRIVATE KEY-----/gi], severity: "CRITICAL" },
+  JWT_TOKEN: { patterns: [/\beyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]*\b/g], severity: "HIGH" },
+  GOOGLE_API_KEY: { patterns: [/\bAIza[0-9A-Za-z_-]{35}\b/g], severity: "CRITICAL" },
+  SENDGRID_KEY: { patterns: [/\bSG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}\b/g], severity: "CRITICAL" },
+  DATABASE_URL: { patterns: [/(?:postgres|mysql|mongodb)(?:\+srv)?:\/\/[^:]+:[^@]+@[^\s'"]+/gi], severity: "HIGH" },
+  NPM_TOKEN: { patterns: [/\bnpm_[a-zA-Z0-9]{36}\b/g], severity: "CRITICAL" },
+  OPENAI_API_KEY: { patterns: [/\bsk-[a-zA-Z0-9]{20,}(?:T3BlbkFJ[a-zA-Z0-9]{20,})?\b/g], severity: "CRITICAL" },
+  // Generic named-key literals (api_key = "…", secret_key=…, client_secret=…).
+  // These are deliberately conservative: a quoted value that does not look like
+  // a mask (uniform chars below) is flagged HIGH and left for the LLM pass /
+  // human to confirm, so we never add shape-only noise for docs or examples.
+  API_KEY: {
+    patterns: [/\b(?:api[_-]?key|apikey)\s*[:=]\s*["'][A-Za-z0-9_\-$+/=]{12,}["']/gi],
     severity: "HIGH",
   },
-  GOOGLE_API_KEY: {
-    patterns: [
-      /\bAIza[0-9A-Za-z_-]{35}\b/g,
-    ],
-    severity: "CRITICAL",
-  },
-  SENDGRID_KEY: {
-    patterns: [
-      /\bSG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}\b/g,
-    ],
-    severity: "CRITICAL",
-  },
-  TWILIO_KEY: {
-    patterns: [
-      /\bAC[a-zA-Z0-9]{32}\b/g,
-    ],
-    severity: "CRITICAL",
-  },
-  DATABRICKS_TOKEN: {
-    patterns: [
-      /\bdapi[a-z0-9]{32}[a-z0-9_-]+\b/gi,
-    ],
-    severity: "CRITICAL",
-  },
-  DATABASE_PASSWORD: {
-    patterns: [
-      /password\s*=\s*['"](.*?)['"]/gi,
-      /db_password\s*:\s*['"](.*?)['"]/gi,
-    ],
-    severity: "HIGH",
-  },
-  AZURE_STORAGE_KEY: {
-    patterns: [
-      /DefaultEndpointsProtocol=https?;[^;]*AccountKey=[a-zA-Z0-9+/]{88}==/gi,
-    ],
-    severity: "CRITICAL",
-  },
-  AZURE_CONNECTION_STRING: {
-    patterns: [
-      /HostName=[^;]+;SharedAccessKeyName=[^;]+;SharedAccessKey=[a-zA-Z0-9+/=]+/gi,
-    ],
-    severity: "CRITICAL",
-  },
-  MONGODB_URI: {
-    patterns: [
-      /mongodb\+srv:\/\/[^:]+:[^@]+@[^\s"'`]+/gi,
-      /mongodb:\/\/[^:]+:[^@]+@[^\s"'`]+/gi,
-    ],
-    severity: "CRITICAL",
-  },
-  FIREBASE_KEY: {
-    patterns: [
-      /AAAA[a-zA-Z0-9_-]{52}/g,
-    ],
-    severity: "CRITICAL",
-  },
-  HEROKU_API_KEY: {
-    patterns: [
-      /heroku[_]auth\s*=\s*['"]([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})['"]?/gi,
-      /\b[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\b/g,
-    ],
-    severity: "HIGH",
-  },
-  DIGITALOCEAN_TOKEN: {
-    patterns: [
-      /dop_v1_[a-z0-9]{64}/gi,
-    ],
-    severity: "CRITICAL",
-  },
-  GITHUB_OAUTH_TOKEN: {
-    patterns: [
-      /oauth_token\s*=\s*['"]?([a-f0-9]{32,40})['"]?/gi,
-    ],
-    severity: "CRITICAL",
-  },
-  REDIS_URL: {
-    patterns: [
-      /redis:\/\/:[^@]+@[^\s"'`]+(?::\d+)?/gi,
-    ],
-    severity: "HIGH",
-  },
-  SSH_PRIVATE_KEY: {
-    patterns: [
-      /-----BEGIN RSA PRIVATE KEY-----/gi,
-      /-----BEGIN OPENSSH PRIVATE KEY-----/gi,
-      /-----BEGIN EC PRIVATE KEY-----/gi,
-      /-----BEGIN PRIVATE KEY-----/gi,
-    ],
-    severity: "CRITICAL",
-  },
-  NPM_TOKEN: {
-    patterns: [
-      /npm_[a-zA-Z0-9]{36}/g,
-    ],
-    severity: "CRITICAL",
-  },
-  DOCKER_CONFIG: {
-    patterns: [
-      /"auth"\s*:\s*"[a-zA-Z0-9+/]{20,}={0,2}"/gi,
-    ],
-    severity: "CRITICAL",
-  },
-  SLACK_WEBHOOK: {
-    patterns: [
-      /https:\/\/hooks\.slack\.com\/services\/[a-zA-Z0-9/]+/g,
-    ],
-    severity: "HIGH",
-  },
-  GRAFANA_API_KEY: {
-    patterns: [
-      /grafana_api_key\s*[=:]\s*['"]?([a-zA-Z0-9]{32,})['"]?/gi,
-    ],
-    severity: "HIGH",
-  },
-  NOTION_API_KEY: {
-    patterns: [
-      /secret_[a-z0-9]{40}/gi,
-    ],
-    severity: "CRITICAL",
-  },
-  MAILCHIMP_API_KEY: {
-    patterns: [
-      /[a-f0-9]{32}-us\d{1,2}/gi,
-    ],
-    severity: "HIGH",
-  },
-  OKTA_API_TOKEN: {
-    patterns: [
-      /00[a-zA-Z0-9_]{36}/g,
-    ],
-    severity: "CRITICAL",
-  },
-  OPENAI_API_KEY: {
-    patterns: [
-      /sk-[a-zA-Z0-9]{20,}/g,
-      /sk-proj-[a-zA-Z0-9_]{20,}/g,
-    ],
-    severity: "CRITICAL",
-  },
-  ANTHROPIC_API_KEY: {
-    patterns: [
-      /sk-ant-[a-zA-Z0-9_]{20,}/g,
-    ],
-    severity: "CRITICAL",
-  },
-  SUPABASE_KEY: {
-    patterns: [
-      /eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*/g,
-    ],
-    severity: "CRITICAL",
-  },
-  PRIVATE_KEY_FILE: {
-    patterns: [
-      /-----BEGIN (DSA|RSA|EC|OPENSSH|PGP) PRIVATE KEY(?:\sENCRYPTED)? -----/gi,
-    ],
-    severity: "CRITICAL",
-  },
-  API_KEY_ASSIGNMENT: {
-    patterns: [
-      /api[_-]?key\s*[:=]\s*['"]([\w\-\.]{20,})['"]/gi,
-      /apikey\s*[:=]\s*['"]([\w\-\.]{20,})['"]/gi,
-    ],
-    severity: "HIGH",
-  },
-  SECRET_KEY_ASSIGNMENT: {
-    patterns: [
-      /secret[_-]?key\s*[:=]\s*['"]([\w\-\.]{20,})['"]/gi,
-      /secretkey\s*[:=]\s*['"]([\w\-\.]{20,})['"]/gi,
-    ],
+  SECRET_KEY: {
+    patterns: [/\b(?:secret[_-]?key|secretkey|client[_-]?secret)\s*[:=]\s*["'][A-Za-z0-9_\-$+/=]{12,}["']/gi],
     severity: "HIGH",
   },
 };
+
+/**
+ * Mask-like values (xxxx…, aaaa…, 1234… repeated) are never real credentials.
+ * Applies to every pattern match as a final anti-false-positive gate.
+ */
+function isUniformSecretValue(value: string): boolean {
+  const alnum = value.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  if (alnum.length < 8) return false;
+  const unique = new Set(alnum).size;
+  return unique <= 1 || unique / alnum.length < 0.1;
+}
 
 export const secretsPatternScanner: ScannerPlugin = {
   name: "SECRETS_PATTERN",
@@ -341,10 +156,11 @@ export const secretsPatternScanner: ScannerPlugin = {
       // First, check for multi-line patterns (like private keys)
       for (const [credentialType, config] of Object.entries(PATTERN_DETECTORS)) {
         if (credentialType.includes("KEY") && config.patterns.some(p => p.source.includes("BEGIN"))) {
-          for (const pattern of config.patterns) {
-            if (!pattern.source.includes("BEGIN")) continue;
+          for (const patternSource of config.patterns) {
+            if (!patternSource.source.includes("BEGIN")) continue;
+            // Create fresh pattern to avoid .lastIndex state issues
+            const pattern = new RegExp(patternSource.source, patternSource.flags || "gi");
             let match;
-            pattern.lastIndex = 0;
             while ((match = pattern.exec(content)) !== null) {
               const matchedValue = match[0];
               const lineNumber =
@@ -401,10 +217,10 @@ export const secretsPatternScanner: ScannerPlugin = {
             continue;
           }
 
-          for (const pattern of config.patterns) {
+          for (const patternSource of config.patterns) {
+            // Create fresh pattern to avoid .lastIndex state issues
+            const pattern = new RegExp(patternSource.source, patternSource.flags || "g");
             let match;
-            // Reset regex global state
-            pattern.lastIndex = 0;
             while ((match = pattern.exec(line)) !== null) {
               const matchedValue = match[0];
 
@@ -415,7 +231,8 @@ export const secretsPatternScanner: ScannerPlugin = {
                 matchedValue.toLowerCase().includes("test") ||
                 /^(xxx|yyy|zzz|aaa|bbb|ccc|ddd|eee|fff|000|111|222)[\-_]/.test(
                   matchedValue,
-                )
+                ) ||
+                isUniformSecretValue(matchedValue)
               ) {
                 continue;
               }
@@ -550,9 +367,23 @@ export const secretsLlmScanner: ScannerPlugin = {
       }
     }
 
-    if (findings.length > 0 && ctx.orgSettings.enableLlmSecrets) {
-      ctx.onProgress?.(`Secrets AI: classifying ${findings.length} candidate(s)...`);
-      const classified = await classifySecrets(findings, {
+    // Deduplicate findings from overlapping chunks
+    const deduped = new Map<string, RawFinding>();
+    for (const f of findings) {
+      const meta = f.metadata && typeof f.metadata === "object"
+        ? (f.metadata as Record<string, unknown>)
+        : {};
+      const key = `${f.filePath}:${f.startLine}:${(meta.credentialType as string | undefined) ?? ""}`;
+      const existing = deduped.get(key);
+      if (!existing || (f.confidence ?? 0) > (existing.confidence ?? 0)) {
+        deduped.set(key, f);
+      }
+    }
+    const dedupedFindings = Array.from(deduped.values());
+
+    if (dedupedFindings.length > 0 && ctx.orgSettings.enableLlmSecrets) {
+      ctx.onProgress?.(`Secrets AI: classifying ${dedupedFindings.length} candidate(s)...`);
+      const classified = await classifySecrets(dedupedFindings, {
         provider: ctx.orgSettings.llmProvider,
         baseUrl: ctx.orgSettings.llmBaseUrl,
         apiKey: ctx.orgSettings.llmApiKey,
@@ -562,8 +393,8 @@ export const secretsLlmScanner: ScannerPlugin = {
       return classified;
     }
 
-    ctx.onProgress?.(`Secrets AI: ${findings.length} confirmed secret(s)`);
-    return findings;
+    ctx.onProgress?.(`Secrets AI: ${dedupedFindings.length} confirmed secret(s)`);
+    return dedupedFindings;
   },
 };
 
@@ -646,7 +477,7 @@ async function analyzeSecretChunk(
         const masked = maskSecretValue(f.exposedValue || "****");
         const base: RawFinding = applySeverityCalibration({
           scanner: "SECRETS_LLM",
-          severity: f.severity?.toUpperCase() === "HIGH" ? "HIGH" : "CRITICAL",
+          severity: (f.severity?.toUpperCase() === "CRITICAL" || !f.severity) ? "CRITICAL" : "HIGH",
           title: `${f.credentialType}: ${f.title}`,
           description: "",
           filePath: chunk.filePath,

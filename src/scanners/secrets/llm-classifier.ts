@@ -5,6 +5,7 @@ import {
 } from "@/lib/llm-gateway";
 import { RawFinding } from "../types";
 import { logger } from "@/lib/logger";
+import { UNTRUSTED_CONTENT_GUARD } from "../shared/prompts";
 
 export const SYSTEM_PROMPT = `You are a security expert classifying potential secret/credential findings in source code.
 
@@ -25,6 +26,8 @@ Treat these as LIKELY FALSE POSITIVES:
 - Certificate PUBLIC keys or public key material (BEGIN PUBLIC KEY, .pub files) — public by design, not a secret
 
 Do NOT lower confidence merely because a value is base64 or looks "encoded" — if the context is a real credential use site, it is still a leak. Conversely, do NOT raise confidence for a plausible-looking value that clearly lives in docs/examples.
+
+${UNTRUSTED_CONTENT_GUARD}
 
 For each finding, output isSecret true/false and a confidence that reflects context strength, not just shape. When a finding is a true secret but you are unsure it is reachable, keep confidence >= 0.80 (reachability is assessed elsewhere).
 
@@ -107,10 +110,53 @@ export async function classifySecrets(
       classMap.set(c.index, c);
     }
 
-    return findings.filter((_, i) => {
+    // A "real secret" verdict keeps the finding and folds the classifier's
+    // second-opinion certainty and reasoning into it, so the audit trail shows
+    // WHY the value survived beyond the shape/entropy match: raise confidence
+    // to the classifier's when it is more certain (it sees the full file path,
+    // line, usage context and the candidate's whyReal), and record both
+    // classifierConfidence and classifierReasoning in metadata for triage.
+    return findings.flatMap((f, i) => {
       const classification = classMap.get(i);
-      if (!classification) return true; // keep if LLM didn't classify
-      return classification.isSecret;
+      if (!classification) return [f]; // keep if LLM didn't classify
+      if (!classification.isSecret) return []; // confirmed false positive
+
+      const baseMeta = (
+        f.metadata && typeof f.metadata === "object" && !Array.isArray(f.metadata)
+          ? f.metadata
+          : {}
+      ) as Record<string, unknown>;
+      const meta: Record<string, unknown> = { ...baseMeta };
+
+      const classifierConfidence =
+        typeof classification.confidence === "number"
+          ? classification.confidence
+          : undefined;
+      const reasoning =
+        typeof classification.reasoning === "string" &&
+        classification.reasoning.trim()
+          ? classification.reasoning.trim()
+          : undefined;
+
+      if (classifierConfidence !== undefined) {
+        meta.classifierConfidence = classifierConfidence;
+        if (reasoning) meta.classifierReasoning = reasoning;
+      }
+      if (reasoning) {
+        const existing = typeof baseMeta.confidenceReason === "string"
+          ? baseMeta.confidenceReason.trim()
+          : "";
+        meta.confidenceReason = existing
+          ? `${existing} | classifier: ${reasoning}`
+          : `classifier: ${reasoning}`;
+      }
+
+      const confidence =
+        classifierConfidence !== undefined
+          ? Math.min(1.0, Math.max(f.confidence ?? 0, classifierConfidence))
+          : f.confidence;
+
+      return [{ ...f, confidence, metadata: meta }];
     });
   } catch (err) {
     logger.error(

@@ -93,6 +93,8 @@ Each real secret MUST have:
 - startLine/endLine: exact source lines.
 - exposedValue: the full literal exactly as it appears (will be masked before display — do NOT omit or truncate).
 
+${UNTRUSTED_CONTENT_GUARD}
+
 ${SEVERITY_CALIBRATION_PROMPT}
 For each TRUE secret (confidence >= 0.80) return:
 {
@@ -251,6 +253,8 @@ COMPOSE CHECKS:
 23. **User not set / root default in compose** - no user: directive and the image runs as root; same host-level damage as USER root in the Dockerfile. CWE-250.
 24. **Dangerous default command or entrypoint** - ENTRYPOINT/CMD that execs a shell with attacker-influenced args (e.g. sh -c "$UNTRUSTED_VAR"), or a healthcheck/entrypoint that fetches and executes remote content. CWE-78.
 
+${UNTRUSTED_CONTENT_GUARD}
+
 ${SEVERITY_CALIBRATION_PROMPT}
 
 Return JSON: { "findings": [{ "title", "severity", "description", "startLine", "endLine", "cweId", "confidence", "remediation", "validationSteps" }] }
@@ -324,6 +328,8 @@ RESPONSE FORMAT - Return JSON array with findings. Each finding must include:
 }
 
 If no findings: return {"findings": []}
+
+${UNTRUSTED_CONTENT_GUARD}
 
 ${SEVERITY_CALIBRATION_PROMPT}`;
 

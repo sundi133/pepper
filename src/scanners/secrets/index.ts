@@ -99,7 +99,30 @@ const PATTERN_DETECTORS: Record<string, { patterns: RegExp[]; severity: "CRITICA
   DATABASE_URL: { patterns: [/(?:postgres|mysql|mongodb)(?:\+srv)?:\/\/[^:]+:[^@]+@[^\s'"]+/gi], severity: "HIGH" },
   NPM_TOKEN: { patterns: [/\bnpm_[a-zA-Z0-9]{36}\b/g], severity: "CRITICAL" },
   OPENAI_API_KEY: { patterns: [/\bsk-[a-zA-Z0-9]{20,}(?:T3BlbkFJ[a-zA-Z0-9]{20,})?\b/g], severity: "CRITICAL" },
+  // Generic named-key literals (api_key = "…", secret_key=…, client_secret=…).
+  // These are deliberately conservative: a quoted value that does not look like
+  // a mask (uniform chars below) is flagged HIGH and left for the LLM pass /
+  // human to confirm, so we never add shape-only noise for docs or examples.
+  API_KEY: {
+    patterns: [/\b(?:api[_-]?key|apikey)\s*[:=]\s*["'][A-Za-z0-9_\-$+/=]{12,}["']/gi],
+    severity: "HIGH",
+  },
+  SECRET_KEY: {
+    patterns: [/\b(?:secret[_-]?key|secretkey|client[_-]?secret)\s*[:=]\s*["'][A-Za-z0-9_\-$+/=]{12,}["']/gi],
+    severity: "HIGH",
+  },
 };
+
+/**
+ * Mask-like values (xxxx…, aaaa…, 1234… repeated) are never real credentials.
+ * Applies to every pattern match as a final anti-false-positive gate.
+ */
+function isUniformSecretValue(value: string): boolean {
+  const alnum = value.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  if (alnum.length < 8) return false;
+  const unique = new Set(alnum).size;
+  return unique <= 1 || unique / alnum.length < 0.1;
+}
 
 export const secretsPatternScanner: ScannerPlugin = {
   name: "SECRETS_PATTERN",
@@ -208,7 +231,8 @@ export const secretsPatternScanner: ScannerPlugin = {
                 matchedValue.toLowerCase().includes("test") ||
                 /^(xxx|yyy|zzz|aaa|bbb|ccc|ddd|eee|fff|000|111|222)[\-_]/.test(
                   matchedValue,
-                )
+                ) ||
+                isUniformSecretValue(matchedValue)
               ) {
                 continue;
               }
@@ -346,7 +370,10 @@ export const secretsLlmScanner: ScannerPlugin = {
     // Deduplicate findings from overlapping chunks
     const deduped = new Map<string, RawFinding>();
     for (const f of findings) {
-      const key = `${f.filePath}:${f.startLine}:${(f.metadata as any)?.credentialType}`;
+      const meta = f.metadata && typeof f.metadata === "object"
+        ? (f.metadata as Record<string, unknown>)
+        : {};
+      const key = `${f.filePath}:${f.startLine}:${(meta.credentialType as string | undefined) ?? ""}`;
       const existing = deduped.get(key);
       if (!existing || (f.confidence ?? 0) > (existing.confidence ?? 0)) {
         deduped.set(key, f);

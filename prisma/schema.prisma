@@ -184,6 +184,11 @@ model Project {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  /// Holder for throwaway developer pre-push scans. Segregated from canonical
+  /// projects so a local dev scan never clobbers a real project's scan, and so
+  /// these can be excluded from trends/dashboards and reaped.
+  ephemeral      Boolean  @default(false)
+
   /// Set when imported via GitHub OAuth (unique per org).
   githubRepoId       Int?
   githubOwner        String?
@@ -229,6 +234,8 @@ model Scan {
   baseSha    String?
   sourceType SourceType @default(UPLOAD)
   sourceRef  String?
+  /// Where the scan was triggered from. Null for historical rows.
+  origin     ScanOrigin?
   projectId  String     @unique
   triggeredBy String?
   jobId      String?
@@ -403,6 +410,15 @@ enum SourceType {
   WEBHOOK
   CONTAINER_IMAGE
   PRECOMMIT
+}
+
+/// How a scan was triggered, independent of how the source arrived (sourceType).
+/// A local dev pre-push scan and a CI scan both UPLOAD a tarball but differ here.
+enum ScanOrigin {
+  WEB
+  LOCAL
+  CICD
+  WEBHOOK
 }
 
 enum GateResult {

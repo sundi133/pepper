@@ -1,9 +1,15 @@
 import "dotenv/config";
 import { Worker } from "bullmq";
-import { SCAN_QUEUE_NAME, ScanJobData } from "@/lib/queue";
+import {
+  REMEDIATION_QUEUE_NAME,
+  SCAN_QUEUE_NAME,
+  ScanJobData,
+  type RemediationJobData,
+} from "@/lib/queue";
 import { redisConnection } from "@/lib/redis";
 import { ensureBucket } from "@/lib/minio";
 import { processScanJob } from "./scan-processor";
+import { runRemediation } from "@/lib/remediation/agent";
 import { startScheduler } from "./scheduler";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -62,12 +68,51 @@ async function main() {
     logger.error({ error: error.message }, "Worker error");
   });
 
+  // AI remediation runs: long, sequential LLM + git work per run.
+  const remediationWorker = new Worker<RemediationJobData>(
+    REMEDIATION_QUEUE_NAME,
+    async (job) => runRemediation(job.data.runId),
+    {
+      connection: redisConnection,
+      concurrency: parseInt(process.env.REMEDIATION_CONCURRENCY || "2"),
+      lockDuration: 300_000,
+      lockRenewTime: 150_000,
+      stalledInterval: 300_000,
+    },
+  );
+
+  remediationWorker.on("failed", async (job, error) => {
+    logger.error(
+      { jobId: job?.id, runId: job?.data.runId, error: error.message },
+      "Remediation job failed",
+    );
+    if (job?.data.runId) {
+      await prisma.remediationRun
+        .updateMany({
+          where: {
+            id: job.data.runId,
+            status: { in: ["QUEUED", "RUNNING"] },
+          },
+          data: {
+            status: "FAILED",
+            completedAt: new Date(),
+            errorMessage: error.message.slice(0, 2000),
+          },
+        })
+        .catch(() => undefined);
+    }
+  });
+
+  remediationWorker.on("error", (error) => {
+    logger.error({ error: error.message }, "Remediation worker error");
+  });
+
   // Graceful shutdown
   const schedulerInterval = startScheduler();
   const shutdown = async () => {
     logger.info("Shutting down worker...");
     clearInterval(schedulerInterval);
-    await worker.close();
+    await Promise.all([worker.close(), remediationWorker.close()]);
     process.exit(0);
   };
 

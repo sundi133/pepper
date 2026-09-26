@@ -114,6 +114,7 @@ const NO_STORE_PREFIXES = [
   "/projects",
   "/repositories",
   "/scans",
+  "/remediation",
   "/trends",
   "/notifications",
   "/settings",

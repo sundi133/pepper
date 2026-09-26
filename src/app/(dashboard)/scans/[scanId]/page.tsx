@@ -39,6 +39,7 @@ import {
 } from "@/components/scans/scan-status-badge";
 import { FindingsTable } from "@/components/scans/findings-table";
 import { FindingDetailInline } from "@/components/scans/finding-detail-panel";
+import { RemediationRunsStrip } from "@/components/remediation/remediation-runs-strip";
 import { Progress } from "@/components/ui/progress";
 import {
   Ban,
@@ -846,6 +847,7 @@ export default function ScanDetailPage() {
                 </div>
               )}
             <div className="px-0 sm:px-0">
+              <RemediationRunsStrip scanId={scanId} />
               {findingSections.length === 0 ? (
                 <FindingsTable
                   findings={visibleFindings}

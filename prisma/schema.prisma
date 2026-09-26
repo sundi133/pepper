@@ -258,6 +258,101 @@ model Scan {
   findings  Finding[]
   artifacts ScanArtifact[]
   notifications Notification[]
+  remediationRuns RemediationRun[]
+}
+
+/// One AI remediation session: a set of findings fixed sequentially in a
+/// clone of the repo, validated, then shipped as a single pull request.
+model RemediationRun {
+  id             String            @id @default(cuid())
+  organizationId String
+  scanId         String
+  createdBy      String?
+  status         RemediationStatus @default(QUEUED)
+  /// github | azure_devops | bitbucket
+  provider       String?
+  /// Display-safe repository URL (never carries credentials).
+  repoUrl        String?
+  baseBranch     String?
+  headBranch     String?
+  prUrl          String?
+  prNumber       Int?
+  errorMessage   String?           @db.Text
+  fixedCount     Int               @default(0)
+  failedCount    Int               @default(0)
+  cancelRequested Boolean          @default(false)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  scan   Scan                @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  items  RemediationItem[]
+  events RemediationEvent[]
+
+  @@index([organizationId, createdAt])
+  @@index([scanId, createdAt])
+}
+
+/// A single finding inside a remediation run.
+model RemediationItem {
+  id          String                @id @default(cuid())
+  runId       String
+  findingId   String
+  position    Int
+  status      RemediationItemStatus @default(PENDING)
+  title       String
+  severity    String
+  filePath    String?
+  /// Streamed natural-language analysis (root cause + plan).
+  analysis    String?               @db.Text
+  /// Unified diff of the accepted fix.
+  diff        String?               @db.Text
+  summary     String?               @db.Text
+  /// [{ name, status: passed|failed|skipped, detail }]
+  validation  Json?
+  attempts    Int                   @default(0)
+  error       String?               @db.Text
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  run RemediationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, position])
+}
+
+/// Append-only progress log for a run; the UI tails it over SSE.
+model RemediationEvent {
+  id        String   @id @default(cuid())
+  runId     String
+  seq       Int
+  itemId    String?
+  type      String
+  data      Json?
+  createdAt DateTime @default(now())
+
+  run RemediationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, seq])
+}
+
+enum RemediationStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+  CANCELLED
+}
+
+enum RemediationItemStatus {
+  PENDING
+  ANALYZING
+  FIXING
+  VALIDATING
+  FIXED
+  FAILED
+  SKIPPED
 }
 
 model Notification {

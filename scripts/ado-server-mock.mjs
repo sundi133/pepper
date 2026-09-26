@@ -216,6 +216,27 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, repoObject());
   }
 
+  // Create a pull request (AI remediation). Print it plus the pushed commits.
+  if (/\/_apis\/git\/repositories\/[^/]+\/pullrequests$/i.test(p) && req.method === "POST") {
+    const body = JSON.parse((await readBody(req)) || "{}");
+    const id = Math.floor(Math.random() * 900) + 100;
+    const head = String(body.sourceRefName || "").replace(/^refs\/heads\//, "");
+    const baseRef = String(body.targetRefName || "").replace(/^refs\/heads\//, "");
+    console.log(`\n🔀 PR #${id} created: ${head} → ${baseRef}\n   ${body.title}`);
+    console.log(String(body.description || "").split("\n").map((l) => `   │ ${l}`).join("\n"));
+    try {
+      const out = execFileSync(
+        "git",
+        ["log", "--stat", "--format=   ● %h %s", `${baseRef}..${head}`],
+        { cwd: path.join(gitRoot, `${cfg.repo}.git`), encoding: "utf8" },
+      );
+      console.log(out);
+    } catch {
+      /* branch not pushed */
+    }
+    return json(res, 201, { pullRequestId: id, status: "active" });
+  }
+
   // PR iterations
   if (/\/pullRequests\/\d+\/iterations$/.test(p)) {
     return json(res, 200, { count: 1, value: [{ id: 1 }] });

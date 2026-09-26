@@ -28,7 +28,9 @@ import {
   resolveGithubRepoForFixPr,
 } from "@/lib/open-fix-pr-client";
 import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
-import { FileCode, ChevronDown, ChevronRight, GitPullRequest, ShieldCheck } from "lucide-react";
+import { FileCode, ChevronDown, ChevronRight, GitPullRequest, ShieldCheck, Bot } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { MAX_FINDINGS_PER_RUN } from "@/lib/remediation/types";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -106,8 +108,10 @@ export function FindingsTable({
   renderExpanded,
   fixPrSource,
 }: FindingsTableProps) {
+  const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<string>("");
+  const [remediateStarting, setRemediateStarting] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
 
   // Bulk Fix PR state
@@ -295,6 +299,41 @@ export function FindingsTable({
     }
   }
 
+  async function handleAiRemediate() {
+    if (!fixPrSource || selected.size === 0) return;
+    const ids = findings.filter((f) => selected.has(f.id)).map((f) => f.id);
+    if (ids.length > MAX_FINDINGS_PER_RUN) {
+      toast.error(`Select at most ${MAX_FINDINGS_PER_RUN} findings per remediation run.`);
+      return;
+    }
+    if (
+      !window.confirm(
+        `Start the AI remediation agent on ${ids.length} finding${ids.length === 1 ? "" : "s"}? It fixes and validates each issue in turn, then opens ONE pull request with all validated fixes for you to review.`,
+      )
+    ) {
+      return;
+    }
+    setRemediateStarting(true);
+    try {
+      const res = await fetch(`/api/scans/${fixPrSource.scanId}/remediation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ findingIds: ids }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 409 && body.runId) {
+        toast.info("A remediation run is already in progress — opening it.");
+        router.push(`/remediation/${body.runId}`);
+        return;
+      }
+      if (!res.ok || !body.runId) throw new Error(body.error || "Could not start remediation");
+      router.push(`/remediation/${body.runId}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not start remediation");
+      setRemediateStarting(false);
+    }
+  }
+
   if (findings.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -342,6 +381,18 @@ export function FindingsTable({
             <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
             {verifyLoading ? "Verifying..." : "Verify FP"}
           </Button>
+          {fixPrSource && (
+            <Button
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => void handleAiRemediate()}
+              disabled={remediateStarting}
+              title="Fix, validate and ship all selected findings in one pull request"
+            >
+              <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              {remediateStarting ? "Starting..." : "AI Remediate"}
+            </Button>
+          )}
           {fixPrSource && (
             <Button
               size="sm"

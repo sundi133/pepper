@@ -30,6 +30,32 @@ export const scanQueue = new Proxy({} as Queue, {
   },
 });
 
+export const REMEDIATION_QUEUE_NAME = "pepper-remediation";
+
+export interface RemediationJobData {
+  runId: string;
+}
+
+let _remediationQueue: Queue<RemediationJobData> | undefined;
+
+export function getRemediationQueue(): Queue<RemediationJobData> {
+  if (!_remediationQueue) {
+    _remediationQueue = new Queue<RemediationJobData>(REMEDIATION_QUEUE_NAME, {
+      connection: redisConnection,
+      defaultJobOptions: {
+        // A retry would push a second branch/PR for the same run — never retry.
+        attempts: 1,
+        removeOnComplete: { count: 500 },
+        removeOnFail: { count: 500 },
+      },
+    });
+    _remediationQueue.on("error", (err) => {
+      console.error("[remediation-queue] error:", err.message);
+    });
+  }
+  return _remediationQueue;
+}
+
 export interface ScanJobData {
   scanId: string;
   projectId: string;

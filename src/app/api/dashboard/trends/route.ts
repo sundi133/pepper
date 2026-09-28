@@ -125,6 +125,12 @@ export async function GET(req: NextRequest) {
 
   if (project) {
     series = buildRepoSeries(points, days);
+    // A version can be diffed when its findings were captured, or it is the
+    // project's current scan (live findings).
+    const comparable = new Set([
+      ...snapshots.filter((x) => x.findingsCaptured).map((x) => x.scanId),
+      ...liveScans.map((x) => x.id),
+    ]);
     const runs = await prisma.remediationRun.findMany({
       where: {
         organizationId: orgId,
@@ -155,6 +161,7 @@ export async function GET(req: NextRequest) {
         .slice(0, 50)
         .map((p) => ({
           scanId: p.scanId,
+          comparable: comparable.has(p.scanId),
           scanType: p.scanType,
           completedAt: p.completedAt.toISOString(),
           commitSha: p.commitSha,

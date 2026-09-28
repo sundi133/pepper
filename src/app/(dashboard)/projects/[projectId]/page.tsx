@@ -29,7 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Settings, Trash2 } from "lucide-react";
+import { Settings, Trash2, TrendingDown } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -155,6 +155,12 @@ export default function ProjectDetailPage() {
             <Trash2 className="mr-2 h-4 w-4" />
             Delete
           </Button>
+          <Link href={`/trends?project=${projectId}`}>
+            <Button variant="outline" className="whitespace-nowrap">
+              <TrendingDown className="mr-2 h-4 w-4" />
+              Trends
+            </Button>
+          </Link>
           <Link href={`/projects/${projectId}/settings`}>
             <Button variant="outline" className="whitespace-nowrap">
               <Settings className="mr-2 h-4 w-4" />

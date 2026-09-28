@@ -1004,6 +1004,14 @@ Schema:
       log.warn({ fpErr }, "Auto FP verification failed (non-blocking)");
     }
 
+    // 9d. Record this scan in the repository's history (trends survive rescans)
+    try {
+      const { recordScanSnapshot } = await import("@/lib/scan-history");
+      await recordScanSnapshot(scanId);
+    } catch (histErr) {
+      log.warn({ histErr }, "Scan history snapshot failed (non-blocking)");
+    }
+
     try {
       const { notifyScanLifecycleFromWorker } = await import(
         "@/lib/scan-notifications"

@@ -123,7 +123,9 @@ export const MAX_FINDINGS_PER_RUN = 25;
 
 export interface RemediationRunSnapshot {
   id: string;
-  scanId: string;
+  /** Null once a rescan replaced the scan the run started from. */
+  scanId: string | null;
+  projectId: string | null;
   status: RemediationRunStatus;
   provider: string | null;
   repoUrl: string | null;

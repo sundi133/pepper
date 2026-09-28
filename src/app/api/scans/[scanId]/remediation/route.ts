@@ -54,6 +54,7 @@ export async function POST(
     where: { id: scanId, project: { organizationId: orgId } },
     select: {
       id: true,
+      projectId: true,
       status: true,
       sourceType: true,
       sourceRef: true,
@@ -123,6 +124,7 @@ export async function POST(
     data: {
       organizationId: orgId,
       scanId,
+      projectId: scan.projectId,
       createdBy: auth.session.user.id,
       provider: target.provider,
       repoUrl: target.repoUrl,
@@ -166,7 +168,7 @@ export async function POST(
   return NextResponse.json({ runId: run.id }, { status: 201 });
 }
 
-/** GET /api/scans/[scanId]/remediation — recent runs for this scan. */
+/** GET /api/scans/[scanId]/remediation — recent runs for this scan's repository. */
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ scanId: string }> },
@@ -177,8 +179,14 @@ export async function GET(
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
 
   const { scanId } = await params;
+  const scan = await prisma.scan.findFirst({
+    where: { id: scanId, project: { organizationId: orgId } },
+    select: { projectId: true },
+  });
+  if (!scan) return NextResponse.json({ error: "Scan not found" }, { status: 404 });
+  // Runs belong to the repository, so they stay visible after a rescan.
   const runs = await prisma.remediationRun.findMany({
-    where: { scanId, organizationId: orgId },
+    where: { organizationId: orgId, OR: [{ scanId }, { projectId: scan.projectId }] },
     orderBy: { createdAt: "desc" },
     take: 10,
     select: {

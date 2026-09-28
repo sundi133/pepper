@@ -33,7 +33,7 @@ export default function RemediationRunPage() {
       <PageBreadcrumb
         items={[
           { label: "Scans", href: "/scans" },
-          ...(run ? [{ label: "Scan", href: `/scans/${run.scanId}` }] : []),
+          ...(run?.scanId ? [{ label: "Scan", href: `/scans/${run.scanId}` }] : []),
           { label: "AI remediation" },
         ]}
       />

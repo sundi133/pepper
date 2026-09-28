@@ -213,6 +213,7 @@ model Project {
   scans        Scan[]
   buildGate    BuildGate?
   schedule     ScanSchedule?
+  snapshots    ScanSnapshot[]
 
   @@unique([organizationId, githubRepoId])
   @@unique([organizationId, bitbucketRepoUuid])
@@ -266,7 +267,11 @@ model Scan {
 model RemediationRun {
   id             String            @id @default(cuid())
   organizationId String
-  scanId         String
+  /// The repository (project) fixed. Runs outlive rescans, which replace the
+  /// project's scan row, so trends can show fixes over time.
+  projectId      String?
+  /// Null once the scan is replaced by a rescan.
+  scanId         String?
   createdBy      String?
   status         RemediationStatus @default(QUEUED)
   /// github | azure_devops | bitbucket
@@ -286,12 +291,40 @@ model RemediationRun {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
-  scan   Scan                @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  scan   Scan?               @relation(fields: [scanId], references: [id], onDelete: SetNull)
   items  RemediationItem[]
   events RemediationEvent[]
 
   @@index([organizationId, createdAt])
   @@index([scanId, createdAt])
+  @@index([projectId, createdAt])
+}
+
+/// Immutable per-scan severity totals. A project keeps only its latest Scan
+/// row (rescans replace it), so this is the repository's history for trends.
+model ScanSnapshot {
+  id             String    @id @default(cuid())
+  organizationId String
+  projectId      String
+  /// The scan this was taken from (the scan row itself may be gone).
+  scanId         String    @unique
+  scanType       ScanType
+  branch         String?
+  commitSha      String?
+  completedAt    DateTime
+  criticalCount  Int       @default(0)
+  highCount      Int       @default(0)
+  mediumCount    Int       @default(0)
+  lowCount       Int       @default(0)
+  infoCount      Int       @default(0)
+  filesScanned   Int       @default(0)
+  gateResult     GateResult
+  createdAt      DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, completedAt])
+  @@index([organizationId, completedAt])
 }
 
 /// A single finding inside a remediation run.

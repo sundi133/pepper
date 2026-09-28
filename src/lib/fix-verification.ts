@@ -40,146 +40,66 @@ export function findingFingerprint(f: FingerprintInput): string {
 
 // ─── Core logic ─────────────────────────────────────────────────────────────
 
+/**
+ * Tag each finding of a completed scan as new or persisting, and record how
+ * many previously-open findings are no longer detected.
+ *
+ * The comparison baseline is the repository's latest captured ScanSnapshot
+ * (see lib/scan-delta): a rescan deletes the previous Scan and its findings
+ * before the new scan exists, so they cannot be read from Finding. With no
+ * baseline (first scan, or history recorded before finding capture) findings
+ * keep isNew = null and both counts stay 0.
+ */
 export async function autoResolveFixedFindings(
   scanId: string,
   projectId: string,
   log: Logger,
 ): Promise<{ resolved: number; newCount: number; persistingCount: number }> {
-  // Find the most recent completed scan for this project before this one
-  const currentScan = await prisma.scan.findUnique({
-    where: { id: scanId },
-    select: { createdAt: true },
-  });
-  if (!currentScan) return { resolved: 0, newCount: 0, persistingCount: 0 };
-
-  const previousScan = await prisma.scan.findFirst({
-    where: {
-      projectId,
-      status: "COMPLETED",
-      id: { not: scanId },
-      createdAt: { lt: currentScan.createdAt },
-    },
-    orderBy: { createdAt: "desc" },
-    select: { id: true },
-  });
-
-  if (!previousScan) {
-    // No prior scan — all findings have isNew = null (no comparison available)
+  const { computeScanDelta } = await import("@/lib/scan-delta");
+  const delta = await computeScanDelta(scanId);
+  if (!delta) {
     return { resolved: 0, newCount: 0, persistingCount: 0 };
   }
 
-  // ── Step 1: Fetch all findings from the previous scan (all statuses) ──────
-  // We include false positives and resolved too so the fingerprint set is
-  // complete — we don't want to flag a previously-suppressed finding as "new".
-  const previousFindings = await prisma.finding.findMany({
-    where: { scanId: previousScan.id },
-    select: {
-      id: true,
-      scanner: true,
-      ruleId: true,
-      cweId: true,
-      cveId: true,
-      filePath: true,
-      startLine: true,
-      title: true,
-      status: true,
-    },
-  });
-
-  const previousFingerprintSet = new Set(previousFindings.map(findingFingerprint));
-  const previousOpenFingerprintSet = new Set(
-    previousFindings
-      .filter((f) => f.status === "OPEN" || f.status === "IN_PROGRESS")
-      .map(findingFingerprint),
-  );
-
-  // ── Step 2: Fetch current scan findings ───────────────────────────────────
-  const currentFindings = await prisma.finding.findMany({
-    where: { scanId, status: { not: "FALSE_POSITIVE" } },
-    select: {
-      id: true,
-      scanner: true,
-      ruleId: true,
-      cweId: true,
-      cveId: true,
-      filePath: true,
-      startLine: true,
-      title: true,
-    },
-  });
-
-  // ── Step 3: Tag current findings as new vs. persisting ───────────────────
-  const newIds: string[] = [];
-  const persistingIds: string[] = [];
-
-  for (const f of currentFindings) {
-    const fp = findingFingerprint(f);
-    if (previousFingerprintSet.has(fp)) {
-      persistingIds.push(f.id);
-    } else {
-      newIds.push(f.id);
-    }
-  }
-
-  // Batch-update isNew flags
-  if (newIds.length > 0) {
+  if (delta.newFindingIds.length > 0) {
     await prisma.finding.updateMany({
-      where: { id: { in: newIds } },
+      where: { id: { in: delta.newFindingIds }, scanId },
       data: { isNew: true },
     });
   }
-  if (persistingIds.length > 0) {
+  if (delta.persistingFindingIds.length > 0) {
     await prisma.finding.updateMany({
-      where: { id: { in: persistingIds } },
+      where: { id: { in: delta.persistingFindingIds }, scanId },
       data: { isNew: false },
     });
   }
 
-  // ── Step 4: Auto-resolve findings from previous scan that are now gone ────
-  // Only consider OPEN / IN_PROGRESS findings from the previous scan.
-  const currentFingerprintSet = new Set(currentFindings.map(findingFingerprint));
-  const previousOpenFindings = previousFindings.filter(
-    (f) => f.status === "OPEN" || f.status === "IN_PROGRESS",
-  );
-
-  const resolvedIds = previousOpenFindings
-    .filter((f) => !currentFingerprintSet.has(findingFingerprint(f)))
-    .map((f) => f.id);
-
-  if (resolvedIds.length > 0) {
-    await prisma.finding.updateMany({
-      where: { id: { in: resolvedIds } },
-      data: {
-        status: "RESOLVED",
-        statusNote: `Auto-resolved: not detected in scan ${scanId}`,
-        statusUpdatedAt: new Date(),
-      },
-    });
-  }
-
-  // Persist counts on the current scan
+  // The baseline's finding rows are gone, so there is nothing to mark
+  // RESOLVED — the count tells the user what this scan no longer detects.
   await prisma.scan.update({
     where: { id: scanId },
     data: {
-      autoResolvedCount: resolvedIds.length,
-      newFindingCount: newIds.length,
+      autoResolvedCount: delta.resolvedCount,
+      newFindingCount: delta.newFindingIds.length,
     },
   });
 
   log.info(
     {
-      resolved: resolvedIds.length,
-      new: newIds.length,
-      persisting: persistingIds.length,
-      previousScanId: previousScan.id,
+      projectId,
+      baselineScanId: delta.baseline.scanId,
+      baselineScanType: delta.baseline.scanType,
+      resolved: delta.resolvedCount,
+      new: delta.newFindingIds.length,
+      persisting: delta.persistingFindingIds.length,
     },
-    "Scan delta computed",
+    "Scan delta computed against history baseline",
   );
 
   return {
-    resolved: resolvedIds.length,
-    newCount: newIds.length,
-    persistingCount: persistingIds.length,
+    resolved: delta.resolvedCount,
+    newCount: delta.newFindingIds.length,
+    persistingCount: delta.persistingFindingIds.length,
   };
 }
 
@@ -191,26 +111,23 @@ export async function getPreviousScanFingerprintSet(
 ): Promise<Set<string> | null> {
   const currentScan = await prisma.scan.findUnique({
     where: { id: scanId },
-    select: { createdAt: true },
+    select: { createdAt: true, scanType: true, projectId: true },
   });
-  if (!currentScan) return null;
+  if (!currentScan || currentScan.projectId !== projectId) return null;
 
-  const previousScan = await prisma.scan.findFirst({
-    where: {
-      projectId,
-      status: "COMPLETED",
-      id: { not: scanId },
-      createdAt: { lt: currentScan.createdAt },
-    },
-    orderBy: { createdAt: "desc" },
-    select: { id: true },
+  const { pickBaseline } = await import("@/lib/scan-delta");
+  const candidates = await prisma.scanSnapshot.findMany({
+    where: { projectId, findingsCaptured: true, scanId: { not: scanId }, completedAt: { lt: currentScan.createdAt } },
+    orderBy: { completedAt: "desc" },
+    take: 25,
+    select: { id: true, scanId: true, scanType: true, completedAt: true },
   });
-  if (!previousScan) return null;
+  const baseline = pickBaseline(candidates, { scanId, scanType: currentScan.scanType, createdAt: currentScan.createdAt });
+  if (!baseline) return null;
 
-  const previousFindings = await prisma.finding.findMany({
-    where: { scanId: previousScan.id },
-    select: { scanner: true, ruleId: true, cweId: true, cveId: true, filePath: true, startLine: true, title: true },
+  const previousFindings = await prisma.scanSnapshotFinding.findMany({
+    where: { snapshotId: baseline.id },
+    select: { fingerprint: true },
   });
-
-  return new Set(previousFindings.map(findingFingerprint));
+  return new Set(previousFindings.map((f) => f.fingerprint));
 }

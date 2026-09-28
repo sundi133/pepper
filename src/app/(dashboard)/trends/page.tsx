@@ -26,6 +26,7 @@ import {
 } from "recharts";
 import { ArrowDownRight, ArrowUpRight, ExternalLink, Minus } from "lucide-react";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
+import { ScanCompare } from "@/components/trends/scan-compare";
 
 type Sev = "critical" | "high" | "medium" | "low";
 type Totals = Record<Sev | "info", number>;
@@ -69,6 +70,7 @@ interface TrendsResponse {
     scans: Array<
       Totals & {
         scanId: string;
+        comparable: boolean;
         scanType: string;
         completedAt: string;
         commitSha: string | null;
@@ -148,7 +150,7 @@ function ChartTooltip({
       ) : (
         <>
           <p className="flex justify-between gap-4">
-            <span className="text-muted-foreground">Open findings</span>
+            <span className="text-muted-foreground">Findings</span>
             <span className="font-medium tabular-nums text-foreground">{p.total}</span>
           </p>
           {SEVERITIES.map((s) => (
@@ -186,11 +188,22 @@ function TrendsView() {
 
   const [showTable, setShowTable] = useState(false);
 
-  function setParam(key: string, value: string | null) {
+  function setParams(values: Record<string, string | null>) {
     const next = new URLSearchParams(params.toString());
-    if (value) next.set(key, value);
-    else next.delete(key);
+    for (const [key, value] of Object.entries(values)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
     router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+  }
+  const setParam = (key: string, value: string | null) => setParams({ [key]: value });
+
+  function compareWith(scanId: string) {
+    const scans = repo?.scans ?? [];
+    const latest = scans.find((x) => x.comparable && x.scanId !== scanId);
+    if (!latest) return;
+    setParams({ base: scanId, target: latest.scanId });
+    document.getElementById("compare")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   const qs = new URLSearchParams({ days: String(days) });
@@ -213,13 +226,13 @@ function TrendsView() {
   );
   const fixesByDay = useMemo(() => {
     const m = new Map<string, FixImpact[]>();
-    for (const f of repo?.remediations ?? []) {
+    for (const f of data?.repo?.remediations ?? []) {
       if (!f.prUrl) continue;
       const key = f.openedAt.slice(0, 10);
       m.set(key, [...(m.get(key) ?? []), f]);
     }
     return m;
-  }, [repo]);
+  }, [data]);
 
   const baseline = data?.comparison.baseline ?? null;
   const current = data?.comparison.current ?? null;
@@ -241,7 +254,7 @@ function TrendsView() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={projectId || "all"} onValueChange={(v) => setParam("project", v === "all" ? null : v)}>
+          <Select value={projectId || "all"} onValueChange={(v) => setParams({ project: v === "all" ? null : v, base: null, target: null })}>
             <SelectTrigger className="h-9 w-60" aria-label="Repository">
               <SelectValue placeholder="All repositories" />
             </SelectTrigger>
@@ -279,7 +292,7 @@ function TrendsView() {
           </p>
           <div className="space-y-0.5">
             <p className="text-sm text-foreground">
-              {repo ? "open findings now" : "open findings now, across all repositories"}
+              {repo ? "findings on the latest scan" : "findings on the latest scans, across all repositories"}
             </p>
             {baseline && current && baseline.at !== current.at ? (
               <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
@@ -292,7 +305,7 @@ function TrendsView() {
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                {current ? "No earlier scan in this range to compare with." : "No scans yet."}
+                {!data ? "\u00a0" : current ? "No earlier scan in this range to compare with." : "No scans yet."}
               </p>
             )}
           </div>
@@ -309,7 +322,7 @@ function TrendsView() {
                   {s.label}
                 </p>
                 <div className="mt-1 flex items-baseline justify-between gap-2">
-                  <p className="text-2xl font-semibold tabular-nums">{now}</p>
+                  <p className="text-2xl font-semibold tabular-nums">{data ? now : "—"}</p>
                   {was !== undefined && baseline && current && baseline.at !== current.at ? (
                     <span className="text-right text-xs text-muted-foreground">
                       was {was} · <Delta from={was} to={now} />
@@ -343,7 +356,7 @@ function TrendsView() {
       <section className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h2 className="text-base font-semibold">Open findings over time</h2>
+            <h2 className="text-base font-semibold">Findings over time</h2>
             <p className="text-xs text-muted-foreground">
               {repo
                 ? "Latest full scan as of each day. Vertical markers are AI fix pull requests."
@@ -407,7 +420,7 @@ function TrendsView() {
                   <Area
                     type="stepAfter"
                     dataKey="total"
-                    name="Open findings"
+                    name="Findings"
                     stroke="var(--series-1)"
                     strokeWidth={2}
                     fill="var(--series-1)"
@@ -529,6 +542,25 @@ function TrendsView() {
         </section>
       )}
 
+      {/* Compare two scan versions (repo) */}
+      {repo && (
+        <section id="compare" className="scroll-mt-6 space-y-3">
+          <div>
+            <h2 className="text-base font-semibold">Compare scan versions</h2>
+            <p className="text-xs text-muted-foreground">
+              What was fixed, what is new and what is still present between two scans. The older scan is the baseline.
+            </p>
+          </div>
+          <ScanCompare
+            projectId={repo.project.id}
+            scans={repo.scans}
+            baseId={params.get("base")}
+            targetId={params.get("target")}
+            onChange={(base, target) => setParams({ base, target })}
+          />
+        </section>
+      )}
+
       {/* Scan history (repo) / gate trend (org) */}
       {repo ? (
         <section className="space-y-3">
@@ -544,6 +576,9 @@ function TrendsView() {
                     <th key={s.key} className="px-4 py-2.5 text-right font-medium">{s.label}</th>
                   ))}
                   <th className="px-4 py-2.5 font-medium">Gate</th>
+                  <th className="px-4 py-2.5">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="tabular-nums">
@@ -564,11 +599,26 @@ function TrendsView() {
                         {s.gateResult === "FAILED" ? "Failed" : s.gateResult === "PASSED" ? "Passed" : "—"}
                       </span>
                     </td>
+                    <td className="px-4 py-2.5 text-right text-xs">
+                      {s.comparable ? (
+                        <button
+                          type="button"
+                          onClick={() => compareWith(s.scanId)}
+                          className="text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          Compare
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground/60" title="Recorded before scan comparison was available">
+                          Totals only
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {repo.scans.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-6 text-center text-sm text-muted-foreground">
+                    <td colSpan={9} className="px-4 py-6 text-center text-sm text-muted-foreground">
                       No scans in this range.
                     </td>
                   </tr>

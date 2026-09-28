@@ -24,10 +24,15 @@ function normalizeFindingTitle(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+/** What the finding is (rule / CVE / CWE, else its normalized title) — no location. */
+export function findingRuleKey(f: Pick<FingerprintInput, "ruleId" | "cveId" | "cweId" | "title">): string {
+  return f.ruleId ?? f.cveId ?? f.cweId ?? normalizeFindingTitle(f.title);
+}
+
 export function findingFingerprint(f: FingerprintInput): string {
   return [
     f.scanner,
-    f.ruleId ?? f.cveId ?? f.cweId ?? normalizeFindingTitle(f.title),
+    findingRuleKey(f),
     f.filePath ?? "",
     f.startLine != null ? Math.floor(f.startLine / 5) : 0,
   ].join(":");

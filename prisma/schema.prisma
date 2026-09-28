@@ -319,12 +319,40 @@ model ScanSnapshot {
   infoCount      Int       @default(0)
   filesScanned   Int       @default(0)
   gateResult     GateResult
+  /// True once this scan's findings were copied into ScanSnapshotFinding.
+  /// False for snapshots backfilled before finding capture existed.
+  findingsCaptured Boolean  @default(false)
   createdAt      DateTime  @default(now())
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project  Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  findings ScanSnapshotFinding[]
 
   @@index([projectId, completedAt])
   @@index([organizationId, completedAt])
+}
+
+/// Compact, point-in-time copy of one finding from a snapshotted scan, so any
+/// two scan versions can be compared after the scan rows are replaced.
+model ScanSnapshotFinding {
+  id          String        @id @default(cuid())
+  snapshotId  String
+  /// Cross-scan identity (see findingFingerprint in lib/fix-verification).
+  fingerprint String
+  /// The live Finding id at capture time (gone after a rescan).
+  findingId   String?
+  scanner     Scanner
+  severity    Severity
+  status      FindingStatus
+  title       String
+  filePath    String?
+  startLine   Int?
+  ruleId      String?
+  cweId       String?
+  cveId       String?
+
+  snapshot ScanSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@index([snapshotId])
 }
 
 /// A single finding inside a remediation run.

@@ -60,7 +60,7 @@ export async function recordScanSnapshot(scanId: string): Promise<void> {
     filesScanned: s.filesScanned,
     gateResult: s.gateResult,
   };
-  await prisma.scanSnapshot.upsert({
+  const snapshot = await prisma.scanSnapshot.upsert({
     where: { scanId: s.id },
     create: {
       organizationId: s.project.organizationId,
@@ -73,7 +73,56 @@ export async function recordScanSnapshot(scanId: string): Promise<void> {
       ...totals,
     },
     update: totals,
+    select: { id: true },
   });
+  await captureSnapshotFindings(snapshot.id, s.id);
+}
+
+const CAPTURE_CHUNK = 1000;
+
+/**
+ * Copy a scan's findings into the snapshot (replacing any earlier copy), so
+ * this version stays comparable after a rescan deletes the scan's findings.
+ */
+export async function captureSnapshotFindings(snapshotId: string, scanId: string): Promise<number> {
+  const { findingFingerprint } = await import("@/lib/fix-verification");
+  const findings = await prisma.finding.findMany({
+    where: { scanId },
+    select: {
+      id: true,
+      scanner: true,
+      severity: true,
+      status: true,
+      title: true,
+      filePath: true,
+      startLine: true,
+      ruleId: true,
+      cweId: true,
+      cveId: true,
+    },
+  });
+  const rows = findings.map((f) => ({
+    snapshotId,
+    fingerprint: findingFingerprint(f),
+    findingId: f.id,
+    scanner: f.scanner,
+    severity: f.severity,
+    status: f.status,
+    title: f.title.slice(0, 500),
+    filePath: f.filePath,
+    startLine: f.startLine,
+    ruleId: f.ruleId,
+    cweId: f.cweId,
+    cveId: f.cveId,
+  }));
+  await prisma.$transaction(async (tx) => {
+    await tx.scanSnapshotFinding.deleteMany({ where: { snapshotId } });
+    for (let i = 0; i < rows.length; i += CAPTURE_CHUNK) {
+      await tx.scanSnapshotFinding.createMany({ data: rows.slice(i, i + CAPTURE_CHUNK) });
+    }
+    await tx.scanSnapshot.update({ where: { id: snapshotId }, data: { findingsCaptured: true } });
+  }, { timeout: 60_000 });
+  return rows.length;
 }
 
 export function dayKey(d: Date): string {

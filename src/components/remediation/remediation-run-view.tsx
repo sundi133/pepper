@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   ArrowUpRight,
@@ -609,12 +610,19 @@ export function RemediationRunView({ initial }: { initial: RemediationRunSnapsho
               </p>
             </div>
           </div>
-          <Button asChild>
-            <a href={prUrl} target="_blank" rel="noopener noreferrer">
-              Review pull request
-              <ArrowUpRight className="ml-1 h-4 w-4" aria-hidden />
-            </a>
-          </Button>
+          <div className="flex items-center gap-2">
+            {snapshot.projectId && (
+              <Button asChild variant="ghost">
+                <Link href={`/trends?project=${snapshot.projectId}`}>See impact</Link>
+              </Button>
+            )}
+            <Button asChild>
+              <a href={prUrl} target="_blank" rel="noopener noreferrer">
+                Review pull request
+                <ArrowUpRight className="ml-1 h-4 w-4" aria-hidden />
+              </a>
+            </Button>
+          </div>
         </div>
       )}
       {terminal && !prUrl && error && (

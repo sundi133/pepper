@@ -7,6 +7,7 @@ import type { RemediationRunSnapshot, RemediationStreamEvent } from "./types";
 const snapshot: RemediationRunSnapshot = {
   id: "run1",
   scanId: "scan1",
+  projectId: "proj1",
   status: "QUEUED",
   provider: "github",
   repoUrl: "https://github.com/a/b",

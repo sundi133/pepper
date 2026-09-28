@@ -162,6 +162,19 @@ export async function runRemediation(runId: string): Promise<void> {
     },
   });
   if (!run || run.status !== "QUEUED") return;
+  const scan = run.scan;
+  const scanId = run.scanId;
+  if (!scan || !scanId) {
+    await prisma.remediationRun.updateMany({
+      where: { id: runId, status: "QUEUED" },
+      data: {
+        status: "FAILED",
+        completedAt: new Date(),
+        errorMessage: "The scan was replaced by a rescan before this run started. Start a new run from the latest scan.",
+      },
+    });
+    return;
+  }
 
   const claimed = await prisma.remediationRun.updateMany({
     where: { id: runId, status: "QUEUED" },
@@ -174,7 +187,7 @@ export async function runRemediation(runId: string): Promise<void> {
     sink.emit({ type: "log", level, message });
 
   const findings = await prisma.finding.findMany({
-    where: { id: { in: run.items.map((i) => i.findingId) }, scanId: run.scanId },
+    where: { id: { in: run.items.map((i) => i.findingId) }, scanId },
     select: {
       id: true,
       title: true,
@@ -243,7 +256,7 @@ export async function runRemediation(runId: string): Promise<void> {
 
   try {
     // ── Setup: repository, credentials, model ──────────────────────
-    const target = resolveRemediationRepo({ scan: run.scan, project: run.scan.project });
+    const target = resolveRemediationRepo({ scan, project: scan.project });
     if (!target.ok) {
       await finish("FAILED", { error: target.error });
       return;
@@ -368,7 +381,7 @@ export async function runRemediation(runId: string): Promise<void> {
       userId: run.createdBy,
       action: "remediation.pr_opened",
       resource: "scan",
-      resourceId: run.scanId,
+      resourceId: scanId,
       details: { runId, prUrl: pr.url, fixed: counts.fixed, failed: counts.failed },
     }).catch(() => undefined);
 

@@ -27,6 +27,7 @@ export async function loadRunSnapshot(
   return {
     id: run.id,
     scanId: run.scanId,
+    projectId: run.projectId,
     status: run.status,
     provider: run.provider,
     repoUrl: run.repoUrl,

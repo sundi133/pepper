@@ -188,6 +188,24 @@ PRECISION — keep=false must be justified, not lazy:
 - For CRITICAL/HIGH keep=true findings, make "remediation" state the exact upgrade target (from
   fixVersion/introducedBy) and, when possible, the specific configuration change that removes the exposure.
 
+MACHINE-CONSUMED OUTPUT — your verdict drives automated decisions:
+- Every keep=false is recorded as a VEX "not_affected" assertion (a legal/audit statement that this
+  vulnerability does not apply) and removes a CRITICAL/HIGH finding from the report. A wrong keep=false
+  hides a real vulnerability — that is a security incident, not a triage opinion.
+- Therefore keep=false ONLY when the advisory and import evidence together make non-applicability
+  concrete (dev/test-only, no reachable code path, or the advisory itself says the affected feature is
+  not present). Do not "lean" toward keep=false to reduce report noise, and do not let a low EPSS score
+  alone justify it.
+- When you keep=true, "reason" must name the deciding evidence (imports found, KEV listing, CRITICAL
+  severity, vulnerable function present). When you keep=false, "reason" must assert the specific
+  non-applicability ground (e.g. "package is dev-only and severity is MEDIUM").
+- ASYMMETRIC COST — when genuinely uncertain after weighing the evidence (advisory truncated, imports
+  partial, reachability ambiguous), default to keep=true. A false keep costs a triage click; a false
+  drop hides a real CVE.
+- If the advisory is truncated ("… [truncated]" or missing), say so in the reason and do not use the
+  absent portion as a ground for keep=false. Truncation means the model sees less evidence — treat that
+  as a reason to keep, not to drop.
+
 Return JSON: { "triaged": [{ "osvId", "keep": true|false, "reason", "metadata": { "directDependency": bool, "reachable": bool, "exploitPreconditions": "...", "fixVersion": "...", "remediation": "..." } }] }`;
 
 export const MALICIOUS_VALIDATION_PROMPT = `Validate supply-chain risk from EVIDENCE only (metadata, install scripts, typosquat signals, OSV MAL-*).

@@ -474,8 +474,7 @@ export async function runLlmSastScanner(
   );
 
   // Process chunks with concurrency limit
-  let succeeded = 0;
-  let failed = 0;
+  const tally = { succeeded: 0, failed: 0 };
 
   // Track which chunks belong to each file so we know when a file is fully done
   const chunksPerFile = new Map<string, number>();
@@ -487,64 +486,37 @@ export async function runLlmSastScanner(
     );
   }
 
-  for (let i = 0; i < chunks.length; i += maxConcurrency) {
-    await ctx.waitIfPaused?.();
-    if (ctx.signal?.aborted) break;
-
-    const batch = chunks.slice(i, i + maxConcurrency);
-    const results = await Promise.allSettled(
-      batch.map((chunk) =>
-        analyzeChunk(
-          client,
-          ctx.orgSettings.llmModel,
-          chunk,
-          maxResponseTokens,
-          finalPrompt,
-          inlinePolicies.map((p) => p.name),
-          repoContextBlock,
-        ),
-      ),
-    );
-
-    const batchFindings: RawFinding[] = [];
-    for (let j = 0; j < results.length; j++) {
-      const result = results[j];
-      const chunkFilePath = batch[j].filePath;
-
-      // Track completed chunks per file
+  await runChunkBatches({
+    ctx,
+    client,
+    model: ctx.orgSettings.llmModel,
+    chunks,
+    maxConcurrency,
+    prompt: finalPrompt,
+    policyNames: inlinePolicies.map((p) => p.name),
+    repoContextBlock,
+    maxResponseTokens,
+    errorLogMsg: "LLM SAST chunk analysis rejected",
+    tally,
+    findings,
+    onChunkDone: (filePath) => {
       completedChunksPerFile.set(
-        chunkFilePath,
-        (completedChunksPerFile.get(chunkFilePath) || 0) + 1,
+        filePath,
+        (completedChunksPerFile.get(filePath) || 0) + 1,
       );
       if (
-        completedChunksPerFile.get(chunkFilePath) ===
-        chunksPerFile.get(chunkFilePath)
+        completedChunksPerFile.get(filePath) ===
+        chunksPerFile.get(filePath)
       ) {
-        completedFiles.add(chunkFilePath);
+        completedFiles.add(filePath);
       }
-
-      if (result.status === "fulfilled") {
-        batchFindings.push(...result.value);
-        findings.push(...result.value);
-        succeeded++;
-      } else {
-        failed++;
-        logger.error(
-          { err: result.reason },
-          "LLM SAST chunk analysis rejected",
-        );
-      }
-    }
-
-    // Flush this batch's findings to DB immediately so they appear in UI
-    if (batchFindings.length > 0 && ctx.onBatchFindings) {
-      await ctx.onBatchFindings("SAST_LLM", batchFindings);
-    }
-
-    ctx.onProgress?.(
-      `LLM SAST: ${completedFiles.size}/${totalFiles} files scanned (${findings.length} findings)`,
-    );
-  }
+    },
+    onProgress: () => {
+      ctx.onProgress?.(
+        `LLM SAST: ${completedFiles.size}/${totalFiles} files scanned (${findings.length} findings)`,
+      );
+    },
+  });
 
   for (
     let policyIndex = 0;
@@ -566,44 +538,20 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
       `LLM SAST: checking additional policies ${policyIndex + 1}-${policyIndex + policyBatch.length} of ${additionalPolicies.length}`,
     );
 
-    for (let i = 0; i < chunks.length; i += maxConcurrency) {
-      await ctx.waitIfPaused?.();
-      if (ctx.signal?.aborted) break;
-
-      const batch = chunks.slice(i, i + maxConcurrency);
-      const results = await Promise.allSettled(
-        batch.map((chunk) =>
-          analyzeChunk(
-            client,
-            ctx.orgSettings.llmModel,
-            chunk,
-            maxResponseTokens,
-            policyPrompt,
-            policyBatch.map((p) => p.name),
-            repoContextBlock,
-          ),
-        ),
-      );
-
-      const batchFindings: RawFinding[] = [];
-      for (const result of results) {
-        if (result.status === "fulfilled") {
-          batchFindings.push(...result.value);
-          findings.push(...result.value);
-          succeeded++;
-        } else {
-          failed++;
-          logger.error(
-            { err: result.reason },
-            "LLM SAST additional policy analysis rejected",
-          );
-        }
-      }
-
-      if (batchFindings.length > 0 && ctx.onBatchFindings) {
-        await ctx.onBatchFindings("SAST_LLM", batchFindings);
-      }
-    }
+    await runChunkBatches({
+      ctx,
+      client,
+      model: ctx.orgSettings.llmModel,
+      chunks,
+      maxConcurrency,
+      prompt: policyPrompt,
+      policyNames: policyBatch.map((p) => p.name),
+      repoContextBlock,
+      maxResponseTokens,
+      errorLogMsg: "LLM SAST additional policy analysis rejected",
+      tally,
+      findings,
+    });
   }
 
   // Pass 2: cross-file validation of pass-1 candidates
@@ -632,8 +580,8 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
   logger.info(
     {
       total: chunks.length,
-      succeeded,
-      failed,
+      succeeded: tally.succeeded,
+      failed: tally.failed,
       pass1: findings.length,
       pass2: validated.length,
       filesScanned: totalFiles,
@@ -755,6 +703,89 @@ async function validateCandidatesPass2(
   }
 
   return validated;
+}
+
+interface RunChunkBatchesOptions {
+  ctx: ScanContext;
+  client: ReturnType<typeof createLlmClient>;
+  model: string;
+  chunks: Chunk[];
+  maxConcurrency: number;
+  prompt: string;
+  policyNames: string[];
+  repoContextBlock: string;
+  maxResponseTokens: number;
+  errorLogMsg: string;
+  tally: { succeeded: number; failed: number };
+  findings: RawFinding[];
+  /** Called after each chunk so callers can track per-file completion. */
+  onChunkDone?: (filePath: string) => void;
+  /** Called after each batch flushes, so callers can report progress. */
+  onProgress?: () => void;
+}
+
+/** Run chunk analysis in bounded-concurrency batches, collecting findings. */
+async function runChunkBatches(opts: RunChunkBatchesOptions): Promise<void> {
+  const {
+    ctx,
+    client,
+    model,
+    chunks,
+    maxConcurrency,
+    prompt,
+    policyNames,
+    repoContextBlock,
+    maxResponseTokens,
+    errorLogMsg,
+    tally,
+    findings,
+    onChunkDone,
+    onProgress,
+  } = opts;
+
+  for (let i = 0; i < chunks.length; i += maxConcurrency) {
+    await ctx.waitIfPaused?.();
+    if (ctx.signal?.aborted) break;
+
+    const batch = chunks.slice(i, i + maxConcurrency);
+    const results = await Promise.allSettled(
+      batch.map((chunk) =>
+        analyzeChunk(
+          client,
+          model,
+          chunk,
+          maxResponseTokens,
+          prompt,
+          policyNames,
+          repoContextBlock,
+        ),
+      ),
+    );
+
+    const batchFindings: RawFinding[] = [];
+    for (let j = 0; j < results.length; j++) {
+      const result = results[j];
+      const chunkFilePath = batch[j].filePath;
+
+      onChunkDone?.(chunkFilePath);
+
+      if (result.status === "fulfilled") {
+        batchFindings.push(...result.value);
+        findings.push(...result.value);
+        tally.succeeded++;
+      } else {
+        tally.failed++;
+        logger.error({ err: result.reason }, errorLogMsg);
+      }
+    }
+
+    // Flush this batch's findings to DB immediately so they appear in UI
+    if (batchFindings.length > 0 && ctx.onBatchFindings) {
+      await ctx.onBatchFindings("SAST_LLM", batchFindings);
+    }
+
+    onProgress?.();
+  }
 }
 
 async function analyzeChunk(

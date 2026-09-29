@@ -155,6 +155,8 @@ STRICT RULES:
    - 0.7-0.8: Probable — reasonable attack hypothesis; name missing context
    - 0.65-0.69: Suspicious — deserves human review; explain uncertainty in description
    - Below 0.65: Do NOT report
+6. CONSOLIDATION — report each root cause ONCE per chunk. When the same vulnerability (same sink, same taint source) is triggered through several parameters, handlers, or repeated occurrences in the chunk, emit ONE finding that names the triggering sites — do not emit one finding per occurrence. Duplicate-like findings whose title/description/cweId match an already-emitted finding in this chunk must be merged, not repeated.
+7. CHUNK-BOUNDARY HONESTY — you see one chunk, not the whole file or repo. If the exploit path depends on code outside this chunk (the caller that supplies untrusted input, the route registration, a guard defined elsewhere, a helper that sanitizes), state exactly which piece is missing and set confidence accordingly. A finding whose exploitability rests entirely on unseen code is a pass-1 candidate (0.65–0.74), never a certain one — downstream cross-file validation decides whether it survives.
 
 For each genuine vulnerability found, respond with:
 {

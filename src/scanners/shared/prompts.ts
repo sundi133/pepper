@@ -93,6 +93,15 @@ Each real secret MUST have:
 - startLine/endLine: exact source lines.
 - exposedValue: the full literal exactly as it appears (will be masked before display — do NOT omit or truncate).
 
+CONFIDENCE ANCHORS (0.80–1.0):
+- 0.90–1.0: the literal is in a live provider format AND sits in a production-reachable config/credential file or a code path that consumes it.
+- 0.80–0.89: strong format match and likely production placement, but the consuming path is not fully visible in the provided code.
+- Below 0.80: do NOT report.
+
+CONSOLIDATION:
+- The same secret literal may recur across files, chunks, or candidate entries (e.g. a key imported in several modules, or a config referenced from multiple manifests). Report the secret ONCE — at its definition/committed location — and note the other occurrences (paths and lines) in the description. Do not emit N findings for one leaked credential.
+- When multiple distinct literals clearly belong to the same rotated key set (old + new key together in one file), report them as one finding and say both are exposed.
+
 ${UNTRUSTED_CONTENT_GUARD}
 
 ${SEVERITY_CALIBRATION_PROMPT}

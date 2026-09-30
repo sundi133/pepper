@@ -9,12 +9,14 @@
 #   ./scripts/ado-server-gcp.sh seed     # test project + vulnerable repo + open PR
 #   ./scripts/ado-server-gcp.sh status   # install progress (serial console)
 #   ./scripts/ado-server-gcp.sh rdp      # RDP via IAP → localhost:13389
+#   ./scripts/ado-server-gcp.sh tunnel   # ADO web + API via IAP → localhost:18080
 #   ./scripts/ado-server-gcp.sh stop | start | down
 #
 # What "up" does (reliable GCP parts are fully automated):
 #   1. Enables the compute API and creates a GCS bucket for the ISO.
 #   2. Uploads $ADO_INSTALLER to the bucket.
-#   3. Creates firewall rules: RDP over IAP (35.235.240.0/20) and internal 8080.
+#   3. Creates firewall rules: RDP and the ADO port over IAP (35.235.240.0/20),
+#      and the ADO port from the VPC.
 #   4. Creates a Windows Server 2022 VM whose startup script downloads + mounts
 #      the ISO, installs SQL Server Express, then runs the ADO Server installer
 #      and an unattended "Basic" configuration — writing progress markers to the
@@ -34,7 +36,9 @@ VM_NAME="${VM_NAME:-ado-server}"
 MACHINE_TYPE="${MACHINE_TYPE:-e2-standard-4}"
 DISK_SIZE="${DISK_SIZE:-128GB}"
 ADO_USER="${ADO_USER:-adoadmin}"
-ADO_PORT="${ADO_PORT:-8080}"
+# ADO Server 2019+ "Basic" configuration serves the site on :80 (TFS used 8080).
+ADO_PORT="${ADO_PORT:-80}"
+LOCAL_PORT="${LOCAL_PORT:-18080}"
 COLLECTION="${COLLECTION:-DefaultCollection}"
 BUCKET="${BUCKET:-gs://${PROJECT}-ado-installer}"
 NETWORK_TAG="ado-server"
@@ -143,7 +147,7 @@ cmd_up() {
   echo "→ uploading installer (this can take a while)"
   gsutil cp "$ADO_INSTALLER" "$BUCKET/$ISO_OBJECT"
 
-  echo "→ firewall: RDP over IAP + internal $ADO_PORT"
+  echo "→ firewall: RDP + port $ADO_PORT over IAP, port $ADO_PORT from the VPC"
   gc compute firewall-rules describe ado-iap-rdp >/dev/null 2>&1 || \
     gc compute firewall-rules create ado-iap-rdp \
       --direction=INGRESS --action=ALLOW --rules=tcp:3389 \
@@ -152,6 +156,10 @@ cmd_up() {
     gc compute firewall-rules create ado-internal \
       --direction=INGRESS --action=ALLOW --rules="tcp:${ADO_PORT}" \
       --source-ranges=10.0.0.0/8 --target-tags="$NETWORK_TAG"
+  gc compute firewall-rules describe ado-iap-http >/dev/null 2>&1 || \
+    gc compute firewall-rules create ado-iap-http \
+      --direction=INGRESS --action=ALLOW --rules="tcp:${ADO_PORT}" \
+      --source-ranges=35.235.240.0/20 --target-tags="$NETWORK_TAG"
 
   echo "→ creating VM $VM_NAME ($MACHINE_TYPE, Windows Server 2022)"
   local tmp; tmp="$(mktemp)"; startup_ps1 > "$tmp"
@@ -191,8 +199,16 @@ cmd_rdp() {
     --local-host-port=localhost:13389 --zone="$ZONE"
 }
 
+cmd_tunnel() {
+  require_project; need gcloud; require_vm
+  echo "→ IAP tunnel: http://localhost:${LOCAL_PORT}/${COLLECTION} → ${VM_NAME}:${ADO_PORT} (Ctrl-C to close)"
+  echo "  From Pepper in Docker use Server URL http://host.docker.internal:${LOCAL_PORT}"
+  gc compute start-iap-tunnel "$VM_NAME" "$ADO_PORT" \
+    --local-host-port="localhost:${LOCAL_PORT}" --zone="$ZONE"
+}
+
 # seed needs the ADO server reachable and a PAT.
-#   ADO_URL=http://localhost:8080  (e.g. through an IAP tunnel to :8080)
+#   ADO_URL=http://localhost:18080  (through "$0 tunnel")
 #   ADO_PAT=<pat from the ADO web UI>
 cmd_seed() {
   need curl
@@ -269,7 +285,7 @@ cmd_down() {
   read -r -p "Delete VM '$VM_NAME', firewall rules, and bucket $BUCKET? [y/N] " a
   [ "$a" = "y" ] || { echo "aborted"; return; }
   gc compute instances delete "$VM_NAME" --zone="$ZONE" --quiet || true
-  gc compute firewall-rules delete ado-iap-rdp ado-internal --quiet || true
+  gc compute firewall-rules delete ado-iap-rdp ado-iap-http ado-internal --quiet || true
   gsutil -m rm -r "$BUCKET" 2>/dev/null || true
   echo "✓ torn down"
 }
@@ -278,6 +294,7 @@ case "${1:-}" in
   up)     cmd_up ;;
   status) cmd_status ;;
   rdp)    cmd_rdp ;;
+  tunnel) cmd_tunnel ;;
   seed)   cmd_seed ;;
   reapply) cmd_reapply ;;
   stop)   cmd_stop ;;
@@ -289,6 +306,7 @@ usage: ADO_INSTALLER=<iso> PROJECT=<gcp-project> $0 <command>
   up      create VM + deliver ISO + install/configure ADO Server 2022
   status  show install progress (serial console markers)
   rdp     reset password + IAP tunnel → localhost:13389
+  tunnel  IAP tunnel to the ADO site → localhost:\$LOCAL_PORT (=$LOCAL_PORT)
   seed    ADO_URL=<url> ADO_PAT=<pat> — create test project + vulnerable repo + PR
   stop    stop the VM (keeps disk)
   start   start the VM

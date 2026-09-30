@@ -10,7 +10,10 @@ import { groupIacStacks } from "./stacks";
 import { enrichFinding } from "../shared/finding-normalize";
 import { buildDeepRepoContext } from "../shared/repo-context";
 import { UNTRUSTED_CONTENT_GUARD } from "../shared/prompts";
-import { applySeverityCalibration } from "@/lib/severity-calibration";
+import {
+  applySeverityCalibration,
+  SEVERITY_CALIBRATION_PROMPT,
+} from "@/lib/severity-calibration";
 import {
   SKIP_DIRECTORIES,
   LLM_MAX_FILE_SIZE_BYTES,
@@ -95,6 +98,22 @@ WEB SERVER / REVERSE-PROXY CONFIG PATTERNS (nginx, Apache/httpd, Caddy, HAProxy,
 
 Only report findings with a concrete misconfiguration, a real attack path, and an exact fix. Apply the same minimum confidence: 0.85.
 
+CONFIDENCE ANCHORS (0.85–1.0):
+- 0.95–1.0: the misconfiguration, its exposure (or lack of it), and the attack path are all
+  directly visible in the supplied files.
+- 0.85–0.94: clear evidence, but a controlling detail (deployment wiring, override file, upstream
+  resource) is inferred rather than shown in the stack. Say which detail is inferred.
+
+CONSOLIDATION:
+- The same misconfiguration repeated across a stack (e.g. the same unencrypted volume or same
+  permissive rule re-declared in several files) is ONE finding at the primary declaration site,
+  with the other file/line occurrences listed in "metadata.remediation". Do not emit one finding
+  per occurrence.
+- Do not re-report a pattern that is already correctly handled elsewhere in the stack (e.g. an
+  over-permissive rule later narrowed by a sibling file in the same stack).
+
+${SEVERITY_CALIBRATION_PROMPT}
+
 Return JSON:
 {
   "findings": [{
@@ -103,7 +122,7 @@ Return JSON:
     "startLine": <int>, "endLine": <int>,
     "cweId": "CWE-XXX", "confidence": <0.85-1.0>,
     "recommendation": "string (specific, actionable fix)",
-    "metadata": { "exposedAsset": "string", "attackPath": "string (concrete attack vector)", "validationSteps": ["string"], "remediation": "string" }
+    "metadata": { "exposedAsset": "string", "attackPath": "string (concrete attack vector)", "validationSteps": ["string"], "remediation": "string", "weaknessClass": "string", "severityJustification": "string (one sentence: class + evidence)" }
   }]
 }`;
 

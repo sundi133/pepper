@@ -4,6 +4,16 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GitHubProvider from "next-auth/providers/github";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
+import { logger } from "./logger";
+import {
+  ENTRA_PROVIDER_ID,
+  entraProvider,
+  getEntraConfig,
+  resolveEntraAccess,
+  type EntraClaims,
+} from "./sso/entra";
+import { provisionEntraUser } from "./sso/entra-provision";
+import type { Role } from "./saml/role-mapping";
 import { isHcaptchaEnabled, verifyHcaptchaToken } from "./hcaptcha";
 import { isSamlEnabled } from "./saml/config";
 import { verifySamlHandoffToken } from "./saml/handoff";
@@ -18,10 +28,24 @@ async function auditLoginFailure(
   await writeUserAuditEvent({ userId, action: "user.login_failed", details, ipAddress });
 }
 
+const entraConfig = getEntraConfig();
+
+/**
+ * Entra access decisions made in the signIn callback, reused by the jwt
+ * callback that provisions the user moments later (same sign-in).
+ */
+const entraDecisions = new Map<string, { role: Role; expires: number }>();
+
+/** Optional shorter session lifetime (default 30 days), e.g. so SSO removals bite sooner. */
+function sessionMaxAgeSeconds(): number | undefined {
+  const hours = Number(process.env.SESSION_MAX_AGE_HOURS);
+  return Number.isFinite(hours) && hours > 0 ? Math.round(hours * 3600) : undefined;
+}
+
 export const authOptions: NextAuthOptions = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   adapter: PrismaAdapter(prisma as any) as NextAuthOptions["adapter"],
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", ...(sessionMaxAgeSeconds() ? { maxAge: sessionMaxAgeSeconds() } : {}) },
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -109,11 +133,40 @@ export const authOptions: NextAuthOptions = {
           }),
         ]
       : []),
+    // Microsoft Entra ID (OIDC, single tenant). Registered only when enabled
+    // and fully configured.
+    ...(entraConfig ? [entraProvider(entraConfig)] : []),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async signIn({ account, profile }) {
+      if (account?.provider !== ENTRA_PROVIDER_ID || !entraConfig) return true;
+      const access = await resolveEntraAccess(profile as unknown as EntraClaims, account.access_token, entraConfig);
+      if (!access.allowed) {
+        logger.warn({ reason: access.reason, oid: account.providerAccountId }, "Entra sign-in refused");
+        return `/login?error=entra_${access.reason}`;
+      }
+      const now = Date.now();
+      for (const [k, v] of entraDecisions) if (v.expires <= now) entraDecisions.delete(k);
+      entraDecisions.set(account.providerAccountId, { role: access.role, expires: now + 5 * 60_000 });
+      return true;
+    },
+    async jwt({ token, user, account, profile }) {
       if (user) {
         token.userId = user.id;
+      }
+
+      // First jwt call of an Entra sign-in: put the user in the organization
+      // with the role Entra grants, before memberships are read below.
+      if (user?.email && account?.provider === ENTRA_PROVIDER_ID && entraConfig) {
+        const cached = entraDecisions.get(account.providerAccountId);
+        entraDecisions.delete(account.providerAccountId);
+        let role = cached && cached.expires > Date.now() ? cached.role : null;
+        if (!role) {
+          const access = await resolveEntraAccess(profile as unknown as EntraClaims, account.access_token, entraConfig);
+          if (!access.allowed) throw new Error(`Entra sign-in refused: ${access.reason}`);
+          role = access.role;
+        }
+        await provisionEntraUser({ email: user.email, name: user.name ?? null, role, cfg: entraConfig });
       }
 
       const userId =

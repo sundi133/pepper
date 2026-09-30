@@ -52,6 +52,12 @@ export async function POST(req: NextRequest) {
       profile as Record<string, unknown>,
       cfg,
     );
+    if (identity.groupsOverage) {
+      logger.warn(
+        { email: identity.email },
+        "SAML: Entra sent a groups overage link (user is in more than 150 groups) — group-based roles can't apply; use app roles or 'Groups assigned to the application'",
+      );
+    }
     if (!identity.email) {
       logger.warn("SAML: assertion had no resolvable email");
       return loginError("sso_no_email");

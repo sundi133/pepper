@@ -67,4 +67,25 @@ describe("extractSamlIdentity", () => {
     );
     expect(id.groups).toEqual(["admins", "eng"]);
   });
+
+  it("reads Entra's groups and app-role claim URIs with the default attribute", () => {
+    const id = extractSamlIdentity(
+      {
+        email: "x@y.com",
+        "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups": ["guid-1", "guid-2"],
+        "http://schemas.microsoft.com/ws/2008/06/identity/claims/role": "Pepper.Admin",
+      },
+      baseCfg,
+    );
+    expect(id.groups).toEqual(["guid-1", "guid-2", "Pepper.Admin"]);
+    expect(id.groupsOverage).toBeUndefined();
+  });
+
+  it("flags Entra's groups overage link", () => {
+    const id = extractSamlIdentity(
+      { email: "x@y.com", "http://schemas.microsoft.com/claims/groups.link": "https://graph.windows.net/…" },
+      baseCfg,
+    );
+    expect(id.groupsOverage).toBe(true);
+  });
 });

@@ -1,5 +1,6 @@
 import { getHcaptchaSiteKey } from "@/lib/hcaptcha";
 import { isSamlEnabled } from "@/lib/saml/config";
+import { isEntraEnabled } from "@/lib/sso/entra";
 import { LoginForm } from "./login-form";
 
 // Read the captcha site key from runtime env on each request so it can be
@@ -16,6 +17,7 @@ export default async function LoginPage({
     <LoginForm
       captchaSiteKey={getHcaptchaSiteKey()}
       samlEnabled={isSamlEnabled()}
+      entraEnabled={isEntraEnabled()}
       initialError={typeof error === "string" ? error : undefined}
     />
   );

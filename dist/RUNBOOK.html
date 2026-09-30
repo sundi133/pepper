@@ -136,7 +136,7 @@
     <ol class="qs">
       <li>What does <code>uname -m</code> print on the VM (<code>x86_64</code> or <code>aarch64</code>)?</li>
       <li>What URL will Pepper have (for example <code>https://pepper.yourcompany.local</code>)? Do you have a TLS certificate for it, or a reverse proxy that terminates TLS?</li>
-      <li>Can the VM reach Docker Hub and quay.io, directly or through a proxy? If not, we'll send an offline image archive.</li>
+      <li>Can the VM reach Docker Hub, directly or through a proxy? If not, we'll send an offline image archive.</li>
       <li>Is there an outbound proxy? Please send its address and the internal hosts that must bypass it.</li>
       <li>Which AI model endpoint should Pepper use (internal gateway, Azure OpenAI or other)? Is internet access allowed for it?</li>
       <li>Do your internal services use certificates from an internal CA? If so, please send the CA certificate (PEM).</li>
@@ -191,7 +191,7 @@
       <li><strong>Docker Engine 24 or newer</strong> with the <strong>Compose v2 plugin</strong>.</li>
       <li><strong>Outbound access from the VM</strong>, directly or through your proxy:
         <ul>
-          <li>Docker Hub (<code>registry-1.docker.io</code>) and <code>quay.io</code>. Only needed to pull images; without it, use the offline route in step 4. Docker Hub limits anonymous pulls per public IP. Behind a shared company IP, run <code>docker login</code> with any Docker Hub account first, or use the offline route.</li>
+          <li>Docker Hub (<code>registry-1.docker.io</code>). Only needed to pull images; without it, use the offline route in step 4. Docker Hub limits anonymous pulls per public IP. Behind a shared company IP, run <code>docker login</code> with any Docker Hub account first, or use the offline route.</li>
           <li>Your Git servers, for example Azure DevOps Server.</li>
           <li>Your LLM endpoint.</li>
           <li><code>api.osv.dev</code> (optional, for dependency vulnerability data).</li>
@@ -268,11 +268,11 @@ docker compose ps</pre></div>
           <p>On any machine with internet access and Docker, download the images into one file:</p>
           <div class="cmd"><pre>V=__PEPPER_VERSION__
 for i in docker.io/sundi133/pepper-api:$V docker.io/sundi133/pepper-worker:$V \
-         postgres:16-alpine redis:7-alpine quay.io/minio/minio:latest; do
+         postgres:16-alpine redis:7-alpine docker.io/chainguard/minio:latest; do
   docker pull --platform linux/amd64 "$i"
 done
 docker save -o pepper-images-$V.tar docker.io/sundi133/pepper-api:$V \
-  docker.io/sundi133/pepper-worker:$V postgres:16-alpine redis:7-alpine quay.io/minio/minio:latest
+  docker.io/sundi133/pepper-worker:$V postgres:16-alpine redis:7-alpine docker.io/chainguard/minio:latest
 sha256sum pepper-images-$V.tar > pepper-images-$V.tar.sha256</pre></div>
           <p>Copy both files to <code>/opt/pepper</code> on the VM, then load them and start without pulling:</p>
           <div class="cmd"><pre>cd /opt/pepper
@@ -349,7 +349,7 @@ VARS</pre></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Hosts</th><th>Used for</th></tr></thead>
           <tbody>
-            <tr><td>registry-1.docker.io<br>auth.docker.io<br>production.cloudfront.docker.com<br>quay.io, *.quay.io</td><td>Installing and upgrading (Docker). Not needed with the offline image archive. Docker Hub may move layers to other CDN hosts, so allowing <code>*.docker.io</code> and <code>*.docker.com</code> avoids surprises.</td></tr>
+            <tr><td>registry-1.docker.io<br>auth.docker.io<br>production.cloudfront.docker.com</td><td>Installing and upgrading (Docker). Not needed with the offline image archive. Docker Hub may move layers to other CDN hosts, so allowing <code>*.docker.io</code> and <code>*.docker.com</code> avoids surprises.</td></tr>
             <tr><td>api.anthropic.com</td><td>The AI model (Claude). Replace with your model endpoint if different.</td></tr>
             <tr><td>api.osv.dev<br>api.deps.dev</td><td>Known vulnerabilities in dependencies, and package metadata.</td></tr>
             <tr><td>api.first.org<br>www.cisa.gov</td><td>Exploit likelihood (EPSS) and the known-exploited list (KEV).</td></tr>

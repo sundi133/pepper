@@ -103,7 +103,7 @@ For environments without internet access:
 # On a machine with internet — export images
 docker pull sundi133/pepper:latest
 docker pull sundi133/pepper-worker:latest
-docker save sundi133/pepper sundi133/pepper-worker postgres:16-alpine redis:7-alpine minio/minio:latest -o pepper-images.tar
+docker save sundi133/pepper sundi133/pepper-worker postgres:16-alpine redis:7-alpine chainguard/minio:latest -o pepper-images.tar
 
 # Transfer pepper-images.tar + dist/ files to the target machine
 

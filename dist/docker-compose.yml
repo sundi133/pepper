@@ -50,7 +50,10 @@ services:
       retries: 10
 
   minio:
-    image: quay.io/minio/minio:latest
+    # MinIO's own images are no longer public (quay.io needs a login, Docker Hub
+    # removed them); Chainguard publishes a maintained build. Override with
+    # MINIO_IMAGE for an internal registry.
+    image: ${MINIO_IMAGE:-docker.io/chainguard/minio:latest}
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:

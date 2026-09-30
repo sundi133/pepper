@@ -1,26 +1,110 @@
-import { Dependency, RawFinding, ScanContext } from "../types";
+import { Dependency, RawFinding } from "../types";
 import { logger } from "@/lib/logger";
 import { findPackageUsageWithLines } from "./find-package-usage";
+import { osvFixVersion, osvSeverity, type OsvRecord } from "./osv-severity";
+
+const DETAIL_CONCURRENCY = 8;
+const DETAIL_TIMEOUT_MS = 15_000;
+const DETAIL_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const DETAIL_CACHE_MAX = 5000;
+const detailCache = new Map<string, { record: OsvVulnerability; at: number }>();
+
+/**
+ * `/v1/querybatch` returns only `id` + `modified` per vulnerability, so fetch
+ * each full record (`/v1/vulns/{id}`) for severity, aliases, fix versions,
+ * CWEs and descriptions. Cached per worker process; on any failure the
+ * id-only record is kept so a scan never loses findings.
+ */
+async function fetchVulnDetails(ids: string[], apiUrl: string): Promise<Map<string, OsvVulnerability>> {
+  const out = new Map<string, OsvVulnerability>();
+  const now = Date.now();
+  const todo: string[] = [];
+  for (const id of ids) {
+    const hit = detailCache.get(id);
+    if (hit && now - hit.at < DETAIL_CACHE_TTL_MS) out.set(id, hit.record);
+    else todo.push(id);
+  }
+  let next = 0;
+  let failed = 0;
+  const worker = async () => {
+    while (next < todo.length) {
+      const id = todo[next++];
+      try {
+        const res = await fetch(`${apiUrl}/v1/vulns/${encodeURIComponent(id)}`, {
+          signal: AbortSignal.timeout(DETAIL_TIMEOUT_MS),
+        });
+        if (!res.ok) {
+          failed++;
+          continue;
+        }
+        const record = (await res.json()) as OsvVulnerability;
+        out.set(id, record);
+        if (detailCache.size >= DETAIL_CACHE_MAX) {
+          const oldest = detailCache.keys().next().value;
+          if (oldest !== undefined) detailCache.delete(oldest);
+        }
+        detailCache.set(id, { record, at: Date.now() });
+      } catch {
+        failed++;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(DETAIL_CONCURRENCY, todo.length) }, worker));
+  if (failed) {
+    logger.warn({ failed, requested: todo.length }, "OSV: some vulnerability details could not be fetched; using summary data");
+  }
+  return out;
+}
+
+/**
+ * POST one querybatch. OSV rejects the WHOLE batch (400) when any query is
+ * invalid (e.g. an unknown ecosystem), which used to drop every result — so
+ * on a 400 retry each ecosystem separately and skip only the bad one.
+ */
+async function postQueryBatch(
+  apiUrl: string,
+  queries: OsvQuery[],
+): Promise<Array<{ vulns?: OsvVulnerability[] }> | null> {
+  const send = async (qs: OsvQuery[]) =>
+    fetch(`${apiUrl}/v1/querybatch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ queries: qs }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+  const response = await send(queries);
+  if (response.ok) return ((await response.json()) as OsvBatchResponse).results;
+  if (response.status !== 400) {
+    logger.warn({ status: response.status, batchSize: queries.length }, "OSV vulnerability batch request failed");
+    return null;
+  }
+
+  const results: Array<{ vulns?: OsvVulnerability[] }> = queries.map(() => ({}));
+  const byEcosystem = new Map<string, number[]>();
+  queries.forEach((q, idx) => {
+    byEcosystem.set(q.package.ecosystem, [...(byEcosystem.get(q.package.ecosystem) ?? []), idx]);
+  });
+  for (const [ecosystem, idxs] of byEcosystem) {
+    const r = await send(idxs.map((k) => queries[k]));
+    if (!r.ok) {
+      logger.warn({ status: r.status, ecosystem, count: idxs.length }, "OSV rejected queries for this ecosystem; skipping them");
+      continue;
+    }
+    const part = ((await r.json()) as OsvBatchResponse).results;
+    idxs.forEach((k, pos) => {
+      results[k] = part[pos] ?? {};
+    });
+  }
+  return results;
+}
 
 interface OsvQuery {
   package: { name: string; ecosystem: string };
   version: string;
 }
 
-interface OsvVulnerability {
-  id: string;
-  summary?: string;
-  details?: string;
-  aliases?: string[];
-  severity?: Array<{ type: string; score: string }>;
-  affected?: Array<{
-    ranges?: Array<{
-      events: Array<{ introduced?: string; fixed?: string }>;
-    }>;
-  }>;
-  references?: Array<{ type: string; url: string }>;
-  database_specific?: { cwe_ids?: string[] };
-}
+type OsvVulnerability = OsvRecord;
 
 interface OsvBatchResponse {
   results: Array<{ vulns?: OsvVulnerability[] }>;
@@ -44,37 +128,27 @@ export async function queryOsvBatch(
     }));
 
     try {
-      const response = await fetch(`${apiUrl}/v1/querybatch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ queries }),
-        signal: AbortSignal.timeout(30000),
-      });
+      const batchResults = await postQueryBatch(apiUrl, queries);
+      if (!batchResults) continue;
 
-      if (!response.ok) {
-        logger.warn(
-          {
-            status: response.status,
-            batchStart: i,
-            batchSize: batch.length,
-          },
-          "OSV vulnerability batch request failed",
-        );
-        continue;
-      }
+      const ids = [
+        ...new Set(batchResults.flatMap((r) => (r?.vulns ?? []).map((v) => v.id))),
+      ];
+      const details = await fetchVulnDetails(ids, apiUrl);
 
-      const data: OsvBatchResponse = await response.json();
-
-      for (let j = 0; j < data.results.length; j++) {
-        const vulns = data.results[j]?.vulns;
+      for (let j = 0; j < batchResults.length; j++) {
+        const vulns = batchResults[j]?.vulns;
         if (!vulns || vulns.length === 0) continue;
 
         const dep = batch[j];
 
-        for (const vuln of vulns) {
-          const severity = cvssToSeverity(vuln.severity);
-          const cveId = vuln.aliases?.find((a) => a.startsWith("CVE-"));
-          const fixVersion = getFixVersion(vuln);
+        for (const summaryVuln of vulns) {
+          const vuln = details.get(summaryVuln.id) ?? summaryVuln;
+          const { severity, cvssScore } = osvSeverity(vuln);
+          const cveId =
+            vuln.aliases?.find((a) => a.startsWith("CVE-")) ??
+            (vuln.id.startsWith("CVE-") ? vuln.id : undefined);
+          const fixVersion = osvFixVersion(vuln, dep);
 
           // Find where this package is used in source code
           let usageLocations: Array<{ filePath: string; line: number; usage: string }> = [];
@@ -85,7 +159,7 @@ export async function queryOsvBatch(
                 ctx.fileList,
                 dep.name,
               );
-            } catch (err) {
+            } catch {
               // Silently continue if usage analysis fails
             }
           }
@@ -95,7 +169,7 @@ export async function queryOsvBatch(
             severity,
             title: `${vuln.id}: ${vuln.summary || "Vulnerability in " + dep.name}`,
             description: buildDescription(vuln, dep, fixVersion),
-            filePath: (dep as any).sourceFile || undefined,
+            filePath: dep.sourceFile || undefined,
             ruleId: vuln.id,
             cveId,
             cweId: vuln.database_specific?.cwe_ids?.[0],
@@ -106,6 +180,8 @@ export async function queryOsvBatch(
               ecosystem: dep.ecosystem,
               osvId: vuln.id,
               fixVersion,
+              cvssScore: cvssScore ?? undefined,
+              aliases: vuln.aliases?.length ? vuln.aliases : undefined,
               references: vuln.references?.map((r) => r.url),
               usageLocations: usageLocations.length > 0 ? usageLocations : undefined,
             },
@@ -126,34 +202,6 @@ export async function queryOsvBatch(
   }
 
   return findings;
-}
-
-function cvssToSeverity(
-  severity?: OsvVulnerability["severity"],
-): RawFinding["severity"] {
-  if (!severity || severity.length === 0) return "MEDIUM";
-
-  const cvss = severity.find((s) => s.type === "CVSS_V3");
-  if (!cvss) return "MEDIUM";
-
-  const score = parseFloat(cvss.score);
-  if (isNaN(score)) return "MEDIUM";
-
-  if (score >= 9.0) return "CRITICAL";
-  if (score >= 7.0) return "HIGH";
-  if (score >= 4.0) return "MEDIUM";
-  return "LOW";
-}
-
-function getFixVersion(vuln: OsvVulnerability): string | undefined {
-  for (const affected of vuln.affected || []) {
-    for (const range of affected.ranges || []) {
-      for (const event of range.events) {
-        if (event.fixed) return event.fixed;
-      }
-    }
-  }
-  return undefined;
 }
 
 function buildDescription(

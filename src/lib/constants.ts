@@ -351,7 +351,7 @@ export const WEB_RESEARCH_MAX_PER_SCAN = parseInt(
 // ─── deps.dev (Open Source Insights) ─────────────────────────────────────────
 // Supplies declared licenses, source repo, deprecation and provenance signals.
 // Covers npm, PyPI, Maven, Go, crates.io, NuGet and RubyGems; Packagist, Pub,
-// Hex and SwiftPM are skipped.
+// Hex and Swift (SwiftURL) are skipped.
 
 export const DEPS_DEV_API_URL =
   process.env.DEPS_DEV_API_URL || "https://api.deps.dev";

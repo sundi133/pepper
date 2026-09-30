@@ -50,3 +50,6 @@ PYSEC-*.json
 /src/generated/prisma
 
 .pepper.env
+
+# Packaged customer bundles / image archives (scripts/package-install-bundle.sh)
+release/

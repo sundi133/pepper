@@ -1,5 +1,12 @@
 # On-prem Pepper deployment (Docker) — with SAML, Azure DevOps Server & internal CA
 
+> **Installing for a customer?** Give them the install bundle instead of this
+> repository: `scripts/package-install-bundle.sh <image-tag>` produces
+> `release/pepper-install-<tag>.tar.gz` (compose file, `.env.example`,
+> `setup.sh`, `INSTALL.md`) that runs the published images with no source code.
+> Add `IMAGES=1` to also write an offline image archive for air-gapped sites.
+> This document covers building from source.
+
 Single-VM, hardened deployment using `docker-compose.onprem.yml`. Only the app is
 published (`:3000`); Postgres, Redis and MinIO stay on the internal compose
 network. TLS is terminated by a reverse proxy you run in front.

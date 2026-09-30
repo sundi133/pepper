@@ -1,10 +1,28 @@
-version: "3.9"
+# Pepper — customer deployment (prebuilt images, no source code needed).
+#
+#   docker compose pull
+#   docker compose up -d
+#
+# Everything is configured in .env (next to this file). Only the web UI port
+# is published; Postgres, Redis and MinIO are reachable only on the internal
+# network. Database schema changes are applied automatically on start.
+name: pepper
 
-# Pepper SAST - Customer Deployment
-# 1. Copy .env.example to .env and fill in your values
-# 2. Optionally run setup.sh for automated setup
-# 3. Run: docker compose up -d
-# 4. Open Pepper in the browser and sign in with your admin credentials
+x-app-env: &app-env
+  # Internal wiring (service DNS names) — overrides anything in .env.
+  DATABASE_URL: postgresql://pepper:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/pepper
+  REDIS_URL: redis://redis:6379
+  MINIO_ENDPOINT: minio
+  MINIO_PORT: "9000"
+  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+  MINIO_USE_SSL: "false"
+  MINIO_BUCKET: pepper-artifacts
+  # Internal services never go through an outbound proxy; hosts you add to
+  # NO_PROXY in .env (e.g. your Azure DevOps Server) are kept.
+  NO_PROXY: "${NO_PROXY:-},localhost,127.0.0.1,postgres,redis,minio,pepper-api,pepper-worker"
+  no_proxy: "${NO_PROXY:-},localhost,127.0.0.1,postgres,redis,minio,pepper-api,pepper-worker"
+  NODE_ENV: production
 
 services:
   postgres:
@@ -19,7 +37,7 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pepper"]
       interval: 5s
-      retries: 5
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -29,24 +47,24 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
-      retries: 5
+      retries: 10
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
     volumes:
       - miniodata:/data
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s
-      retries: 5
+      retries: 10
 
   pepper-api:
-    image: ${PEPPER_API_IMAGE:-docker.io/sundi133/pepper}:${PEPPER_VERSION:-latest}
+    image: ${PEPPER_API_IMAGE:-docker.io/sundi133/pepper-api}:${PEPPER_VERSION:?Set PEPPER_VERSION in .env}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -54,32 +72,29 @@ services:
       redis:
         condition: service_healthy
       minio:
-        condition: service_started
+        condition: service_healthy
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://pepper:${POSTGRES_PASSWORD}@postgres:5432/pepper
-      REDIS_URL: redis://redis:6379
-      MINIO_ENDPOINT: minio
-      MINIO_PORT: "9000"
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      MINIO_USE_SSL: "false"
-      MINIO_BUCKET: pepper-artifacts
+      <<: *app-env
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Set NEXTAUTH_SECRET in .env}
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@pepper.local}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:?Set NEXTAUTH_URL in .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in .env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
-      LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
-      LLM_BASE_URL: ${LLM_BASE_URL:-https://openrouter.ai/api/v1}
-      LLM_MODEL: ${LLM_MODEL:-google/gemini-2.5-flash}
-      LLM_API_KEY: ${LLM_API_KEY:-}
-      OPENROUTER_REFERER: ${OPENROUTER_REFERER:-https://pepper.dev}
-      OPENROUTER_TITLE: ${OPENROUTER_TITLE:-Pepper SAST}
-      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
     ports:
-      - "${PEPPER_PORT:-3000}:3000"
+      - "${PEPPER_BIND_ADDRESS:-0.0.0.0}:${PEPPER_PORT:-3000}:3000"
+    volumes:
+      # Internal CA certificates (set NODE_EXTRA_CA_CERTS=/certs/<file>.pem in .env)
+      - ./certs:/certs:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
 
   pepper-worker:
-    image: ${PEPPER_WORKER_IMAGE:-docker.io/sundi133/pepper-worker}:${PEPPER_VERSION:-latest}
+    image: ${PEPPER_WORKER_IMAGE:-docker.io/sundi133/pepper-worker}:${PEPPER_VERSION:?Set PEPPER_VERSION in .env}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -87,29 +102,18 @@ services:
       redis:
         condition: service_healthy
       minio:
-        condition: service_started
+        condition: service_healthy
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://pepper:${POSTGRES_PASSWORD}@postgres:5432/pepper
-      REDIS_URL: redis://redis:6379
-      MINIO_ENDPOINT: minio
-      MINIO_PORT: "9000"
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      MINIO_USE_SSL: "false"
-      MINIO_BUCKET: pepper-artifacts
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
-      MAX_LLM_CONCURRENCY: ${MAX_LLM_CONCURRENCY:-2}
-      LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
-      LLM_BASE_URL: ${LLM_BASE_URL:-https://openrouter.ai/api/v1}
-      LLM_MODEL: ${LLM_MODEL:-google/gemini-2.5-flash}
-      LLM_API_KEY: ${LLM_API_KEY:-}
-      OPENROUTER_REFERER: ${OPENROUTER_REFERER:-https://pepper.dev}
-      OPENROUTER_TITLE: ${OPENROUTER_TITLE:-Pepper SAST}
-      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
-    deploy:
-      replicas: ${WORKER_REPLICAS:-1}
+      <<: *app-env
+    volumes:
+      - ./certs:/certs:ro
+      # Trivy vulnerability database cache (container scanning).
+      - trivycache:/var/cache/trivy
 
 volumes:
   pgdata:
   redisdata:
   miniodata:
+  trivycache:

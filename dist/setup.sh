@@ -115,66 +115,93 @@ install_docker() {
   ok "Docker installed successfully"
 }
 
+set_env() {
+  # set_env KEY VALUE — replace the KEY= line in .env (value is quoted).
+  local key="$1" value="$2" tmp
+  tmp="$(mktemp)"
+  awk -v k="$key" -v v="$value" 'BEGIN{done=0} $0 ~ "^"k"=" {print k"=\""v"\""; done=1; next} {print} END{if(!done) print k"=\""v"\""}' "$PEPPER_DIR/.env" > "$tmp"
+  mv "$tmp" "$PEPPER_DIR/.env"
+  chmod 600 "$PEPPER_DIR/.env"
+}
+
+env_value() {
+  grep -E "^$1=" "$PEPPER_DIR/.env" 2>/dev/null | tail -1 | cut -d'=' -f2- | tr -d '"'
+}
+
 create_env() {
+  mkdir -p "$PEPPER_DIR/certs"
+
   if [ -f "$PEPPER_DIR/.env" ]; then
-    ok ".env already exists"
+    ok ".env already exists (not modified)"
     return
   fi
 
   info "Creating .env configuration..."
   cp "$PEPPER_DIR/.env.example" "$PEPPER_DIR/.env"
 
-  local pg_password nextauth_secret admin_password minio_password
-  pg_password="$(generate_password)"
-  nextauth_secret="$(generate_secret)"
+  local url version admin_email admin_password
+  read -r -p "Pepper URL users will open [http://$(hostname -f 2>/dev/null || hostname):3000]: " url
+  url="${url:-http://$(hostname -f 2>/dev/null || hostname):3000}"
+  read -r -p "Pepper version tag (from your Pepper contact): " version
+  read -r -p "Administrator email [admin@yourcompany.com]: " admin_email
+  admin_email="${admin_email:-admin@yourcompany.com}"
   admin_password="$(generate_password)"
-  minio_password="$(generate_password)"
 
-  replace_in_file "$PEPPER_DIR/.env" 'POSTGRES_PASSWORD="CHANGE_ME_strong_random_password"' "POSTGRES_PASSWORD=\"${pg_password}\""
-  replace_in_file "$PEPPER_DIR/.env" 'NEXTAUTH_SECRET="CHANGE_ME_random_secret"' "NEXTAUTH_SECRET=\"${nextauth_secret}\""
-  replace_in_file "$PEPPER_DIR/.env" 'ADMIN_PASSWORD="CHANGE_ME_admin_password"' "ADMIN_PASSWORD=\"${admin_password}\""
-  replace_in_file "$PEPPER_DIR/.env" '# MINIO_SECRET_KEY="CHANGE_ME_minio_password"' "MINIO_SECRET_KEY=\"${minio_password}\""
+  set_env NEXTAUTH_URL "$url"
+  [ -n "$version" ] && set_env PEPPER_VERSION "$version"
+  set_env NEXTAUTH_SECRET "$(generate_secret)"
+  set_env POSTGRES_PASSWORD "$(generate_password)"
+  set_env MINIO_ROOT_PASSWORD "$(generate_password)"
+  set_env ADMIN_EMAIL "$admin_email"
+  set_env ADMIN_PASSWORD "$admin_password"
 
-  if grep -q 'LLM_API_KEY="CHANGE_ME_openrouter_api_key"' "$PEPPER_DIR/.env"; then
-    warn "Set LLM_API_KEY in .env before first AI scan."
-  fi
-
-  ok ".env configured"
+  ok ".env created (permissions 600)"
   echo ""
-  echo "  Admin email:    admin@yourcompany.com"
+  echo "  Admin email:    ${admin_email}"
   echo "  Admin password: ${admin_password}"
   echo ""
-  warn "Save the admin password above. It is also written to .env."
+  warn "Save the admin password. Set LLM_API_KEY (or your internal LLM) in .env before the first AI scan."
 }
 
 docker_login_if_configured() {
-  if ! grep -q '^PEPPER_REGISTRY=' "$PEPPER_DIR/.env"; then
-    return
-  fi
-
-  # shellcheck disable=SC1090
-  . "$PEPPER_DIR/.env"
-
-  if [ -n "${PEPPER_REGISTRY:-}" ] && [ -n "${PEPPER_REGISTRY_USERNAME:-}" ] && [ -n "${PEPPER_REGISTRY_PASSWORD:-}" ]; then
-    info "Logging in to private registry ${PEPPER_REGISTRY}..."
-    echo "${PEPPER_REGISTRY_PASSWORD}" | docker login "${PEPPER_REGISTRY}" --username "${PEPPER_REGISTRY_USERNAME}" --password-stdin
+  local registry user pass
+  registry="$(env_value PEPPER_REGISTRY)"
+  user="$(env_value PEPPER_REGISTRY_USERNAME)"
+  pass="$(env_value PEPPER_REGISTRY_PASSWORD)"
+  if [ -n "$registry" ] && [ -n "$user" ] && [ -n "$pass" ]; then
+    info "Logging in to registry ${registry}..."
+    echo "$pass" | docker login "$registry" --username "$user" --password-stdin
     ok "Registry login successful"
-  else
-    info "Skipping registry login: PEPPER_REGISTRY credentials not set"
   fi
 }
 
+images_present() {
+  local img
+  for img in $(docker compose -f "$PEPPER_DIR/docker-compose.yml" --env-file "$PEPPER_DIR/.env" config --images); do
+    docker image inspect "$img" >/dev/null 2>&1 || return 1
+  done
+}
+
 start_pepper() {
-  info "Pulling Pepper images..."
-  docker compose -f "$PEPPER_DIR/docker-compose.yml" --env-file "$PEPPER_DIR/.env" pull
+  if [ "$(env_value PEPPER_VERSION)" = "CHANGE_ME_version_tag" ] || [ -z "$(env_value PEPPER_VERSION)" ]; then
+    err "Set PEPPER_VERSION in .env first."
+    exit 1
+  fi
+
+  if images_present; then
+    ok "All images are already loaded (offline install); skipping pull"
+  else
+    info "Pulling Pepper images..."
+    docker compose -f "$PEPPER_DIR/docker-compose.yml" --env-file "$PEPPER_DIR/.env" pull
+  fi
 
   info "Starting Pepper..."
   docker compose -f "$PEPPER_DIR/docker-compose.yml" --env-file "$PEPPER_DIR/.env" up -d
 
-  info "Waiting for Pepper API..."
-  local retries=45
+  info "Waiting for Pepper (first start applies the database schema; can take a few minutes)..."
+  local retries=90
   local port
-  port=$(grep '^PEPPER_PORT=' "$PEPPER_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || true)
+  port="$(env_value PEPPER_PORT)"
   port="${port:-3000}"
 
   while [ $retries -gt 0 ]; do
@@ -182,11 +209,11 @@ start_pepper() {
       ok "Pepper is running"
       return
     fi
-    sleep 2
+    sleep 5
     retries=$((retries - 1))
   done
 
-  warn "Pepper may still be starting. Check logs with: docker compose logs -f"
+  warn "Pepper is still starting. Check: docker compose logs -f pepper-api"
 }
 
 print_summary() {
@@ -198,7 +225,7 @@ print_summary() {
   echo "------------------------------------------------------------"
   echo "Pepper SAST is ready"
   echo "------------------------------------------------------------"
-  echo "Web UI: http://localhost:${port}"
+  echo "Web UI: $(env_value NEXTAUTH_URL)"
   echo "Login: check .env for ADMIN_EMAIL and ADMIN_PASSWORD"
   echo ""
   echo "Useful commands:"

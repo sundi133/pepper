@@ -4,6 +4,8 @@ import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { scanQueue, ScanJobData } from "@/lib/queue";
 import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
+import { objectExists } from "@/lib/minio";
+import { uploadExpiredMessage } from "@/lib/data-retention";
 
 export async function POST(
   req: NextRequest,
@@ -44,6 +46,13 @@ export async function POST(
         { error: "Original scan source is not available for resume" },
         { status: 409 },
       );
+    }
+    if (
+      scan.sourceType === "UPLOAD" &&
+      scan.sourceRef.startsWith("scans/") &&
+      (await objectExists(scan.sourceRef)) === false
+    ) {
+      return NextResponse.json({ error: uploadExpiredMessage() }, { status: 410 });
     }
 
     const orgSettings = await prisma.orgSettings.findUnique({

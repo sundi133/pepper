@@ -6,6 +6,8 @@ import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
 import { parseRescanBody } from "@/lib/scan-types";
 import { execFileSync } from "child_process";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
+import { objectExists } from "@/lib/minio";
+import { uploadExpiredMessage } from "@/lib/data-retention";
 
 function resolveGitDefaultBranch(repoUrl: string) {
   try {
@@ -65,6 +67,16 @@ export async function POST(
       { error: "Original scan source is not available for rescan" },
       { status: 409 },
     );
+  }
+
+  // A retention policy may have deleted the uploaded archive. Check before the
+  // old results are removed below, so they aren't lost to a scan that can't run.
+  if (
+    originalScan.sourceType === "UPLOAD" &&
+    originalScan.sourceRef.startsWith("scans/") &&
+    (await objectExists(originalScan.sourceRef)) === false
+  ) {
+    return NextResponse.json({ error: uploadExpiredMessage() }, { status: 410 });
   }
 
   const projectId = originalScan.projectId;

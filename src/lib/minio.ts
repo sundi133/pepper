@@ -53,6 +53,20 @@ export async function getPresignedUrl(
   return minioClient.presignedGetObject(BUCKET, key, expiry);
 }
 
+/**
+ * Whether an object exists: false only when storage says it's missing, null
+ * when storage couldn't be asked (callers should then carry on as before).
+ */
+export async function objectExists(key: string): Promise<boolean | null> {
+  try {
+    await minioClient.statObject(BUCKET, key);
+    return true;
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    return code === "NotFound" || code === "NoSuchKey" ? false : null;
+  }
+}
+
 export async function deleteObject(key: string): Promise<void> {
   await minioClient.removeObject(BUCKET, key);
 }

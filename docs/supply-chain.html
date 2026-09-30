@@ -94,15 +94,16 @@
         <tbody>
           <tr><td>npm</td><td><code>package.json</code>, <code>package-lock.json</code>, <code>yarn.lock</code>, <code>pnpm-lock.yaml</code></td><td>Full</td></tr>
           <tr><td>PyPI</td><td><code>requirements.txt</code>, <code>Pipfile.lock</code>, <code>poetry.lock</code>, <code>pyproject.toml</code></td><td>Full</td></tr>
-          <tr><td>Maven / Gradle</td><td><code>pom.xml</code>, <code>build.gradle</code>, <code>build.gradle.kts</code></td><td>Full</td></tr>
+          <tr><td>Maven / Gradle</td><td><code>pom.xml</code>, <code>build.gradle</code>, <code>build.gradle.kts</code>, <code>gradle.lockfile</code>, <code>libs.versions.toml</code></td><td>Full</td></tr>
           <tr><td>Go</td><td><code>go.mod</code></td><td>Full</td></tr>
           <tr><td>crates.io</td><td><code>Cargo.toml</code>, <code>Cargo.lock</code></td><td>Full</td></tr>
-          <tr><td>NuGet</td><td><code>.csproj</code>, <code>.fsproj</code>, <code>.vbproj</code>, <code>packages.config</code></td><td>Full</td></tr>
+          <tr><td>NuGet</td><td><code>.csproj</code>, <code>.fsproj</code>, <code>.vbproj</code>, <code>packages.config</code>, <code>packages.lock.json</code>, <code>Directory.Packages.props</code></td><td>Full</td></tr>
           <tr><td>RubyGems</td><td><code>Gemfile.lock</code></td><td>Full</td></tr>
           <tr><td>Packagist</td><td><code>composer.json</code>, <code>composer.lock</code></td><td>Vulnerabilities only</td></tr>
           <tr><td>Pub (Dart)</td><td><code>pubspec.yaml</code></td><td>Vulnerabilities only</td></tr>
           <tr><td>Hex (Elixir)</td><td><code>mix.lock</code></td><td>Vulnerabilities only</td></tr>
-          <tr><td>SwiftPM</td><td><code>Package.resolved</code></td><td>Vulnerabilities only</td></tr>
+          <tr><td>Swift (SwiftPM, Carthage)</td><td><code>Package.resolved</code>, <code>Cartfile.resolved</code></td><td>Vulnerabilities only</td></tr>
+          <tr><td>CocoaPods</td><td><code>Podfile.lock</code></td><td>Inventory / SBOM only (no public vulnerability database)</td></tr>
         </tbody>
       </table>
 

@@ -19,16 +19,27 @@ import { poetryLockParser } from "./parsers/poetry-lock";
 import { goModParser } from "./parsers/go-mod";
 import { cargoTomlParser } from "./parsers/cargo-toml";
 import { cargoLockParser } from "./parsers/cargo-lock";
-import { pomXmlParser, buildGradleParser } from "./parsers/pom-xml";
+import {
+  pomXmlParser,
+  buildGradleParser,
+  gradleLockfileParser,
+  versionCatalogParser,
+} from "./parsers/pom-xml";
 import { gemfileLockParser } from "./parsers/gemfile-lock";
 import {
   composerJsonParser,
   composerLockParser,
 } from "./parsers/composer-json";
-import { csprojParser, packagesConfigParser } from "./parsers/csproj";
+import {
+  csprojParser,
+  packagesConfigParser,
+  packagesLockJsonParser,
+  directoryPackagesPropsParser,
+} from "./parsers/csproj";
 import { pubspecYamlParser } from "./parsers/pubspec-yaml";
 import { mixLockParser } from "./parsers/mix-lock";
 import { swiftPackageResolvedParser } from "./parsers/swift-package";
+import { podfileLockParser, cartfileResolvedParser } from "./parsers/ios";
 import { queryOsvBatch } from "./osv-client";
 import { triageScaFindings } from "./triage";
 import { enrichFindingsWithEpssKev } from "@/lib/epss-kev-enrichment";
@@ -58,23 +69,29 @@ const ALL_PARSERS: DependencyParser[] = [
   // Rust — lock file first
   cargoLockParser,
   cargoTomlParser,
-  // Java/Kotlin/Scala
+  // Java/Kotlin/Scala — lock file first
+  gradleLockfileParser,
   pomXmlParser,
   buildGradleParser,
+  versionCatalogParser,
   // Ruby
   gemfileLockParser,
   // PHP
   composerLockParser,
   composerJsonParser,
-  // .NET / C# / F#
+  // .NET / C# / F# — lock file first
+  packagesLockJsonParser,
   csprojParser,
   packagesConfigParser,
+  directoryPackagesPropsParser,
   // Dart/Flutter
   pubspecYamlParser,
   // Elixir
   mixLockParser,
-  // Swift
+  // Swift / iOS
   swiftPackageResolvedParser,
+  podfileLockParser,
+  cartfileResolvedParser,
 ];
 
 /** File extensions that are also dependency manifests (matched by extension, not filename) */
@@ -84,10 +101,63 @@ const EXTENSION_PARSERS: Record<string, DependencyParser> = {
   ".vbproj": csprojParser,
 };
 
+/** Every file name SCA parses (plus .csproj-style extensions). */
+export const DEPENDENCY_FILE_NAMES: ReadonlySet<string> = new Set(
+  ALL_PARSERS.flatMap((p) => p.filePatterns),
+);
+
+/** True for files the SCA scanner reads (by name or project-file extension). */
+export function isDependencyFile(filePath: string): boolean {
+  const fileName = path.basename(filePath);
+  return DEPENDENCY_FILE_NAMES.has(fileName) || Boolean(EXTENSION_PARSERS[path.extname(fileName).toLowerCase()]);
+}
+
+/** Lock files: exact resolved versions, preferred over the manifest's declared ranges. */
+const LOCK_FILE_NAMES = new Set([
+  "package-lock.json",
+  "npm-shrinkwrap.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "Pipfile.lock",
+  "poetry.lock",
+  "Cargo.lock",
+  "Gemfile.lock",
+  "composer.lock",
+  "mix.lock",
+  "Package.resolved",
+  "gradle.lockfile",
+  "packages.lock.json",
+  "Podfile.lock",
+  "Cartfile.resolved",
+]);
+
+/** Ecosystems with no public vulnerability database: inventory / SBOM only. */
+const NO_VULNERABILITY_DB = new Set(["CocoaPods"]);
+
+/**
+ * When a lock file in the same directory resolves a package, the manifest's
+ * entry for it is dropped: `^1.2.3` in package.json would otherwise be looked
+ * up as 1.2.3, a version that isn't installed (false-positive CVEs). The
+ * package is still remembered as a direct dependency.
+ */
+function preferLockedVersions(deps: Dependency[]): { dependencies: Dependency[]; directNames: string[] } {
+  const key = (d: Dependency) =>
+    `${d.ecosystem.toLowerCase()}|${path.dirname(d.sourceFile ?? "")}|${d.name.toLowerCase()}`;
+  const isLock = (d: Dependency) => LOCK_FILE_NAMES.has(path.basename(d.sourceFile ?? ""));
+  const locked = new Set(deps.filter(isLock).map(key));
+  const directNames = new Set<string>();
+  const dependencies = deps.filter((d) => {
+    if (isLock(d) || !locked.has(key(d))) return true;
+    directNames.add(d.name);
+    return false;
+  });
+  return { dependencies, directNames: [...directNames] };
+}
+
 export function parseDependencies(
   workDir: string,
   fileList: string[],
-): { dependencies: Dependency[]; parsedFiles: string[] } {
+): { dependencies: Dependency[]; parsedFiles: string[]; directNames: string[] } {
   const dependencies: Dependency[] = [];
   const parsedFiles: string[] = [];
   const seen = new Set<string>();
@@ -134,14 +204,14 @@ export function parseDependencies(
     }
   }
 
-  return { dependencies, parsedFiles };
+  return { ...preferLockedVersions(dependencies), parsedFiles };
 }
 
 export const scaScanner: ScannerPlugin = {
   name: "SCA",
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
     await ctx.waitIfPaused?.();
-    const { dependencies, parsedFiles } = parseDependencies(
+    const { dependencies, parsedFiles, directNames } = parseDependencies(
       ctx.workDir,
       ctx.scaFileList ?? ctx.fileList,
     );
@@ -159,11 +229,16 @@ export const scaScanner: ScannerPlugin = {
       "package.json", "requirements.txt", "Pipfile", "go.mod", "Cargo.toml",
       "pom.xml", "Gemfile", "composer.json", "pyproject.toml", "pubspec.yaml",
       "mix.exs", "Package.swift", "build.gradle", "build.gradle.kts",
-      ".csproj", ".fsproj", ".vbproj",
+      "libs.versions.toml", "Directory.Packages.props", "packages.config",
     ]);
-    const directDependencies = new Set<string>();
+    const MANIFEST_EXTENSIONS = new Set([".csproj", ".fsproj", ".vbproj"]);
+    const directDependencies = new Set<string>(directNames);
     for (const dep of dependencies) {
-      if (dep.sourceFile && MANIFEST_NAMES.has(path.basename(dep.sourceFile))) {
+      if (
+        dep.sourceFile &&
+        (MANIFEST_NAMES.has(path.basename(dep.sourceFile)) ||
+          MANIFEST_EXTENSIONS.has(path.extname(dep.sourceFile).toLowerCase()))
+      ) {
         directDependencies.add(dep.name);
       }
     }
@@ -202,11 +277,13 @@ export const scaScanner: ScannerPlugin = {
     }
 
     await ctx.waitIfPaused?.();
+    // OSV rejects a batch containing an ecosystem it doesn't know.
+    const osvDependencies = dependencies.filter((d) => !NO_VULNERABILITY_DB.has(d.ecosystem));
     ctx.onProgress?.(
-      `SCA: querying OSV for ${dependencies.length} dependencies...`,
+      `SCA: querying OSV for ${osvDependencies.length} dependencies...`,
     );
     let findings = await queryOsvBatch(
-      dependencies,
+      osvDependencies,
       ctx.orgSettings.osvApiUrl,
       { workDir: ctx.workDir, fileList: ctx.fileList },
     );

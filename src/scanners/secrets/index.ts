@@ -16,6 +16,11 @@ import { buildRepoContextSummary } from "@/lib/llm-repo-context";
 import { validateSecretCandidate, getEntropyLabel } from "./entropy-validator";
 import { classifySecrets } from "./llm-classifier";
 import {
+  PATTERN_DETECTORS,
+  isLikelyPlaceholderSecret,
+  isSecretScanCandidate,
+} from "./patterns";
+import {
   SKIP_DIRECTORIES,
   BINARY_EXTENSIONS,
   MAX_CHUNK_TOKENS,
@@ -26,51 +31,6 @@ import {
   SECRETS_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
-
-const SECRET_SCAN_EXTENSIONS = new Set([
-  ...Object.keys({
-    ".js": 1,
-    ".jsx": 1,
-    ".ts": 1,
-    ".tsx": 1,
-    ".py": 1,
-    ".go": 1,
-    ".java": 1,
-    ".rb": 1,
-    ".php": 1,
-    ".cs": 1,
-    ".rs": 1,
-    ".yml": 1,
-    ".yaml": 1,
-    ".json": 1,
-    ".env": 1,
-    ".toml": 1,
-    ".tf": 1,
-    ".sh": 1,
-  }),
-  ".env",
-  ".pem",
-  ".key",
-]);
-
-const CONFIG_BASENAMES = new Set([
-  ".env",
-  ".env.local",
-  ".env.production",
-  ".env.test",
-  ".env.staging",
-  ".env.ci",
-  ".env.production.local",
-  "credentials.json",
-  "secrets.json",
-  "config.json",
-  "appsettings.json",
-  "serviceAccountKey.json",
-  "id_rsa",
-  "id_dsa",
-  "id_ecdsa",
-  "id_ed25519",
-]);
 
 interface SecretLlmFinding {
   title: string;
@@ -86,44 +46,6 @@ interface SecretLlmFinding {
   confidence: number;
 }
 
-const PATTERN_DETECTORS: Record<string, { patterns: RegExp[]; severity: "CRITICAL" | "HIGH" }> = {
-  AWS_ACCESS_KEY: { patterns: [/\b(AKIA|ASIA)[0-9A-Z]{16}\b/g], severity: "CRITICAL" },
-  GITHUB_TOKEN: { patterns: [/\b(ghp|ghu|gho|ghs)_[a-zA-Z0-9_]{36,}\b/g], severity: "CRITICAL" },
-  GITLAB_TOKEN: { patterns: [/\bglpat-[a-zA-Z0-9_-]{20,}\b/g], severity: "CRITICAL" },
-  SLACK_TOKEN: { patterns: [/\b(xox[bap])-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,32}\b/g], severity: "CRITICAL" },
-  STRIPE_KEY: { patterns: [/\b(sk|pk)_(live|test)_[a-zA-Z0-9]{24,}\b/g], severity: "CRITICAL" },
-  PRIVATE_KEY: { patterns: [/-----BEGIN (RSA|DSA|EC|OPENSSH|PGP) PRIVATE KEY-----/gi], severity: "CRITICAL" },
-  JWT_TOKEN: { patterns: [/\beyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]*\b/g], severity: "HIGH" },
-  GOOGLE_API_KEY: { patterns: [/\bAIza[0-9A-Za-z_-]{35}\b/g], severity: "CRITICAL" },
-  SENDGRID_KEY: { patterns: [/\bSG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}\b/g], severity: "CRITICAL" },
-  DATABASE_URL: { patterns: [/(?:postgres|mysql|mongodb)(?:\+srv)?:\/\/[^:]+:[^@]+@[^\s'"]+/gi], severity: "HIGH" },
-  NPM_TOKEN: { patterns: [/\bnpm_[a-zA-Z0-9]{36}\b/g], severity: "CRITICAL" },
-  OPENAI_API_KEY: { patterns: [/\bsk-[a-zA-Z0-9]{20,}(?:T3BlbkFJ[a-zA-Z0-9]{20,})?\b/g], severity: "CRITICAL" },
-  // Generic named-key literals (api_key = "…", secret_key=…, client_secret=…).
-  // These are deliberately conservative: a quoted value that does not look like
-  // a mask (uniform chars below) is flagged HIGH and left for the LLM pass /
-  // human to confirm, so we never add shape-only noise for docs or examples.
-  API_KEY: {
-    patterns: [/\b(?:api[_-]?key|apikey)\s*[:=]\s*["'][A-Za-z0-9_\-$+/=]{12,}["']/gi],
-    severity: "HIGH",
-  },
-  SECRET_KEY: {
-    patterns: [/\b(?:secret[_-]?key|secretkey|client[_-]?secret)\s*[:=]\s*["'][A-Za-z0-9_\-$+/=]{12,}["']/gi],
-    severity: "HIGH",
-  },
-};
-
-/**
- * Mask-like values (xxxx…, aaaa…, 1234… repeated) are never real credentials.
- * Applies to every pattern match as a final anti-false-positive gate.
- */
-function isUniformSecretValue(value: string): boolean {
-  const alnum = value.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-  if (alnum.length < 8) return false;
-  const unique = new Set(alnum).size;
-  return unique <= 1 || unique / alnum.length < 0.1;
-}
-
 export const secretsPatternScanner: ScannerPlugin = {
   name: "SECRETS_PATTERN",
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
@@ -134,15 +56,7 @@ export const secretsPatternScanner: ScannerPlugin = {
       if (ctx.signal?.aborted) break;
       if (isSkippedPath(filePath)) continue;
 
-      const ext = path.extname(filePath).toLowerCase();
-      const base = path.basename(filePath).toLowerCase();
-      if (
-        !SECRET_SCAN_EXTENSIONS.has(ext) &&
-        !CONFIG_BASENAMES.has(base) &&
-        !base.includes(".env")
-      ) {
-        continue;
-      }
+      if (!isSecretScanCandidate(filePath, "pattern")) continue;
 
       const fullPath = path.join(ctx.workDir, filePath);
       let content: string;
@@ -225,17 +139,7 @@ export const secretsPatternScanner: ScannerPlugin = {
               const matchedValue = match[0];
 
               // Skip common false positives
-              if (
-                matchedValue.toLowerCase().includes("example") ||
-                matchedValue.toLowerCase().includes("placeholder") ||
-                matchedValue.toLowerCase().includes("test") ||
-                /^(xxx|yyy|zzz|aaa|bbb|ccc|ddd|eee|fff|000|111|222)[\-_]/.test(
-                  matchedValue,
-                ) ||
-                isUniformSecretValue(matchedValue)
-              ) {
-                continue;
-              }
+              if (isLikelyPlaceholderSecret(matchedValue)) continue;
 
               const masked = maskSecretValue(matchedValue);
               const base: RawFinding = applySeverityCalibration({
@@ -306,15 +210,7 @@ export const secretsLlmScanner: ScannerPlugin = {
       if (ctx.signal?.aborted) break;
       if (isSkippedPath(filePath)) continue;
 
-      const ext = path.extname(filePath).toLowerCase();
-      const base = path.basename(filePath).toLowerCase();
-      if (
-        !SECRET_SCAN_EXTENSIONS.has(ext) &&
-        !CONFIG_BASENAMES.has(base) &&
-        !base.includes(".env")
-      ) {
-        continue;
-      }
+      if (!isSecretScanCandidate(filePath, "llm")) continue;
 
       const fullPath = path.join(ctx.workDir, filePath);
       try {

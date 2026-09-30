@@ -5,42 +5,19 @@ import {
   parseDiffNameStatus,
   type DiffFile,
 } from "@/scanners/diff-parser";
-
-/** Basenames and extensions treated as dependency manifests for incremental SCA. */
-export const SCA_MANIFEST_BASENAMES = new Set([
-  "package.json",
-  "package-lock.json",
-  "requirements.txt",
-  "requirements-dev.txt",
-  "requirements-test.txt",
-  "Pipfile.lock",
-  "pyproject.toml",
-  "go.mod",
-  "Cargo.toml",
-  "pom.xml",
-  "build.gradle",
-  "build.gradle.kts",
-  "Gemfile.lock",
-  "composer.json",
-  "composer.lock",
-  "packages.config",
-  "pubspec.yaml",
-  "mix.lock",
-  "Package.resolved",
-]);
-
-const SCA_MANIFEST_EXTENSIONS = new Set([".csproj", ".fsproj", ".vbproj"]);
+import { isDependencyFile } from "@/scanners/sca";
 
 export function normalizeRepoPath(filePath: string): string {
   return filePath.replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
+/**
+ * Dependency files for incremental SCA: exactly the files the SCA parsers
+ * read, so a PR that only changes yarn.lock or gradle.lockfile is still
+ * checked.
+ */
 export function isScaManifestPath(filePath: string): boolean {
-  const norm = normalizeRepoPath(filePath);
-  const base = norm.split("/").pop() ?? norm;
-  if (SCA_MANIFEST_BASENAMES.has(base)) return true;
-  const ext = base.includes(".") ? `.${base.split(".").pop()}` : "";
-  return SCA_MANIFEST_EXTENSIONS.has(ext);
+  return isDependencyFile(normalizeRepoPath(filePath));
 }
 
 export interface IncrementalFileFilterResult {

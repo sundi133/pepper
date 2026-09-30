@@ -3,6 +3,10 @@
 Pepper supports enterprise **SAML 2.0 single sign-on** against one org-wide
 identity provider (Okta, Entra/Azure AD, OneLogin, Ping, …).
 
+> **Microsoft Entra ID?** Native "Sign in with Microsoft" (OpenID Connect) is
+> usually simpler and handles large group memberships. See
+> [ENTRA_ID_SETUP.md](./ENTRA_ID_SETUP.md), which also covers SAML with Entra.
+
 > **Scope.** This is the **single global IdP** model — one IdP for the whole
 > install, configured via environment variables. It fits **self-hosted,
 > single-tenant** Pepper. Multi-tenant SaaS (per-organization IdPs, e.g. the

@@ -61,6 +61,10 @@ SAML_GROUP_ATTR=groups
 SAML_ROLE_MAP={"pepper-admins":"ADMIN","appsec":"SECURITY","engineers":"DEVELOPER"}
 SAML_DEFAULT_ROLE=VIEWER
 # SAML_WANT_ASSERTIONS_SIGNED=false              # only if the IdP signs the <Response>
+# ── or Microsoft Entra ID (OpenID Connect; see docs/ENTRA_ID_SETUP.md) ──
+# ENABLE_ENTRA_SSO=true
+# ENTRA_TENANT_ID=<tenant-id>  ENTRA_CLIENT_ID=<client-id>  ENTRA_CLIENT_SECRET=<secret>
+# ENTRA_ROLE_MAP={"Pepper.Admin":"ADMIN","Pepper.Security":"SECURITY"}
 
 # ── Azure DevOps Server ──
 AZURE_DEVOPS_API_VERSION=7.1                     # 6.0 for Server 2020, 5.0 for 2019

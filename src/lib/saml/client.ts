@@ -39,6 +39,13 @@ const NAME_KEYS = [
   "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/displayname",
 ];
 
+// Microsoft Entra ID sends groups (object IDs) and app roles under these claim
+// URIs; they're read in addition to the default "groups" attribute.
+export const ENTRA_SAML_GROUPS_CLAIM = "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups";
+export const ENTRA_SAML_ROLE_CLAIM = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
+/** Sent instead of the groups when a user is in more than 150 groups. */
+export const ENTRA_SAML_GROUPS_OVERAGE_CLAIM = "http://schemas.microsoft.com/claims/groups.link";
+
 type Profile = Record<string, unknown> & { nameID?: string | null };
 
 function firstString(profile: Profile, keys: string[]): string | undefined {
@@ -56,6 +63,8 @@ export interface SamlIdentity {
   email: string;
   name: string | null;
   groups: string[];
+  /** Entra left the groups out (too many); only app roles can map. */
+  groupsOverage?: true;
 }
 
 /**
@@ -82,8 +91,19 @@ export function extractSamlIdentity(
     null;
 
   const groups = normalizeGroups(profile[cfg.groupAttr]);
-
-  return { email: email.toLowerCase(), name, groups };
+  if (cfg.groupAttr === "groups") {
+    // Default attribute: also accept Entra's claim URIs, so Entra works
+    // without setting SAML_GROUP_ATTR.
+    for (const g of [
+      ...normalizeGroups(profile[ENTRA_SAML_GROUPS_CLAIM]),
+      ...normalizeGroups(profile[ENTRA_SAML_ROLE_CLAIM]),
+    ]) {
+      if (!groups.includes(g)) groups.push(g);
+    }
+  }
+  const identity: SamlIdentity = { email: email.toLowerCase(), name, groups };
+  if (profile[ENTRA_SAML_GROUPS_OVERAGE_CLAIM] !== undefined) identity.groupsOverage = true;
+  return identity;
 }
 
 function joinNames(profile: Profile): string | undefined {

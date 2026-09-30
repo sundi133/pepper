@@ -21,7 +21,8 @@ export class SamlProvisionError extends Error {
   }
 }
 
-async function resolveTargetOrgId(defaultOrgSlug: string): Promise<string> {
+/** The organization SSO users join: the given slug, else the oldest org. */
+export async function resolveTargetOrgId(defaultOrgSlug: string): Promise<string> {
   if (defaultOrgSlug) {
     const org = await prisma.organization.findUnique({
       where: { slug: defaultOrgSlug },

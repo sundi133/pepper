@@ -40,16 +40,48 @@ function ssoErrorMessage(error: string | undefined): string {
   if (error === "sso") {
     return "Single sign-on failed. Please try again or use your password.";
   }
+  if (error === "entra_no_role") {
+    return "Your Microsoft account isn't assigned to Pepper. Ask your administrator to add you to a Pepper group or app role.";
+  }
+  if (error === "entra_guest") {
+    return "Guest accounts can't sign in to Pepper. Use an account from your organization's directory.";
+  }
+  if (error === "entra_tenant") {
+    return "That Microsoft account belongs to a different organization.";
+  }
+  if (error === "entra_no_email") {
+    return "Your Microsoft account has no email address or user principal name Pepper can use.";
+  }
+  if (error === "OAuthAccountNotLinked") {
+    return "This email is already linked to a different sign-in method.";
+  }
+  if (error === "OAuthSignin" || error === "OAuthCallback" || error === "Callback") {
+    return "Microsoft sign-in failed. Please try again, or contact your administrator.";
+  }
   return "";
+}
+
+/** Microsoft's four-square mark (brand colours). */
+function MicrosoftMark() {
+  return (
+    <svg viewBox="0 0 21 21" className="h-4 w-4" aria-hidden>
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    </svg>
+  );
 }
 
 export function LoginForm({
   captchaSiteKey,
   samlEnabled = false,
+  entraEnabled = false,
   initialError,
 }: {
   captchaSiteKey: string;
   samlEnabled?: boolean;
+  entraEnabled?: boolean;
   initialError?: string;
 }) {
   const router = useRouter();
@@ -184,18 +216,30 @@ export function LoginForm({
                   {loading ? "Signing in…" : "Sign in"}
                 </Button>
               </form>
+              {samlEnabled || entraEnabled ? (
+                <div className="my-4 flex items-center gap-3">
+                  <span className="h-px flex-1 bg-border" />
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                    or
+                  </span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              ) : null}
+              {entraEnabled ? (
+                <Button
+                  variant="outline"
+                  className="h-11 w-full gap-2"
+                  onClick={() => void signIn("entra", { callbackUrl: "/dashboard" })}
+                >
+                  <MicrosoftMark />
+                  Sign in with Microsoft
+                </Button>
+              ) : null}
               {samlEnabled ? (
                 <>
-                  <div className="my-4 flex items-center gap-3">
-                    <span className="h-px flex-1 bg-border" />
-                    <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                      or
-                    </span>
-                    <span className="h-px flex-1 bg-border" />
-                  </div>
                   <Button
                     variant="outline"
-                    className="h-11 w-full gap-2"
+                    className={`h-11 w-full gap-2${entraEnabled ? " mt-2" : ""}`}
                     asChild
                   >
                     {/* Full navigation to the SAML API route, not client routing. */}

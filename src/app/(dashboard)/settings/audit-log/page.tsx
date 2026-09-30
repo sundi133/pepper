@@ -43,6 +43,7 @@ interface Retention {
   effectiveDays: number | null;
   minDays: number;
   lastPurge: { action: string; createdAt: string; details: Record<string, unknown> | null } | null;
+  scanData?: { uploadDays: number | null; historyDays: number | null };
 }
 
 interface ArchiveObject {
@@ -393,6 +394,21 @@ export default function AuditLogPage() {
                 </span>
               )}
             </div>
+
+            {retention.scanData && (
+              <div className="space-y-1 border-t pt-3 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">Scan data</p>
+                <p>Uploaded source archives are {describeDays(retention.scanData.uploadDays)}.</p>
+                <p>
+                  Scan history and AI fix runs are {describeDays(retention.scanData.historyDays)}; each project&apos;s
+                  latest scan is always kept.
+                </p>
+                <p>
+                  Set by the administrator with <code>UPLOAD_RETENTION_DAYS</code> and{" "}
+                  <code>SCAN_HISTORY_RETENTION_DAYS</code> in the server environment.
+                </p>
+              </div>
+            )}
 
             <div className="border-t pt-3">
               {archives === null ? (

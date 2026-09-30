@@ -161,6 +161,7 @@ explains its settings.
 - **Sign-in:** Microsoft Entra ID or SAML single sign-on.
 - **Azure DevOps Server:** set `AZURE_DEVOPS_API_VERSION` (`6.0` for Server 2020, `7.0` for Server 2022). Connect it in *Settings → Integrations*.
 - **Email** notifications (SMTP), **audit log retention**, and **scan concurrency**.
+- **Data retention:** `UPLOAD_RETENTION_DAYS` deletes uploaded source archives after that many days; `SCAN_HISTORY_RETENTION_DAYS` trims old scan history and AI fix runs. Both keep everything by default.
 - **Ticketing:** Azure Boards, Jira and Slack are configured in the UI, under *Settings → Integrations → Outbound*.
 
 After changing `.env`, run `docker compose up -d`. Only the changed containers restart.

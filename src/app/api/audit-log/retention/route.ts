@@ -7,6 +7,7 @@ import {
   effectiveRetentionDays,
   instanceRetentionDays,
 } from "@/lib/audit-retention";
+import { scanHistoryRetentionDays, uploadRetentionDays } from "@/lib/data-retention";
 
 const MAX_RETENTION_DAYS = 3650;
 
@@ -28,6 +29,11 @@ async function current(orgId: string) {
     effectiveDays: effectiveRetentionDays(settings?.auditLogRetentionDays, instanceDays),
     minDays: MIN_RETENTION_DAYS,
     lastPurge,
+    /** Instance-wide scan data retention (server environment, read-only here). */
+    scanData: {
+      uploadDays: uploadRetentionDays(),
+      historyDays: scanHistoryRetentionDays(),
+    },
   };
 }
 

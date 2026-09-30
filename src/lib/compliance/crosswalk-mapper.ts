@@ -7,8 +7,8 @@
  * auditors require.
  *
  * This is Tier 1 of the two-tier engine (see docs/COMPLIANCE_REPORTING_SPEC.md).
- * Frameworks whose controls carry `cweMapping` / `appliesTo` are mapped here;
- * everything else falls back to the LLM mapper.
+ * Frameworks whose controls carry `cweMapping` / `ruleMapping` / `appliesTo`
+ * are mapped here; everything else falls back to the LLM mapper.
  */
 import { ComplianceFramework, ComplianceControl, Coverage } from "./pdf-parser";
 import type {
@@ -28,12 +28,27 @@ export function normalizeCwe(raw?: string | null): string | null {
 }
 
 /**
+ * Normalize a scanner check id so catalogs and findings agree across Trivy
+ * versions: "AVD-KSV-0017", "ksv017", "KSV-0017" → "KSV-0017". Other rule ids
+ * are upper-cased as-is.
+ */
+export function normalizeRuleId(raw?: string | null): string | null {
+  if (!raw) return null;
+  const id = String(raw).trim().toUpperCase().replace(/^AVD-/, "");
+  const m = id.match(/^([A-Z]+)-?(\d+)$/);
+  return m ? `${m[1]}-${m[2].padStart(4, "0")}` : id || null;
+}
+
+/**
  * True when this framework carries deterministic mapping data and should be
  * handled by the crosswalk engine rather than the LLM.
  */
 export function hasDeterministicMapping(framework: ComplianceFramework): boolean {
   return framework.controls.some(
-    (c) => (c.cweMapping && c.cweMapping.length > 0) || c.appliesTo,
+    (c) =>
+      (c.cweMapping && c.cweMapping.length > 0) ||
+      (c.ruleMapping && c.ruleMapping.length > 0) ||
+      c.appliesTo,
   );
 }
 
@@ -41,6 +56,7 @@ export function hasDeterministicMapping(framework: ComplianceFramework): boolean
 export function controlCoverage(control: ComplianceControl): Coverage {
   if (control.coverage) return control.coverage;
   if (control.cweMapping && control.cweMapping.length > 0) return "assessable";
+  if (control.ruleMapping && control.ruleMapping.length > 0) return "assessable";
   if (control.appliesTo) return "assessable";
   return "not-assessable";
 }
@@ -49,6 +65,7 @@ export function controlCoverage(control: ComplianceControl): Coverage {
  * Map findings to controls deterministically.
  *
  * - A finding whose CWE is listed in a control's `cweMapping` → "direct".
+ * - A finding raised by a check listed in a control's `ruleMapping` → "direct".
  * - A finding whose scanner matches a control's `appliesTo` → "supporting".
  * Direct wins over supporting for the same control.
  */
@@ -58,9 +75,17 @@ export function mapFindingsDeterministic(
 ): FindingComplianceResult[] {
   // Build a CWE → controls[] index once per framework.
   const cweIndex = new Map<string, ComplianceControl[]>();
+  const ruleIndex = new Map<string, ComplianceControl[]>();
   const activityControls: ComplianceControl[] = [];
 
   for (const control of framework.controls) {
+    for (const rule of control.ruleMapping || []) {
+      const norm = normalizeRuleId(rule);
+      if (!norm) continue;
+      const list = ruleIndex.get(norm) || [];
+      list.push(control);
+      ruleIndex.set(norm, list);
+    }
     for (const cwe of control.cweMapping || []) {
       const norm = normalizeCwe(cwe);
       if (!norm) continue;
@@ -84,6 +109,23 @@ export function mapFindingsDeterministic(
           theme: control.theme || "Unknown",
           relevance: "direct",
           reasoning: `${cwe} maps directly to ${control.controlId} (${control.title}) per the ${framework.name} crosswalk.`,
+        });
+      }
+    }
+
+    // Direct: the check that raised the finding is named by the control.
+    const ruleIds = [finding.ruleId, ...(finding.ruleIds || [])]
+      .map(normalizeRuleId)
+      .filter((r): r is string => Boolean(r));
+    for (const rule of new Set(ruleIds)) {
+      for (const control of ruleIndex.get(rule) || []) {
+        if (byControlId.has(control.controlId)) continue;
+        byControlId.set(control.controlId, {
+          controlId: control.controlId,
+          title: control.title,
+          theme: control.theme || "Unknown",
+          relevance: "direct",
+          reasoning: `Check ${rule} is one of the checks for ${control.controlId} (${control.title}) in the ${framework.name} mapping.`,
         });
       }
     }

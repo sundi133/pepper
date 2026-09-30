@@ -7,6 +7,8 @@ import { FindingForMapping } from "@/lib/compliance/llm-mapper";
 import {
   frameworkSlug,
   runFrameworkMapping,
+  complianceCacheKey,
+  toFindingsForMapping,
   type FindingRow,
 } from "@/lib/compliance/report-run";
 import { getLlmConfig as resolveLlmConfig } from "@/lib/llm-gateway";
@@ -99,19 +101,11 @@ export async function GET(
       filePath: true,
       startLine: true,
       status: true,
+      metadata: true,
     },
   });
 
-  const findingsForMapping: FindingForMapping[] = findings.map((f) => ({
-    id: f.id,
-    title: f.title,
-    description: f.description,
-    severity: f.severity,
-    scanner: f.scanner,
-    cweId: f.cweId,
-    ruleId: f.ruleId,
-    filePath: f.filePath,
-  }));
+  const findingsForMapping: FindingForMapping[] = toFindingsForMapping(findings);
 
   const scanMeta = (scan.scannerProgress as Record<string, unknown>) || {};
   const cache =
@@ -155,7 +149,7 @@ export async function GET(
   const perFramework = await Promise.all(
     frameworks.map(async (framework) => {
       const slug = frameworkSlug(framework.name);
-      const cacheKey = `${slug}::${mode}::${modelSeg}`;
+      const cacheKey = complianceCacheKey(framework, mode, modelSeg);
 
       if (!refresh && cache[cacheKey]) {
         return { cacheKey, report: cache[cacheKey], cached: true };

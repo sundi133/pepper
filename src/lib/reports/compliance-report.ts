@@ -62,7 +62,7 @@ export type ComplianceExportInput = {
 
 const SOURCE_LABELS: Record<string, string> = {
   agentic: "Agentic AI mapping (verified)",
-  crosswalk: "Deterministic CWE crosswalk",
+  crosswalk: "Deterministic crosswalk (CWE / check id)",
   llm: "AI mapping",
 };
 

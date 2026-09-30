@@ -60,6 +60,8 @@ interface CatalogControl {
   controlId: string;
   title: string;
   theme: string;
+  /** Finest grouping available (ASVS section, else theme) for focusing. */
+  section: string;
   coverage: string;
   summary: string;
   requirements: string;
@@ -70,6 +72,7 @@ function buildCatalog(framework: ComplianceFramework): CatalogControl[] {
     controlId: c.controlId,
     title: c.title,
     theme: c.theme || "",
+    section: c.subclause || c.theme || "",
     coverage: controlCoverage(c),
     summary: (c.summary || "").slice(0, 220),
     requirements: (c.implementationChecklist || []).slice(0, 3).join("; "),
@@ -87,6 +90,28 @@ function catalogText(catalog: CatalogControl[]): string {
 
 const REASON_BATCH = 8; // findings per reasoning call — agentic reasoning needs room
 
+/** Catalogs up to this size go to the LLM whole (the historical behaviour). */
+const FULL_CATALOG_MAX = 80;
+/** Cap on a focused catalog for large frameworks (e.g. ASVS's 286 requirements). */
+const FOCUSED_CATALOG_MAX = 60;
+
+/**
+ * For large catalogs, send only what a batch plausibly needs: the crosswalk
+ * hints plus the other controls in their sections, so the model can still
+ * pick a closer sibling requirement without paying for the whole standard on
+ * every call.
+ */
+export function focusedCatalog(catalog: CatalogControl[], hintIds: Set<string>): CatalogControl[] {
+  if (catalog.length <= FULL_CATALOG_MAX) return catalog;
+  const sections = new Set(catalog.filter((c) => hintIds.has(c.controlId)).map((c) => c.section));
+  const picked = catalog.filter((c) => hintIds.has(c.controlId));
+  for (const c of catalog) {
+    if (picked.length >= Math.max(FOCUSED_CATALOG_MAX, hintIds.size)) break;
+    if (!hintIds.has(c.controlId) && sections.has(c.section)) picked.push(c);
+  }
+  return picked;
+}
+
 export async function mapFindingsAgentic(
   findings: FindingForMapping[],
   framework: ComplianceFramework,
@@ -96,7 +121,6 @@ export async function mapFindingsAgentic(
   const client = createLlmClient(llmConfig);
   const catalog = buildCatalog(framework);
   const validIds = new Set(catalog.map((c) => c.controlId));
-  const catalogStr = catalogText(catalog);
 
   // Ground: deterministic priors per finding.
   const priors = new Map<string, ControlMapping[]>();
@@ -125,12 +149,13 @@ export async function mapFindingsAgentic(
     );
 
     try {
+      const hintIds = new Set(batch.flatMap((f) => (priors.get(f.id) || []).map((c) => c.controlId)));
       let mapped = await reasonBatch(
         client,
         llmConfig.model,
         batch,
         priors,
-        catalogStr,
+        catalogText(focusedCatalog(catalog, hintIds)),
         framework.name,
       );
       const proposed = Array.from(mapped.values()).reduce(

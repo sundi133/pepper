@@ -8,9 +8,12 @@ import {
   type ComplianceFrameworkReport,
 } from "@/lib/reports/compliance-report";
 import { REPORT_HTML_CSP, reportFileSlug } from "@/lib/reports/report-html";
+import { buildComplianceCsv } from "@/lib/reports/compliance-csv";
+import { loadAllFrameworks } from "@/lib/compliance/pdf-parser";
+import { complianceCacheKey, frameworkSlug } from "@/lib/compliance/report-run";
 
 /**
- * GET /api/scans/[scanId]/compliance/export?format=html|pdf
+ * GET /api/scans/[scanId]/compliance/export?format=html|pdf|csv
  *
  * Renders already-generated compliance results as a downloadable report. Reads
  * only the per-framework cache written by the compliance stream/GET routes —
@@ -20,6 +23,8 @@ import { REPORT_HTML_CSP, reportFileSlug } from "@/lib/reports/report-html";
  *   ?frameworks=owasp-top-10,pci-dss   Framework slugs to include (required).
  *   ?mode=deep|fast                    Mapping mode the results were built with.
  *   ?model=<id>                        Model used for deep mode (omit for crosswalk).
+ *   ?rows=controls|findings            CSV only: one row per control (default) or
+ *                                      per finding-to-control mapping.
  */
 export async function GET(
   req: NextRequest,
@@ -35,9 +40,9 @@ export async function GET(
 
   const url = new URL(req.url);
   const format = url.searchParams.get("format") || "html";
-  if (format !== "html" && format !== "pdf") {
+  if (format !== "html" && format !== "pdf" && format !== "csv") {
     return NextResponse.json(
-      { error: "Unsupported format. Use format=html or format=pdf." },
+      { error: "Unsupported format. Use format=html, format=pdf or format=csv." },
       { status: 400 },
     );
   }
@@ -75,10 +80,12 @@ export async function GET(
   const cache =
     (scanMeta._complianceByFramework as Record<string, unknown>) || {};
 
+  const catalogs = new Map(loadAllFrameworks().map((f) => [frameworkSlug(f.name), f]));
   const reports: ComplianceFrameworkReport[] = [];
   const missing: string[] = [];
   for (const slug of slugs) {
-    const cached = cache[`${slug}::${mode}::${modelSeg}`];
+    const framework = catalogs.get(slug);
+    const cached = cache[complianceCacheKey(framework ?? { name: slug }, mode, modelSeg)];
     if (cached && typeof cached === "object") {
       reports.push(cached as ComplianceFrameworkReport);
     } else {
@@ -109,6 +116,17 @@ export async function GET(
 
   const timestamp = new Date().toISOString().slice(0, 10);
   const fileBase = `${reportFileSlug(input.projectName)}-compliance-${timestamp}`;
+
+  if (format === "csv") {
+    const rows = url.searchParams.get("rows") === "findings" ? "findings" : "controls";
+    return new NextResponse(buildComplianceCsv(input, [...catalogs.values()], rows), {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${fileBase}-${rows}.csv"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
 
   if (format === "pdf") {
     try {

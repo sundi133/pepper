@@ -110,6 +110,28 @@ interface CoverageBucketEntry {
   findingCount: number;
   criticalHighCount: number;
   reason?: string;
+  /** ASVS verification levels the requirement belongs to. */
+  levels?: number[];
+}
+
+/** Per-level bucket counts for frameworks with levels (ASVS L1–L3). */
+function levelBreakdown(buckets: NonNullable<FrameworkReport["buckets"]>) {
+  const all = [
+    ...buckets.gapsFound.map((e) => ({ e, b: "gaps" as const })),
+    ...buckets.noIssuesDetected.map((e) => ({ e, b: "clear" as const })),
+    ...buckets.notCovered.map((e) => ({ e, b: "notCovered" as const })),
+  ];
+  if (!all.some(({ e }) => e.levels?.length)) return null;
+  return [1, 2, 3].map((level) => {
+    const at = all.filter(({ e }) => e.levels?.includes(level));
+    return {
+      level,
+      total: at.length,
+      gaps: at.filter((x) => x.b === "gaps").length,
+      clear: at.filter((x) => x.b === "clear").length,
+      notCovered: at.filter((x) => x.b === "notCovered").length,
+    };
+  });
 }
 
 interface FrameworkReport {
@@ -140,7 +162,10 @@ interface AvailableFramework {
 }
 
 function csvEscape(value: string | number | null | undefined): string {
-  const stringValue = value == null ? "" : String(value);
+  let stringValue = value == null ? "" : String(value);
+  // Finding titles and paths come from scanned code: keep spreadsheets from
+  // running them as formulas.
+  if (/^[=+\-@\t\r]/.test(stringValue)) stringValue = `'${stringValue}`;
   return `"${stringValue.replace(/"/g, '""')}"`;
 }
 
@@ -329,7 +354,7 @@ export default function ComplianceReportPage() {
     { label: "Compliance" },
   ];
 
-  function handleExportReport(format: "pdf" | "html") {
+  function handleExportReport(format: "pdf" | "html" | "csv") {
     const slugs = visibleReports
       .map((r) => r.slug)
       .filter((s): s is string => !!s);
@@ -473,7 +498,7 @@ export default function ComplianceReportPage() {
                   ? "bg-green-600 text-white"
                   : "text-muted-foreground hover:text-foreground"
               }`}
-              title="Deterministic CWE crosswalk only (instant, reproducible, no LLM)"
+              title="Deterministic crosswalk only — CWE and check ids (instant, reproducible, no LLM)"
             >
               Fast
             </button>
@@ -513,6 +538,14 @@ export default function ComplianceReportPage() {
               <Button variant="outline" onClick={handleExportCsv}>
                 <Download className="mr-2 h-4 w-4" />
                 Export CSV
+              </Button>
+              <Button
+                variant="outline"
+                title="One row per control, including controls with no findings and those code scanning can't assess"
+                onClick={() => handleExportReport("csv")}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Control matrix CSV
               </Button>
               <Button
                 variant="outline"
@@ -643,7 +676,7 @@ export default function ComplianceReportPage() {
             <CardDescription>
               {mode === "deep"
                 ? "Grounding findings, reasoning about controls, and verifying each mapping."
-                : "Deterministic CWE crosswalk."}
+                : "Deterministic crosswalk (CWE / check id)."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -703,7 +736,7 @@ export default function ComplianceReportPage() {
                       }
                     >
                       {report.mappingSource === "crosswalk"
-                        ? "Deterministic (CWE crosswalk)"
+                        ? "Deterministic (crosswalk)"
                         : report.mappingSource === "agentic"
                           ? "Agentic AI (grounded + verified)"
                           : "AI-mapped"}
@@ -796,6 +829,36 @@ export default function ComplianceReportPage() {
                     </p>
                   </div>
                 </div>
+                {(() => {
+                  const levels = levelBreakdown(report.buckets);
+                  if (!levels) return null;
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs text-muted-foreground">
+                            <th className="py-1 pr-4 font-medium">Level</th>
+                            <th className="py-1 pr-4 font-medium">Requirements</th>
+                            <th className="py-1 pr-4 font-medium">Gaps found</th>
+                            <th className="py-1 pr-4 font-medium">No issues detected</th>
+                            <th className="py-1 font-medium">Not covered</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {levels.map((l) => (
+                            <tr key={l.level} className="border-t">
+                              <td className="py-1.5 pr-4 font-medium">L{l.level}</td>
+                              <td className="py-1.5 pr-4">{l.total}</td>
+                              <td className="py-1.5 pr-4 text-destructive">{l.gaps}</td>
+                              <td className="py-1.5 pr-4 text-green-600">{l.clear}</td>
+                              <td className="py-1.5 text-muted-foreground">{l.notCovered}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
                 {report.buckets.notCovered.length > 0 && (
                   <details className="text-sm">
                     <summary className="cursor-pointer text-muted-foreground hover:text-foreground">

@@ -43,7 +43,43 @@ export type FindingRow = {
   filePath: string | null;
   startLine: number | null;
   status: string;
+  /** Scanner metadata; grouped findings list their checks in `checkIds`. */
+  metadata?: unknown;
 };
+
+/**
+ * Cache key for one framework's report on a scan. The catalog revision is
+ * part of it only when set, so existing cached reports stay valid for
+ * catalogs that never changed.
+ */
+export function complianceCacheKey(
+  framework: { name: string; revision?: string },
+  mode: string,
+  modelSeg: string,
+): string {
+  const slug = frameworkSlug(framework.name);
+  return framework.revision
+    ? `${slug}@${framework.revision}::${mode}::${modelSeg}`
+    : `${slug}::${mode}::${modelSeg}`;
+}
+
+/** The mapping engines' view of a finding. */
+export function toFindingsForMapping(findings: FindingRow[]): FindingForMapping[] {
+  return findings.map((f) => {
+    const checkIds = (f.metadata as { checkIds?: unknown } | null | undefined)?.checkIds;
+    return {
+      id: f.id,
+      title: f.title,
+      description: f.description,
+      severity: f.severity,
+      scanner: f.scanner,
+      cweId: f.cweId,
+      ruleId: f.ruleId,
+      ...(Array.isArray(checkIds) ? { ruleIds: checkIds.filter((c): c is string => typeof c === "string") } : {}),
+      filePath: f.filePath,
+    };
+  });
+}
 
 export function buildFrameworkReport(
   framework: ComplianceFramework,
@@ -111,6 +147,7 @@ export function buildFrameworkReport(
       coverage,
       findingCount,
       criticalHighCount,
+      ...(control.levels?.length ? { levels: control.levels } : {}),
     };
     if (findingCount > 0) {
       gapsFound.push(entry);

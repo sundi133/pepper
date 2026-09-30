@@ -27,6 +27,8 @@ export interface FindingForMapping {
   scanner: string;
   cweId?: string | null;
   ruleId?: string | null;
+  /** Further check ids behind a grouped finding (metadata.checkIds). */
+  ruleIds?: string[];
   filePath?: string | null;
 }
 

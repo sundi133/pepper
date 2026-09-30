@@ -43,12 +43,33 @@ export interface ComplianceControl {
    * controls" (PCI 6.3.1, NIST RV.1, SA-11, RA-5, SSDF PW.7/PW.8).
    */
   appliesTo?: { scanners?: string[] };
+
+  /**
+   * Deterministic crosswalk by scanner rule id (e.g. ["KSV-0017","AWS-0086"]):
+   * a finding raised by one of these checks is a direct gap for this control.
+   * Used where the benchmark is defined in terms of configuration checks (CIS).
+   */
+  ruleMapping?: string[];
+
+  /** ASVS verification levels this requirement belongs to (1, 2, 3). */
+  levels?: number[];
+
+  /** Benchmarks: "manual" = the benchmark marks this control as a manual check. */
+  assessment?: "manual";
 }
 
 export interface ComplianceFramework {
   name: string;
   /** Framework revision, stamped into every report (e.g. "4.0.1", "2021", "Rev 5"). */
   version?: string;
+  /**
+   * Bump when a catalog's controls change under the same name, so cached
+   * reports built from the old catalog aren't reused.
+   */
+  revision?: string;
+  /** Provenance and license of the catalog data. */
+  source?: string;
+  license?: string;
   fileName: string;
   controls: ComplianceControl[];
   /** Full text catalog for LLM context — all controls as a compact reference */
@@ -387,7 +408,10 @@ export function loadAllFrameworks(): ComplianceFramework[] {
   // so a hand-authored JSON supersedes a PDF parsed for LLM mapping.
   const isDeterministic = (f: ComplianceFramework) =>
     f.controls.some(
-      (c) => (c.cweMapping && c.cweMapping.length > 0) || c.appliesTo,
+      (c) =>
+        (c.cweMapping && c.cweMapping.length > 0) ||
+        (c.ruleMapping && c.ruleMapping.length > 0) ||
+        c.appliesTo,
     );
   const slugOf = (name: string) =>
     name

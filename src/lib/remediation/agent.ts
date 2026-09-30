@@ -46,6 +46,7 @@ import {
 import {
   PROVIDER_LABELS,
   authenticatedRepoUrl,
+  credentialsMismatch,
   loadProviderCredentials,
   missingCredentialsMessage,
   openProviderPullRequest,
@@ -266,6 +267,11 @@ export async function runRemediation(runId: string): Promise<void> {
     const creds = await loadProviderCredentials(run.organizationId, target.provider);
     if (!creds) {
       await finish("FAILED", { error: missingCredentialsMessage(target.provider) });
+      return;
+    }
+    const mismatch = credentialsMismatch(target.repoUrl, creds);
+    if (mismatch) {
+      await finish("FAILED", { error: mismatch });
       return;
     }
 

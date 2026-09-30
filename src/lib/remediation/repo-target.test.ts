@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authenticatedRepoUrl, resolveRemediationRepo } from "./repo-target";
+import { authenticatedRepoUrl, credentialsMismatch, resolveRemediationRepo } from "./repo-target";
 
 const project = {
   repoUrl: null,
@@ -41,6 +41,23 @@ describe("resolveRemediationRepo", () => {
     ).toMatchObject({ ok: true, provider: "azure_devops" });
   });
 
+  it("recognises an Azure DevOps Server repo added by URL (not via the integration)", () => {
+    for (const url of [
+      "https://tfs.corp.local/DefaultCollection/Web/_git/api",
+      "https://tfs.corp.local/tfs/DefaultCollection/Web/_git/api",
+      "http://10.0.0.5:8080/DefaultCollection/Web/_git/api.git",
+    ]) {
+      expect(
+        resolveRemediationRepo({ scan: { sourceType: "UPLOAD", sourceRef: "scans/x.zip", branch: null }, project: { ...project, repoUrl: url } }),
+        url,
+      ).toMatchObject({ ok: true, provider: "azure_devops", repoUrl: url });
+    }
+    // `_git` needs a collection and project before it, and a repo after it.
+    expect(
+      resolveRemediationRepo({ scan: { sourceType: "GIT_CLONE", sourceRef: "https://git.example.com/_git/api", branch: null }, project }),
+    ).toMatchObject({ ok: false, code: "PROVIDER_UNSUPPORTED" });
+  });
+
   it("rejects scans without a repository and unknown hosts", () => {
     expect(
       resolveRemediationRepo({ scan: { sourceType: "UPLOAD", sourceRef: "scans/x.zip", branch: null }, project }),
@@ -65,5 +82,27 @@ describe("authenticatedRepoUrl", () => {
         auth: { organization: "o", pat: "pat" },
       }),
     ).toBe("https://pat@dev.azure.com/o/p/_git/r");
+  });
+});
+
+describe("credentialsMismatch", () => {
+  const server = { provider: "azure_devops" as const, auth: { organization: "DefaultCollection", pat: "p", serverUrl: "https://tfs.corp.local/tfs" } };
+  const cloud = { provider: "azure_devops" as const, auth: { organization: "acme", pat: "p" } };
+
+  it("allows the connected server or cloud", () => {
+    expect(credentialsMismatch("https://tfs.corp.local/tfs/DefaultCollection/Web/_git/api", server)).toBeNull();
+    expect(credentialsMismatch("https://TFS.corp.local/tfs/DefaultCollection/Web/_git/api", server)).toBeNull();
+    expect(credentialsMismatch("https://dev.azure.com/acme/Web/_git/api", cloud)).toBeNull();
+    expect(credentialsMismatch("https://acme.visualstudio.com/Web/_git/api", cloud)).toBeNull();
+  });
+
+  it("never sends the PAT to another host", () => {
+    expect(credentialsMismatch("https://evil.example/c/p/_git/api", server)).toMatch(/is not the connected Azure DevOps Server \(tfs\.corp\.local\)/);
+    expect(credentialsMismatch("http://tfs.corp.local/tfs/DefaultCollection/Web/_git/api", server)).toMatch(/not the connected/);
+    expect(credentialsMismatch("https://tfs.corp.local/c/p/_git/api", cloud)).toMatch(/connected to Azure DevOps Services/);
+  });
+
+  it("leaves other providers alone", () => {
+    expect(credentialsMismatch("https://github.com/a/b", { provider: "github", token: "t" })).toBeNull();
   });
 });

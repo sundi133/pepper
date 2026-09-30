@@ -1,6 +1,6 @@
 import { azureGet, parseAzureErrorBody } from "./azure-devops-api";
 import type { AzureDevOpsAuth } from "./azure-devops-api";
-import { parseAzureDevOpsRef } from "./parse-azure-devops-repo-input";
+import { azureDevOpsRepoCloneUrl, parseAzureDevOpsRef } from "./parse-azure-devops-repo-input";
 
 export type AzureDevOpsRepoListItem = {
   id: string;
@@ -59,7 +59,7 @@ export async function listAzureDevOpsRepositoriesInOrganization(
       // appending the same repositories once per page for large orgs.
       if (seenIds.has(r.id)) continue;
       const projectName = r.project.name;
-      const cloneUrl = r.remoteUrl?.trim() || r.webUrl?.trim() || "";
+      const cloneUrl = azureDevOpsRepoCloneUrl(auth, projectName, r.name, r);
       if (!cloneUrl) continue;
       seenIds.add(r.id);
       added++;

@@ -12,7 +12,6 @@ import {
   ScanStatusBadge,
   GateResultBadge,
 } from "@/components/scans/scan-status-badge";
-import { CreateScanDialog } from "@/components/scans/create-scan-dialog";
 import {
   Table,
   TableBody,
@@ -130,11 +129,10 @@ export default function ScansPage() {
           <h1 className="text-2xl font-bold">Scans</h1>
           <p className="text-muted-foreground">
             {canCreateScan
-              ? "Review findings from the table. Use New scan to queue a scan from the dialog."
-              : "Review findings from the table. Only admins and security users can create scans."}
+              ? "Review findings from the table. Start a scan with New scan in the sidebar."
+              : "Review findings from the table. Viewers can't start scans."}
           </p>
         </div>
-        {canCreateScan && <CreateScanDialog onScanCreated={() => refresh()} />}
       </div>
 
       <Card>

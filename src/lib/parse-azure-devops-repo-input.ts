@@ -38,6 +38,26 @@ export function azureDevOpsServerCloneUrl(
 }
 
 /**
+ * The URL Pepper clones an Azure DevOps repository from. On Azure DevOps
+ * Server the API's `remoteUrl` is built from the server's configured public
+ * URL, which Pepper may not be able to reach (reverse proxy, split DNS, an
+ * alias only users resolve). The Server URL entered in Pepper is known to
+ * work, since connecting probed it, so Server clones are built on that.
+ * Services keeps the API's URL. Returns "" when there is nothing to clone.
+ */
+export function azureDevOpsRepoCloneUrl(
+  auth: { organization: string; serverUrl?: string | null },
+  project: string,
+  repo: string,
+  apiUrls: { remoteUrl?: string | null; webUrl?: string | null } = {},
+): string {
+  if (auth.serverUrl?.trim()) {
+    return azureDevOpsServerCloneUrl(auth.serverUrl, auth.organization, project, repo);
+  }
+  return apiUrls.remoteUrl?.trim() || apiUrls.webUrl?.trim() || "";
+}
+
+/**
  * Parse a repository reference in any of the forms Pepper accepts:
  *   - `project/repo` (org taken from the connected account)
  *   - `org/project/repo`

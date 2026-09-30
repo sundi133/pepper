@@ -191,7 +191,7 @@
       <li><strong>Docker Engine 24 or newer</strong> with the <strong>Compose v2 plugin</strong>.</li>
       <li><strong>Outbound access from the VM</strong>, directly or through your proxy:
         <ul>
-          <li>Docker Hub (<code>registry-1.docker.io</code>) and <code>quay.io</code>. Only needed to pull images; without it, use the offline route in step 4.</li>
+          <li>Docker Hub (<code>registry-1.docker.io</code>) and <code>quay.io</code>. Only needed to pull images; without it, use the offline route in step 4. Docker Hub limits anonymous pulls per public IP. Behind a shared company IP, run <code>docker login</code> with any Docker Hub account first, or use the offline route.</li>
           <li>Your Git servers, for example Azure DevOps Server.</li>
           <li>Your LLM endpoint.</li>
           <li><code>api.osv.dev</code> (optional, for dependency vulnerability data).</li>
@@ -321,13 +321,44 @@ docker compose up -d</pre></div>
     <details>
       <summary>Outbound proxy or internal certificate authority</summary>
       <div>
-        <p>Put your internal CA certificate (PEM) in <code>/opt/pepper/certs/internal-ca.pem</code>. Then add the lines you need to <code>.env</code>:</p>
-        <div class="cmd"><pre>NODE_EXTRA_CA_CERTS="/certs/internal-ca.pem"
-GIT_SSL_CAINFO="/certs/internal-ca.pem"
-HTTPS_PROXY="http://proxy.yourcompany.local:8080"
+        <p><strong>1. Let Docker pull images through the proxy.</strong> The proxy settings in <code>.env</code> apply to Pepper's containers, not to Docker itself, so <code>docker compose pull</code> needs its own setting. If <code>/etc/docker/daemon.json</code> already exists, add the <code>proxies</code> block to it instead of replacing the file.</p>
+        <div class="cmd"><pre>sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json &gt;/dev/null &lt;&lt;'JSON'
+{ "proxies": {
+    "http-proxy":  "http://proxy.yourcompany.local:8080",
+    "https-proxy": "http://proxy.yourcompany.local:8080",
+    "no-proxy":    "localhost,127.0.0.1,.yourcompany.local" } }
+JSON
+sudo systemctl restart docker
+docker info | grep -i proxy       # shows the proxy Docker will use</pre></div>
+        <p><strong>2. Let Pepper use the proxy.</strong> Add to <code>.env</code>, listing your Azure DevOps Server and other internal hosts in <code>NO_PROXY</code>:</p>
+        <div class="cmd"><pre>HTTPS_PROXY="http://proxy.yourcompany.local:8080"
 HTTP_PROXY="http://proxy.yourcompany.local:8080"
 NO_PROXY="tfs.yourcompany.local,.yourcompany.local"</pre></div>
-        <p>Apply with <code>docker compose up -d</code>. On SELinux-enforcing hosts, if the containers can't read the certificate, relabel the folder with <code>sudo chcon -Rt container_file_t /opt/pepper/certs</code>.</p>
+        <p><strong>3. Internal CA or a TLS-inspecting proxy.</strong> Put your CA certificate (PEM) in <code>/opt/pepper/certs/internal-ca.pem</code>. Then build a bundle of the public roots plus your CA. Git and the container scanner replace their trust store with this bundle, so it must also keep public sites trusted.</p>
+        <div class="cmd"><pre>cd /opt/pepper
+cat /etc/ssl/certs/ca-certificates.crt certs/internal-ca.pem &gt; certs/ca-bundle.pem 2&gt;/dev/null \
+  || cat /etc/pki/tls/certs/ca-bundle.crt certs/internal-ca.pem &gt; certs/ca-bundle.pem   # RHEL
+cat &gt;&gt; .env &lt;&lt;'VARS'
+NODE_EXTRA_CA_CERTS="/certs/internal-ca.pem"
+GIT_SSL_CAINFO="/certs/ca-bundle.pem"
+SSL_CERT_FILE="/certs/ca-bundle.pem"
+VARS</pre></div>
+        <p>Apply with <code>docker compose up -d</code>. On SELinux-enforcing hosts, if the containers can't read the certificates, relabel the folder with <code>sudo chcon -Rt container_file_t /opt/pepper/certs</code>.</p>
+        <p><strong>Hosts to allow on your proxy:</strong></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Hosts</th><th>Used for</th></tr></thead>
+          <tbody>
+            <tr><td>registry-1.docker.io<br>auth.docker.io<br>production.cloudfront.docker.com<br>quay.io, *.quay.io</td><td>Installing and upgrading (Docker). Not needed with the offline image archive. Docker Hub may move layers to other CDN hosts, so allowing <code>*.docker.io</code> and <code>*.docker.com</code> avoids surprises.</td></tr>
+            <tr><td>api.anthropic.com</td><td>The AI model (Claude). Replace with your model endpoint if different.</td></tr>
+            <tr><td>api.osv.dev<br>api.deps.dev</td><td>Known vulnerabilities in dependencies, and package metadata.</td></tr>
+            <tr><td>api.first.org<br>www.cisa.gov</td><td>Exploit likelihood (EPSS) and the known-exploited list (KEV).</td></tr>
+            <tr><td>mirror.gcr.io<br>ghcr.io<br>pkg-containers.githubusercontent.com</td><td>Container scanning: the vulnerability database download (Trivy).</td></tr>
+            <tr><td>registry.npmjs.org<br>pypi.org<br>search.maven.org<br>proxy.golang.org<br>crates.io<br>rubygems.org</td><td>Malicious and typosquatted package checks.</td></tr>
+            <tr><td>login.microsoftonline.com<br>graph.microsoft.com</td><td>Sign in with Microsoft Entra ID (OpenID Connect). SAML needs none of these.</td></tr>
+            <tr><td>Your Azure DevOps Server</td><td>Usually internal: list it in <code>NO_PROXY</code> instead.</td></tr>
+          </tbody>
+        </table></div>
       </div>
     </details>
     <details>
@@ -411,7 +442,9 @@ ALLOW_PUBLIC_REGISTRATION="false"</pre></div>
         <tr><td>ENTRA_REQUIRE_ROLE</td><td>false</td><td>Block users who match no role.</td></tr>
         <tr><td>ENTRA_ROLE_SYNC</td><td>raise</td><td><code>raise</code> only promotes; <code>exact</code> also demotes to match Entra on every sign-in.</td></tr>
         <tr><td>ENABLE_SAML_SSO<br>SAML_ENTRY_POINT<br>SAML_IDP_CERT</td><td>false</td><td>SAML 2.0 with any IdP. ACS URL: <code>{NEXTAUTH_URL}/api/auth/saml/acs</code>.</td></tr>
-        <tr><td>SAML_ROLE_MAP<br>SAML_DEFAULT_ROLE</td><td><br>VIEWER</td><td>IdP group → Pepper role, and the role for users who match none.</td></tr>
+        <tr><td>SAML_WANT_ASSERTIONS_SIGNED</td><td>true</td><td>Requires a signed assertion (Entra's default). Set <code>false</code> only if your IdP signs just the response.</td></tr>
+        <tr><td>SAML_EMAIL_ATTR<br>SAML_NAME_ATTR<br>SAML_GROUP_ATTR</td><td>(auto)</td><td>Claims carrying email, display name and groups. Leave blank for Entra ID: its claims, including groups and app roles, are read automatically. Set only for other claim names, e.g. <code>memberOf</code> on ADFS.</td></tr>
+        <tr><td>SAML_ROLE_MAP<br>SAML_DEFAULT_ROLE</td><td><br>VIEWER</td><td>IdP group → Pepper role, and the role for users who match none. Entra sends group object IDs or app role values.</td></tr>
         <tr><td>SESSION_MAX_AGE_HOURS</td><td>720</td><td>Session lifetime. Shorter means SSO removals take effect sooner.</td></tr>
         <tr><td>ALLOW_PUBLIC_REGISTRATION</td><td>true</td><td>Self-registration page. Usually <code>false</code> with SSO.</td></tr>
       </tbody>
@@ -452,7 +485,8 @@ docker run --rm -v pepper_miniodata:/data -v "$PWD":/backup alpine \
       <thead><tr><th>Symptom</th><th>What to check</th></tr></thead>
       <tbody>
         <tr><td>"… is required in .env"</td><td>A required setting is empty in <code>.env</code>.</td></tr>
-        <tr><td>pull: unauthorized / timeout</td><td>The VM can't reach Docker Hub or quay.io. Check your proxy, or use the offline route in step 4.</td></tr>
+        <tr><td>pull: timeout</td><td>Docker itself needs the proxy: see <em>Outbound proxy</em> above (<code>daemon.json</code>). Or use the offline route in step 4.</td></tr>
+        <tr><td>pull: toomanyrequests</td><td>Docker Hub's anonymous pull limit for your public IP. Run <code>docker login</code>, or use the offline route.</td></tr>
         <tr><td>pepper-api not healthy</td><td><code>docker compose logs pepper-api</code>. Usually disk space or a changed database password.</td></tr>
         <tr><td>Sign-in loops back</td><td><code>NEXTAUTH_URL</code> must match the browser address exactly.</td></tr>
         <tr><td>Scans stay "Queued"</td><td><code>docker compose logs pepper-worker</code></td></tr>

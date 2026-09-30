@@ -11,6 +11,8 @@ export async function createProjectWithBuildGate(params: {
   description?: string | null;
   repoUrl?: string | null;
   defaultBranch?: string;
+  /** Throwaway holder for developer pre-push scans; excluded from dashboards. */
+  ephemeral?: boolean;
 }) {
   const project = await prisma.project.create({
     data: {
@@ -19,6 +21,7 @@ export async function createProjectWithBuildGate(params: {
       repoUrl: params.repoUrl ?? null,
       defaultBranch: params.defaultBranch ?? "main",
       organizationId: params.organizationId,
+      ephemeral: params.ephemeral ?? false,
     },
   });
 

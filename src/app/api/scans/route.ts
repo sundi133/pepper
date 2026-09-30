@@ -57,6 +57,13 @@ const createScanSchema = z
       .optional(),
     svnUsername: z.string().optional(),
     svnPassword: z.string().optional(),
+    /** Where the scan was triggered from. Defaults to WEB. */
+    origin: z.enum(["WEB", "LOCAL", "CICD", "WEBHOOK"]).optional(),
+    /**
+     * Throwaway developer scan: routed to a segregated ephemeral project so it
+     * never clobbers a canonical project's scan. Only honoured for uploads.
+     */
+    ephemeral: z.boolean().optional(),
   })
   .refine((data) => !(data.repoUrl && data.svnUrl), {
     message: "Cannot specify both repoUrl and svnUrl",
@@ -143,6 +150,11 @@ export async function POST(req: NextRequest) {
     const requestedProjectId = scanParams.projectId?.trim();
     let effectiveProjectId = requestedProjectId;
 
+    // A throwaway developer scan must never target a caller-supplied project,
+    // since creating a scan wipes that project's prior scans.
+    const isEphemeral =
+      scanParams.ephemeral === true && !!fileBuffer && !requestedProjectId;
+
     if (!effectiveProjectId) {
       const nameOverride = scanParams.newProjectName?.trim();
       let name: string;
@@ -172,13 +184,28 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const created = await createProjectWithBuildGate({
-        organizationId: orgId,
-        name,
-        repoUrl,
-        defaultBranch,
-      });
-      effectiveProjectId = created.id;
+      if (isEphemeral) {
+        // Find-or-create a segregated ephemeral project so repeated dev scans
+        // reuse one holder and never clobber a canonical project's scan.
+        const { resolveEphemeralProject } = await import(
+          "@/lib/ephemeral-scan-project"
+        );
+        const ephemeralProject = await resolveEphemeralProject({
+          organizationId: orgId,
+          name,
+          repoUrl,
+          defaultBranch,
+        });
+        effectiveProjectId = ephemeralProject.id;
+      } else {
+        const created = await createProjectWithBuildGate({
+          organizationId: orgId,
+          name,
+          repoUrl,
+          defaultBranch,
+        });
+        effectiveProjectId = created.id;
+      }
     }
 
     // Verify project exists in the caller's organization.
@@ -215,6 +242,9 @@ export async function POST(req: NextRequest) {
             : scanParams.svnUrl
               ? "SVN_CHECKOUT"
               : "UPLOAD",
+        // Ephemeral dev scans are LOCAL by definition; otherwise honour the
+        // caller's origin and default to WEB.
+        origin: isEphemeral ? "LOCAL" : scanParams.origin ?? "WEB",
         triggeredBy: auth.session.user.id,
         status: "QUEUED",
       },

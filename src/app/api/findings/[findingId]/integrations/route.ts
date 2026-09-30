@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { decryptSecret } from "@/lib/token-encryption";
 import { notifySlackFinding } from "@/lib/integrations/slack";
 import { createJiraIssueForFinding } from "@/lib/integrations/jira";
@@ -59,6 +59,9 @@ export async function POST(
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+  // Creates tickets / sends messages in external systems.
+  const roleAuth = await requireRole(orgId, "DEVELOPER");
+  if ("error" in roleAuth) return roleAuth.error;
 
   const { findingId } = await params;
   let channel = "all";

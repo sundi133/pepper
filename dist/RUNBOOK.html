@@ -255,6 +255,7 @@ sed -i "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=\"$(openssl rand -hex 12)\"|" .env</
     <div class="num">4</div>
     <div class="body">
       <h2>Start Pepper</h2>
+      <p class="note">Internet only through a proxy? Do <a href="#network">Outbound proxy</a> first: Docker needs its own proxy setting before it can pull.</p>
       <div class="cmd"><pre>cd /opt/pepper
 docker compose pull
 docker compose up -d</pre></div>
@@ -317,7 +318,7 @@ docker compose up -d</pre></div>
   </section>
 
   <section class="plain">
-    <h2>If your network needs it</h2>
+    <h2 id="network">If your network needs it</h2>
     <details>
       <summary>Outbound proxy or internal certificate authority</summary>
       <div>

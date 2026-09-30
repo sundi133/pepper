@@ -13,6 +13,7 @@ import {
 import { notifySlackScanComplete } from "@/lib/integrations/slack";
 import { forwardToSiem } from "@/lib/integrations/siem";
 import { fireWebhook } from "@/lib/integrations/webhook";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
@@ -23,6 +24,14 @@ export async function POST(req: NextRequest) {
   }
 
   const body: IntegrationConfigData = await req.json();
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "integration.tested",
+    resource: "integration",
+    details: { kind: body.kind },
+    ipAddress: ipFromHeaders(req.headers),
+  });
 
   try {
     if (body.kind === "SLACK") {

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { scanQueue } from "@/lib/queue";
 import { deleteObject } from "@/lib/minio";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 export async function GET(
   _req: NextRequest,
@@ -43,7 +44,7 @@ export async function GET(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ scanId: string }> },
 ) {
   const auth = await requireAuth();
@@ -65,6 +66,7 @@ export async function DELETE(
       id: true,
       status: true,
       jobId: true,
+      project: { select: { name: true } },
       artifacts: { select: { objectKey: true } },
     },
   });
@@ -98,6 +100,16 @@ export async function DELETE(
   ]);
 
   await Promise.allSettled(objectKeys.map((key) => deleteObject(key)));
+
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "scan.deleted",
+    resource: "scan",
+    resourceId: scanId,
+    details: { projectName: scan.project.name, status: scan.status },
+    ipAddress: ipFromHeaders(req.headers),
+  });
 
   return NextResponse.json({ success: true });
 }

@@ -192,7 +192,9 @@ RUN apk add --no-cache git unzip subversion \
         <li>Worker logs are structured JSON (pino) — pipe to your log aggregator.</li>
         <li>Scan progress is written to <code>Scan.scannerProgress</code> as JSONB and
           surfaced live in the UI.</li>
-        <li>Audit log is queryable via <code>GET /api/audit-log</code>.</li>
+        <li>Audit log is queryable via <code>GET /api/audit-log</code> and exportable as
+          CSV / JSON; set <code>AUDIT_LOG_RETENTION_DAYS</code> for an instance-wide
+          retention period (expiring entries are archived to object storage first).</li>
         <li>Trend metrics: <code>GET /api/dashboard/trends?days=30</code>.</li>
       </ul>
 

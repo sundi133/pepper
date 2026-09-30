@@ -7,6 +7,7 @@ import {
 } from "@/lib/finding-report";
 import { z } from "zod";
 import { generateSuppressionRule } from "@/lib/suppression-rules";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const updateStatusSchema = z.object({
   status: z.enum([
@@ -41,7 +42,7 @@ export async function PATCH(
         id: findingId,
         scan: { project: { organizationId: orgId } },
       },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (!existing) {
       return NextResponse.json({ error: "Finding not found" }, { status: 404 });
@@ -55,6 +56,23 @@ export async function PATCH(
         statusUpdatedBy: auth.session.user.id,
         statusUpdatedAt: new Date(),
       },
+    });
+
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "finding.status_changed",
+      resource: "finding",
+      resourceId: finding.id,
+      details: {
+        from: existing.status,
+        to: data.status,
+        note: data.statusNote || null,
+        title: finding.title,
+        severity: finding.severity,
+        scanId: finding.scanId,
+      },
+      ipAddress: ipFromHeaders(req.headers),
     });
 
     // Auto-create suppression rule when marking as false positive

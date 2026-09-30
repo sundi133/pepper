@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { z } from "zod";
 import { generateSuppressionRule } from "@/lib/suppression-rules";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const bulkUpdateSchema = z.object({
   findingIds: z.array(z.string()).min(1).max(500),
@@ -39,6 +40,21 @@ export async function PATCH(req: NextRequest) {
         statusUpdatedBy: auth.session.user.id,
         statusUpdatedAt: new Date(),
       },
+    });
+
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "finding.status_changed",
+      resource: "finding",
+      details: {
+        to: data.status,
+        note: data.statusNote || null,
+        bulk: true,
+        updated: result.count,
+        findingIds: data.findingIds.slice(0, 500),
+      },
+      ipAddress: ipFromHeaders(req.headers),
     });
 
     // Auto-create suppression rules when bulk-marking as false positive

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { z } from "zod";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const createPolicySchema = z.object({
   name: z.string().min(1).max(200),
@@ -45,6 +46,16 @@ export async function POST(req: NextRequest) {
         ...data,
         organizationId: orgId,
       },
+    });
+
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "policy.created",
+      resource: "policy",
+      resourceId: policy.id,
+      details: { name: policy.name },
+      ipAddress: ipFromHeaders(req.headers),
     });
 
     return NextResponse.json(policy, { status: 201 });

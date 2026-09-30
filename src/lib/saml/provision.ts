@@ -13,6 +13,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { higherRole, type Role } from "./role-mapping";
+import { writeAuditLog } from "@/lib/audit-log";
 
 export class SamlProvisionError extends Error {
   constructor(message: string) {
@@ -60,7 +61,11 @@ export async function provisionSamlUser(input: {
   const organizationId = await resolveTargetOrgId(input.defaultOrgSlug);
   const name = input.name?.trim() || null;
 
-  return prisma.$transaction(async (tx) => {
+  const changes: { created: boolean; joined: boolean; roleFrom?: Role; roleTo?: Role } = {
+    created: false,
+    joined: false,
+  };
+  const result = await prisma.$transaction(async (tx) => {
     let user = await tx.user.findUnique({
       where: { email },
       select: { id: true, name: true },
@@ -70,6 +75,7 @@ export async function provisionSamlUser(input: {
         data: { email, name, emailVerified: new Date() },
         select: { id: true, name: true },
       });
+      changes.created = true;
     } else if (!user.name && name) {
       await tx.user.update({ where: { id: user.id }, data: { name } });
     }
@@ -85,6 +91,7 @@ export async function provisionSamlUser(input: {
       await tx.orgMember.create({
         data: { userId: user.id, organizationId, role: input.role },
       });
+      changes.joined = true;
     } else {
       const effective = higherRole(membership.role as Role, input.role);
       if (effective !== membership.role) {
@@ -94,9 +101,29 @@ export async function provisionSamlUser(input: {
           },
           data: { role: effective },
         });
+        changes.roleFrom = membership.role as Role;
+        changes.roleTo = effective;
       }
     }
 
     return { userId: user.id };
   });
+
+  // SSO-driven account and role changes, attributed to the user signing in.
+  const base = { organizationId, userId: result.userId, resource: "user" as const, resourceId: result.userId };
+  if (changes.created || changes.joined) {
+    await writeAuditLog({
+      ...base,
+      action: "user.created",
+      details: { email, role: input.role, method: "saml", newAccount: changes.created },
+    });
+  }
+  if (changes.roleFrom && changes.roleTo) {
+    await writeAuditLog({
+      ...base,
+      action: "user.role_changed",
+      details: { email, from: changes.roleFrom, to: changes.roleTo, method: "saml_group_mapping" },
+    });
+  }
+  return result;
 }

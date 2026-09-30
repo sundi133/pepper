@@ -7,6 +7,7 @@ import {
   parseLlmJsonResponse,
   getLlmConfig,
 } from "@/lib/llm-gateway";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const SYSTEM = `You are a senior application security engineer performing false positive triage on vulnerability findings from automated SAST, SCA, and secrets scanners.
 
@@ -167,6 +168,15 @@ export async function POST(
           statusUpdatedBy: auth.session.user.id,
           statusUpdatedAt: new Date(),
         },
+      });
+      await writeAuditLog({
+        organizationId: orgId,
+        userId: auth.session.user.id,
+        action: "finding.status_changed",
+        resource: "finding",
+        resourceId: findingId,
+        details: { to: "FALSE_POSITIVE", via: "ai_verification", confidence: result.confidence },
+        ipAddress: ipFromHeaders(req.headers),
       });
       return NextResponse.json({ ...result, applied: true });
     }

@@ -9,6 +9,7 @@ import {
   sanitizeOAuthReturnTo,
   verifyGithubOAuthState,
 } from "@/lib/github-oauth-state";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 function redirectWithError(message: string, returnTo?: string): NextResponse {
   const base = process.env.NEXTAUTH_URL?.replace(/\/$/, "") || "";
@@ -75,6 +76,14 @@ export async function GET(req: NextRequest) {
       scope: tokenRes.scope,
       githubUserId: String(userRes.data.id),
       githubLogin: userRes.data.login,
+    });
+    await writeAuditLog({
+      organizationId: payload.orgId,
+      userId: payload.userId,
+      action: "integration.created",
+      resource: "integration",
+      details: { provider: "github", githubLogin: userRes.data.login, scope: tokenRes.scope },
+      ipAddress: ipFromHeaders(req.headers),
     });
 
     const base = process.env.NEXTAUTH_URL?.replace(/\/$/, "") || "";

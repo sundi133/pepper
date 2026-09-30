@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { prisma } from "@/lib/prisma";
 import { queryAuditLog } from "@/lib/audit-log";
+import { parseAuditFilters } from "@/lib/audit-export";
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth();
@@ -10,20 +11,22 @@ export async function GET(req: NextRequest) {
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+  // Holds user emails and IP addresses: security staff and admins only.
+  const roleAuth = await requireRole(orgId, "SECURITY");
+  if ("error" in roleAuth) return roleAuth.error;
 
   const url = new URL(req.url);
   const cursor = url.searchParams.get("cursor") || undefined;
-  const action = url.searchParams.get("action") || undefined;
-  const resource = url.searchParams.get("resource") || undefined;
-  const userId = url.searchParams.get("userId") || undefined;
   const limit = url.searchParams.get("limit");
+  const parsed = parseAuditFilters(url.searchParams);
+  if ("error" in parsed) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
+  }
 
   const { rows, nextCursor } = await queryAuditLog({
     organizationId: orgId,
     cursor,
-    action,
-    resource,
-    userId,
+    ...parsed.filters,
     limit: limit ? Math.min(parseInt(limit, 10) || 50, 200) : 50,
   });
 

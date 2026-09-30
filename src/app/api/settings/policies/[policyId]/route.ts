@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { z } from "zod";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const updatePolicySchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -44,6 +45,16 @@ export async function PATCH(
       data,
     });
 
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "policy.updated",
+      resource: "policy",
+      resourceId: policyId,
+      details: { name: policy.name, changed: data },
+      ipAddress: ipFromHeaders(req.headers),
+    });
+
     return NextResponse.json(policy);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -80,6 +91,15 @@ export async function DELETE(
   if (result.count === 0) {
     return NextResponse.json({ error: "Policy not found" }, { status: 404 });
   }
+
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "policy.deleted",
+    resource: "policy",
+    resourceId: policyId,
+    ipAddress: ipFromHeaders(req.headers),
+  });
 
   return NextResponse.json({ success: true });
 }

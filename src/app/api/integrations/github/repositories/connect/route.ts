@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { connectGithubRepositories } from "@/lib/connect-github-repositories";
 import { GithubTokenInvalidError } from "@/lib/github-connection";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const bodySchema = z.object({
   repoIds: z.array(z.number().int().positive()).min(1).max(50).optional(),
@@ -57,6 +58,19 @@ export async function POST(req: NextRequest) {
       branchesByRepoId,
       scanType: body.scanType,
     });
+    await Promise.all(
+      result.connected.map((r) =>
+        writeAuditLog({
+          organizationId: orgId,
+          userId: auth.session.user.id,
+          action: "project.created",
+          resource: "project",
+          resourceId: r.projectId,
+          details: { source: "github", repository: r.fullName, scanId: r.scanId },
+          ipAddress: ipFromHeaders(req.headers),
+        }),
+      ),
+    );
     return NextResponse.json(result, { status: 201 });
   } catch (e) {
     if (e instanceof GithubTokenInvalidError) {

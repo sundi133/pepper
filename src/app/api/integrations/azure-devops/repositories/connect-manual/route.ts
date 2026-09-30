@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { connectManualAzureDevOpsRepository } from "@/lib/connect-manual-azure-devops-repository";
 import { AzureDevOpsCredentialsInvalidError } from "@/lib/azure-devops-connection";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const bodySchema = z.object({
   repoUrl: z.string().min(1).max(500),
@@ -39,6 +40,17 @@ export async function POST(req: NextRequest) {
       branch: body.branch,
       scanType: body.scanType,
     });
+    if (result.created) {
+      await writeAuditLog({
+        organizationId: orgId,
+        userId: auth.session.user.id,
+        action: "project.created",
+        resource: "project",
+        resourceId: result.projectId,
+        details: { source: "azure_devops", repository: result.fullName, scanId: result.scanId },
+        ipAddress: ipFromHeaders(req.headers),
+      });
+    }
     return NextResponse.json(
       {
         projectId: result.projectId,

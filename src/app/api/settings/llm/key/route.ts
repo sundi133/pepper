@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 
-export async function DELETE() {
+export async function DELETE(req: Request) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
@@ -17,6 +18,15 @@ export async function DELETE() {
     await prisma.orgSettings.update({
       where: { organizationId: orgId },
       data: { llmApiKey: null },
+    });
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "settings.llm.updated",
+      resource: "settings",
+      resourceId: orgId,
+      details: { apiKeyRemoved: true },
+      ipAddress: ipFromHeaders(req.headers),
     });
     return NextResponse.json({ success: true });
   } catch {

@@ -20,6 +20,7 @@ import {
   githubHttpsCloneUrl,
   parseGithubRepoInput,
 } from "@/lib/parse-github-repo-input";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const bodySchema = z
   .object({
@@ -243,6 +244,16 @@ export async function POST(
       { status: result.status >= 400 && result.status < 600 ? result.status : 502 },
     );
   }
+
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "finding.open_pr",
+    resource: "finding",
+    resourceId: findingId,
+    details: { scanId, pullRequestUrl: result.pullRequestUrl, branch: result.branch, agentic: useAgentic },
+    ipAddress: ipFromHeaders(req.headers),
+  });
 
   return NextResponse.json({
     pullRequestUrl: result.pullRequestUrl,

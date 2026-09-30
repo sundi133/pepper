@@ -228,7 +228,21 @@ DELETE /api/apikeys/&lt;id&gt;</code></pre>
 # → { "entries": [ { "id": …, "action": "scan.queued", "resource": "scan",
 #                     "resourceId": "…", "user": { "id": …, "email": … },
 #                     "ipAddress": "…", "details": {...}, "createdAt": "…" } ],
-#     "nextCursor": "…" }</code></pre>
+#     "nextCursor": "…" }
+# Filters: action, resource, userId, from, to (ISO timestamp or YYYY-MM-DD;
+# a date-only "to" includes the whole day). Security or Admin role.
+
+GET /api/audit-log/export?format=csv|json&amp;from=2026-07-01&amp;to=2026-09-30
+# → streamed download of every matching entry (same filters as above)
+#   CSV columns: timestamp,action,resource,resourceId,userId,userEmail,
+#                userName,ipAddress,details
+
+GET /api/audit-log/retention
+PUT /api/audit-log/retention     # Admin: { "retentionDays": 90 | null | 0,
+                                 #          "archive": true }
+                                 # null = instance default, 0 = keep forever
+GET /api/audit-log/archives                       # archived (purged) entries
+GET /api/audit-log/archives/download?key=…        # gzipped JSON lines</code></pre>
 
       <h2 id="trends">Trends</h2>
       <pre><code>GET /api/dashboard/trends?days=30

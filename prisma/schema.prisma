@@ -637,6 +637,12 @@ model OrgSettings {
   bitbucketWebhookSecretEnc  String? @db.Text
   azureDevOpsWebhookSecretEnc String? @db.Text
 
+  /// Audit log retention in days. null = the instance default
+  /// (AUDIT_LOG_RETENTION_DAYS, unset = keep forever); 0 = keep forever.
+  auditLogRetentionDays Int?
+  /// Copy expiring audit entries to object storage before deleting them.
+  auditLogArchive       Boolean @default(true)
+
   organization Organization @relation(fields: [organizationId], references: [id])
 }
 

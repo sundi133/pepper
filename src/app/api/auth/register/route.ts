@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
-import { ipFromHeaders } from "@/lib/audit-log";
+import { ipFromHeaders, writeAuditLog } from "@/lib/audit-log";
 import { isHcaptchaEnabled, verifyHcaptchaToken } from "@/lib/hcaptcha";
 import {
   isPublicRegistrationEnabled,
@@ -50,6 +50,15 @@ export async function POST(req: NextRequest) {
     }
 
     const { user, organization } = await registerNewUser(data);
+    await writeAuditLog({
+      organizationId: organization.id,
+      userId: user.id,
+      action: "user.created",
+      resource: "user",
+      resourceId: user.id,
+      details: { email: user.email, method: "self_registration" },
+      ipAddress: ipFromHeaders(req.headers),
+    });
 
     return NextResponse.json(
       {

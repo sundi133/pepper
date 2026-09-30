@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { encryptSecret } from "@/lib/token-encryption";
 import { z } from "zod";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 export async function GET() {
   const auth = await requireAuth();
@@ -80,6 +81,20 @@ export async function PUT(req: NextRequest) {
         organizationId: orgId,
         ...updateData,
       },
+    });
+
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "settings.updated",
+      resource: "settings",
+      resourceId: orgId,
+      details: {
+        area: "container_registry",
+        registryType: data.containerRegistryType ?? undefined,
+        credentialsChanged: Boolean(data.containerRegistryUsername || data.containerRegistryPassword) || data.containerRegistryType === null,
+      },
+      ipAddress: ipFromHeaders(req.headers),
     });
 
     return NextResponse.json({ success: true });

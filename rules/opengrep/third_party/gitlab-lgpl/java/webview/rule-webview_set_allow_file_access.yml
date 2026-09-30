@@ -1,0 +1,35 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://github.com/mobsf/mobsfscan/blob/main/mobsfscan/rules/semgrep/webview/webview_file_access.yaml
+# hash: e29e85c3
+# yamllint enable
+---
+rules:
+  - id: rules_lgpl_java_webview_rule-webview-set-allow-file-access
+    pattern: $WB.setAllowFileAccess(true);
+    message: |
+      WebView File System Access is enabled. An attacker able to inject 
+      script into a WebView, could exploit the opportunity to unauthorized 
+      access to sensitive user data or system files.
+
+      To fix this security issue, you should disable file access in the 
+      WebView or restrict it to specific directories. 
+      An example:
+      ```
+      // Create a WebView instance
+      WebView webView = new WebView(context);
+      // Disable file access in the WebView
+      webView.getSettings().setAllowFileAccess(false);
+      ```
+    languages:
+      - java
+    severity: WARNING
+    metadata:
+      category: security
+      cwe: "CWE-73"
+      shortDescription: "External control of file name or path"
+      owasp:
+        - "A5:2017-Broken Access Control"
+        - "A04:2021-Insecure Design"
+        - "A06:2025-Insecure Design"
+      security-severity: MEDIUM

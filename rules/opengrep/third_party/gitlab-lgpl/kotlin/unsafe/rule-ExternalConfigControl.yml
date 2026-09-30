@@ -1,0 +1,41 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://find-sec-bugs.github.io/bugs.htm
+# yamllint enable
+---
+rules:
+  - id: "kotlin_unsafe_rule-ExternalConfigControl"
+    languages:
+      - "kotlin"
+    message: |
+      Allowing external control of system settings can disrupt service or cause an application to
+      behave in unexpected, and potentially malicious ways. An attacker could cause an error by
+      providing a nonexistent catalog name or connect to an unauthorized portion of the database.
+    severity: "WARNING"
+    metadata:
+      shortDescription: "External control of system or configuration setting"
+      category: "security"
+      cwe: "CWE-15"
+      owasp:
+        - "A6:2017-Security Misconfiguration"
+        - "A05:2021-Security Misconfiguration"
+        - "A02:2025-Security Misconfiguration"
+      technology:
+        - "kotlin"
+      security-severity: "MEDIUM"
+
+    patterns:
+      - metavariable-pattern:
+          metavariable: "$GET_PARAMETER"
+          pattern-either:
+            - pattern: '($REQ: HttpServletRequest).getParameter'
+            - pattern: '($REQ: HttpServletRequest?)?.getParameter'
+      - metavariable-pattern:
+          metavariable: "$SET_CATALOG"
+          pattern-either:
+            - pattern: '($CONN: java.sql.Connection).setCatalog'
+            - pattern: '($CONN: java.sql.Connection?)?.setCatalog'
+      - pattern: |-
+          $TAINTED = $GET_PARAMETER(...)
+          ...
+          $SET_CATALOG($TAINTED)

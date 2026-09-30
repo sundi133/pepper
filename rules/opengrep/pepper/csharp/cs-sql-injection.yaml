@@ -1,0 +1,66 @@
+rules:
+  - id: pepper.csharp.sql-injection
+    mode: taint
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      Request input reaches a SQL command text. An attacker can read or modify
+      any data or bypass authentication.
+      Fix: use parameters (SqlParameter / command.Parameters.AddWithValue),
+      EF Core FromSqlInterpolated / ExecuteSqlInterpolated or LINQ, or Dapper
+      with an anonymous parameter object.
+    metadata:
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+    pattern-sources:
+      - patterns:
+          - pattern-inside: |
+              class $CLASS : $BASE { ... }
+          - metavariable-regex:
+              metavariable: $BASE
+              regex: .*(Controller|ControllerBase|PageModel|ApiController)\b.*
+          - pattern-inside: |
+              public $RET $ACTION(..., $TYPE $PARAM, ...) { ... }
+          # Numeric / boolean / Guid / date parameters cannot carry an injection.
+          - metavariable-regex:
+              metavariable: $TYPE
+              regex: ^(?!(int|long|short|byte|sbyte|uint|ulong|ushort|bool|decimal|double|float|Guid|DateTime|DateTimeOffset|TimeSpan)\??$).*
+          - pattern: $PARAM
+      - pattern-either:
+          - pattern: Request.Query[...]
+          - pattern: Request.Form[...]
+          - pattern: Request.Headers[...]
+          - pattern: Request.Cookies[...]
+          - pattern: Request.QueryString[...]
+          - pattern: HttpContext.Request.Query[...]
+          - pattern: HttpContext.Request.Form[...]
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: int.Parse(...)
+          - pattern: long.Parse(...)
+          - pattern: Guid.Parse(...)
+          - pattern: Convert.ToInt32(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new SqlCommand($Q, ...)
+              - pattern: new SqlDataAdapter($Q, ...)
+              - pattern: new OleDbCommand($Q, ...)
+              - pattern: new OdbcCommand($Q, ...)
+              - pattern: new NpgsqlCommand($Q, ...)
+              - pattern: new MySqlCommand($Q, ...)
+              - pattern: $CMD.CommandText = $Q
+              - pattern: $X.FromSqlRaw($Q, ...)
+              - pattern: $X.ExecuteSqlRaw($Q, ...)
+              - pattern: $X.ExecuteSqlRawAsync($Q, ...)
+              - pattern: $CONN.Query($Q, ...)
+              - pattern: $CONN.QueryAsync($Q, ...)
+              - pattern: $CONN.Execute($Q, ...)
+              - pattern: $CONN.ExecuteAsync($Q, ...)
+              - pattern: $CONN.QueryFirstOrDefault($Q, ...)
+          - focus-metavariable: $Q

@@ -1,0 +1,31 @@
+rules:
+  - id: pepper.csharp.insecure-deserialization
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      This deserializer can execute attacker-controlled code when it reads
+      untrusted data. Microsoft marks BinaryFormatter, SoapFormatter,
+      NetDataContractSerializer, LosFormatter and ObjectStateFormatter as
+      dangerous, as is Json.NET with TypeNameHandling other than None.
+      Fix: use System.Text.Json or DataContractSerializer with known types;
+      keep Json.NET TypeNameHandling = None.
+    metadata:
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      owasp: "A08:2021 - Software and Data Integrity Failures"
+      category: security
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://learn.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide
+    pattern-either:
+      - patterns:
+          - pattern: new $F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^(BinaryFormatter|SoapFormatter|NetDataContractSerializer|LosFormatter|ObjectStateFormatter)$
+      - patterns:
+          - pattern: TypeNameHandling.$H
+          - metavariable-regex:
+              metavariable: $H
+              regex: ^(All|Auto|Objects|Arrays)$

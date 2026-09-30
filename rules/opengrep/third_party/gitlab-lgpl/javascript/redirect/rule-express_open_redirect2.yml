@@ -1,0 +1,130 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://github.com/ajinabraham/njsscan/blob/master/njsscan/rules/semantic_grep/redirect/open_redirect.yaml
+# hash: e7a0a61
+# yamllint enable
+---
+rules:
+  - id: rules_lgpl_javascript_redirect_rule-express-open-redirect2
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-inside: |
+              function ($REQ, $RES, ...) {...}
+          - focus-metavariable: $REQ
+    pattern-sinks:
+      - pattern-either:
+          - patterns:
+              - pattern-not: |
+                  $RES.$METHOD("=~/location/i", "=~/http(s)?:\/\/.*\//" + ...)
+              - pattern-not-inside: |
+                  $VAR = "=~/http(s)?:\/\/.*\//" + ...;
+                  ...
+              - pattern: |
+                  $RES.$METHOD("=~/location/i", $VAR)
+              - metavariable-regex:
+                  metavariable: $METHOD
+                  regex: (header|set|append|setHeader)
+          - patterns:
+              - pattern-not-inside: |
+                  $V = "=~/http(s)?:\/\/.*\//" + ...;
+                  ...
+              - pattern-not:
+                  patterns:
+                    - pattern: |
+                        $RES.writeHead(..., { 
+                            ..., 
+                            location: $V,
+                            ...
+                        })
+                    - metavariable-pattern:
+                        metavariable: $V
+                        patterns:
+                          - pattern: |
+                              "=~/http(s)?:\/\/.*\//" + ...
+              - pattern: |
+                  $RES.writeHead(..., { 
+                              ..., 
+                              location: $V,
+                              ...
+                          })
+              - focus-metavariable: $V
+          - patterns:
+              - pattern-not: |
+                  $RES.location("=~/http(s)?:\/\/.*\//" + ...)
+              - pattern-not-inside: |
+                  $VAR = "=~/http(s)?:\/\/.*\//" + ...;
+                  ...
+              - pattern: |
+                  $RES.location($VAR)
+    pattern-sanitizers:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: |
+                      if($VALIDATION){
+                        ...
+                      } 
+                  - pattern: |
+                      $A = $VALIDATION
+                      ...
+                      if($A){
+                        ...
+                      }
+              - metavariable-pattern:
+                  metavariable: $VALIDATION
+                  pattern-either:
+                    - pattern: |
+                        $AL.includes(...)  
+                    - pattern: |
+                        $AL.indexOf(...) !== -1
+                    - pattern: |
+                        $AL.find(...) !== undefined
+                    - pattern: |
+                        $ALS.has(...)
+    message: |
+      Passing untrusted user input in `redirect()` can result in an open redirect
+      vulnerability. This could be abused by malicious actors to trick users into 
+      being redirected to websites under their control to capture authentication
+      information.  
+      To prevent open redirect vulnerabilities:
+
+      - Always validate and sanitize user inputs, especially URL parameters
+       or query strings that may influence the flow of the application.
+      - Use allowlists (lists of permitted URLs) to validate redirect targets 
+       against known, trusted URLs before performing the redirect.
+      - Avoid directly using user input for redirecting. If unavoidable, ensure
+       strict validation against an allowlist.
+
+      Following is an example of secure validation against allowlist to prevent the vulnerability:
+       ```
+       // Define a list of explicitly allowed URLs for redirection
+       const allowedUrls = [
+           'https://www.example.com/page1',
+           'https://www.example.com/page2',
+           'https://secure.example.com/page3'
+       ];
+
+       app.get('/redirect/:url', (req, res) => {
+           const url = decodeURIComponent(req.params.url);
+           const isAllowed = allowedUrls.includes(url);
+           if (isAllowed) {
+               // If the URL is allowed, proceed with the redirect
+                res.location(url).status(302).end();
+           } else {
+               res.status(400).send('Invalid redirect URL');
+           }
+       });
+       ```
+    languages:
+      - javascript
+    severity: ERROR
+    metadata:
+      shortDescription: "URL redirection to untrusted site 'open redirect'"
+      category: "security"
+      owasp:
+        - "A1:2017-Injection"
+        - "A01:2021-Broken Access Control"
+        - "A01:2025-Broken Access Control"
+      cwe: "CWE-601"
+      security-severity: "CRITICAL"

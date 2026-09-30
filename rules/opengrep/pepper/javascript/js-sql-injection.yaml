@@ -1,0 +1,52 @@
+rules:
+  - id: pepper.js.sql-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request input reaches a SQL query string. An attacker can change the
+      query (read or modify any data, bypass authentication).
+      Fix: use parameterised queries - pass values separately
+      (`db.query("... WHERE id = $1", [id])`, `?` placeholders, or the ORM's
+      query builder) instead of concatenating or interpolating them.
+    metadata:
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+              - pattern: $REQ.headers
+              - pattern: $REQ.cookies
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|ctx|ctx\.request)$
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: parseInt(...)
+          - pattern: parseFloat(...)
+          - pattern: Number(...)
+          - pattern: $X.escape(...)
+          - pattern: escape(...)
+          - pattern: $X.escapeId(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB.query($Q, ...)
+              - pattern: $DB.execute($Q, ...)
+              - pattern: $DB.raw($Q, ...)
+              - pattern: $DB.$queryRawUnsafe($Q, ...)
+              - pattern: $DB.$executeRawUnsafe($Q, ...)
+          - metavariable-regex:
+              metavariable: $DB
+              regex: (?i)^(.*[._])?\w*(db|pool|conn|connection|client|knex|sequelize|prisma|pg|mysql|sql|sqlite|database|trx|tx|manager|repository)$
+          - focus-metavariable: $Q

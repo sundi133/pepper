@@ -1,0 +1,68 @@
+rules:
+  - id: pepper.js.command-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request input reaches a shell command. An attacker can run arbitrary
+      commands on the server.
+      Fix: avoid the shell - use `execFile`/`spawn` with a fixed command and
+      the value as a separate argument (no `shell: true`), and validate it
+      against an allow-list.
+    metadata:
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+              - pattern: $REQ.headers
+              - pattern: $REQ.cookies
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|ctx|ctx\.request)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: require('child_process').$FN($CMD, ...)
+              - patterns:
+                  - pattern-either:
+                      - pattern-inside: |
+                          $CP = require('child_process');
+                          ...
+                      - pattern-inside: |
+                          import * as $CP from 'child_process';
+                          ...
+                      - pattern-inside: |
+                          import $CP from 'child_process';
+                          ...
+                  - pattern: $CP.$FN($CMD, ...)
+              - patterns:
+                  - pattern-either:
+                      - pattern-inside: |
+                          import { $FN } from 'child_process';
+                          ...
+                      - pattern-inside: |
+                          const { $FN } = require('child_process');
+                          ...
+                  - pattern: $FN($CMD, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(exec|execSync)$
+          - focus-metavariable: $CMD
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  $X.spawn($CMD, ..., {..., shell: true, ...})
+              - pattern: |
+                  spawn($CMD, ..., {..., shell: true, ...})
+          - focus-metavariable: $CMD

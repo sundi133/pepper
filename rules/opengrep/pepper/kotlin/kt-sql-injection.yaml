@@ -1,0 +1,54 @@
+rules:
+  - id: pepper.kotlin.sql-injection
+    mode: taint
+    languages: [kotlin]
+    severity: ERROR
+    message: >-
+      Request input reaches a SQL query string. An attacker can read or
+      modify any data or bypass authentication.
+      Fix: use PreparedStatement with ? placeholders, JPA named parameters or
+      the framework's query builder instead of string templates.
+    metadata:
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+    pattern-sources:
+      - patterns:
+          - pattern-inside: |
+              fun $M(..., @$ANNO $P: $T, ...) { ... }
+          - metavariable-regex:
+              metavariable: $ANNO
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue|ModelAttribute)$
+          - pattern: $P
+      - patterns:
+          - pattern-inside: |
+              fun $M(..., @$ANNO(...) $P: $T, ...) { ... }
+          - metavariable-regex:
+              metavariable: $ANNO
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue|ModelAttribute)$
+          - pattern: $P
+      - pattern-either:
+          - pattern: $R.getParameter(...)
+          - pattern: $R.getHeader(...)
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: $X.toInt()
+          - pattern: $X.toLong()
+          - pattern: Integer.parseInt(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $S.executeQuery($Q)
+              - pattern: $S.executeUpdate($Q, ...)
+              - pattern: $S.execute($Q, ...)
+              - pattern: $C.prepareStatement($Q, ...)
+              - pattern: $EM.createQuery($Q, ...)
+              - pattern: $EM.createNativeQuery($Q, ...)
+              - pattern: $J.queryForObject($Q, ...)
+              - pattern: $J.queryForList($Q, ...)
+              - pattern: $J.update($Q, ...)
+          - focus-metavariable: $Q

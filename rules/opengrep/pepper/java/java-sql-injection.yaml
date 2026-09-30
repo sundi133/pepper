@@ -1,0 +1,67 @@
+rules:
+  - id: pepper.java.sql-injection
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Request input reaches a SQL or JPQL query string. An attacker can read
+      or modify any data or bypass authentication.
+      Fix: use PreparedStatement with ? placeholders (setString/setInt), JPA
+      named parameters (:name + setParameter), or the Criteria API.
+    metadata:
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: (HttpServletRequest $R).$GET(...)
+              - pattern: $R.getParameter(...)
+              - pattern: $R.getHeader(...)
+              - pattern: $R.getQueryString()
+          - metavariable-regex:
+              metavariable: $GET
+              regex: ^(getParameter|getParameterValues|getHeader|getHeaders|getQueryString|getCookies|getPathInfo|getRequestURI)$
+      - patterns:
+          - pattern-either:
+              - pattern: $R.getParameter(...)
+              - pattern: $R.getHeader(...)
+              - pattern: $R.getQueryString()
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $M(..., @$ANNO $T $P, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @$ANNO(...) $T $P, ...) { ... }
+          - metavariable-regex:
+              metavariable: $ANNO
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue|ModelAttribute|QueryParam|PathParam|FormParam|HeaderParam)$
+          - pattern: $P
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: Integer.parseInt(...)
+          - pattern: Long.parseLong(...)
+          - pattern: Integer.valueOf(...)
+          - pattern: Long.valueOf(...)
+          - pattern: UUID.fromString(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $S.executeQuery($Q)
+              - pattern: $S.executeUpdate($Q, ...)
+              - pattern: $S.execute($Q, ...)
+              - pattern: $S.addBatch($Q)
+              - pattern: $C.prepareStatement($Q, ...)
+              - pattern: $C.prepareCall($Q, ...)
+              - pattern: $EM.createQuery($Q, ...)
+              - pattern: $EM.createNativeQuery($Q, ...)
+              - pattern: $J.queryForObject($Q, ...)
+              - pattern: $J.queryForList($Q, ...)
+              - pattern: $J.queryForMap($Q, ...)
+              - pattern: $J.update($Q, ...)
+              - pattern: $J.batchUpdate($Q, ...)
+          - focus-metavariable: $Q

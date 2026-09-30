@@ -6,10 +6,11 @@ import {
   ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 
-// SAST_PATTERN is quarantined (returns zero findings). SECRETS_PATTERN findings
-// are fast, high-confidence detections that should reach the final result;
-// deduplication with SECRETS_LLM is handled in areRootCauseDuplicates.
-const PATTERN_SCANNERS = new Set(["SAST_PATTERN"]);
+// SAST_PATTERN is rule-based SAST (OpenGrep, curated packs). Its findings pass
+// the gates below like any other scanner: LOW-confidence rules fall under the
+// floor, test/fixture code is dropped, and a line number is required.
+// SECRETS_PATTERN findings are fast, high-confidence detections; deduplication
+// with SECRETS_LLM is handled in areRootCauseDuplicates.
 
 const FAILURE_RULE_IDS = new Set([
   "CONTAINER-INVENTORY",
@@ -54,7 +55,6 @@ function hasRemediation(f: RawFinding): boolean {
 
 export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
   return findings.filter((f) => {
-    if (PATTERN_SCANNERS.has(f.scanner)) return false;
     if (f.severity === "INFO") return false;
     if (FAILURE_RULE_IDS.has(f.ruleId || "")) return false;
 
@@ -73,8 +73,13 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
     if (!hasRemediation(f)) {
       const hasCwe = Boolean(f.cweId);
       const isHighConfidence = (f.confidence ?? 0) >= 0.78;
-      const exemptScanner = f.scanner === "ZERO_DAY" || f.scanner === "SAST_LLM";
-      if (!(exemptScanner && hasCwe && isHighConfidence)) {
+      // Rule-based SAST findings carry the rule's guidance; a CWE is enough.
+      const exemptScanner =
+        f.scanner === "ZERO_DAY" || f.scanner === "SAST_LLM" || f.scanner === "SAST_PATTERN";
+      // A rule's message is its guidance, so any CWE-tagged rule match counts
+      // (the confidence floor above still applies).
+      const ruleBased = f.scanner === "SAST_PATTERN";
+      if (!(exemptScanner && hasCwe && (isHighConfidence || ruleBased))) {
         return false;
       }
     }
@@ -98,7 +103,7 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
     // analyze specific code locations). ZERO_DAY and IAC scanners can report
     // cross-file or config-level findings without a precise line.
     if (
-      ["SAST_LLM", "SECRETS_LLM"].includes(f.scanner) &&
+      ["SAST_LLM", "SECRETS_LLM", "SAST_PATTERN"].includes(f.scanner) &&
       f.filePath &&
       (!f.startLine || f.startLine < 1)
     ) {
@@ -122,6 +127,12 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
       ["SAST_LLM", "SECRETS_LLM", "ZERO_DAY"].includes(f.scanner) &&
       (f.confidence ?? 0) < 0.9
     ) {
+      return false;
+    }
+
+    // Rule matches in test / fixture / example code are almost always
+    // deliberate or unreachable.
+    if (f.scanner === "SAST_PATTERN" && TEST_PATH.test(f.filePath || "")) {
       return false;
     }
 

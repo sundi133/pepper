@@ -15,7 +15,8 @@ export const SEVERITY_COLORS = {
 } as const;
 
 /** Pattern-only findings: no synthetic LLM-style report blocks. */
-// SAST_PATTERN is quarantined (returns zero findings). SECRETS_PATTERN
+// SAST_PATTERN is rule-based SAST (OpenGrep): its rule message already holds
+// the explanation and fix, so it gets the pattern report. SECRETS_PATTERN
 // findings reach the UI and need report enrichment like other scanners.
 export const PATTERN_BASED_SCANNERS = new Set(["SAST_PATTERN"]);
 

@@ -1,0 +1,39 @@
+rules:
+  - id: pepper.java.insecure-deserialization
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Java native deserialization (ObjectInputStream / XMLDecoder / XStream
+      without an allow-list) can execute attacker-controlled code when the
+      data is untrusted (gadget chains).
+      Fix: exchange data as JSON or another data-only format; if Java
+      serialization is unavoidable, set an ObjectInputFilter allow-list
+      (JEP 290) or XStream.allowTypes before reading.
+    metadata:
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      owasp: "A08:2021 - Software and Data Integrity Failures"
+      category: security
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: (ObjectInputStream $IN).readObject()
+              - pattern: new ObjectInputStream(...).readObject()
+              - pattern: (ObjectInputStream $IN).readUnshared()
+          - pattern-not-inside: |
+              $IN.setObjectInputFilter(...);
+              ...
+          - pattern-not-inside: |
+              class $C extends ObjectInputStream { ... }
+      - pattern: new XMLDecoder(...).readObject()
+      - pattern: (XMLDecoder $D).readObject()
+      - patterns:
+          - pattern: (XStream $X).fromXML(...)
+          - pattern-not-inside: |
+              $X.allowTypes(...);
+              ...
+          - pattern-not-inside: |
+              $X.allowTypesByWildcard(...);
+              ...

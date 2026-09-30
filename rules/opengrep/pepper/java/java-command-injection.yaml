@@ -1,0 +1,51 @@
+rules:
+  - id: pepper.java.command-injection
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Request input reaches an operating-system command. An attacker can run
+      arbitrary commands on the server.
+      Fix: do not build commands from input; use ProcessBuilder with a fixed
+      program and pass validated values as separate arguments (no "sh -c").
+    metadata:
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: (HttpServletRequest $R).$GET(...)
+              - pattern: $R.getParameter(...)
+              - pattern: $R.getHeader(...)
+              - pattern: $R.getQueryString()
+          - metavariable-regex:
+              metavariable: $GET
+              regex: ^(getParameter|getParameterValues|getHeader|getHeaders|getQueryString|getCookies|getPathInfo|getRequestURI)$
+      - patterns:
+          - pattern-either:
+              - pattern: $R.getParameter(...)
+              - pattern: $R.getHeader(...)
+              - pattern: $R.getQueryString()
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $M(..., @$ANNO $T $P, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @$ANNO(...) $T $P, ...) { ... }
+          - metavariable-regex:
+              metavariable: $ANNO
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue|ModelAttribute|QueryParam|PathParam|FormParam|HeaderParam)$
+          - pattern: $P
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Runtime.getRuntime().exec($CMD, ...)
+              - pattern: (Runtime $RT).exec($CMD, ...)
+              - pattern: new ProcessBuilder(..., $CMD, ...)
+              - pattern: (ProcessBuilder $PB).command(..., $CMD, ...)
+          - focus-metavariable: $CMD

@@ -1,0 +1,49 @@
+rules:
+  - id: pepper.java.xxe
+    languages: [java]
+    severity: ERROR
+    message: >-
+      An XML parser is created with external entities / DTDs enabled (the
+      Java default). Parsing untrusted XML can read local files or reach
+      internal URLs (XXE).
+      Fix: disable DTDs before parsing, e.g.
+      factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+      (or XMLInputFactory.SUPPORT_DTD = false).
+    metadata:
+      cwe: "CWE-611: Improper Restriction of XML External Entity Reference"
+      owasp: "A05:2021 - Security Misconfiguration"
+      category: security
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $F.newDocumentBuilder()
+              - pattern: $F.newSAXParser()
+          - pattern-inside: |
+              $FT $F = $FACTORY.newInstance(...);
+              ...
+          - metavariable-regex:
+              metavariable: $FACTORY
+              regex: ^(DocumentBuilderFactory|SAXParserFactory)$
+          - pattern-not-inside: |
+              $F.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+              ...
+          - pattern-not-inside: |
+              $F.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+              ...
+          - pattern-not-inside: |
+              $F.setFeature("http://xml.org/sax/features/external-general-entities", false);
+              ...
+      - patterns:
+          - pattern: $F.createXMLStreamReader(...)
+          - pattern-inside: |
+              XMLInputFactory $F = XMLInputFactory.newInstance();
+              ...
+          - pattern-not-inside: |
+              $F.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+              ...
+          - pattern-not-inside: |
+              $F.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+              ...

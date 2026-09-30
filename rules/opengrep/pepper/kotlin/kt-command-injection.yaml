@@ -1,0 +1,42 @@
+rules:
+  - id: pepper.kotlin.command-injection
+    mode: taint
+    languages: [kotlin]
+    severity: ERROR
+    message: >-
+      Request input reaches an operating-system command. An attacker can run
+      arbitrary commands on the server.
+      Fix: use ProcessBuilder with a fixed program and pass validated values
+      as separate arguments; never run "sh -c" with user input.
+    metadata:
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+    pattern-sources:
+      - patterns:
+          - pattern-inside: |
+              fun $M(..., @$ANNO $P: $T, ...) { ... }
+          - metavariable-regex:
+              metavariable: $ANNO
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue|ModelAttribute)$
+          - pattern: $P
+      - patterns:
+          - pattern-inside: |
+              fun $M(..., @$ANNO(...) $P: $T, ...) { ... }
+          - metavariable-regex:
+              metavariable: $ANNO
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue|ModelAttribute)$
+          - pattern: $P
+      - pattern-either:
+          - pattern: $R.getParameter(...)
+          - pattern: $R.getHeader(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Runtime.getRuntime().exec($CMD, ...)
+              - pattern: ProcessBuilder(..., $CMD, ...)
+          - focus-metavariable: $CMD

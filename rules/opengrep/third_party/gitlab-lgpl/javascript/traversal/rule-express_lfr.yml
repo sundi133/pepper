@@ -1,0 +1,48 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://github.com/ajinabraham/njsscan/blob/master/njsscan/rules/semantic_grep/traversal/express_hbs_lfr.yaml
+# hash: e7a0a61
+# yamllint enable
+---
+rules:
+- id: "rules_lgpl_javascript_traversal_rule-express-lfr"
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: function ($REQ, $RES, ...) {...}
+    - pattern: $REQ.$FUNC. ...
+    - metavariable-regex:
+        metavariable: $FUNC
+        regex: ^(body|params|query|cookies|hostname|subdomains|ip|ips|originalUrl|path)$
+  pattern-sinks:
+  - pattern: "$RES.render(..., $VAR)"
+  message: |
+    This application is using untrusted user input in express render() function.
+    Rendering templates with untrusted user input enables arbitrary file read 
+    vulnerabilities when using templating engines like Handlebars (hbs). 
+
+    An attacker can craft malicious input that traverses the filesystem and exposes sensitive files. 
+    Consider sanitizing and validating all user input before passing it to render() to prevent arbitrary file reads. 
+
+    Sample safe use of express.render function
+    ```
+    app.get("/traversal/2", async (req, res) => {
+        var indexPath = "index";
+        res.render(indexPath, { title: "Index Page" })
+    });
+    ```
+
+    For more details see: 
+    https://owasp.org/www-community/attacks/Path_Traversal
+  languages:
+  - "javascript"
+  severity: "WARNING"
+  metadata:
+    owasp: 
+    - "A5:2017-Broken Access Control"
+    - "A01:2021-Broken Access Control"
+    - "A01:2025-Broken Access Control"
+    cwe: "CWE-23" 
+    shortDescription: "Relative path traversal"
+    security-severity: "MEDIUM"
+    category: "security"

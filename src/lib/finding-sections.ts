@@ -13,8 +13,7 @@ export const FINDING_SECTIONS = [
   {
     id: "SAST",
     title: "SAST Findings",
-    // SAST_PATTERN is currently quarantined and emits nothing, but it belongs
-    // here rather than in Other if it is ever re-enabled.
+    // SAST_PATTERN = rule-based SAST (OpenGrep); SAST_LLM = AI analysis.
     scanners: ["SAST_LLM", "SAST_PATTERN"],
     description: "Static application security findings",
   },

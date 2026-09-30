@@ -1,0 +1,63 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://github.com/ajinabraham/njsscan/blob/master/njsscan/rules/semantic_grep/traversal/path_traversal.yaml
+# hash: e7a0a61
+# yamllint enable
+---
+rules:
+- id: rules_lgpl_javascript_traversal_rule-generic-path-traversal
+  mode: taint
+  languages:
+  - "javascript"
+  pattern-sources:
+  - patterns:
+    - focus-metavariable: $REQ
+    - pattern: function ($REQ, $RES, ...) {...}
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          $FS = require('fs')
+          ...
+      - pattern-inside: |
+          import $FS from 'fs'
+          ...
+    - pattern-either:
+      - pattern: $FS.createReadStream(...)
+      - patterns:
+        - pattern: $FS.readFile($REQ, ...)
+        - focus-metavariable: $REQ
+      - patterns:
+        - pattern: $FS.readFileSync($REQ,...)
+        - focus-metavariable: $REQ
+      - patterns:
+        - pattern: $FS.readFileAsync($REQ,...)
+        - focus-metavariable: $REQ
+  message: |
+    This application is using untrusted user input with the readFile() and
+    readFileSync() functions. 
+    This can lead to directory traversal attacks, as reading files with untrusted input enables arbitrary file access.
+    An attacker could craft malicious input that traverses the file system and exposes sensitive files. 
+    Please consider sanitizing and validating all user input before passing it to readFile() or readFileSync() to prevent unwanted file reads.
+    Here is an example of a safer usage in readFileAsync():
+    ```
+    app.get('/foo', function (req, res) {
+        var fileName = config.dirName + '/' + data;
+        fs.readFileAsync("fileName")
+            .then(function (data) {
+                res.download(fileName, downloadFileName);
+            })
+        })
+    ```
+    For more details see: 
+    https://owasp.org/www-community/attacks/Path_Traversal
+  severity: "WARNING"
+  metadata:
+    owasp: 
+    - "A5:2017-Broken Access Control"
+    - "A01:2021-Broken Access Control"
+    - "A01:2025-Broken Access Control"
+    cwe: "CWE-23" 
+    shortDescription: "Relative path traversal"
+    security-severity: "MEDIUM"
+    category: "security"

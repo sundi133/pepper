@@ -1,0 +1,81 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://github.com/ajinabraham/njsscan/blob/master/njsscan/rules/semantic_grep/dos/layer7_object_dos.yaml
+# hash: e7a0a61
+# yamllint enable
+---
+rules:
+- id: "rules_lgpl_javascript_dos_rule-layer7-object-dos"
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: function ($REQ, $RES, ...) {...}
+    - pattern: $REQ.$FUNC. ...
+    - metavariable-regex:
+        metavariable: "$FUNC"
+        regex: "^(body|params|query|baseUrl|cookies|hostname|subdomains|ip|ips|originalUrl|path)$"
+  pattern-sanitizers:
+  - patterns:
+    - pattern: $OBJ.slice($X, $Y)
+    - pattern-not: $OBJ.slice($X)
+    - pattern-not: $OBJ.slice(..., $OBJ.length)
+    - pattern-not: $OBJ.slice(..., Object.keys($OBJ).length)
+  pattern-sinks:
+  - patterns:
+    - pattern: |
+        for(...; $COND; ...){...}
+    - focus-metavariable: $COND
+    - metavariable-pattern:
+        metavariable: $COND
+        pattern-either:
+        - pattern: |
+            Object.Keys($VAR).length
+        - pattern: $VAR.length
+  - patterns:
+    - pattern-either:
+      - pattern: $OBJ.forEach
+      - pattern: $OBJ.map
+      - pattern: Object.keys($OBJ).map
+      - pattern: $OBJ.filter
+      - pattern: $OBJ.reduce
+      - pattern: $OBJ.reduceRight
+    - focus-metavariable: $OBJ
+  message: |
+    This application is looping over user controlled objects, which can lead to a layer 7 denial of service vulnerability.
+
+    A layer 7 denial of service attack refers to overloading the application layer of the OSI model, typically layer 7. 
+    This can happen when user-controlled input such as objects, arrays, strings, etc. are iterated or looped over without proper validation or limits in place.
+    
+    For example, if a user can control the size of an array or object passed into the application, 
+    they could create an extremely large input that gets looped over. This would consume excessive CPU cycles or memory, 
+    potentially crashing or slowing down the application.
+
+    To prevent this, limits should be set on the number of iterations, input sizes, recursion depth, etc.
+
+    Sample case of secure array looped over with user-controlled input
+    ```
+    // Potential DoS if req.body.list.length is large.
+    app.post('/dos/layer7-object-dos/for-loop/1', function (req, res) {
+        var list = req.body.list;
+        for (let i = 0; i <= 10; i++) {
+            if(!list[i]){
+              // return;
+            }  
+        }
+        res.send("res")
+    });
+    ```
+
+    Implementing protections against layer 7 denial of service attacks is important for securing modern web applications and APIs.
+  languages:
+  - "javascript"
+  severity: "WARNING"
+  metadata:
+    owasp: 
+    - "A6:2017-Security Misconfiguration"
+    - "A03:2021-Injection"
+    - "A05:2025-Injection"
+    cwe: "CWE-606"
+    shortDescription: "Unchecked input for loop condition"
+    security-severity: "MEDIUM"
+    category: "security"

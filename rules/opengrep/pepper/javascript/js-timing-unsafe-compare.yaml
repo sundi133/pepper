@@ -1,0 +1,36 @@
+rules:
+  - id: pepper.js.timing-unsafe-secret-compare
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      A secret, token, signature or HMAC is compared with === / !==, which
+      returns as soon as a character differs. An attacker can measure the
+      timing to recover the value byte by byte.
+      Fix: compare fixed-length buffers with crypto.timingSafeEqual (check the
+      lengths first), e.g. timingSafeEqual(Buffer.from(a), Buffer.from(b)).
+    metadata:
+      cwe: "CWE-208: Observable Timing Discrepancy"
+      owasp: "A02:2021 - Cryptographic Failures"
+      category: security
+      confidence: MEDIUM
+      likelihood: LOW
+      impact: HIGH
+      references:
+        - https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b
+    patterns:
+      - pattern-either:
+          - pattern: $A === $B
+          - pattern: $A !== $B
+          - pattern: $A == $B
+          - pattern: $A != $B
+      - metavariable-regex:
+          metavariable: $A
+          regex: (?i)^[\w.\[\]'"]*(secret|token|signature|sig|hmac|digest|apikey|api_key|webhookkey)[\w.\[\]'"]*$
+      - metavariable-regex:
+          metavariable: $B
+          regex: (?i)^[\w.\[\]'"]*(secret|token|signature|sig|hmac|digest|apikey|api_key|webhookkey|expected|provided|computed)[\w.\[\]'"]*$
+      - metavariable-regex:
+          metavariable: $B
+          regex: ^(?!(null|undefined|true|false|""|''|\d+)$).*
+      - pattern-not-inside: |
+          typeof $X === $T

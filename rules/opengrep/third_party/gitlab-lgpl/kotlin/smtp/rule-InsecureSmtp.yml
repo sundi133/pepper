@@ -1,0 +1,43 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://find-sec-bugs.github.io/bugs.htm
+# yamllint enable
+---
+rules:
+  - id: "kotlin_smtp_rule-InsecureSmtp"
+    languages:
+      - "kotlin"
+    message: |
+      Server identity verification is disabled when making SSL connections.
+    metadata:
+      shortDescription: "Improper validation of certificate with host mismatch"
+      category: "security"
+      cwe: "CWE-297"
+      owasp:
+        - "A3:2017-Sensitive Data Exposure"
+        - "A07:2021-Identification and Authentication Failures"
+        - "A07:2025-Authentication Failures"
+      security-severity: "CRITICAL"
+    severity: "ERROR"
+
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $E = org.apache.commons.mail.SimpleEmail(...)
+              ...
+          - pattern-inside: |
+              $E = org.apache.commons.mail.Email(...)
+              ...
+          - pattern-inside: |
+              $E = org.apache.commons.mail.MultiPartEmail(...)
+              ...
+          - pattern-inside: |
+              $E = org.apache.commons.mail.HtmlEmail(...)
+              ...
+          - pattern-inside: |
+              $E = org.apache.commons.mail.ImageHtmlEmail(...)
+              ...
+      - pattern-not: |
+          $E.setSSLOnConnect(true)
+          ...
+          $E.setSSLCheckServerIdentity(true)

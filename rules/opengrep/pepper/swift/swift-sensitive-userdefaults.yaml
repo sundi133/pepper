@@ -1,0 +1,27 @@
+rules:
+  - id: pepper.swift.sensitive-data-in-userdefaults
+    languages: [swift]
+    severity: WARNING
+    message: >-
+      A password, token or other secret is stored in UserDefaults, which is an
+      unencrypted plist readable from device backups and jailbroken devices.
+      Fix: store secrets in the Keychain (kSecClassGenericPassword) instead.
+    metadata:
+      cwe: "CWE-312: Cleartext Storage of Sensitive Information"
+      owasp: "M9: Insecure Data Storage (OWASP Mobile Top 10 2024)"
+      category: security
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $UD.set($V, forKey: $KEY)
+          - pattern: |
+              $UD.setValue($V, forKey: $KEY)
+      - metavariable-regex:
+          metavariable: $UD
+          regex: .*(UserDefaults|defaults).*
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i).*(passw(or)?d|passcode|pwd|token|secret|api_?key|pin|credential).*

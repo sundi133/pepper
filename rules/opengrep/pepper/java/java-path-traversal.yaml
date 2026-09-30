@@ -1,0 +1,60 @@
+rules:
+  - id: pepper.java.path-traversal
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Request input is used as a file path. An attacker can use "../" to read,
+      overwrite or delete files outside the intended directory.
+      Fix: take only the file name (Paths.get(input).getFileName()), resolve
+      it against a fixed base directory and check the normalised result still
+      starts with that base.
+    metadata:
+      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+      owasp: "A01:2021 - Broken Access Control"
+      category: security
+      confidence: MEDIUM
+      likelihood: HIGH
+      impact: HIGH
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: (HttpServletRequest $R).$GET(...)
+              - pattern: $R.getParameter(...)
+              - pattern: $R.getHeader(...)
+              - pattern: $R.getQueryString()
+          - metavariable-regex:
+              metavariable: $GET
+              regex: ^(getParameter|getParameterValues|getHeader|getHeaders|getQueryString|getCookies|getPathInfo|getRequestURI)$
+      - patterns:
+          - pattern-either:
+              - pattern: $R.getParameter(...)
+              - pattern: $R.getHeader(...)
+              - pattern: $R.getQueryString()
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $M(..., @$ANNO $T $P, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @$ANNO(...) $T $P, ...) { ... }
+          - metavariable-regex:
+              metavariable: $ANNO
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue|ModelAttribute|QueryParam|PathParam|FormParam|HeaderParam)$
+          - pattern: $P
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: FilenameUtils.getName(...)
+          - pattern: $X.getFileName()
+          - pattern: Integer.parseInt(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new File($P)
+              - pattern: new File($BASE, $P)
+              - pattern: new FileInputStream($P)
+              - pattern: new FileOutputStream($P, ...)
+              - pattern: new FileReader($P)
+              - pattern: new FileWriter($P, ...)
+              - pattern: Paths.get($P, ...)
+              - pattern: Path.of($P, ...)
+          - focus-metavariable: $P

@@ -7,6 +7,8 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   globalIgnores([
+    // OpenGrep rule fixtures are deliberately vulnerable sample code.
+    "rules/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",

@@ -1,0 +1,23 @@
+rules:
+  - id: pepper.csharp.cert-validation-disabled
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      TLS server certificate validation is disabled (the callback always
+      returns true). Connections can be intercepted (man-in-the-middle).
+      Fix: remove the callback; for an internal CA, trust it in the machine
+      store or validate the chain against that CA in the callback.
+    metadata:
+      cwe: "CWE-295: Improper Certificate Validation"
+      owasp: "A02:2021 - Cryptographic Failures"
+      category: security
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+    pattern-either:
+      - pattern: $X.ServerCertificateValidationCallback = (...) => true
+      - pattern: $X.ServerCertificateCustomValidationCallback = (...) => true
+      - pattern: ServicePointManager.ServerCertificateValidationCallback = (...) => true
+      - pattern: HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+      - pattern: |
+          $X.ServerCertificateValidationCallback = delegate { return true; }

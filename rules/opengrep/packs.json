@@ -1,0 +1,27 @@
+{
+  "$comment": "OpenGrep rule packs bundled with Pepper. Only packs whose license allows redistribution in a commercial product are bundled. See README.md.",
+  "packs": [
+    {
+      "id": "pepper",
+      "path": "pepper",
+      "license": "Pepper (proprietary)",
+      "description": "Pepper-authored rules: taint-based injection rules and high-confidence misconfigurations for JS/TS, Java, Kotlin, C#, Swift and iOS.",
+      "enabled": true
+    },
+    {
+      "id": "gitlab-lgpl",
+      "path": "third_party/gitlab-lgpl",
+      "license": "LGPL-3.0-only",
+      "source": "https://gitlab.com/gitlab-org/security-products/sast-rules (rules/lgpl @ 53bf5cf)",
+      "description": "GitLab SAST rules derived from njsscan / mobsfscan: Node.js, Kotlin, Java (Android), Swift, Objective-C.",
+      "enabled": true,
+      "excludeRules": {
+        "rules_lgpl_javascript_ssrf_rule-node-ssrf": "Flags every fetch/request with a variable URL (30 false positives on Pepper's own code).",
+        "rules_lgpl_javascript_dos_rule-regex-dos": "Flags every regex.test(input); dominated WebGoat/Pepper results with no real ReDoS.",
+        "rules_lgpl_javascript_crypto_rule-node-insecure-random-generator": "Flags every Math.random(), including non-security ids and mocks.",
+        "kotlin_password_rule-HardcodePassword": "Fires on JDBC URLs and non-secret strings.",
+        "rules_lgpl_javascript_crypto_rule-node-timing-attack": "Flags any === on names like password/token (4/4 false positives on Juice Shop, e.g. password confirmation, token === null). Replaced by pepper.js.timing-unsafe-secret-compare."
+      }
+    }
+  ]
+}

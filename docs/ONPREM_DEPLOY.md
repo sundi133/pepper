@@ -157,6 +157,18 @@ the `AZURE_DEVOPS_WEBHOOK_SECRET` in the Basic-auth password field.
 
 ---
 
+## Rule-based SAST (OpenGrep)
+
+The worker image ships [OpenGrep](https://github.com/opengrep/opengrep) (pinned,
+checksum-verified) and the rule packs in `rules/opengrep/` — Pepper's own rules
+plus GitLab's LGPL-3.0 rules. It runs fully offline on every FULL, SAST_ONLY and
+PR scan, independent of the LLM. Findings appear as **SAST (Pattern)**.
+
+- Add your own rules: mount a directory of OpenGrep/Semgrep YAML rules into the
+  worker and set `OPENGREP_EXTRA_RULES=/path/in/container` (several: `:`-separated).
+- Disable: `ENABLE_OPENGREP_SAST=false`.
+- See `rules/opengrep/README.md` for which rule sets are bundled and why.
+
 ## Common gotchas
 
 - **TLS is your reverse proxy, not the container.** The app only speaks HTTP on 3000.

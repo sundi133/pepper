@@ -1,0 +1,21 @@
+rules:
+  - id: pepper.ios.ats-arbitrary-loads
+    languages: [generic]
+    severity: WARNING
+    message: >-
+      App Transport Security is disabled for all connections
+      (NSAllowsArbitraryLoads = true), so the app may use plain HTTP and weak
+      TLS.
+      Fix: remove NSAllowsArbitraryLoads; if a specific host needs an
+      exception, add a scoped NSExceptionDomains entry for that host only.
+    metadata:
+      cwe: "CWE-319: Cleartext Transmission of Sensitive Information"
+      owasp: "M5: Insecure Communication (OWASP Mobile Top 10 2024)"
+      category: security
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: MEDIUM
+    paths:
+      include:
+        - "*.plist"
+    pattern-regex: <key>NSAllowsArbitraryLoads</key>\s*<true\s*/>

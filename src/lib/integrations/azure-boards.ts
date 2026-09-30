@@ -81,6 +81,20 @@ export function boardsConfigError(config: Partial<AzureBoardsConfig> | undefined
   return null;
 }
 
+/**
+ * With no Server URL the board is Azure DevOps Services (dev.azure.com). When
+ * the org's repo connection is an Azure DevOps Server and the board reuses its
+ * PAT or names the same collection, the board is on that server.
+ */
+function inferredServerUrl(config: AzureBoardsConfig, orgConnection: AzureDevOpsAuth | null): string | undefined {
+  const connectionServer = orgConnection?.serverUrl?.trim();
+  if (!connectionServer) return undefined;
+  const reusesConnectionPat = !config.pat?.trim();
+  const sameCollection =
+    config.organization.trim().toLowerCase() === orgConnection!.organization.trim().toLowerCase();
+  return reusesConnectionPat || sameCollection ? connectionServer : undefined;
+}
+
 /** Credentials for the board: the integration's own PAT, else the org's repo connection. */
 export function boardsAuth(
   config: AzureBoardsConfig,
@@ -88,7 +102,7 @@ export function boardsAuth(
 ): AzureDevOpsAuth | null {
   const pat = config.pat?.trim() || orgConnection?.pat;
   if (!pat || !config.organization?.trim()) return null;
-  const serverUrl = config.serverUrl?.trim();
+  const serverUrl = config.serverUrl?.trim() || inferredServerUrl(config, orgConnection);
   return {
     organization: config.organization.trim(),
     pat,
@@ -228,10 +242,22 @@ export function buildWorkItemOps(
 // ─── REST ────────────────────────────────────────────────────────────────────
 
 /** Readable error, with hints for the usual on-prem / PAT problems. */
-export function boardsError(action: string, res: AzureDevOpsResponse<unknown>): Error {
+export function boardsError(action: string, res: AzureDevOpsResponse<unknown>, auth?: AzureDevOpsAuth): Error {
   // A bad PAT often gets 203 + an HTML sign-in page instead of a 401.
   if (res.status === 401 || res.status === 203) {
-    return new Error(`${action} failed: the PAT was rejected. It needs the Work Items (Read & write) scope.`);
+    const server = auth?.serverUrl?.trim();
+    let host = "dev.azure.com";
+    try {
+      if (server) host = new URL(server).host;
+    } catch {
+      host = server!;
+    }
+    const where = server
+      ? `the Server URL (${host})`
+      : "the Server URL: it's blank, which means Azure DevOps Services (dev.azure.com); set it for Azure DevOps Server";
+    return new Error(
+      `${action} failed: ${host} rejected the PAT. Check ${where}, and that the PAT has the Work Items (Read & write) scope.`,
+    );
   }
   if (res.status === 403) {
     return new Error(`${action} failed (403): the PAT's user can't create work items in this project.`);
@@ -260,7 +286,7 @@ export async function createWorkItem(
     // Likely a customised type without Priority / Severity / Repro Steps.
     res = await azureJsonPatch<{ id?: number }>(auth, "POST", path, buildWorkItemOps(config, f, false), config.apiVersion);
   }
-  if (!res.ok || res.status === 203 || res.data?.id == null) throw boardsError("Azure Boards create", res);
+  if (!res.ok || res.status === 203 || res.data?.id == null) throw boardsError("Azure Boards create", res, auth);
   const id = String(res.data.id);
   return { id, url: webUrl(auth, project, id, res.data) };
 }
@@ -283,7 +309,7 @@ export async function markWorkItemFixed(
   const itemPath = `/${encodeURIComponent(project)}/_apis/wit/workitems/${encodeURIComponent(id)}`;
   const current = await azureGet<{ fields?: Record<string, unknown> }>(auth, `${itemPath}?fields=System.State`, config.apiVersion);
   if (current.status === 404) return false;
-  if (!current.ok || current.status === 203) throw boardsError("Azure Boards read", current);
+  if (!current.ok || current.status === 203) throw boardsError("Azure Boards read", current, auth);
 
   const state = String(current.data.fields?.["System.State"] ?? "");
   const link = note.scanUrl ? ` <a href="${escapeHtml(note.scanUrl)}">View the scan</a>.` : "";
@@ -302,7 +328,7 @@ export async function markWorkItemFixed(
     // The state isn't valid for this type / transition — still leave the comment.
     res = await azureJsonPatch(auth, "PATCH", itemPath, [comment], config.apiVersion);
   }
-  if (!res.ok || res.status === 203) throw boardsError("Azure Boards update", res);
+  if (!res.ok || res.status === 203) throw boardsError("Azure Boards update", res, auth);
   return true;
 }
 
@@ -323,7 +349,7 @@ export async function noteWorkItemRegressed(
     config.apiVersion,
   );
   if (res.status === 404) return;
-  if (!res.ok || res.status === 203) throw boardsError("Azure Boards update", res);
+  if (!res.ok || res.status === 203) throw boardsError("Azure Boards update", res, auth);
 }
 
 /**
@@ -339,7 +365,7 @@ export async function validateBoardsConfig(
   if (!project) {
     // Organization-level call that only needs the Work Items scope.
     const res = await azureGet(auth, "/_apis/wit/fields/System.Title", config.apiVersion);
-    if (!res.ok || res.status === 203) throw boardsError("Azure Boards check", res);
+    if (!res.ok || res.status === 203) throw boardsError("Azure Boards check", res, auth);
     return { workItemType: workItemTypeOf(config) };
   }
   const p = encodeURIComponent(project);
@@ -348,7 +374,7 @@ export async function validateBoardsConfig(
   if (res.status === 404) {
     throw new Error(`Project "${project}" or work item type "${type}" was not found. Basic-process projects use "Issue" instead of "Bug".`);
   }
-  if (!res.ok || res.status === 203) throw boardsError("Azure Boards check", res);
+  if (!res.ok || res.status === 203) throw boardsError("Azure Boards check", res, auth);
 
   for (const [kind, value] of [["Areas", config.areaPath], ["Iterations", config.iterationPath]] as const) {
     const path = value?.trim();
@@ -358,7 +384,7 @@ export async function validateBoardsConfig(
     const sub = segments[0]?.toLowerCase() === project.toLowerCase() ? segments.slice(1) : segments;
     const node = await azureGet(auth, `/${p}/_apis/wit/classificationnodes/${kind}/${sub.map(encodeURIComponent).join("/")}`, config.apiVersion);
     if (node.status === 404) throw new Error(`${kind === "Areas" ? "Area" : "Iteration"} path "${path}" was not found in "${project}".`);
-    if (!node.ok || node.status === 203) throw boardsError("Azure Boards check", node);
+    if (!node.ok || node.status === 203) throw boardsError("Azure Boards check", node, auth);
   }
   return { workItemType: res.data.name || type };
 }

@@ -21,7 +21,7 @@ contains everything:
   - your Git servers (Azure DevOps Server, GitHub, GitLab, Bitbucket) to clone repositories;
   - your LLM endpoint (for example an internal gateway, Azure OpenAI or OpenRouter);
   - `api.osv.dev` for dependency vulnerability data (optional; see *Air-gapped* below);
-  - the image registry, unless you install from an offline image archive (section 3).
+  - Docker Hub, unless you install from an offline image archive (section 3).
 
 ## 2. Install (server with registry access)
 
@@ -66,10 +66,10 @@ docker pull docker.io/sundi133/pepper-api:$V
 docker pull docker.io/sundi133/pepper-worker:$V
 docker pull postgres:16-alpine
 docker pull redis:7-alpine
-docker pull quay.io/minio/minio:latest
+docker pull docker.io/chainguard/minio:latest
 docker save -o pepper-images-$V.tar \
   docker.io/sundi133/pepper-api:$V docker.io/sundi133/pepper-worker:$V \
-  postgres:16-alpine redis:7-alpine quay.io/minio/minio:latest
+  postgres:16-alpine redis:7-alpine docker.io/chainguard/minio:latest
 sha256sum pepper-images-$V.tar > pepper-images-$V.tar.sha256
 ```
 

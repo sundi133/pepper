@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   boardsAuth,
+  boardsError,
   boardsConfigError,
   boardsTarget,
   buildWorkItemOps,
@@ -100,6 +101,19 @@ describe("config", () => {
     expect(boardsAuth(cloud, null)).toBeNull();
   });
 
+  it("uses the on-prem connection's server when the board's Server URL is blank", () => {
+    const onPrem = { organization: "DefaultCollection", pat: "conn", serverUrl: "http://ado-server" };
+    const board: AzureBoardsConfig = { organization: "DefaultCollection", project: "PepperTest" };
+    // Reuses the connection's PAT → same server.
+    expect(boardsAuth(board, onPrem)).toEqual({ organization: "DefaultCollection", pat: "conn", serverUrl: "http://ado-server" });
+    // Own PAT, same collection (case-insensitive) → same server.
+    expect(boardsAuth({ ...board, organization: "defaultcollection", pat: "own" }, onPrem)?.serverUrl).toBe("http://ado-server");
+    // Own PAT and a different organization → still Azure DevOps Services.
+    expect(boardsAuth({ ...board, organization: "acme", pat: "own" }, onPrem)?.serverUrl).toBeUndefined();
+    // An explicit Server URL always wins.
+    expect(boardsAuth({ ...board, serverUrl: "https://tfs.corp" }, onPrem)?.serverUrl).toBe("https://tfs.corp");
+  });
+
   it("rejects unusable configs", () => {
     expect(boardsConfigError(cloud)).toBeNull();
     expect(boardsConfigError({ ...cloud, organization: " " })).toMatch(/Organization/);
@@ -168,5 +182,17 @@ describe("REST", () => {
     calls = mockFetch({ status: 200, body: {} });
     await validateBoardsConfig(auth, cloud, null);
     expect(calls[0].url).toBe("https://dev.azure.com/acme/_apis/wit/fields/System.Title?api-version=7.1");
+  });
+});
+
+describe("boardsError", () => {
+  const rejected = { ok: false, status: 203, data: "<html>sign in</html>", raw: "" } as never;
+  it("names the host and points at the Server URL when the PAT is rejected", () => {
+    expect(boardsError("Azure Boards check", rejected).message).toMatch(
+      /dev\.azure\.com rejected the PAT\. Check the Server URL: it's blank, which means Azure DevOps Services .*Work Items \(Read & write\)/,
+    );
+    expect(
+      boardsError("Azure Boards check", rejected, { organization: "DefaultCollection", pat: "p", serverUrl: "http://ado-server:8080/tfs" }).message,
+    ).toMatch(/ado-server:8080 rejected the PAT\. Check the Server URL \(ado-server:8080\)/);
   });
 });

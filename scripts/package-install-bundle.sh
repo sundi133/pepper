@@ -33,8 +33,8 @@ echo "Bundle: $OUT/$NAME.tar.gz"
 
 if [ "${IMAGES:-0}" = "1" ]; then
   for img in "$API" "$WORKER"; do docker pull --platform linux/amd64 "$img"; done
-  for img in postgres:16-alpine redis:7-alpine quay.io/minio/minio:latest; do docker pull --platform linux/amd64 "$img"; done
-  docker save -o "$OUT/pepper-images-$VERSION.tar" "$API" "$WORKER" postgres:16-alpine redis:7-alpine quay.io/minio/minio:latest
+  for img in postgres:16-alpine redis:7-alpine docker.io/chainguard/minio:latest; do docker pull --platform linux/amd64 "$img"; done
+  docker save -o "$OUT/pepper-images-$VERSION.tar" "$API" "$WORKER" postgres:16-alpine redis:7-alpine docker.io/chainguard/minio:latest
   (cd "$OUT" && sha256sum "pepper-images-$VERSION.tar" > "pepper-images-$VERSION.tar.sha256" 2>/dev/null || shasum -a 256 "pepper-images-$VERSION.tar" > "pepper-images-$VERSION.tar.sha256")
   echo "Images: $OUT/pepper-images-$VERSION.tar"
 fi

@@ -64,6 +64,17 @@ function isHttpUrl(s: string | null | undefined): s is string {
   return !!s && /^https?:\/\//i.test(s.trim());
 }
 
+/** `…/{collection}/{project}/_git/{repo}`: the clone URL shape of Azure DevOps Services and Server. */
+function isAzureDevOpsGitUrl(url: string): boolean {
+  try {
+    const parts = new URL(url).pathname.split("/").filter(Boolean);
+    const gitIdx = parts.indexOf("_git");
+    return gitIdx >= 2 && !!parts[gitIdx + 1];
+  } catch {
+    return false;
+  }
+}
+
 function hostOf(url: string): string {
   try {
     return new URL(url).hostname.toLowerCase();
@@ -99,7 +110,12 @@ export function resolveRemediationRepo(
   else if (host === "bitbucket.org") provider = "bitbucket";
   else if (host === "dev.azure.com" || host.endsWith(".visualstudio.com")) {
     provider = "azure_devops";
-  } else if (project.connectedViaAzure) provider = "azure_devops";
+  } else if (project.connectedViaAzure || isAzureDevOpsGitUrl(repoUrl)) {
+    // Azure DevOps Server on any host, whether the project came from the
+    // integration or was added by URL. credentialsMismatch() then checks the
+    // host is the connected server before the PAT is used.
+    provider = "azure_devops";
+  }
   else if (project.connectedViaBitbucket) provider = "bitbucket";
   else if (project.connectedViaGithub) provider = "github";
 
@@ -139,6 +155,35 @@ export async function loadProviderCredentials(
   const { getOrgBitbucketAuth } = await import("@/lib/bitbucket-connection");
   const auth = await getOrgBitbucketAuth(organizationId);
   return auth ? { provider, auth } : null;
+}
+
+/**
+ * Stored credentials may only be sent to the host they belong to: the PAT is
+ * embedded in the clone/push URL, so a repository URL pointing elsewhere would
+ * hand it to that host. Returns an error message, or null when they match.
+ */
+export function credentialsMismatch(repoUrl: string, creds: ProviderCredentials): string | null {
+  if (creds.provider !== "azure_devops") return null;
+  let repo: URL;
+  try {
+    repo = new URL(repoUrl);
+  } catch {
+    return `Not a valid repository URL: ${repoUrl}`;
+  }
+  const serverUrl = creds.auth.serverUrl?.trim();
+  if (serverUrl) {
+    let server: URL | null = null;
+    try {
+      server = new URL(serverUrl);
+    } catch {
+      /* reported below */
+    }
+    if (server && repo.origin === server.origin) return null;
+    return `${repo.host} is not the connected Azure DevOps Server (${server?.host ?? serverUrl}). Connect that server under Settings → Integrations, or correct the project's repository URL.`;
+  }
+  const host = repo.hostname.toLowerCase();
+  if (host === "dev.azure.com" || host.endsWith(".visualstudio.com")) return null;
+  return `${repo.host} looks like Azure DevOps Server, but this organization is connected to Azure DevOps Services (dev.azure.com). Connect the server (with its Server URL) under Settings → Integrations.`;
 }
 
 export function missingCredentialsMessage(provider: RemediationProvider): string {

@@ -6,6 +6,7 @@ import { getLlmConfig } from "@/lib/llm-gateway";
 import { getRemediationQueue } from "@/lib/queue";
 import { writeAuditLog } from "@/lib/audit-log";
 import {
+  credentialsMismatch,
   loadProviderCredentials,
   missingCredentialsMessage,
   resolveRemediationRepo,
@@ -84,6 +85,10 @@ export async function POST(
       { error: missingCredentialsMessage(target.provider), code: "PROVIDER_NOT_CONNECTED" },
       { status: 400 },
     );
+  }
+  const mismatch = credentialsMismatch(target.repoUrl, creds);
+  if (mismatch) {
+    return NextResponse.json({ error: mismatch, code: "PROVIDER_HOST_MISMATCH" }, { status: 400 });
   }
   const orgSettings = await prisma.orgSettings.findUnique({ where: { organizationId: orgId } });
   const llm = getLlmConfig(orgSettings);

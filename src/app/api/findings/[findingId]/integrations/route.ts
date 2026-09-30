@@ -4,9 +4,9 @@ import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { decryptSecret } from "@/lib/token-encryption";
 import { notifySlackFinding } from "@/lib/integrations/slack";
 import { createJiraIssueForFinding } from "@/lib/integrations/jira";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import type { JiraConfig, SlackConfig } from "@/lib/integrations/types";
 import { logger } from "@/lib/logger";
-import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const FINDING_SEVERITIES = new Set([
   "CRITICAL",

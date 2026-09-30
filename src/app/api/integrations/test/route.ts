@@ -12,8 +12,8 @@ import {
 } from "@/lib/integrations/jira";
 import { notifySlackScanComplete } from "@/lib/integrations/slack";
 import { forwardToSiem } from "@/lib/integrations/siem";
-import { fireWebhook } from "@/lib/integrations/webhook";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
+import { fireWebhook } from "@/lib/integrations/webhook";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();

@@ -938,11 +938,10 @@ Schema:
           highCount: true,
           mediumCount: true,
           lowCount: true,
-          createdAt: true,
         },
       });
       const hasNewFindings = buildGate.failOnNew
-        ? await scanHasNewFindings(scanId, projectId, currentScan.createdAt)
+        ? await scanHasNewFindings(scanId)
         : false;
       if (
         hasNewFindings ||
@@ -1400,74 +1399,13 @@ async function runExploitValidation(
   }
 }
 
-async function scanHasNewFindings(
-  scanId: string,
-  projectId: string,
-  createdAt: Date,
-): Promise<boolean> {
-  const previousScan = await prisma.scan.findFirst({
-    where: {
-      projectId,
-      status: "COMPLETED",
-      id: { not: scanId },
-      createdAt: { lt: createdAt },
-    },
-    orderBy: { createdAt: "desc" },
-    select: {
-      findings: {
-        select: {
-          scanner: true,
-          ruleId: true,
-          cweId: true,
-          cveId: true,
-          filePath: true,
-          startLine: true,
-          title: true,
-        },
-      },
-    },
-  });
-
-  if (!previousScan) {
-    return false;
-  }
-
-  const previousKeys = new Set(previousScan.findings.map(findingFingerprint));
-  const currentFindings = await prisma.finding.findMany({
-    where: { scanId, status: { not: "FALSE_POSITIVE" } },
-    select: {
-      scanner: true,
-      ruleId: true,
-      cweId: true,
-      cveId: true,
-      filePath: true,
-      startLine: true,
-      title: true,
-    },
-  });
-
-  return currentFindings.some(
-    (finding) => !previousKeys.has(findingFingerprint(finding)),
-  );
-}
-
-function findingFingerprint(finding: {
-  scanner: string;
-  ruleId: string | null;
-  cweId: string | null;
-  cveId: string | null;
-  filePath: string | null;
-  startLine: number | null;
-  title: string;
-}): string {
-  return [
-    finding.scanner,
-    finding.ruleId || finding.cveId || finding.cweId || normalizeFindingTitle(finding.title),
-    finding.filePath || "",
-    finding.startLine ? Math.floor(finding.startLine / 5) : 0,
-  ].join(":");
-}
-
-function normalizeFindingTitle(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+/**
+ * Build-gate "fail on new findings": does this scan contain findings that
+ * were not in the repository's history baseline (see lib/scan-delta)?
+ * False when there is no baseline yet, so a first scan never fails on "new".
+ */
+async function scanHasNewFindings(scanId: string): Promise<boolean> {
+  const { computeScanDelta } = await import("@/lib/scan-delta");
+  const delta = await computeScanDelta(scanId);
+  return (delta?.newFindingIds.length ?? 0) > 0;
 }

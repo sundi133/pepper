@@ -411,7 +411,9 @@ ALLOW_PUBLIC_REGISTRATION="false"</pre></div>
         <tr><td>ENTRA_REQUIRE_ROLE</td><td>false</td><td>Block users who match no role.</td></tr>
         <tr><td>ENTRA_ROLE_SYNC</td><td>raise</td><td><code>raise</code> only promotes; <code>exact</code> also demotes to match Entra on every sign-in.</td></tr>
         <tr><td>ENABLE_SAML_SSO<br>SAML_ENTRY_POINT<br>SAML_IDP_CERT</td><td>false</td><td>SAML 2.0 with any IdP. ACS URL: <code>{NEXTAUTH_URL}/api/auth/saml/acs</code>.</td></tr>
-        <tr><td>SAML_ROLE_MAP<br>SAML_DEFAULT_ROLE</td><td><br>VIEWER</td><td>IdP group → Pepper role, and the role for users who match none.</td></tr>
+        <tr><td>SAML_WANT_ASSERTIONS_SIGNED</td><td>true</td><td>Requires a signed assertion (Entra's default). Set <code>false</code> only if your IdP signs just the response.</td></tr>
+        <tr><td>SAML_EMAIL_ATTR<br>SAML_NAME_ATTR<br>SAML_GROUP_ATTR</td><td>(auto)</td><td>Claims carrying email, display name and groups. Leave blank for Entra ID: its claims, including groups and app roles, are read automatically. Set only for other claim names, e.g. <code>memberOf</code> on ADFS.</td></tr>
+        <tr><td>SAML_ROLE_MAP<br>SAML_DEFAULT_ROLE</td><td><br>VIEWER</td><td>IdP group → Pepper role, and the role for users who match none. Entra sends group object IDs or app role values.</td></tr>
         <tr><td>SESSION_MAX_AGE_HOURS</td><td>720</td><td>Session lifetime. Shorter means SSO removals take effect sooner.</td></tr>
         <tr><td>ALLOW_PUBLIC_REGISTRATION</td><td>true</td><td>Self-registration page. Usually <code>false</code> with SSO.</td></tr>
       </tbody>

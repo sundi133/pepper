@@ -15,24 +15,35 @@ function makeTempDir(files: Record<string, string>): string {
   return root;
 }
 
+function makeCtx(workDir: string, fileList: string[]): ScanContext {
+  return {
+    workDir,
+    fileList,
+    scanType: "SAST_ONLY",
+    orgSettings: {
+      llmProvider: "openai",
+      llmBaseUrl: "",
+      llmModel: "",
+      enableLlmSast: true,
+      enableLlmSecrets: false,
+      osvApiUrl: "",
+      vulnDbMode: "offline",
+    },
+  };
+}
+
+async function scanFiles(
+  files: Record<string, string>,
+): Promise<{ findings: Awaited<ReturnType<typeof sastLlmScanner.scan>>; workDir: string }> {
+  const workDir = makeTempDir(files);
+  const findings = await sastLlmScanner.scan(makeCtx(workDir, Object.keys(files)));
+  return { findings, workDir };
+}
+
 describe("SAST_LLM scanner", () => {
   it("returns empty findings when no source files present", async () => {
-    const workDir = makeTempDir({});
+    const { findings, workDir } = await scanFiles({});
     try {
-      const findings = await sastLlmScanner.scan({
-        workDir,
-        fileList: [],
-        scanType: "SAST_ONLY",
-        orgSettings: {
-          llmProvider: "openai",
-          llmBaseUrl: "",
-          llmModel: "",
-          enableLlmSast: true,
-          enableLlmSecrets: false,
-          osvApiUrl: "",
-          vulnDbMode: "offline",
-        },
-      });
       expect(findings).toHaveLength(0);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
@@ -40,26 +51,12 @@ describe("SAST_LLM scanner", () => {
   });
 
   it("excludes non-source files from scanning", async () => {
-    const workDir = makeTempDir({
+    const { findings, workDir } = await scanFiles({
       "package-lock.json": JSON.stringify({ version: 1, packages: {} }),
       "README.md": "# My Project",
       ".env": "SECRET_KEY=test",
     });
     try {
-      const findings = await sastLlmScanner.scan({
-        workDir,
-        fileList: ["package-lock.json", "README.md", ".env"],
-        scanType: "SAST_ONLY",
-        orgSettings: {
-          llmProvider: "openai",
-          llmBaseUrl: "",
-          llmModel: "",
-          enableLlmSast: true,
-          enableLlmSecrets: false,
-          osvApiUrl: "",
-          vulnDbMode: "offline",
-        },
-      });
       // Lockfiles, markdown, env files should be excluded by extension filters
       expect(findings).toHaveLength(0);
     } finally {
@@ -68,7 +65,7 @@ describe("SAST_LLM scanner", () => {
   });
 
   it("processes source code files for analysis", async () => {
-    const workDir = makeTempDir({
+    const { findings, workDir } = await scanFiles({
       "src/index.ts": `
         const userId = req.params.id;
         const query = "SELECT * FROM users WHERE id = " + userId;
@@ -76,20 +73,6 @@ describe("SAST_LLM scanner", () => {
       `,
     });
     try {
-      const findings = await sastLlmScanner.scan({
-        workDir,
-        fileList: ["src/index.ts"],
-        scanType: "SAST_ONLY",
-        orgSettings: {
-          llmProvider: "openai",
-          llmBaseUrl: "",
-          llmModel: "",
-          enableLlmSast: true,
-          enableLlmSecrets: false,
-          osvApiUrl: "",
-          vulnDbMode: "offline",
-        },
-      });
       // In offline mode with no real LLM, should return empty or mock findings
       // Real test would require mocking Claude API or integration test
       expect(Array.isArray(findings)).toBe(true);
@@ -99,27 +82,13 @@ describe("SAST_LLM scanner", () => {
   });
 
   it("respects pepper:ignore suppression comments", async () => {
-    const workDir = makeTempDir({
+    const { findings, workDir } = await scanFiles({
       "src/skip.ts": `
         // pepper:ignore
         const query = "SELECT * FROM users WHERE id = " + userId;
       `,
     });
     try {
-      const findings = await sastLlmScanner.scan({
-        workDir,
-        fileList: ["src/skip.ts"],
-        scanType: "SAST_ONLY",
-        orgSettings: {
-          llmProvider: "openai",
-          llmBaseUrl: "",
-          llmModel: "",
-          enableLlmSast: true,
-          enableLlmSecrets: false,
-          osvApiUrl: "",
-          vulnDbMode: "offline",
-        },
-      });
       // Findings with pepper:ignore should be marked as suppressed
       const suppressed = findings.filter((f) => (f as unknown as Record<string, unknown>).suppressed);
       expect(suppressed.length >= 0).toBe(true);
@@ -134,24 +103,10 @@ describe("SAST_LLM scanner", () => {
     for (let i = 0; i < 100; i++) {
       largeCode += `function test${i}() { const x = "test"; }\n`;
     }
-    const workDir = makeTempDir({
+    const { findings, workDir } = await scanFiles({
       "src/large.ts": largeCode,
     });
     try {
-      const findings = await sastLlmScanner.scan({
-        workDir,
-        fileList: ["src/large.ts"],
-        scanType: "SAST_ONLY",
-        orgSettings: {
-          llmProvider: "openai",
-          llmBaseUrl: "",
-          llmModel: "",
-          enableLlmSast: true,
-          enableLlmSecrets: false,
-          osvApiUrl: "",
-          vulnDbMode: "offline",
-        },
-      });
       // Should handle large file without crashing
       expect(Array.isArray(findings)).toBe(true);
     } finally {

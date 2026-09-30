@@ -36,7 +36,7 @@ Edit `.env`. At minimum set:
 
 - `PEPPER_VERSION`: the version tag you were given, for example `sha-a0c538e`.
 - `NEXTAUTH_URL`: the exact URL users will open, for example `https://pepper.yourcompany.local`.
-- `NEXTAUTH_SECRET`, `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`: long random values. Generate each with `openssl rand -base64 32`.
+- `NEXTAUTH_SECRET`, `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`: long random values. Generate each with `openssl rand -hex 32` (use hex: `/` or `+` in the database password would break its connection URL).
 - `ADMIN_EMAIL` and `ADMIN_PASSWORD`: the first administrator account.
 - `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`: your AI model endpoint.
 

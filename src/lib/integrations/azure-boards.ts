@@ -47,6 +47,42 @@ export function workItemTypeOf(config: AzureBoardsConfig): string {
   return config.workItemType?.trim() || DEFAULT_WORK_ITEM_TYPE;
 }
 
+/** Basic-process projects have Issue instead of Bug (Agile, Scrum and CMMI have Bug). */
+const BASIC_PROCESS_WORK_ITEM_TYPE = "Issue";
+/** Type found to exist per board, for boards that leave the type blank. */
+const resolvedWorkItemTypes = new Map<string, string>();
+
+function workItemTypeKey(auth: AzureDevOpsAuth, project: string): string {
+  return `${azureApiBase(auth)}/${project}`.toLowerCase();
+}
+
+/** The configured type; if blank, Bug then Issue, unless one is already known to exist. */
+function workItemTypesToTry(auth: AzureDevOpsAuth, config: AzureBoardsConfig, project: string): string[] {
+  const configured = config.workItemType?.trim();
+  if (configured) return [configured];
+  const known = resolvedWorkItemTypes.get(workItemTypeKey(auth, project));
+  return known ? [known] : [DEFAULT_WORK_ITEM_TYPE, BASIC_PROCESS_WORK_ITEM_TYPE];
+}
+
+function rememberWorkItemType(auth: AzureDevOpsAuth, config: AzureBoardsConfig, project: string, type: string) {
+  if (!config.workItemType?.trim()) resolvedWorkItemTypes.set(workItemTypeKey(auth, project), type);
+}
+
+/** ADO's answer when a work item type doesn't exist in the project (VS402323). */
+function isMissingWorkItemType(res: AzureDevOpsResponse<unknown>): boolean {
+  if (res.status !== 404 && res.status !== 400) return false;
+  return res.status === 404 || /VS402323|work item type .* does not exist/i.test(parseAzureErrorBody(res.data, res.raw) || "");
+}
+
+/** Why a Project value can't be a project name, or null. */
+function projectNameError(project: string | undefined): string | null {
+  const p = project?.trim();
+  if (p && /[\\/]/.test(p)) {
+    return `Project must be the Azure DevOps project name only (e.g. "${p.split(/[\\/]/)[0]}"), not "${p}"`;
+  }
+  return null;
+}
+
 /**
  * The board's identity — where work items land. Stable across integration
  * re-creation so dedupe survives deleting and re-adding the same board.
@@ -72,6 +108,8 @@ export function boardsConfigError(config: Partial<AzureBoardsConfig> | undefined
       return "Server URL is not a valid URL";
     }
   }
+  const projectError = projectNameError(config.project);
+  if (projectError) return projectError;
   if (config.autoCreateSeverities && !config.autoCreateSeverities.every((s) => TICKET_SEVERITIES.has(s))) {
     return "autoCreateSeverities must be CRITICAL, HIGH, MEDIUM or LOW";
   }
@@ -280,11 +318,19 @@ export async function createWorkItem(
   project: string,
   f: BoardsFindingInput,
 ): Promise<WorkItemRef> {
-  const path = `/${encodeURIComponent(project)}/_apis/wit/workitems/$${encodeURIComponent(workItemTypeOf(config))}`;
-  let res = await azureJsonPatch<{ id?: number }>(auth, "POST", path, buildWorkItemOps(config, f, true), config.apiVersion);
-  if (res.status === 400) {
-    // Likely a customised type without Priority / Severity / Repro Steps.
-    res = await azureJsonPatch<{ id?: number }>(auth, "POST", path, buildWorkItemOps(config, f, false), config.apiVersion);
+  const types = workItemTypesToTry(auth, config, project);
+  let res!: AzureDevOpsResponse<{ id?: number }>;
+  for (const [i, type] of types.entries()) {
+    const typed = { ...config, workItemType: type };
+    const path = `/${encodeURIComponent(project)}/_apis/wit/workitems/$${encodeURIComponent(type)}`;
+    res = await azureJsonPatch<{ id?: number }>(auth, "POST", path, buildWorkItemOps(typed, f, true), config.apiVersion);
+    if (res.status === 400 && !isMissingWorkItemType(res)) {
+      // Likely a customised type without Priority / Severity / Repro Steps.
+      res = await azureJsonPatch<{ id?: number }>(auth, "POST", path, buildWorkItemOps(typed, f, false), config.apiVersion);
+    }
+    if (isMissingWorkItemType(res) && i < types.length - 1) continue;
+    if (res.ok && res.status !== 203 && res.data?.id != null) rememberWorkItemType(auth, config, project, type);
+    break;
   }
   if (!res.ok || res.status === 203 || res.data?.id == null) throw boardsError("Azure Boards create", res, auth);
   const id = String(res.data.id);
@@ -368,13 +414,25 @@ export async function validateBoardsConfig(
     if (!res.ok || res.status === 203) throw boardsError("Azure Boards check", res, auth);
     return { workItemType: workItemTypeOf(config) };
   }
+  const projectError = projectNameError(project);
+  if (projectError) throw new Error(projectError);
   const p = encodeURIComponent(project);
-  const type = workItemTypeOf(config);
-  const res = await azureGet<{ name?: string }>(auth, `/${p}/_apis/wit/workitemtypes/${encodeURIComponent(type)}`, config.apiVersion);
+  const types = workItemTypesToTry(auth, config, project);
+  let res!: AzureDevOpsResponse<{ name?: string }>;
+  let type = types[0];
+  for (type of types) {
+    res = await azureGet<{ name?: string }>(auth, `/${p}/_apis/wit/workitemtypes/${encodeURIComponent(type)}`, config.apiVersion);
+    if (res.status !== 404) break;
+  }
   if (res.status === 404) {
-    throw new Error(`Project "${project}" or work item type "${type}" was not found. Basic-process projects use "Issue" instead of "Bug".`);
+    throw new Error(
+      types.length > 1
+        ? `Project "${project}" was not found, or it has neither a "Bug" nor an "Issue" work item type. Check the project name, or set the work item type.`
+        : `Project "${project}" or work item type "${type}" was not found. Basic-process projects use "Issue" instead of "Bug".`,
+    );
   }
   if (!res.ok || res.status === 203) throw boardsError("Azure Boards check", res, auth);
+  rememberWorkItemType(auth, config, project, res.data.name || type);
 
   for (const [kind, value] of [["Areas", config.areaPath], ["Iterations", config.iterationPath]] as const) {
     const path = value?.trim();

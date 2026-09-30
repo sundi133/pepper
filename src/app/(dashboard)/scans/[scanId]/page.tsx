@@ -852,6 +852,7 @@ export default function ScanDetailPage() {
                 <FindingsTable
                   findings={visibleFindings}
                   fixPrSource={fixPrSource}
+                  scanId={scanId}
                   onSelect={(f) =>
                     setSelectedFinding((prev) => nextFindingSelection(prev, f))
                   }
@@ -884,6 +885,7 @@ export default function ScanDetailPage() {
                       <FindingsTable
                         findings={section.findings}
                         fixPrSource={fixPrSource}
+                  scanId={scanId}
                         onSelect={(f) =>
                           setSelectedFinding((prev) =>
                             nextFindingSelection(prev, f),

@@ -72,6 +72,45 @@ export async function getIntegrationConfig<K extends Kind>(
   }
 }
 
+/** Where a ticket integration files issues; null for other kinds. */
+function ticketTargetOf(data: IntegrationConfigData): string | null {
+  if (data.kind === "AZURE_BOARDS") {
+    const c = data.config as AzureBoardsConfig;
+    if (!c?.organization?.trim()) return null;
+    const host = c.serverUrl?.trim().replace(/\/+$/, "").toLowerCase() || "https://dev.azure.com";
+    return `${host}/${c.organization.trim().toLowerCase()}/${(c.project?.trim() || "").toLowerCase()}`;
+  }
+  if (data.kind === "JIRA") {
+    const c = data.config as JiraConfig;
+    if (!c?.baseUrl?.trim() || !c.projectKey?.trim()) return null;
+    return `${c.baseUrl.trim().replace(/\/+$/, "").toLowerCase()}/${c.projectKey.trim().toUpperCase()}`;
+  }
+  return null;
+}
+
+/**
+ * The existing integration that files into the same board / Jira project, so
+ * saving it again updates it instead of adding a duplicate that would file
+ * (or fail) alongside it.
+ */
+export async function findSameTargetIntegration(orgId: string, data: IntegrationConfigData): Promise<string | null> {
+  const target = ticketTargetOf(data);
+  if (!target) return null;
+  const rows = await prisma.integrationConfig.findMany({
+    where: { organizationId: orgId, kind: data.kind },
+    orderBy: { updatedAt: "desc" },
+  });
+  for (const r of rows) {
+    try {
+      const config = JSON.parse(decryptSecret(r.configEnc));
+      if (ticketTargetOf({ kind: data.kind, config } as IntegrationConfigData) === target) return r.id;
+    } catch {
+      /* un-decryptable row: not a match */
+    }
+  }
+  return null;
+}
+
 export async function upsertIntegration(
   orgId: string,
   data: IntegrationConfigData & { name?: string; enabled?: boolean; id?: string },

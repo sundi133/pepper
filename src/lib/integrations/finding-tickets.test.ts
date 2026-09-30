@@ -56,6 +56,7 @@ vi.mock("@/lib/azure-devops-connection", () => ({ getOrgAzureDevOpsAuth: (...a: 
 import {
   missesToConfirmFix,
   raiseAzureBoardsWorkItem,
+  raiseJiraIssue,
   scanRanScanner,
   syncAzureBoardsForScan,
   type TicketFinding,
@@ -299,5 +300,27 @@ describe("syncAzureBoardsForScan: no longer detected", () => {
       await syncAzureBoardsForScan(id);
     }
     expect(comments()).toHaveLength(0);
+  });
+});
+
+describe("raiseJiraIssue", () => {
+  const jira = {
+    id: "j1",
+    name: "Jira SEC",
+    config: { baseUrl: "https://acme.atlassian.net/", email: "a@b.c", apiToken: "t", projectKey: "sec" },
+  };
+  it("files a Jira issue once per issue and Jira project", async () => {
+    let n = 0;
+    const fetchMock = vi.fn(async () => Response.json({ key: `SEC-${++n}`, self: "x" }));
+    vi.stubGlobal("fetch", fetchMock);
+    addScan("s1");
+    const first = await raiseJiraIssue({ integration: jira, repo, finding: addFinding("s1", { id: "f1" }), branch: "main" });
+    expect(first).toEqual({ key: "SEC-1", url: "https://acme.atlassian.net/browse/SEC-1", existing: false });
+    // A rescan (the way automatic filing runs after every scan) doesn't file it again.
+    addScan("s2");
+    const again = await raiseJiraIssue({ integration: jira, repo, finding: addFinding("s2", { id: "f2", startLine: 43 }), branch: "main" });
+    expect(again).toMatchObject({ key: "SEC-1", existing: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(db.tickets[0]).toMatchObject({ system: "JIRA", target: "https://acme.atlassian.net/SEC", findingId: "f2" });
   });
 });

@@ -176,8 +176,10 @@ describe("REST", () => {
     expect(calls.every((c) => (c.init.method ?? "GET") === "GET")).toBe(true);
     expect(calls[1].url).toContain("/Payments/_apis/wit/classificationnodes/Areas/AppSec?");
 
+    mockFetch({ status: 404, body: { message: "not found" } }, { status: 404, body: { message: "not found" } });
+    await expect(validateBoardsConfig(auth, cloud, "Missing")).rejects.toThrow(/neither a "Bug" nor an "Issue"/);
     mockFetch({ status: 404, body: { message: "not found" } });
-    await expect(validateBoardsConfig(auth, cloud, "Payments")).rejects.toThrow(/Basic-process projects use "Issue"/);
+    await expect(validateBoardsConfig(auth, { ...cloud, workItemType: "Bug" }, "Payments")).rejects.toThrow(/Basic-process projects use "Issue"/);
 
     calls = mockFetch({ status: 200, body: {} });
     await validateBoardsConfig(auth, cloud, null);
@@ -194,5 +196,43 @@ describe("boardsError", () => {
     expect(
       boardsError("Azure Boards check", rejected, { organization: "DefaultCollection", pat: "p", serverUrl: "http://ado-server:8080/tfs" }).message,
     ).toMatch(/ado-server:8080 rejected the PAT\. Check the Server URL \(ado-server:8080\)/);
+  });
+});
+
+describe("work item type", () => {
+  const server = { organization: "DefaultCollection", pat: "p", serverUrl: "http://ado-server" };
+  const board: AzureBoardsConfig = { organization: "DefaultCollection", project: "poc2" };
+  const finding = { pepperFindingId: "f1", title: "SQL injection", severity: "CRITICAL" as const, description: "d", filePath: "src/index.js", line: 58, ruleId: "r", cweId: "CWE-89" };
+
+  it("falls back to Issue on Basic-process projects when the type is blank, and remembers it", async () => {
+    const calls = mockFetch(
+      { status: 404, body: { message: "VS402323: Work item type Bug does not exist in project" } },
+      { status: 200, body: { id: 3 } },
+      { status: 200, body: { id: 4 } },
+    );
+    await expect(createWorkItem(server, board, "poc2", finding as never)).resolves.toMatchObject({ id: "3" });
+    expect(calls[0].url).toContain("/poc2/_apis/wit/workitems/$Bug");
+    expect(calls[1].url).toContain("/poc2/_apis/wit/workitems/$Issue");
+    expect(paths(calls[1])).not.toContain("/fields/Microsoft.VSTS.TCM.ReproSteps");
+    // Next time it goes straight to Issue.
+    await createWorkItem(server, board, "poc2", finding as never);
+    expect(calls[2].url).toContain("/poc2/_apis/wit/workitems/$Issue");
+  });
+
+  it("never falls back when the type is set", async () => {
+    const calls = mockFetch({ status: 404, body: { message: "VS402323: Work item type Bug does not exist" } });
+    await expect(createWorkItem(server, { ...board, project: "other", workItemType: "Bug" }, "other", finding as never)).rejects.toThrow(/404/);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("validation reports the type that exists", async () => {
+    mockFetch({ status: 404, body: { message: "not found" } }, { status: 200, body: { name: "Issue" } });
+    await expect(validateBoardsConfig(server, board, "basicproj")).resolves.toEqual({ workItemType: "Issue" });
+  });
+
+  it("rejects project/repository in the Project field", async () => {
+    expect(boardsConfigError({ ...board, project: "poc2/poc2" })).toMatch(/project name only \(e\.g\. "poc2"\)/);
+    expect(boardsConfigError({ ...board, project: "poc2" })).toBeNull();
+    await expect(validateBoardsConfig(server, board, "poc2/poc2")).rejects.toThrow(/project name only/);
   });
 });

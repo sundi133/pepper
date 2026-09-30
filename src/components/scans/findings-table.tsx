@@ -28,7 +28,8 @@ import {
   resolveGithubRepoForFixPr,
 } from "@/lib/open-fix-pr-client";
 import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
-import { FileCode, ChevronDown, ChevronRight, GitPullRequest, ShieldCheck, Bot } from "lucide-react";
+import { FileCode, ChevronDown, ChevronRight, GitPullRequest, ShieldCheck, Bot, Ticket } from "lucide-react";
+import { RaiseTicketsDialog } from "./raise-tickets-dialog";
 import { useRouter } from "next/navigation";
 import { MAX_FINDINGS_PER_RUN } from "@/lib/remediation/types";
 import { toast } from "sonner";
@@ -98,6 +99,8 @@ interface FindingsTableProps {
   renderExpanded?: (finding: Finding) => ReactNode;
   /** When set, each row shows an action to open a GitHub fix PR for findings with a file path. */
   fixPrSource?: FixPrScanSourceContext;
+  /** The scan these findings belong to; enables "Raise tickets" for the selection. */
+  scanId?: string;
 }
 
 export function FindingsTable({
@@ -107,9 +110,11 @@ export function FindingsTable({
   onBulkStatusChange,
   renderExpanded,
   fixPrSource,
+  scanId,
 }: FindingsTableProps) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [ticketsOpen, setTicketsOpen] = useState(false);
   const [bulkStatus, setBulkStatus] = useState<string>("");
   const [remediateStarting, setRemediateStarting] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -417,6 +422,18 @@ export function FindingsTable({
               {fixPrRunning ? "Fixing..." : "Fix PRs"}
             </Button>
           )}
+          {scanId && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => setTicketsOpen(true)}
+              title="File the selected findings in Azure Boards, Jira or another ticket system"
+            >
+              <Ticket className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Raise tickets
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"
@@ -426,6 +443,14 @@ export function FindingsTable({
             Clear
           </Button>
         </div>
+      )}
+      {scanId && (
+        <RaiseTicketsDialog
+          open={ticketsOpen}
+          onOpenChange={setTicketsOpen}
+          scanId={scanId}
+          findingIds={findings.filter((f) => selected.has(f.id)).map((f) => f.id)}
+        />
       )}
 
       {/* Batch FP Verification Results Dialog */}

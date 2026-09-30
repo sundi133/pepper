@@ -4,10 +4,10 @@ import {
   notifySlackScanComplete,
   type SlackScanCompleteInput,
 } from "./slack";
-import { createJiraIssueForFinding, shouldOpenJiraTicket } from "./jira";
+import { shouldOpenJiraTicket } from "./jira";
 import { forwardToSiem, type SiemFindingEvent } from "./siem";
 import { fireWebhook, type WebhookScanPayload, type WebhookFindingPayload } from "./webhook";
-import { syncAzureBoardsForScan } from "./finding-tickets";
+import { TICKET_FINDING_SELECT, raiseJiraIssue, syncAzureBoardsForScan } from "./finding-tickets";
 import type { JiraConfig, SlackConfig, SiemConfig, WebhookConfig } from "./types";
 
 interface DecryptedRow<TKind extends string, TConfig> {
@@ -62,7 +62,7 @@ export async function dispatchScanCompleteIntegrations(scanId: string) {
       lowCount: true,
       infoCount: true,
       gateResult: true,
-      project: { select: { name: true, organizationId: true } },
+      project: { select: { id: true, name: true, organizationId: true } },
     },
   });
   if (!scan?.project) return;
@@ -94,7 +94,7 @@ export async function dispatchScanCompleteIntegrations(scanId: string) {
     ),
   );
 
-  // ----- Jira (per-finding, severe only) -----
+  // ----- Jira (per-finding, severe only; once per issue, not once per scan) -----
   const jiras = await loadEnabled<JiraConfig>(orgId, "JIRA");
   if (jiras.length > 0) {
     const severeFindings = await prisma.finding.findMany({
@@ -104,8 +104,10 @@ export async function dispatchScanCompleteIntegrations(scanId: string) {
         status: "OPEN",
         scan: { project: { organizationId: orgId } },
       },
+      select: TICKET_FINDING_SELECT,
       take: 25,
     });
+    const repo = { id: scan.project.id, organizationId: orgId };
     for (const jira of jiras) {
       for (const f of severeFindings) {
         if (
@@ -113,19 +115,7 @@ export async function dispatchScanCompleteIntegrations(scanId: string) {
         )
           continue;
         try {
-          await createJiraIssueForFinding(jira.config, {
-            pepperFindingId: f.id,
-            title: f.title,
-            severity: f.severity as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
-            description: f.description,
-            filePath: f.filePath,
-            line: f.startLine,
-            ruleId: f.ruleId,
-            cveId: f.cveId,
-            cweId: f.cweId,
-            scanId: f.scanId,
-            scanUrl,
-          });
+          await raiseJiraIssue({ integration: jira, repo, finding: f, branch: scan.branch, scanUrl });
         } catch (e) {
           console.warn("[integrations] Jira create failed:", e);
         }

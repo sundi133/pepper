@@ -9,6 +9,7 @@ import {
   getLlmConfig,
 } from "@/lib/llm-gateway";
 import { z } from "zod";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const MAX_BATCH = 50;
 
@@ -195,6 +196,14 @@ export async function POST(req: NextRequest) {
           },
         });
         appliedCount = updateResult.count;
+        await writeAuditLog({
+          organizationId: orgId,
+          userId: auth.session.user.id,
+          action: "finding.status_changed",
+          resource: "finding",
+          details: { to: "FALSE_POSITIVE", via: "ai_verification", bulk: true, updated: appliedCount, findingIds: markIds.slice(0, 500) },
+          ipAddress: ipFromHeaders(req.headers),
+        });
       }
     }
 

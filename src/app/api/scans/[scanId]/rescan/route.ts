@@ -5,6 +5,7 @@ import { scanQueue, ScanJobData } from "@/lib/queue";
 import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
 import { parseRescanBody } from "@/lib/scan-types";
 import { execFileSync } from "child_process";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 function resolveGitDefaultBranch(repoUrl: string) {
   try {
@@ -173,6 +174,16 @@ export async function POST(
   } catch (e) {
     console.error("Failed to record notification:", e);
   }
+
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "scan.rescanned",
+    resource: "scan",
+    resourceId: scan.id,
+    details: { previousScanId: scanId, projectName: originalScan.project.name, scanType, branch: branch ?? null },
+    ipAddress: ipFromHeaders(req.headers),
+  });
 
   return NextResponse.json(
     { scanId: scan.id, status: "QUEUED" },

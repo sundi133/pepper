@@ -7,6 +7,16 @@ import { prisma } from "./prisma";
 import { isHcaptchaEnabled, verifyHcaptchaToken } from "./hcaptcha";
 import { isSamlEnabled } from "./saml/config";
 import { verifySamlHandoffToken } from "./saml/handoff";
+import { ipFromHeaderRecord, writeUserAuditEvent } from "./audit-log";
+
+/** Record a failed sign-in (never the password) against the account, if it exists. */
+async function auditLoginFailure(
+  userId: string | null,
+  details: Record<string, unknown>,
+  ipAddress: string | null,
+) {
+  await writeUserAuditEvent({ userId, action: "user.login_failed", details, ipAddress });
+}
 
 export const authOptions: NextAuthOptions = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -22,6 +32,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) return null;
+        const ipAddress = ipFromHeaderRecord(req?.headers);
 
         if (isHcaptchaEnabled()) {
           const forwarded = (req?.headers?.["x-forwarded-for"] as
@@ -31,18 +42,32 @@ export const authOptions: NextAuthOptions = {
             credentials.captchaToken,
             forwarded,
           );
-          if (!ok) return null;
+          if (!ok) {
+            await auditLoginFailure(null, { method: "password", email: credentials.email, reason: "captcha" }, ipAddress);
+            return null;
+          }
         }
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });
-        if (!user?.passwordHash) return null;
+        if (!user?.passwordHash) {
+          await auditLoginFailure(
+            user?.id ?? null,
+            { method: "password", email: credentials.email, reason: user ? "no_password_set" : "unknown_user" },
+            ipAddress,
+          );
+          return null;
+        }
         const valid = await bcrypt.compare(
           credentials.password,
           user.passwordHash,
         );
-        if (!valid) return null;
+        if (!valid) {
+          await auditLoginFailure(user.id, { method: "password", email: user.email, reason: "wrong_password" }, ipAddress);
+          return null;
+        }
+        await writeUserAuditEvent({ userId: user.id, action: "user.login", details: { method: "password" }, ipAddress });
         return { id: user.id, email: user.email, name: user.name };
       },
     }),
@@ -58,14 +83,19 @@ export const authOptions: NextAuthOptions = {
             credentials: {
               token: { label: "SSO token", type: "text" },
             },
-            async authorize(credentials) {
+            async authorize(credentials, req) {
+              const ipAddress = ipFromHeaderRecord(req?.headers);
               const userId = verifySamlHandoffToken(credentials?.token);
-              if (!userId) return null;
+              if (!userId) {
+                await auditLoginFailure(null, { method: "saml", reason: "invalid_sso_token" }, ipAddress);
+                return null;
+              }
               const user = await prisma.user.findUnique({
                 where: { id: userId },
                 select: { id: true, email: true, name: true },
               });
               if (!user) return null;
+              await writeUserAuditEvent({ userId: user.id, action: "user.login", details: { method: "saml" }, ipAddress });
               return { id: user.id, email: user.email, name: user.name };
             },
           }),
@@ -115,6 +145,22 @@ export const authOptions: NextAuthOptions = {
           token.memberships as typeof session.user.memberships;
       }
       return session;
+    },
+  },
+  events: {
+    // Password and SAML sign-ins are recorded in authorize (with the client
+    // IP); this covers OAuth providers.
+    async signIn({ user, account }) {
+      if (!account || account.provider === "credentials" || account.provider === "saml") return;
+      await writeUserAuditEvent({
+        userId: typeof user?.id === "string" ? user.id : null,
+        action: "user.login",
+        details: { method: account.provider },
+      });
+    },
+    async signOut({ token }) {
+      const userId = typeof token?.userId === "string" ? token.userId : null;
+      if (userId) await writeUserAuditEvent({ userId, action: "user.logout" });
     },
   },
   pages: {

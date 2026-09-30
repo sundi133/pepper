@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { z } from "zod";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const updateSchema = z.object({
   projectId: z.string(),
@@ -53,6 +54,16 @@ export async function PUT(req: NextRequest) {
         maxLow: data.maxLow,
         failOnNew: data.failOnNew,
       },
+    });
+
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "buildgate.updated",
+      resource: "buildgate",
+      resourceId: data.projectId,
+      details: { maxCritical: data.maxCritical, maxHigh: data.maxHigh, maxMedium: data.maxMedium, maxLow: data.maxLow, failOnNew: data.failOnNew },
+      ipAddress: ipFromHeaders(req.headers),
     });
 
     return NextResponse.json(buildGate);

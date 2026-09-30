@@ -12,6 +12,7 @@ import {
 } from "@/lib/integrations/jira";
 import { notifySlackScanComplete } from "@/lib/integrations/slack";
 import { forwardToSiem } from "@/lib/integrations/siem";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import { fireWebhook } from "@/lib/integrations/webhook";
 import {
   boardsConfigError,
@@ -30,6 +31,14 @@ export async function POST(req: NextRequest) {
   if ("error" in roleAuth) return roleAuth.error;
 
   const body: IntegrationConfigData = await req.json();
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "integration.tested",
+    resource: "integration",
+    details: { kind: body.kind },
+    ipAddress: ipFromHeaders(req.headers),
+  });
 
   try {
     if (body.kind === "SLACK") {

@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
 import { sendTeamInviteEmail } from "@/lib/email";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 export async function GET() {
   const auth = await requireAuth();
@@ -105,6 +106,16 @@ export async function POST(req: NextRequest) {
       role: data.role,
       isNewUser,
       initialPassword: isNewUser ? data.password : undefined,
+    });
+
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: isNewUser ? "user.created" : "user.invited",
+      resource: "user",
+      resourceId: user.id,
+      details: { email: user.email, role: data.role, newAccount: isNewUser },
+      ipAddress: ipFromHeaders(req.headers),
     });
 
     return NextResponse.json({ member }, { status: 201 });

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { encryptSecret } from "@/lib/token-encryption";
 import { z } from "zod";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 export async function GET() {
   const auth = await requireAuth();
@@ -124,6 +125,23 @@ export async function PUT(req: NextRequest) {
       },
     });
 
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "settings.llm.updated",
+      resource: "settings",
+      resourceId: orgId,
+      details: {
+        // Never the key itself.
+        changed: Object.keys(data).filter((k) => k !== "llmApiKey"),
+        llmProvider: data.llmProvider,
+        llmModel: data.llmModel,
+        llmBaseUrl: data.llmBaseUrl,
+        apiKeyChanged: "llmApiKey" in updateData,
+      },
+      ipAddress: ipFromHeaders(req.headers),
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -152,7 +170,7 @@ const DEFAULTS = {
   vulnDbMode: "online",
 };
 
-export async function DELETE() {
+export async function DELETE(req: Request) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
@@ -168,6 +186,15 @@ export async function DELETE() {
       where: { organizationId: orgId },
       update: DEFAULTS,
       create: { organizationId: orgId, ...DEFAULTS },
+    });
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "settings.llm.updated",
+      resource: "settings",
+      resourceId: orgId,
+      details: { reset: true },
+      ipAddress: ipFromHeaders(req.headers),
     });
     return NextResponse.json({ success: true });
   } catch {

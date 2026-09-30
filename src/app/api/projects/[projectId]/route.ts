@@ -4,6 +4,7 @@ import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { scanQueue } from "@/lib/queue";
 import { deleteObject } from "@/lib/minio";
 import { z } from "zod";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 export async function GET(
   _req: NextRequest,
@@ -105,6 +106,16 @@ export async function PATCH(
       data,
     });
 
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "project.updated",
+      resource: "project",
+      resourceId: projectId,
+      details: { name: project.name, changed: data },
+      ipAddress: ipFromHeaders(req.headers),
+    });
+
     return NextResponse.json(project);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -121,7 +132,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
   const auth = await requireAuth();
@@ -140,6 +151,7 @@ export async function DELETE(
     where: { id: projectId, organizationId: orgId },
     select: {
       id: true,
+      name: true,
       scans: {
         select: {
           id: true,
@@ -190,6 +202,16 @@ export async function DELETE(
   ]);
 
   await Promise.allSettled(objectKeys.map((key) => deleteObject(key)));
+
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "project.deleted",
+    resource: "project",
+    resourceId: projectId,
+    details: { name: project.name, scansDeleted: project.scans.length },
+    ipAddress: ipFromHeaders(req.headers),
+  });
 
   return NextResponse.json({ success: true });
 }

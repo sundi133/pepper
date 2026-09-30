@@ -6,6 +6,7 @@ import {
   getBitbucketConnectionStatus,
 } from "@/lib/bitbucket-connection";
 import { bitbucketGet } from "@/lib/bitbucket-api";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 /**
  * GET — return current connection status (whether the org has a Bitbucket
@@ -97,6 +98,15 @@ export async function POST(req: NextRequest) {
     workspace,
   });
 
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "integration.created",
+    resource: "integration",
+    details: { provider: "bitbucket", username, workspace },
+    ipAddress: ipFromHeaders(req.headers),
+  });
+
   return NextResponse.json({
     connected: true,
     username,
@@ -105,7 +115,7 @@ export async function POST(req: NextRequest) {
 }
 
 /** DELETE — disconnect Bitbucket for the org. */
-export async function DELETE() {
+export async function DELETE(req: Request) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
   const orgId = getDefaultOrgId(auth.session);
@@ -115,5 +125,13 @@ export async function DELETE() {
   const roleAuth = await requireRole(orgId, "SECURITY");
   if ("error" in roleAuth) return roleAuth.error;
   await deleteOrgBitbucketConnection(orgId);
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "integration.deleted",
+    resource: "integration",
+    details: { provider: "bitbucket" },
+    ipAddress: ipFromHeaders(req.headers),
+  });
   return NextResponse.json({ connected: false });
 }

@@ -11,6 +11,7 @@ import { ensureBucket } from "@/lib/minio";
 import { processScanJob } from "./scan-processor";
 import { runRemediation } from "@/lib/remediation/agent";
 import { startScheduler } from "./scheduler";
+import { startAuditRetention } from "@/lib/audit-retention";
 import { logger } from "@/lib/logger";
 import { logOutboundProxy } from "@/lib/outbound-proxy";
 import { prisma } from "@/lib/prisma";
@@ -114,9 +115,11 @@ async function main() {
 
   // Graceful shutdown
   const schedulerInterval = startScheduler();
+  const auditRetentionInterval = startAuditRetention();
   const shutdown = async () => {
     logger.info("Shutting down worker...");
     clearInterval(schedulerInterval);
+    clearInterval(auditRetentionInterval);
     await Promise.all([worker.close(), remediationWorker.close()]);
     process.exit(0);
   };

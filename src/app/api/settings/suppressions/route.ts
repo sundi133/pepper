@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { z } from "zod";
 import { hashSnippet } from "@/lib/suppression-rules";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const createSchema = z.object({
   projectId: z.string().optional(),
@@ -74,6 +75,16 @@ export async function POST(req: NextRequest) {
         source: "user",
         createdBy: auth.session.user.id,
       },
+    });
+
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "suppression.created",
+      resource: "suppression",
+      resourceId: rule.id,
+      details: { projectId: rule.projectId, ruleId: rule.ruleId, cweId: rule.cweId, scanner: rule.scanner, filePathPattern: rule.filePathPattern, titlePattern: rule.titlePattern, reason: rule.reason },
+      ipAddress: ipFromHeaders(req.headers),
     });
 
     return NextResponse.json(rule, { status: 201 });

@@ -3,9 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { scanQueue, ScanJobData } from "@/lib/queue";
 import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ scanId: string }> },
 ) {
   const auth = await requireAuth();
@@ -122,6 +123,15 @@ export async function POST(
       console.error("Failed to record notification:", e);
     }
 
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "scan.resumed",
+      resource: "scan",
+      resourceId: scanId,
+      details: { requeued: true },
+      ipAddress: ipFromHeaders(req.headers),
+    });
     return NextResponse.json({ scanId, status: "QUEUED" });
   }
 
@@ -141,6 +151,15 @@ export async function POST(
   } catch (e) {
     console.error("Failed to record notification:", e);
   }
+
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "scan.resumed",
+    resource: "scan",
+    resourceId: scanId,
+    ipAddress: ipFromHeaders(req.headers),
+  });
 
   return NextResponse.json({ scanId, status: "RUNNING" });
 }

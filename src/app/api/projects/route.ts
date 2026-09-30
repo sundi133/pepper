@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { letterGradeFromCounts, projectSourceLabel } from "@/lib/security-grade";
 import { createProjectWithBuildGate } from "@/lib/create-project-with-build-gate";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 /** Strip HTML tags and trim whitespace to prevent stored XSS. */
 function sanitizeText(value: string): string {
@@ -245,6 +246,16 @@ export async function POST(req: NextRequest) {
       description: data.description,
       repoUrl: data.repoUrl || null,
       defaultBranch: data.defaultBranch,
+    });
+
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "project.created",
+      resource: "project",
+      resourceId: project.id,
+      details: { name: data.name, repoUrl: data.repoUrl || null },
+      ipAddress: ipFromHeaders(req.headers),
     });
 
     return NextResponse.json(project, { status: 201 });

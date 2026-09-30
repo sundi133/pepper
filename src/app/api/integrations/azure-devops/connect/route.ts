@@ -6,6 +6,7 @@ import {
   getAzureDevOpsConnectionStatus,
 } from "@/lib/azure-devops-connection";
 import { azureGet } from "@/lib/azure-devops-api";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 /** GET — current connection status for the calling user's default org. */
 export async function GET() {
@@ -121,6 +122,15 @@ export async function POST(req: NextRequest) {
     azureServerUrl,
   });
 
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "integration.created",
+    resource: "integration",
+    details: { provider: "azure_devops", azureOrganization, azureServerUrl, azureUser },
+    ipAddress: ipFromHeaders(req.headers),
+  });
+
   return NextResponse.json({
     connected: true,
     azureOrganization,
@@ -130,7 +140,7 @@ export async function POST(req: NextRequest) {
 }
 
 /** DELETE — remove the connection. */
-export async function DELETE() {
+export async function DELETE(req: Request) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
   const orgId = getDefaultOrgId(auth.session);
@@ -140,5 +150,13 @@ export async function DELETE() {
   const roleAuth = await requireRole(orgId, "SECURITY");
   if ("error" in roleAuth) return roleAuth.error;
   await deleteOrgAzureDevOpsConnection(orgId);
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "integration.deleted",
+    resource: "integration",
+    details: { provider: "azure_devops" },
+    ipAddress: ipFromHeaders(req.headers),
+  });
   return NextResponse.json({ connected: false });
 }

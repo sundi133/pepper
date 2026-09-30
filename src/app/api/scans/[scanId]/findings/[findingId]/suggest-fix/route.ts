@@ -7,6 +7,7 @@ import {
   parseLlmJsonResponse,
   getLlmConfig,
 } from "@/lib/llm-gateway";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const SYSTEM = `You are a senior application security engineer helping a developer fix one finding.
 
@@ -32,7 +33,7 @@ type SuggestFixBody = {
 };
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   {
     params,
   }: { params: Promise<{ scanId: string; findingId: string }> },
@@ -142,6 +143,15 @@ export async function POST(
           ? parsed.optionalUnifiedDiff.trim()
           : null,
     };
+
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "finding.suggest_fix",
+      resource: "finding",
+      resourceId: findingId,
+      ipAddress: ipFromHeaders(req.headers),
+    });
 
     return NextResponse.json(result);
   } catch (e) {

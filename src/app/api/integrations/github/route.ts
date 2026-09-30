@@ -7,6 +7,7 @@ import {
 } from "@/lib/github-connection";
 import { revokeGithubToken } from "@/lib/github-oauth";
 import { isGithubRepoOAuthConfigured } from "@/lib/github-oauth-config";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 export async function GET() {
   const auth = await requireAuth();
@@ -24,7 +25,7 @@ export async function GET() {
   });
 }
 
-export async function DELETE() {
+export async function DELETE(req: Request) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
@@ -40,6 +41,15 @@ export async function DELETE() {
     await revokeGithubToken(token);
   }
   await deleteOrgGithubConnection(orgId);
+
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "integration.deleted",
+    resource: "integration",
+    details: { provider: "github" },
+    ipAddress: ipFromHeaders(req.headers),
+  });
 
   return NextResponse.json({ success: true });
 }

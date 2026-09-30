@@ -347,6 +347,8 @@ Pepper ships with end-to-end pipeline security primitives:
 - **CI/CD templates** — download ready-to-use GitHub Actions, GitLab CI and
   Jenkinsfile templates from `/api/cicd-templates/<platform>`.
 - **API keys** — manage CI/IDE/precommit credentials under Settings → API Keys.
-- **Audit log** — view security-relevant actions under Settings → Audit Log.
+- **Audit log** — sign-ins, role changes, triage, deletions and settings changes
+  under Settings → Audit Log, with date / action filters, CSV / JSON export, and
+  a per-organization retention period (archived to object storage before deletion).
 - **Trends** — historical severity, gate failures, and mean-time-to-resolve
   charts at `/trends`.

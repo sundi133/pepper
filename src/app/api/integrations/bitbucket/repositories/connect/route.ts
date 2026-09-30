@@ -6,6 +6,7 @@ import {
   BitbucketCredentialsInvalidError,
   getBitbucketConnectionStatus,
 } from "@/lib/bitbucket-connection";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 const bodySchema = z.object({
   repoUuids: z.array(z.string().min(1)).min(1).max(50),
@@ -56,6 +57,19 @@ export async function POST(req: NextRequest) {
       workspace,
       scanType: body.scanType,
     });
+    await Promise.all(
+      result.connected.map((r) =>
+        writeAuditLog({
+          organizationId: orgId,
+          userId: auth.session.user.id,
+          action: "project.created",
+          resource: "project",
+          resourceId: r.projectId,
+          details: { source: "bitbucket", repository: r.fullName, scanId: r.scanId },
+          ipAddress: ipFromHeaders(req.headers),
+        }),
+      ),
+    );
     return NextResponse.json(result, { status: 201 });
   } catch (e) {
     if (e instanceof BitbucketCredentialsInvalidError) {

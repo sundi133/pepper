@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 
@@ -35,6 +36,15 @@ export async function PATCH(
         reason: typeof body.reason === "string" ? body.reason : undefined,
       },
     });
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "suppression.updated",
+      resource: "suppression",
+      resourceId: ruleId,
+      details: { enabled: { from: existing.enabled, to: rule.enabled }, reason: rule.reason },
+      ipAddress: ipFromHeaders(req.headers),
+    });
     return NextResponse.json(rule);
   } catch {
     return NextResponse.json(
@@ -45,7 +55,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ ruleId: string }> },
 ) {
   const auth = await requireAuth();
@@ -69,5 +79,14 @@ export async function DELETE(
   }
 
   await prisma.suppressionRule.delete({ where: { id: ruleId } });
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "suppression.deleted",
+    resource: "suppression",
+    resourceId: ruleId,
+    details: { ruleId: existing.ruleId, cweId: existing.cweId, filePathPattern: existing.filePathPattern, reason: existing.reason },
+    ipAddress: ipFromHeaders(req.headers),
+  });
   return NextResponse.json({ success: true });
 }

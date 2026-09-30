@@ -7,6 +7,12 @@ import {
 } from "@/lib/auth-guard";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
+
+async function memberEmail(userId: string): Promise<string | null> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  return u?.email ?? null;
+}
 
 const patchMemberSchema = z.object({
   role: z.enum(["ADMIN", "SECURITY", "DEVELOPER", "VIEWER"]),
@@ -62,6 +68,16 @@ export async function PATCH(
       data: { role },
     });
 
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "user.role_changed",
+      resource: "user",
+      resourceId: target.userId,
+      details: { email: await memberEmail(target.userId), from: target.role, to: role },
+      ipAddress: ipFromHeaders(req.headers),
+    });
+
     return NextResponse.json({ member });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -79,7 +95,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ memberId: string }> },
 ) {
   const auth = await requireAuth();
@@ -128,6 +144,16 @@ export async function DELETE(
 
     await prisma.orgMember.delete({
       where: { id: memberId },
+    });
+
+    await writeAuditLog({
+      organizationId: orgId,
+      userId: auth.session.user.id,
+      action: "user.removed",
+      resource: "user",
+      resourceId: target.userId,
+      details: { email: await memberEmail(target.userId), role: target.role },
+      ipAddress: ipFromHeaders(req.headers),
     });
 
     return NextResponse.json({ ok: true });

@@ -461,24 +461,47 @@
 
       <h2 id="audit">12 · Audit log</h2>
       <p>
-        Every security-relevant action is appended to the immutable <code>AuditLog</code>
-        table. View it under <em>Settings → Audit Log</em> or
-        <code>GET /api/audit-log</code>.
+        Every security-relevant action is appended to the <code>AuditLog</code> table
+        (the application never edits or deletes entries, except through the retention
+        policy below). View and filter it under <em>Settings → Audit Log</em> or
+        <code>GET /api/audit-log</code>; only the Security and Admin roles can read it.
       </p>
-      <p><strong>Tracked actions include:</strong></p>
+      <p><strong>Tracked actions:</strong></p>
       <ul>
-        <li>Scan queued, cancelled, paused, resumed, rescanned, stopped</li>
-        <li>Integration created / updated / deleted / tested</li>
-        <li>API key created / revoked</li>
-        <li>DAST and code-signing settings updated</li>
-        <li>Project / policy / build-gate changes</li>
-        <li>Finding status changes</li>
+        <li>Sign-ins (password, SAML, GitHub), failed sign-ins with the reason (never
+          the password), sign-outs</li>
+        <li>Users: self-registration, invites, SSO provisioning, role changes (including
+          SAML group mapping), removals</li>
+        <li>Findings: status changes (single, bulk, AI verification), fix PRs, fix
+          suggestions, tickets raised</li>
+        <li>Projects created (including repository imports), updated, deleted</li>
+        <li>Scans queued, cancelled, paused, resumed, stopped, rescanned, deleted;
+          AI remediation runs</li>
+        <li>Policies, suppression rules and build gates created / updated / deleted</li>
+        <li>Integrations and repository connections created / updated / deleted /
+          tested; API keys created / revoked</li>
+        <li>LLM, container registry, code-signing, webhook and audit-retention
+          settings</li>
+        <li>Audit exports, archive downloads and retention purges</li>
       </ul>
       <p>
         Each entry stores <code>action</code>, <code>resource</code>,
         <code>resourceId</code>, the acting <code>userId</code>, the originating IP, a
-        timestamp, and a JSON details blob.
+        timestamp, and a JSON details blob (secrets such as API keys are never
+        recorded).
       </p>
+      <p><strong>Export.</strong> <em>Export CSV</em> / <em>Export JSON</em> on the
+        audit page (or <code>GET /api/audit-log/export?format=csv|json</code>) download
+        every entry matching the current filters, streamed. Exports are themselves
+        audited.</p>
+      <p><strong>Retention.</strong> Entries are kept forever by default. An admin can
+        set a retention period per organization (90 days, 180 days, 1 year, 2 years,
+        or forever); the instance default comes from
+        <code>AUDIT_LOG_RETENTION_DAYS</code> (minimum 30). Before deletion, expiring
+        entries are archived to object storage as gzipped JSON lines and can be
+        downloaded from the audit page; if the upload fails, nothing is deleted.
+        Archiving can be switched off per organization. Each purge is recorded in the
+        log.</p>
 
       <h2 id="trends">Trend analysis</h2>
       <p>

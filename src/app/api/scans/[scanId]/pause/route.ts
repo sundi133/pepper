@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ scanId: string }> },
 ) {
   const auth = await requireAuth();
@@ -49,6 +50,15 @@ export async function POST(
   } catch (e) {
     console.error("Failed to record notification:", e);
   }
+
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "scan.paused",
+    resource: "scan",
+    resourceId: scanId,
+    ipAddress: ipFromHeaders(req.headers),
+  });
 
   return NextResponse.json({ scanId, status: "PAUSED" });
 }

@@ -4,6 +4,7 @@ import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { decryptSecret } from "@/lib/token-encryption";
 import { notifySlackFinding } from "@/lib/integrations/slack";
 import { createJiraIssueForFinding } from "@/lib/integrations/jira";
+import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import type { JiraConfig, SlackConfig } from "@/lib/integrations/types";
 import { logger } from "@/lib/logger";
 import {
@@ -162,6 +163,15 @@ export async function POST(
 
   const scanUrl = scanWebUrl(finding.scanId);
   const results: Record<string, unknown> = {};
+  await writeAuditLog({
+    organizationId: orgId,
+    userId: auth.session.user.id,
+    action: "finding.ticket_raised",
+    resource: "finding",
+    resourceId: finding.id,
+    details: { channel, title: finding.title, severity: finding.severity },
+    ipAddress: ipFromHeaders(req.headers),
+  });
 
   // ----- Slack -----
   if (channel === "all" || channel === "slack") {

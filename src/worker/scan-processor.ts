@@ -44,6 +44,7 @@ import {
 import { decryptSecret } from "@/lib/token-encryption";
 import { computeRiskScore } from "@/lib/risk-score";
 import { validateExploitability } from "@/scanners/shared/exploit-validation";
+import { evaluateBuildGate } from "@/lib/build-gate";
 import {
   ENABLE_EXPLOIT_VALIDATION,
   EXPLOIT_VALIDATION_MIN_SEVERITY,
@@ -928,6 +929,26 @@ Schema:
     // the gate so counts reflect the validated set. Never throws to the caller.
     await runExploitValidation(scanId, orgSettings, workDir, log);
 
+    // 5c. Auto FP verification — re-check findings with the LLM and mark likely
+    // false positives. Runs BEFORE the gate and before the scan is marked
+    // COMPLETED so the gate result, PR status, notifications and history all
+    // reflect the final counts (it recounts severities when it marks any).
+    await assertScanActive();
+    try {
+      const { autoVerifyFalsePositives } = await import(
+        "@/lib/auto-fp-verify"
+      );
+      const fpResult = await autoVerifyFalsePositives(scanId, orgSettings, log);
+      if (fpResult.marked > 0) {
+        log.info(
+          { marked: fpResult.marked, total: fpResult.analyzed },
+          "Auto FP verification marked findings as false positives",
+        );
+      }
+    } catch (fpErr) {
+      log.warn({ fpErr }, "Auto FP verification failed (non-blocking)");
+    }
+
     // 6. Evaluate build gate (read current counts from DB since they were set incrementally)
     let gateResult: "PASSED" | "FAILED" = "PASSED";
     if (buildGate) {
@@ -943,17 +964,7 @@ Schema:
       const hasNewFindings = buildGate.failOnNew
         ? await scanHasNewFindings(scanId)
         : false;
-      if (
-        hasNewFindings ||
-        (buildGate.maxCritical >= 0 &&
-          currentScan.criticalCount > buildGate.maxCritical) ||
-        (buildGate.maxHigh >= 0 && currentScan.highCount > buildGate.maxHigh) ||
-        (buildGate.maxMedium >= 0 &&
-          currentScan.mediumCount > buildGate.maxMedium) ||
-        (buildGate.maxLow >= 0 && currentScan.lowCount > buildGate.maxLow)
-      ) {
-        gateResult = "FAILED";
-      }
+      gateResult = evaluateBuildGate(buildGate, currentScan, hasNewFindings);
     }
 
     // 9. Update scan record (severity counts already incremented per-scanner)
@@ -987,23 +998,7 @@ Schema:
       log.warn({ fixErr }, "Fix verification failed (non-blocking)");
     }
 
-    // 9c. Auto FP verification — re-check findings with LLM to flag likely false positives
-    try {
-      const { autoVerifyFalsePositives } = await import(
-        "@/lib/auto-fp-verify"
-      );
-      const fpResult = await autoVerifyFalsePositives(scanId, orgSettings, log);
-      if (fpResult.marked > 0) {
-        log.info(
-          { marked: fpResult.marked, total: fpResult.analyzed },
-          "Auto FP verification marked findings as false positives",
-        );
-      }
-    } catch (fpErr) {
-      log.warn({ fpErr }, "Auto FP verification failed (non-blocking)");
-    }
-
-    // 9d. Record this scan in the repository's history (trends survive rescans)
+    // 9c. Record this scan in the repository's history (trends survive rescans)
     try {
       const { recordScanSnapshot } = await import("@/lib/scan-history");
       await recordScanSnapshot(scanId);

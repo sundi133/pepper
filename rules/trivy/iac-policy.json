@@ -1,0 +1,20 @@
+{
+  "$comment": "Policy for rule-based IaC scanning with `trivy config` (Trivy: Apache-2.0; checks: MIT). Runs offline with the checks embedded in the Trivy binary. Exclusions/groupings were tuned on TerraGoat, Kubernetes Goat, terraform-aws-vpc, terraform-aws-eks and grafana/helm-charts.",
+  "minSeverity": "HIGH",
+  "misconfigScanners": ["terraform", "cloudformation", "azure-arm", "kubernetes", "helm", "ansible"],
+  "excludeChecks": {
+    "KSV-0118": "'Default security context configured' fires on nearly every workload (26 on Kubernetes Goat, 9 on the Grafana chart); the concrete checks (privileged, host namespaces, hostPath, root) cover the real risk.",
+    "KSV-0014": "Read-only root filesystem is a hardening best practice, not a vulnerability; very common in production charts.",
+    "AWS-0104": "Unrestricted security-group EGRESS is the AWS default and almost always intended (5 hits on terraform-aws-eks). Unrestricted INGRESS stays enabled.",
+    "AWS-0132": "Customer-managed KMS keys for S3 are a cost/compliance choice; unencrypted buckets are still reported by AWS-0088."
+  },
+  "groups": [
+    {
+      "id": "aws-s3-public-access-block",
+      "checks": ["AWS-0086", "AWS-0087", "AWS-0091", "AWS-0093", "AWS-0094"],
+      "title": "S3 bucket public access is not fully blocked",
+      "severity": "HIGH",
+      "resolution": "Add an aws_s3_bucket_public_access_block for the bucket with block_public_acls, block_public_policy, ignore_public_acls and restrict_public_buckets all set to true (or enable account-level S3 Block Public Access)."
+    }
+  ]
+}

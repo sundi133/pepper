@@ -6,6 +6,13 @@ import { notifySlackFinding } from "@/lib/integrations/slack";
 import { createJiraIssueForFinding } from "@/lib/integrations/jira";
 import type { JiraConfig, SlackConfig } from "@/lib/integrations/types";
 import { logger } from "@/lib/logger";
+import {
+  TICKET_FINDING_SELECT,
+  boardsAuthResolver,
+  listFindingTickets,
+  loadBoardsIntegrations,
+  raiseAzureBoardsWorkItem,
+} from "@/lib/integrations/finding-tickets";
 
 const FINDING_SEVERITIES = new Set([
   "CRITICAL",
@@ -42,11 +49,58 @@ async function loadEnabled<T>(orgId: string, kind: string) {
   return out;
 }
 
+const FINDING_WITH_REPO_SELECT = {
+  ...TICKET_FINDING_SELECT,
+  scan: {
+    select: {
+      project: {
+        select: { id: true, name: true, organizationId: true, azureProjectName: true },
+      },
+    },
+  },
+} as const;
+
+/**
+ * Which ticketing destinations are configured, and the work items already
+ * linked to this finding's issue (for the finding panel).
+ */
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ findingId: string }> },
+) {
+  const auth = await requireAuth();
+  if ("error" in auth) return auth.error;
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId) {
+    return NextResponse.json({ error: "No organization" }, { status: 403 });
+  }
+  const { findingId } = await params;
+  const finding = await prisma.finding.findFirst({
+    where: { id: findingId, scan: { project: { organizationId: orgId } } },
+    select: FINDING_WITH_REPO_SELECT,
+  });
+  if (!finding?.scan.project) {
+    return NextResponse.json({ error: "Finding not found" }, { status: 404 });
+  }
+  const kinds = await prisma.integrationConfig.groupBy({
+    by: ["kind"],
+    where: { organizationId: orgId, enabled: true, kind: { in: ["SLACK", "JIRA", "AZURE_BOARDS"] } },
+    _count: { _all: true },
+  });
+  const count = (k: string) => kinds.find((r) => r.kind === k)?._count._all ?? 0;
+  return NextResponse.json({
+    configured: { slack: count("SLACK"), jira: count("JIRA"), azureBoards: count("AZURE_BOARDS") },
+    tickets: await listFindingTickets(finding.scan.project.id, finding),
+  });
+}
+
 /**
  * Raise a scan finding to the organization's enabled Slack + Jira integrations
  * on demand (the "Send to Slack" / "Create Jira" buttons in the finding panel).
  * Best-effort per destination: each enabled integration is attempted and its
  * individual result reported so the UI can show what actually went out.
+ * Azure Boards files one work item per issue: raising the same issue again
+ * returns the existing work item.
  */
 export async function POST(
   req: NextRequest,
@@ -89,7 +143,8 @@ export async function POST(
       cweId: true,
       scan: {
         select: {
-          project: { select: { name: true } },
+          branch: true,
+          project: { select: { id: true, name: true, azureProjectName: true } },
         },
       },
     },
@@ -180,15 +235,67 @@ export async function POST(
     };
   }
 
+  // ----- Azure Boards -----
+  if (channel === "all" || channel === "azure-boards") {
+    const boards = await loadBoardsIntegrations(orgId);
+    const boardResults: Array<{
+      id: string;
+      ok: boolean;
+      workItemId?: string;
+      url?: string;
+      existing?: boolean;
+      error?: string;
+    }> = [];
+    const repo = finding.scan.project;
+    if (boards.length > 0 && repo) {
+      const resolveAuth = boardsAuthResolver(orgId);
+      const ticketFinding = await prisma.finding.findUniqueOrThrow({
+        where: { id: finding.id },
+        select: TICKET_FINDING_SELECT,
+      });
+      for (const b of boards) {
+        try {
+          const boardAuth = await resolveAuth(b.config);
+          if (!boardAuth) {
+            throw new Error("No PAT on the integration and no Azure DevOps connection to reuse");
+          }
+          const item = await raiseAzureBoardsWorkItem({
+            integration: b,
+            auth: boardAuth,
+            repo: { ...repo, organizationId: orgId },
+            finding: ticketFinding,
+            branch: finding.scan.branch,
+            scanUrl,
+          });
+          boardResults.push({ id: b.id, ok: true, workItemId: item.id, url: item.url, existing: item.existing });
+        } catch (e) {
+          boardResults.push({
+            id: b.id,
+            ok: false,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+    }
+    results.azureBoards = {
+      destinationCount: boards.length,
+      results: boardResults,
+    };
+  }
+
   const slackOk = (results.slack as { results: Array<{ ok: boolean }> } | undefined)
     ?.results.some((r) => r.ok);
   const jiraOk = (results.jira as { results: Array<{ ok: boolean }> } | undefined)
     ?.results.some((r) => r.ok);
-  const anyOk = slackOk || jiraOk;
+  const boardsOk = (results.azureBoards as { results: Array<{ ok: boolean }> } | undefined)
+    ?.results.some((r) => r.ok);
+  const anyOk = slackOk || jiraOk || boardsOk;
   const anyConfigured =
     (results.slack as { destinationCount: number } | undefined)
       ?.destinationCount ||
     (results.jira as { destinationCount: number } | undefined)
+      ?.destinationCount ||
+    (results.azureBoards as { destinationCount: number } | undefined)
       ?.destinationCount;
 
   if (anyOk) {
@@ -196,7 +303,7 @@ export async function POST(
   }
   if (!anyConfigured) {
     return NextResponse.json(
-      { ok: false, error: "No Slack or Jira integration is configured for this organization.", results },
+      { ok: false, error: "No Slack, Jira or Azure Boards integration is configured for this organization.", results },
       { status: 404 },
     );
   }

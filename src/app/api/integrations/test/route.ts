@@ -13,6 +13,11 @@ import {
 import { notifySlackScanComplete } from "@/lib/integrations/slack";
 import { forwardToSiem } from "@/lib/integrations/siem";
 import { fireWebhook } from "@/lib/integrations/webhook";
+import {
+  boardsConfigError,
+  validateBoardsConfig,
+} from "@/lib/integrations/azure-boards";
+import { boardsAuthResolver } from "@/lib/integrations/finding-tickets";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
@@ -80,6 +85,20 @@ export async function POST(req: NextRequest) {
         );
       }
       return NextResponse.json({ ok: true, status: result.status });
+    } else if (body.kind === "AZURE_BOARDS") {
+      // Validate only — a test shouldn't leave junk work items on the board.
+      const config = body.config;
+      const error = boardsConfigError(config);
+      if (error) return NextResponse.json({ error }, { status: 400 });
+      const auth = await boardsAuthResolver(orgId)(config);
+      if (!auth) {
+        return NextResponse.json(
+          { error: "No PAT: enter one, or connect Azure DevOps under Integrations first." },
+          { status: 400 },
+        );
+      }
+      const result = await validateBoardsConfig(auth, config, config.project?.trim() || null);
+      return NextResponse.json({ ok: true, workItemType: result.workItemType });
     } else {
       const _exhaustiveCheck: never = body;
       return NextResponse.json(

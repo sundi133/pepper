@@ -190,7 +190,10 @@ POST   /api/projects/&lt;projectId&gt;/schedule   # nightly / weekly cron</code>
       <pre><code>GET    /api/integrations           # list all integrations
 POST   /api/integrations           # upsert
 DELETE /api/integrations/&lt;id&gt;
-POST   /api/integrations/test      # dry-run with provided config</code></pre>
+POST   /api/integrations/test      # dry-run with provided config
+                                   # (Azure Boards: validates only, creates nothing)
+GET    /api/findings/&lt;id&gt;/integrations   # configured destinations + linked work items
+POST   /api/findings/&lt;id&gt;/integrations   # { "channel": "slack" | "jira" | "azure-boards" | "all" }</code></pre>
       <h3>Body shape</h3>
       <pre><code>// Slack
 { "kind": "SLACK", "name": "Security channel",
@@ -204,6 +207,17 @@ POST   /api/integrations/test      # dry-run with provided config</code></pre>
               "email": "bot@acme.com", "apiToken": "…",
               "projectKey": "SEC", "issueType": "Bug",
               "openForSeverities": ["CRITICAL","HIGH"] } }
+
+// Azure Boards (serverUrl only for Azure DevOps Server; pat optional when
+// the org has an Azure DevOps connection; project blank = repo's own project)
+{ "kind": "AZURE_BOARDS", "name": "Azure Boards (Payments)",
+  "config": { "serverUrl": "https://tfs.company.com/tfs",
+              "organization": "DefaultCollection", "project": "Payments",
+              "pat": "…", "workItemType": "Bug",
+              "areaPath": "Payments\\AppSec", "iterationPath": "Payments\\Sprint 12",
+              "assignedTo": "appsec@company.com", "tags": ["appsec"],
+              "autoCreateSeverities": ["CRITICAL","HIGH"],
+              "fixedState": "Resolved", "apiVersion": "6.0" } }
 
 // SIEM
 { "kind": "SIEM", "name": "Splunk HEC",

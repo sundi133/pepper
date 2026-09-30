@@ -24,7 +24,16 @@ import { toast } from "sonner";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 import { Plus, Trash2 } from "lucide-react";
 
-type IntegrationKind = "SLACK" | "JIRA" | "WEBHOOK";
+type IntegrationKind = "SLACK" | "JIRA" | "WEBHOOK" | "AZURE_BOARDS";
+
+type TicketSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+const TICKET_SEVERITIES: TicketSeverity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
+
+interface AzureConnectionStatus {
+  connected: boolean;
+  azureOrganization: string | null;
+  azureServerUrl: string | null;
+}
 
 interface IntegrationRow {
   id: string;
@@ -72,6 +81,22 @@ export default function OutboundIntegrationsPage() {
   const [jiraProject, setJiraProject] = useState("");
   const [jiraIssueType, setJiraIssueType] = useState("Bug");
 
+  // Azure Boards form
+  const [adoConn, setAdoConn] = useState<AzureConnectionStatus | null>(null);
+  const [abServerUrl, setAbServerUrl] = useState("");
+  const [abOrg, setAbOrg] = useState("");
+  const [abProject, setAbProject] = useState("");
+  const [abPat, setAbPat] = useState("");
+  const [abType, setAbType] = useState("Bug");
+  const [abAuto, setAbAuto] = useState<TicketSeverity[]>(["CRITICAL", "HIGH"]);
+  const [abShowAdvanced, setAbShowAdvanced] = useState(false);
+  const [abArea, setAbArea] = useState("");
+  const [abIteration, setAbIteration] = useState("");
+  const [abAssignee, setAbAssignee] = useState("");
+  const [abTags, setAbTags] = useState("");
+  const [abFixedState, setAbFixedState] = useState("");
+  const [abApiVersion, setAbApiVersion] = useState("");
+
   // Generic webhook form
   const [whUrl, setWhUrl] = useState("");
   const [whEvents, setWhEvents] = useState<WebhookEvent[]>(["scan.completed", "scan.gate_failed"]);
@@ -95,6 +120,16 @@ export default function OutboundIntegrationsPage() {
 
   useEffect(() => {
     void reload();
+    // Prefill Azure Boards from the Azure DevOps repository connection.
+    void fetch("/api/integrations/azure-devops/connect")
+      .then((r) => (r.ok ? (r.json() as Promise<AzureConnectionStatus>) : null))
+      .then((c) => {
+        if (!c?.connected) return;
+        setAdoConn(c);
+        setAbOrg((v) => v || c.azureOrganization || "");
+        setAbServerUrl((v) => v || c.azureServerUrl || "");
+      })
+      .catch(() => {});
   }, []);
 
   async function save(payload: {
@@ -112,7 +147,7 @@ export default function OutboundIntegrationsPage() {
       toast.error(j.error || "Save failed");
       return;
     }
-    toast.success(`${payload.kind} integration saved`);
+    toast.success(`${payload.kind === "AZURE_BOARDS" ? "Azure Boards" : payload.kind} integration saved`);
     void reload();
   }
 
@@ -131,8 +166,9 @@ export default function OutboundIntegrationsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ kind, config }),
     });
-    const j = (await res.json()) as { error?: string; ok?: boolean };
-    if (res.ok && j.ok) toast.success(`${kind} test ok`);
+    const j = (await res.json()) as { error?: string; ok?: boolean; workItemType?: string };
+    if (res.ok && j.ok && j.workItemType) toast.success(`Azure Boards ready: can create ${j.workItemType} work items`);
+    else if (res.ok && j.ok) toast.success(`${kind} test ok`);
     else toast.error(j.error || `${kind} test failed`);
   }
 
@@ -153,6 +189,28 @@ export default function OutboundIntegrationsPage() {
   function removeHeader(idx: number) {
     setWhHeaders((prev) => prev.filter((_, i) => i !== idx));
   }
+
+  function buildBoardsConfig() {
+    const opt = (v: string) => v.trim() || undefined;
+    return {
+      serverUrl: opt(abServerUrl),
+      organization: abOrg.trim(),
+      project: opt(abProject),
+      pat: opt(abPat),
+      workItemType: opt(abType),
+      areaPath: opt(abArea),
+      iterationPath: opt(abIteration),
+      assignedTo: opt(abAssignee),
+      tags: abTags.split(",").map((t) => t.trim()).filter(Boolean),
+      autoCreateSeverities: abAuto,
+      fixedState: opt(abFixedState),
+      apiVersion: opt(abApiVersion),
+    };
+  }
+
+  // Without a project, work items go to each repo's own ADO project.
+  const abNeedsPat = !adoConn?.connected;
+  const abReady = Boolean(abOrg.trim()) && (!abNeedsPat || Boolean(abPat.trim()));
 
   function buildWebhookConfig() {
     return {
@@ -337,6 +395,143 @@ export default function OutboundIntegrationsPage() {
               }
             >
               Save Jira integration
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Azure Boards ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Azure Boards</CardTitle>
+          <CardDescription>
+            Files a work item per issue (never twice for the same issue), and
+            comments on it when later scans no longer detect it. Works with
+            Azure DevOps Services and Azure DevOps Server.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1 sm:col-span-2">
+              <Label>Server URL (Azure DevOps Server only)</Label>
+              <Input
+                placeholder="https://tfs.company.com/tfs  (blank for dev.azure.com)"
+                value={abServerUrl}
+                onChange={(e) => setAbServerUrl(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>{abServerUrl.trim() ? "Collection" : "Organization"}</Label>
+              <Input
+                placeholder={abServerUrl.trim() ? "DefaultCollection" : "your-org"}
+                value={abOrg}
+                onChange={(e) => setAbOrg(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Project</Label>
+              <Input
+                placeholder="Blank = each repo's own project"
+                value={abProject}
+                onChange={(e) => setAbProject(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Personal access token</Label>
+              <Input
+                type="password"
+                placeholder={abNeedsPat ? "Work Items (Read & write)" : "Blank = reuse the Azure DevOps connection"}
+                value={abPat}
+                onChange={(e) => setAbPat(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Work item type</Label>
+              <Input
+                placeholder="Bug"
+                value={abType}
+                onChange={(e) => setAbType(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>File automatically after each scan for</Label>
+            <div className="flex flex-wrap gap-3">
+              {TICKET_SEVERITIES.map((sev) => (
+                <label key={sev} className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={abAuto.includes(sev)}
+                    onCheckedChange={() =>
+                      setAbAuto((prev) => (prev.includes(sev) ? prev.filter((x) => x !== sev) : [...prev, sev]))
+                    }
+                  />
+                  {sev.charAt(0) + sev.slice(1).toLowerCase()}
+                </label>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {abAuto.length === 0
+                ? "Manual only: use Raise ticket on a finding."
+                : "Open findings from branch scans; up to 25 new work items per scan. Pull request scans never file work items."}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="text-xs font-medium text-muted-foreground underline-offset-4 hover:underline"
+            onClick={() => setAbShowAdvanced((v) => !v)}
+          >
+            {abShowAdvanced ? "Hide advanced" : "Advanced: area, iteration, assignee, fixed state"}
+          </button>
+          {abShowAdvanced && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Area path</Label>
+                <Input placeholder="Project\Security" value={abArea} onChange={(e) => setAbArea(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Iteration path</Label>
+                <Input placeholder="Project\Sprint 12" value={abIteration} onChange={(e) => setAbIteration(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Assign to</Label>
+                <Input placeholder="appsec@company.com" value={abAssignee} onChange={(e) => setAbAssignee(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Extra tags (comma-separated)</Label>
+                <Input placeholder="appsec, q3" value={abTags} onChange={(e) => setAbTags(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>When fixed, move to state</Label>
+                <Input placeholder="Blank = comment only (e.g. Resolved, Done)" value={abFixedState} onChange={(e) => setAbFixedState(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>API version</Label>
+                <Input placeholder="7.1 (Server 2020: 6.0, Server 2022: 7.0)" value={abApiVersion} onChange={(e) => setAbApiVersion(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              disabled={!abReady}
+              onClick={() =>
+                void save({
+                  kind: "AZURE_BOARDS",
+                  name: `Azure Boards (${abProject.trim() || "repository's project"})`,
+                  config: buildBoardsConfig(),
+                })
+              }
+            >
+              Save Azure Boards integration
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!abReady}
+              onClick={() => void testIntegration("AZURE_BOARDS", buildBoardsConfig())}
+            >
+              Test connection
             </Button>
           </div>
         </CardContent>

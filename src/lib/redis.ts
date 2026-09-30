@@ -37,13 +37,23 @@ function parseRedisConnection(urlString: string) {
   };
 }
 
-// Lazy singleton — only connects when first accessed at runtime
+function redisClient(): IORedis {
+  if (!globalForRedis.redis) {
+    globalForRedis.redis = createRedis();
+  }
+  return globalForRedis.redis;
+}
+
+// Lazy singleton — only connects when first accessed at runtime.
+// Methods are bound to the real client: called through the proxy, ioredis
+// would otherwise write its connection state (this.condition, this.status)
+// onto the proxy's empty target and then crash reading it back
+// ("Cannot read properties of undefined (reading 'auth')").
 export const redis = new Proxy({} as IORedis, {
   get(_target, prop) {
-    if (!globalForRedis.redis) {
-      globalForRedis.redis = createRedis();
-    }
-    return Reflect.get(globalForRedis.redis, prop);
+    const client = redisClient();
+    const value = Reflect.get(client, prop, client);
+    return typeof value === "function" ? value.bind(client) : value;
   },
 });
 

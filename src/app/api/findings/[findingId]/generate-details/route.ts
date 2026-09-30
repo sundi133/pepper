@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import Anthropic from "@anthropic-ai/sdk";
+import { maskForLlm } from "@/lib/llm-redaction";
 
 const client = new Anthropic({
   apiKey: process.env.LLM_API_KEY,
@@ -76,7 +77,7 @@ RULES:
       messages: [
         {
           role: "user",
-          content: prompt,
+          content: maskForLlm(prompt),
         },
       ],
     });

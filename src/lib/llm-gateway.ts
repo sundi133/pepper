@@ -3,6 +3,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { Ollama } from "ollama";
 import { logger } from "@/lib/logger";
 import { decryptSecret } from "@/lib/token-encryption";
+import {
+  createRedactionSession,
+  llmMaskingEnabled,
+  MASKED_SECRETS_NOTE,
+  type RedactionSession,
+} from "@/lib/llm-redaction";
 
 export interface LlmConfig {
   provider: string;
@@ -288,16 +294,50 @@ export async function foundryChat(
   return "{}";
 }
 
+// ─── Secret masking ───────────────────────────────────────────────────
+
+/**
+ * Mask secrets in a prompt before it leaves the process. Pass a session to
+ * keep tokens consistent across calls or to restore values in the answer
+ * (code-fix flows); otherwise each call masks on its own and the answer keeps
+ * the tokens.
+ */
+function maskPrompt(
+  system: string,
+  contents: string[],
+  session: RedactionSession | undefined,
+): { system: string; contents: string[] } {
+  if (!llmMaskingEnabled()) return { system, contents };
+  const s = session ?? createRedactionSession();
+  const before = s.count;
+  const maskedSystem = s.redact(system);
+  const maskedContents = contents.map((c) => s.redact(c));
+  const masked = s.count > before || /\[\[SECRET_\d+/.test(maskedContents.join("\n"));
+  return {
+    system: masked ? `${maskedSystem}\n\n${MASKED_SECRETS_NOTE}` : maskedSystem,
+    contents: maskedContents,
+  };
+}
+
 // ─── Unified Analysis Function ────────────────────────────────────────
 
 export async function analyzeWithLlm(
   llmClient: LlmClient,
   model: string,
-  systemPrompt: string,
-  userContent: string,
-  options?: { temperature?: number; maxTokens?: number },
+  rawSystemPrompt: string,
+  rawUserContent: string,
+  options?: {
+    temperature?: number;
+    maxTokens?: number;
+    /** Share or restore masked secrets (see maskPrompt). */
+    redaction?: RedactionSession;
+  },
 ): Promise<string> {
   const temperature = options?.temperature ?? 0.1;
+  const {
+    system: systemPrompt,
+    contents: [userContent],
+  } = maskPrompt(rawSystemPrompt, [rawUserContent], options?.redaction);
 
   if (llmClient.type === "ollama") {
     const response = await llmClient.client.chat({
@@ -414,11 +454,22 @@ export type ChatMessage = { role: "system" | "user" | "assistant"; content: stri
 
 export async function* streamChatWithLlm(
   llmClient: LlmClient,
-  messages: ChatMessage[],
-  options?: { temperature?: number; maxTokens?: number },
+  rawMessages: ChatMessage[],
+  options?: { temperature?: number; maxTokens?: number; redaction?: RedactionSession },
 ): AsyncGenerator<string> {
   const temperature = options?.temperature ?? 0.7;
   const maxTokens = options?.maxTokens ?? 2048;
+  const systemIdx = rawMessages.findIndex((m) => m.role === "system");
+  const masked = maskPrompt(
+    systemIdx >= 0 ? rawMessages[systemIdx].content : "",
+    rawMessages.map((m, i) => (i === systemIdx ? "" : m.content)),
+    options?.redaction,
+  );
+  const messages: ChatMessage[] = rawMessages.map((m, i) => ({
+    ...m,
+    content: i === systemIdx ? masked.system : masked.contents[i],
+  }));
+  if (systemIdx < 0 && masked.system) messages.unshift({ role: "system", content: masked.system.trim() });
 
   if (llmClient.type === "ollama") {
     const stream = await llmClient.client.chat({

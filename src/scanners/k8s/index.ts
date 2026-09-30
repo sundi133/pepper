@@ -15,6 +15,7 @@ import {
   K8S_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import { llmExcludedPath } from "@/lib/llm-exclusions";
 
 const K8S_FILE_PATTERNS = /\.ya?ml$/i;
 const K8S_DIRECTORIES = new Set(["k8s", "kubernetes", "helm", "manifests"]);
@@ -127,6 +128,7 @@ export const k8sScanner: ScannerPlugin = {
       const fileMetadata: Map<string, { kind?: string; name?: string; namespace?: string }> = new Map();
 
       for (const filePath of batch) {
+        if (llmExcludedPath(filePath)) continue;
         try {
           const fullPath = path.join(ctx.workDir, filePath);
           const content = fs.readFileSync(fullPath, "utf-8");

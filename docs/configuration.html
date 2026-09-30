@@ -132,6 +132,8 @@ OAuth scopes requested: read:user repo</pre>
           <tr><td><code>OLLAMA_CHUNK_OVERLAP_TOKENS</code></td><td>100</td><td>Ollama overlap</td></tr>
           <tr><td><code>OLLAMA_MAX_RESPONSE_TOKENS</code></td><td>2048</td><td>Ollama max response</td></tr>
           <tr><td><code>LLM_MIN_CONFIDENCE</code></td><td>0.7</td><td>Drop LLM findings below this confidence</td></tr>
+          <tr><td><code>LLM_MASK_SECRETS</code></td><td>true</td><td>Replace secrets in code with placeholders before any request is sent to the LLM. Fix PRs still contain the original values.</td></tr>
+          <tr><td><code>LLM_EXCLUDE_PATHS</code></td><td>(none)</td><td>Comma-separated globs of files never sent to the LLM (e.g. <code>config/prod/**,*.tfvars</code>). Private key and keystore files are always excluded; rule-based scanners still scan them.</td></tr>
           <tr><td><code>OLLAMA_HOST</code></td><td>—</td><td>Docker: host Ollama URL (see README)</td></tr>
         </tbody>
       </table>

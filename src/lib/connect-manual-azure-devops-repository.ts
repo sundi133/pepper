@@ -7,7 +7,7 @@ import {
 import { azureGet, parseAzureErrorBody } from "@/lib/azure-devops-api";
 import {
   azureDevOpsHttpsCloneUrl,
-  azureDevOpsServerCloneUrl,
+  azureDevOpsRepoCloneUrl,
   parseAzureDevOpsRef,
   parseAzureDevOpsRepoInput,
 } from "@/lib/parse-azure-devops-repo-input";
@@ -75,16 +75,8 @@ export async function connectManualAzureDevOpsRepository(params: {
 
   const projectName = repo.project?.name || parsed.project;
   const cloneUrl =
-    repo.remoteUrl?.trim() ||
-    repo.webUrl?.trim() ||
-    (auth.serverUrl
-      ? azureDevOpsServerCloneUrl(
-          auth.serverUrl,
-          auth.organization,
-          projectName,
-          repo.name,
-        )
-      : azureDevOpsHttpsCloneUrl(auth.organization, projectName, repo.name));
+    azureDevOpsRepoCloneUrl(auth, projectName, repo.name, repo) ||
+    azureDevOpsHttpsCloneUrl(auth.organization, projectName, repo.name);
 
   const existing = await prisma.project.findFirst({
     where: {

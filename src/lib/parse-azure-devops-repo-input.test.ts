@@ -4,6 +4,7 @@ import {
   azureDevOpsServerCloneUrl,
   parseAzureDevOpsRef,
   parseAzureDevOpsRepoInput,
+  azureDevOpsRepoCloneUrl,
 } from "./parse-azure-devops-repo-input";
 
 describe("azureDevOpsServerCloneUrl", () => {
@@ -156,5 +157,28 @@ describe("parseAzureDevOpsRepoInput", () => {
     expect(parseAzureDevOpsRepoInput("   ")).toBeNull();
     expect(parseAzureDevOpsRepoInput("just-one-segment")).toBeNull();
     expect(parseAzureDevOpsRepoInput("a/b/c/d/e")).toBeNull();
+  });
+});
+
+describe("azureDevOpsRepoCloneUrl", () => {
+  it("builds Server clones on the configured Server URL, not the API's public URL", () => {
+    const auth = { organization: "DefaultCollection", serverUrl: "http://host.docker.internal:18080/" };
+    expect(
+      azureDevOpsRepoCloneUrl(auth, "Pepper Test", "vuln-app", { remoteUrl: "http://ado-server/DefaultCollection/Pepper%20Test/_git/vuln-app" }),
+    ).toBe("http://host.docker.internal:18080/DefaultCollection/Pepper%20Test/_git/vuln-app");
+    expect(
+      azureDevOpsRepoCloneUrl({ organization: "DefaultCollection", serverUrl: "https://tfs.corp.local/tfs" }, "Web", "api"),
+    ).toBe("https://tfs.corp.local/tfs/DefaultCollection/Web/_git/api");
+  });
+
+  it("keeps the API URL for Azure DevOps Services", () => {
+    const auth = { organization: "acme" };
+    expect(azureDevOpsRepoCloneUrl(auth, "Web", "api", { remoteUrl: "https://acme@dev.azure.com/acme/Web/_git/api" })).toBe(
+      "https://acme@dev.azure.com/acme/Web/_git/api",
+    );
+    expect(azureDevOpsRepoCloneUrl(auth, "Web", "api", { webUrl: "https://dev.azure.com/acme/Web/_git/api" })).toBe(
+      "https://dev.azure.com/acme/Web/_git/api",
+    );
+    expect(azureDevOpsRepoCloneUrl(auth, "Web", "api", {})).toBe("");
   });
 });

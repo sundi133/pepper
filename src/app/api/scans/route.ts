@@ -39,6 +39,12 @@ const createScanSchema = z
     projectId: z.string().optional(),
     /** When `projectId` is omitted, overrides inferred name from URL or file. */
     newProjectName: z.string().max(100).transform(sanitizeText).optional(),
+    /**
+     * CI: reuse the org's project with this exact name (created on first use)
+     * so repeated pipeline runs build one project's history instead of a new
+     * project per run. Ignored when `projectId` is given.
+     */
+    projectName: z.string().max(100).transform(sanitizeText).optional(),
     scanType: z.enum(API_CREATE_SCAN_TYPES).default("FULL"),
     branch: z.string().optional(),
     commitSha: z.string().optional(),
@@ -143,8 +149,18 @@ export async function POST(req: NextRequest) {
     const requestedProjectId = scanParams.projectId?.trim();
     let effectiveProjectId = requestedProjectId;
 
+    const reuseName = scanParams.projectName?.trim();
+    if (!effectiveProjectId && reuseName) {
+      const existing = await prisma.project.findFirst({
+        where: { organizationId: orgId, name: reuseName },
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+      });
+      if (existing) effectiveProjectId = existing.id;
+    }
+
     if (!effectiveProjectId) {
-      const nameOverride = scanParams.newProjectName?.trim();
+      const nameOverride = scanParams.newProjectName?.trim() || reuseName;
       let name: string;
       let repoUrl: string | null = null;
       let defaultBranch = scanParams.branch?.trim() || "main";

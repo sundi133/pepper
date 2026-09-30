@@ -139,18 +139,40 @@ server {
 
 ## 5. Internal certificates and proxy
 
-If your Git server, LLM gateway or proxy uses an internal CA:
+If your Git server, LLM gateway or proxy uses an internal CA (including a
+proxy that inspects TLS):
 
 1. Put the CA certificate (PEM) in `/opt/pepper/certs/internal-ca.pem`.
-2. Set these in `.env`:
+2. Build a bundle of the public roots plus your CA. Git and the container
+   scanner replace their trust store with it, so public sites must stay
+   trusted:
+
+   ```bash
+   cat /etc/ssl/certs/ca-certificates.crt certs/internal-ca.pem > certs/ca-bundle.pem
+   # RHEL: cat /etc/pki/tls/certs/ca-bundle.crt certs/internal-ca.pem > certs/ca-bundle.pem
+   ```
+
+3. Set these in `.env`:
 
    ```dotenv
    NODE_EXTRA_CA_CERTS="/certs/internal-ca.pem"
-   GIT_SSL_CAINFO="/certs/internal-ca.pem"
+   GIT_SSL_CAINFO="/certs/ca-bundle.pem"
+   SSL_CERT_FILE="/certs/ca-bundle.pem"
    ```
 
-For an outbound proxy, set `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`. List
-internal hosts (for example your Azure DevOps Server) in `NO_PROXY`.
+For an outbound proxy, set `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` in
+`.env`. List internal hosts (for example your Azure DevOps Server) in
+`NO_PROXY`. These apply to Pepper's containers only: for `docker compose pull`,
+Docker itself needs the proxy in `/etc/docker/daemon.json` (then
+`sudo systemctl restart docker`):
+
+```json
+{ "proxies": { "http-proxy": "http://proxy.yourcompany.local:8080",
+               "https-proxy": "http://proxy.yourcompany.local:8080",
+               "no-proxy": "localhost,127.0.0.1,.yourcompany.local" } }
+```
+
+`RUNBOOK.html` lists every host to allow on the proxy.
 
 Apply either change with `docker compose up -d`.
 

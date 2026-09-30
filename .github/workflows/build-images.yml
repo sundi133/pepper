@@ -17,6 +17,8 @@ name: Build & push images
 
 on:
   push:
+    # Release tags (v1.5.0) publish customer-facing version tags (1.5.0, 1.5).
+    tags: ["v*"]
     branches: [main]
     paths:
       - "src/**"
@@ -40,6 +42,13 @@ on:
 
 permissions:
   contents: read
+
+# One build per ref at a time; a newer push replaces a queued older one, so
+# `latest` always ends up on the newest commit (parallel runs used to finish
+# out of order and leave `latest` on an older build).
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -76,6 +85,8 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
       - name: Build & push
         uses: docker/build-push-action@v6

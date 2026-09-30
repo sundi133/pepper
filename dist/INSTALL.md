@@ -1,183 +1,222 @@
-# Pepper SAST - Customer Installation Guide
+# Pepper — On-Prem Installation Guide
 
-## What You Receive
+Pepper runs as five Docker containers: the web app, a scan worker, PostgreSQL,
+Redis and MinIO (object storage). You don't need the source code. This bundle
+contains everything:
 
-Your deployment bundle should contain only:
+| File | Purpose |
+|---|---|
+| `docker-compose.yml` | The containers and how they connect |
+| `.env.example` | Configuration template (copied to `.env`) |
+| `setup.sh` | Optional guided setup (Linux / macOS) |
+| `INSTALL.md` | This guide |
 
-- `docker-compose.yml`
-- `.env.example`
-- `setup.sh`
-- this `INSTALL.md`
+## 1. Requirements
 
-Pepper source code is not required for customer deployment.
+- **Server:** Linux x86-64 (amd64). Recommended 4 vCPU, 16 GB RAM, 100 GB disk (minimum 2 vCPU / 8 GB).
+- **Docker Engine 24+** with the **Compose plugin** (`docker compose version` must work).
+- **Inbound:** one port for the web UI (default `3000`, usually behind your HTTPS reverse proxy).
+- **Outbound** (direct or through your proxy):
+  - your Git servers (Azure DevOps Server, GitHub, GitLab, Bitbucket) to clone repositories;
+  - your LLM endpoint (for example an internal gateway, Azure OpenAI or OpenRouter);
+  - `api.osv.dev` for dependency vulnerability data (optional; see *Air-gapped* below);
+  - the image registry, unless you install from an offline image archive (section 3).
 
-## Default Deployment Model
-
-Pepper is designed to be delivered as prebuilt container images plus a small deployment bundle.
-
-Recommended defaults:
-
-- private registry images for `pepper` and `pepper-worker`
-- OpenRouter as the default LLM provider
-- a customer-specific OpenRouter API key
-
-## Prerequisites
-
-- Docker 24+
-- Docker Compose v2
-- 4 GB RAM minimum
-- outbound access to:
-  - your image registry
-  - `https://openrouter.ai`
-  - target Git/SVN repositories to be scanned
-
-## Fastest Setup
+## 2. Install (server with registry access)
 
 ```bash
-mkdir pepper && cd pepper
-# copy setup.sh, docker-compose.yml, .env.example, INSTALL.md here
-
-chmod +x setup.sh
-./setup.sh
-```
-
-The script will:
-
-1. install Docker if needed
-2. create `.env`
-3. generate secure secrets and admin password
-4. optionally log in to a private registry if credentials are present in `.env`
-5. pull images
-6. start Pepper
-
-## Required `.env` Values
-
-Set these before first production use:
-
-```dotenv
-POSTGRES_PASSWORD="..."
-NEXTAUTH_SECRET="..."
-ADMIN_EMAIL="admin@yourcompany.com"
-ADMIN_PASSWORD="..."
-LLM_PROVIDER="openrouter"
-LLM_BASE_URL="https://openrouter.ai/api/v1"
-LLM_MODEL="google/gemini-2.5-flash"
-LLM_API_KEY="..."
-```
-
-If you are using a private registry, also set:
-
-```dotenv
-PEPPER_API_IMAGE="registry.example.com/pepper"
-PEPPER_WORKER_IMAGE="registry.example.com/pepper-worker"
-PEPPER_VERSION="1.2.0"
-PEPPER_REGISTRY="registry.example.com"
-PEPPER_REGISTRY_USERNAME="..."
-PEPPER_REGISTRY_PASSWORD="..."
-```
-
-## Manual Setup
-
-```bash
+mkdir -p /opt/pepper && cd /opt/pepper
+# copy the bundle files here, then:
 cp .env.example .env
-# edit .env with your values
-
-docker compose pull
-docker compose up -d
+chmod 600 .env
+mkdir -p certs
 ```
 
-Then open:
+Edit `.env`. At minimum set:
 
-```text
-http://localhost:3000
-```
+- `PEPPER_VERSION`: the version tag you were given, for example `sha-a0c538e`.
+- `NEXTAUTH_URL`: the exact URL users will open, for example `https://pepper.yourcompany.local`.
+- `NEXTAUTH_SECRET`, `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`: long random values. Generate each with `openssl rand -hex 32` (use hex: `/` or `+` in the database password would break its connection URL).
+- `ADMIN_EMAIL` and `ADMIN_PASSWORD`: the first administrator account.
+- `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`: your AI model endpoint.
 
-Sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `.env`.
-
-## OpenRouter Defaults
-
-Pepper is bundled to work with OpenRouter first.
-
-Recommended settings:
-
-```dotenv
-LLM_PROVIDER="openrouter"
-LLM_BASE_URL="https://openrouter.ai/api/v1"
-LLM_MODEL="google/gemini-2.5-flash"
-LLM_API_KEY="..."
-```
-
-Optional metadata:
-
-```dotenv
-OPENROUTER_REFERER="https://pepper.yourcompany.com"
-OPENROUTER_TITLE="Pepper SAST"
-```
-
-## Optional Ollama Mode
-
-If a customer wants a fully local LLM instead of OpenRouter:
-
-```dotenv
-LLM_PROVIDER="ollama"
-OLLAMA_HOST="http://host.docker.internal:11434"
-LLM_MODEL="qwen2.5-coder:7b"
-```
-
-That mode requires Ollama on the host and is slower on CPU.
-
-## SVN Scanning
-
-Pepper supports SVN repositories directly. The worker image already includes Subversion.
-
-When creating a scan, provide:
-
-- the full SVN URL
-- optional revision
-- username/password if the repo is private
-
-## Upgrade Procedure
+Then start Pepper:
 
 ```bash
 docker compose pull
 docker compose up -d
+docker compose ps
 ```
 
-If your deployment bundle version changes, update `PEPPER_VERSION` in `.env` first.
+The first start applies the database schema, which takes 1–3 minutes. When
+`pepper-api` shows `healthy`, open `NEXTAUTH_URL` and sign in with
+`ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
-## Backup
+> `./setup.sh` does the same steps interactively. It generates the secrets,
+> asks for the URL and version, pulls the images and waits until Pepper is up.
+
+## 3. Air-gapped install (no registry access)
+
+**On a machine with internet access**, download the images into one archive:
 
 ```bash
-docker compose exec postgres pg_dump -U pepper pepper > backup.sql
+V=sha-a0c538e     # the Pepper version you were given
+docker pull docker.io/sundi133/pepper-api:$V
+docker pull docker.io/sundi133/pepper-worker:$V
+docker pull postgres:16-alpine
+docker pull redis:7-alpine
+docker pull quay.io/minio/minio:latest
+docker save -o pepper-images-$V.tar \
+  docker.io/sundi133/pepper-api:$V docker.io/sundi133/pepper-worker:$V \
+  postgres:16-alpine redis:7-alpine quay.io/minio/minio:latest
+sha256sum pepper-images-$V.tar > pepper-images-$V.tar.sha256
 ```
 
-Restore:
+Copy `pepper-images-$V.tar` (about 3 GB), its `.sha256` file and this bundle to
+the server through your approved transfer process. Then, **on the server**:
 
 ```bash
-docker compose exec -i postgres psql -U pepper pepper < backup.sql
+cd /opt/pepper
+sha256sum -c pepper-images-sha-a0c538e.tar.sha256
+docker load -i pepper-images-sha-a0c538e.tar
+cp .env.example .env && chmod 600 .env && mkdir -p certs   # then edit .env as in step 2
+docker compose up -d        # no pull: the images are already loaded
 ```
 
-## Troubleshooting
-
-If scans stay queued:
+**Using an internal registry instead** (Harbor, Artifactory, Nexus): after
+`docker load`, retag and push the two Pepper images, then point `.env` at them:
 
 ```bash
-docker compose logs -f pepper-worker
+docker tag docker.io/sundi133/pepper-api:$V    registry.yourcompany.local/pepper/pepper-api:$V
+docker tag docker.io/sundi133/pepper-worker:$V registry.yourcompany.local/pepper/pepper-worker:$V
+docker push registry.yourcompany.local/pepper/pepper-api:$V
+docker push registry.yourcompany.local/pepper/pepper-worker:$V
 ```
 
-If the UI does not come up:
+```dotenv
+PEPPER_API_IMAGE="registry.yourcompany.local/pepper/pepper-api"
+PEPPER_WORKER_IMAGE="registry.yourcompany.local/pepper/pepper-worker"
+```
+
+**Without internet access:**
+
+- **Dependency vulnerability data:** `api.osv.dev` isn't reachable. In
+  *Settings → LLM Config*, set the vulnerability database to **Mirror** (your
+  internal OSV mirror URL) or **Offline**. Offline skips dependency CVE lookups.
+- **AI features:** these need a reachable LLM endpoint, such as your internal
+  OpenAI-compatible gateway or a self-hosted model.
+- **Unaffected:** rule-based SAST (OpenGrep), secrets and IaC checks work
+  fully offline.
+
+## 4. HTTPS
+
+Put Pepper behind your existing reverse proxy or load balancer (nginx, IIS
+ARR, F5), which terminates TLS and forwards to `http://<server>:3000`. Set
+`NEXTAUTH_URL` to the public `https://` URL. Optionally set
+`PEPPER_BIND_ADDRESS=127.0.0.1`, so the app is reachable only through the proxy
+on the same host.
+
+A minimal nginx example:
+
+```nginx
+server {
+  listen 443 ssl;
+  server_name pepper.yourcompany.local;
+  ssl_certificate     /etc/nginx/tls/pepper.crt;
+  ssl_certificate_key /etc/nginx/tls/pepper.key;
+  client_max_body_size 500m;               # repository uploads
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_read_timeout 3600s;               # live scan progress streams
+    proxy_buffering off;
+  }
+}
+```
+
+## 5. Internal certificates and proxy
+
+If your Git server, LLM gateway or proxy uses an internal CA:
+
+1. Put the CA certificate (PEM) in `/opt/pepper/certs/internal-ca.pem`.
+2. Set these in `.env`:
+
+   ```dotenv
+   NODE_EXTRA_CA_CERTS="/certs/internal-ca.pem"
+   GIT_SSL_CAINFO="/certs/internal-ca.pem"
+   ```
+
+For an outbound proxy, set `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`. List
+internal hosts (for example your Azure DevOps Server) in `NO_PROXY`.
+
+Apply either change with `docker compose up -d`.
+
+## 6. Optional features
+
+All of these are configured in `.env`; each section of `.env.example`
+explains its settings.
+
+- **Sign-in:** Microsoft Entra ID or SAML single sign-on.
+- **Azure DevOps Server:** set `AZURE_DEVOPS_API_VERSION` (`6.0` for Server 2020, `7.0` for Server 2022). Connect it in *Settings → Integrations*.
+- **Email** notifications (SMTP), **audit log retention**, and **scan concurrency**.
+- **Ticketing:** Azure Boards, Jira and Slack are configured in the UI, under *Settings → Integrations → Outbound*.
+
+After changing `.env`, run `docker compose up -d`. Only the changed containers restart.
+
+## 7. Upgrade
 
 ```bash
-docker compose logs -f pepper-api
+cd /opt/pepper
+docker compose exec -T postgres pg_dump -U pepper pepper | gzip > backup-$(date +%F).sql.gz
+# set PEPPER_VERSION in .env to the new tag, then:
+docker compose pull          # air-gapped: docker load -i pepper-images-<new>.tar
+docker compose up -d
 ```
 
-If registry pulls fail:
+Database changes are applied automatically when the new version starts.
 
-- verify `PEPPER_REGISTRY`, `PEPPER_REGISTRY_USERNAME`, `PEPPER_REGISTRY_PASSWORD`
-- run `docker login <registry>` manually
+## 8. Backup and restore
 
-If OpenRouter scans fail:
+What to back up:
 
-- verify `LLM_API_KEY`
-- verify outbound internet access to `openrouter.ai`
-- verify the selected model name is valid for your account
+1. **The database:**
+
+   ```bash
+   docker compose exec -T postgres pg_dump -U pepper pepper | gzip > pepper-db.sql.gz
+   ```
+
+2. **Object storage** (reports, SBOMs, audit archives): the Docker volume `pepper_miniodata`.
+3. **`.env`.** Keep it safe: `NEXTAUTH_SECRET` encrypts stored credentials and can't be recovered.
+
+Restore into a fresh install (same `.env`):
+
+```bash
+docker compose up -d postgres
+gunzip -c pepper-db.sql.gz | docker compose exec -T postgres psql -U pepper pepper
+docker compose up -d
+```
+
+## 9. Operations
+
+```bash
+docker compose ps                         # status
+docker compose logs -f pepper-api         # web app logs
+docker compose logs -f pepper-worker      # scan logs
+docker compose restart pepper-worker      # restart a service
+docker compose up -d --scale pepper-worker=3   # more parallel scans
+docker compose down                       # stop (data is kept in volumes)
+```
+
+## 10. Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| `docker compose` says a variable is required | Set that variable in `.env` |
+| `pepper-api` not healthy after 5 minutes | `docker compose logs pepper-api`; database password or disk space |
+| Sign-in redirects to the wrong address | `NEXTAUTH_URL` must match the URL in the browser exactly |
+| Scans stay *Queued* | `docker compose logs pepper-worker`; the worker must be running |
+| Can't clone repositories | Proxy / `NO_PROXY`, internal CA (`GIT_SSL_CAINFO`), repository credentials |
+| AI findings missing | *Settings → LLM Config → Test connection*; check `LLM_*` values and outbound access |
+| `x509: certificate signed by unknown authority` | Internal CA not configured (section 5) |

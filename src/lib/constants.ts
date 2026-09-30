@@ -58,8 +58,12 @@ export const ROLE_HIERARCHY: Record<string, number> = {
 export const FILE_EXTENSIONS: Record<string, string> = {
   ".js": "javascript",
   ".jsx": "javascript",
+  ".mjs": "javascript",
+  ".cjs": "javascript",
   ".ts": "typescript",
   ".tsx": "typescript",
+  ".mts": "typescript",
+  ".cts": "typescript",
   ".py": "python",
   ".go": "go",
   ".java": "java",
@@ -72,7 +76,10 @@ export const FILE_EXTENSIONS: Record<string, string> = {
   ".h": "c",
   ".hpp": "cpp",
   ".swift": "swift",
+  ".m": "objective-c",
+  ".mm": "objective-c++",
   ".kt": "kotlin",
+  ".vb": "vbnet",
   ".scala": "scala",
   ".sh": "shell",
   ".bash": "shell",
@@ -98,6 +105,7 @@ export const FILE_EXTENSIONS: Record<string, string> = {
   ".svelte": "template",
   ".erb": "template",
   ".cshtml": "template",
+  ".razor": "template",
   ".jinja": "template",
   ".jinja2": "template",
 };
@@ -124,6 +132,11 @@ export const SKIP_DIRECTORIES = new Set([
   ".cache",
   ".idea",
   ".vscode",
+  // iOS / Android third-party and generated code (CocoaPods, Carthage, Xcode, Gradle)
+  "Pods",
+  "Carthage",
+  "DerivedData",
+  ".gradle",
 ]);
 
 export const BINARY_EXTENSIONS = new Set([

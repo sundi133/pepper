@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyApiKey } from "@/lib/api-key";
 import { SECRET_PATTERNS } from "@/lib/precommit-secret-patterns";
+import { isLikelyPlaceholderSecret } from "@/scanners/secrets/patterns";
 
 interface PrecommitFile {
   path: string;
@@ -19,19 +20,25 @@ interface PrecommitFinding {
   cweId?: string;
 }
 
+function maskMatch(value: string): string {
+  return value.length <= 8 ? "****" : `${value.slice(0, 4)}****${value.slice(-2)}`;
+}
+
 function detectInFile(file: PrecommitFile): PrecommitFinding[] {
   const findings: PrecommitFinding[] = [];
   const lines = file.content.split("\n");
 
   for (const pattern of SECRET_PATTERNS) {
-    const regex = pattern.pattern instanceof RegExp
-      ? new RegExp(pattern.pattern.source, "gm")
-      : new RegExp(pattern.pattern, "gm");
+    // Keep the pattern's own flags (e.g. case-insensitive) and add g + m.
+    const flags = new Set([...(pattern.pattern.flags ?? ""), "g", "m"]);
+    const regex = new RegExp(pattern.pattern.source, [...flags].join(""));
     const matches = file.content.matchAll(regex);
     for (const match of matches) {
       if (pattern.allowlist?.some((allow) => allow.test(match[0]))) continue;
+      if (isLikelyPlaceholderSecret(match[0])) continue;
       const lineNum = file.content.substring(0, match.index).split("\n").length - 1;
-      const line = lines[lineNum] || "";
+      // Never echo the secret back: mask it in the reported line.
+      const line = (lines[lineNum] || "").split(match[0]).join(maskMatch(match[0]));
       findings.push({
         ruleId: pattern.id,
         title: pattern.title,

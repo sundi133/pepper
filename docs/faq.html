@@ -124,14 +124,24 @@
         <li>Python — <code>requirements.txt</code>, <code>Pipfile.lock</code>, <code>pyproject.toml</code></li>
         <li>Go — <code>go.mod</code></li>
         <li>Rust — <code>Cargo.toml</code></li>
-        <li>Java / Kotlin / Scala — <code>pom.xml</code>, <code>build.gradle</code></li>
+        <li>Java / Kotlin / Scala — <code>pom.xml</code> (with <code>${property}</code>
+          versions), <code>build.gradle</code>, <code>build.gradle.kts</code>,
+          <code>gradle.lockfile</code>, <code>gradle/libs.versions.toml</code></li>
         <li>Ruby — <code>Gemfile.lock</code></li>
         <li>PHP — <code>composer.json</code>, <code>composer.lock</code></li>
-        <li>.NET — <code>*.csproj</code>, <code>*.fsproj</code>, <code>packages.config</code></li>
+        <li>.NET — <code>*.csproj</code>, <code>*.fsproj</code>, <code>*.vbproj</code>,
+          <code>packages.config</code>, <code>packages.lock.json</code>,
+          <code>Directory.Packages.props</code> (central package management)</li>
         <li>Dart / Flutter — <code>pubspec.yaml</code></li>
         <li>Elixir — <code>mix.lock</code></li>
-        <li>Swift — <code>Package.resolved</code></li>
+        <li>Swift / iOS — <code>Package.resolved</code>, <code>Cartfile.resolved</code>
+          (Carthage), <code>Podfile.lock</code> (CocoaPods: SBOM inventory only, since
+          no public vulnerability database covers CocoaPods)</li>
       </ul>
+      <p>
+        When a lock file sits next to its manifest, the locked versions are used, so a
+        <code>^1.2.3</code> range is never checked as 1.2.3 if 1.4.0 is installed.
+      </p>
       <p>
         OSV calls are batched and cached. In air-gapped mode set
         <code>vulnDbMode = offline</code> to skip remote lookups.
@@ -191,7 +201,14 @@
           (hard-coded secrets, deprecated crypto, unsafe deserialisation).</li>
         <li><strong>LLM engine</strong> (<code>SAST_LLM</code>) — Pepper batches files
           through the configured LLM, asks for OWASP-style findings with severity,
-          CWE, and a remediation hint, then filters by a confidence floor.</li>
+          CWE, and a remediation hint, then filters by a confidence floor. It reads
+          JavaScript / TypeScript (including <code>.mjs</code>, <code>.cjs</code>,
+          <code>.mts</code>, <code>.cts</code>, Vue, Svelte), Python, Go, Java, Kotlin,
+          Scala, C# / VB.NET / Razor, Swift, Objective-C (<code>.m</code>,
+          <code>.mm</code>, <code>.h</code>), PHP, Ruby, Rust, C / C++, shell, SQL and
+          server-side templates. Vendored and generated code (<code>node_modules</code>,
+          <code>vendor</code>, <code>Pods</code>, <code>Carthage</code>,
+          <code>DerivedData</code>, build output) is skipped.</li>
         <li><strong>Zero-day engine</strong> (<code>ZERO_DAY</code>) — a separate LLM pass
           that scores files by their <em>likelihood</em> of containing a novel logic flaw,
           then deeply analyses the top-ranked ones. Beyond business-logic, IDOR, race

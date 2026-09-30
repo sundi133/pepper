@@ -20,6 +20,9 @@ COPY scripts ./scripts
 
 FROM base AS worker
 ENV NODE_ENV=production
+# Route Node's fetch/http(s) (LLM SDKs, OSV, repository APIs) through
+# HTTP(S)_PROXY / NO_PROXY when they are set; no effect otherwise.
+ENV NODE_USE_ENV_PROXY=1
 
 RUN apk add --no-cache subversion
 

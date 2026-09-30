@@ -3,6 +3,9 @@ export async function register() {
   const nodeProcess = globalThis.process as NodeJS.Process | undefined;
   if (!nodeProcess?.on) return;
 
+  const { logOutboundProxy } = await import("@/lib/outbound-proxy");
+  logOutboundProxy();
+
   // Catch unhandled errors from ioredis TLS reconnection attempts.
   // When a rediss:// connection times out, ioredis internally fires errors
   // on TLS sockets that may not have listeners attached yet, causing

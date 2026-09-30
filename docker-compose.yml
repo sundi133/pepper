@@ -64,6 +64,10 @@ services:
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_USE_SSL: "false"
       MINIO_BUCKET: pepper-artifacts
+      # Internal services never go through an outbound proxy; anything you set
+      # in NO_PROXY (e.g. your Azure DevOps Server host) is kept in front.
+      NO_PROXY: "${NO_PROXY:-},localhost,127.0.0.1,postgres,redis,minio,sast-api,sast-worker,host.docker.internal"
+      no_proxy: "${NO_PROXY:-},localhost,127.0.0.1,postgres,redis,minio,sast-api,sast-worker,host.docker.internal"
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-change-me}
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@pepper.local}
@@ -93,6 +97,10 @@ services:
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_USE_SSL: "false"
       MINIO_BUCKET: pepper-artifacts
+      # Internal services never go through an outbound proxy; anything you set
+      # in NO_PROXY (e.g. your Azure DevOps Server host) is kept in front.
+      NO_PROXY: "${NO_PROXY:-},localhost,127.0.0.1,postgres,redis,minio,sast-api,sast-worker,host.docker.internal"
+      no_proxy: "${NO_PROXY:-},localhost,127.0.0.1,postgres,redis,minio,sast-api,sast-worker,host.docker.internal"
       # Must match the API's key: the worker decrypts org tokens (GitHub /
       # Bitbucket / Azure DevOps PATs) to clone private repos. Without it,
       # getOrg*Auth returns null and clones fail with "could not read Username".

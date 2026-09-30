@@ -12,10 +12,15 @@ import { processScanJob } from "./scan-processor";
 import { runRemediation } from "@/lib/remediation/agent";
 import { startScheduler } from "./scheduler";
 import { logger } from "@/lib/logger";
+import { logOutboundProxy } from "@/lib/outbound-proxy";
 import { prisma } from "@/lib/prisma";
 
 async function main() {
   logger.info("Starting Pepper scan worker...");
+  logOutboundProxy(
+    (m) => logger.info(m),
+    (m) => logger.warn(m),
+  );
 
   // Ensure MinIO bucket exists
   await ensureBucket();

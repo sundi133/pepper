@@ -175,6 +175,7 @@ const ECOSYSTEM_SEARCH_TERMS: Record<string, string> = {
   pub: "pub.dev Dart",
   hex: "Hex Elixir",
   swiftpm: "Swift Package Manager",
+  swifturl: "Swift Package Manager",
   swift: "Swift Package Manager",
 };
 

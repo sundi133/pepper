@@ -22,7 +22,7 @@ import {
 
 /**
  * Pepper ecosystem label → deps.dev system. Verified against the live API.
- * Packagist, Pub, Hex and SwiftPM have no deps.dev coverage and are skipped.
+ * Packagist, Pub, Hex and Swift (SwiftURL) have no deps.dev coverage and are skipped.
  */
 const SYSTEM_BY_ECOSYSTEM: Record<string, string> = {
   npm: "npm",

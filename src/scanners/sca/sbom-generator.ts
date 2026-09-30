@@ -38,12 +38,18 @@ export function purlFor(dep: Dependency): string {
     pub: "pub",
     hex: "hex",
     swift: "swift",
+    swifturl: "swift",
+    swiftpm: "swift",
   };
   const purlType = ecoMap[eco] || eco;
   const name = encodeURIComponent(dep.name);
   if (purlType === "maven" && dep.name.includes(":")) {
     const [group, artifact] = dep.name.split(":");
     return `pkg:maven/${encodeURIComponent(group)}/${encodeURIComponent(artifact)}@${encodeURIComponent(dep.version)}`;
+  }
+  if (purlType === "swift" && dep.name.includes("/")) {
+    // pkg:swift/github.com/owner/repo@v — namespace segments stay unencoded
+    return `pkg:swift/${dep.name.split("/").map(encodeURIComponent).join("/")}@${encodeURIComponent(dep.version)}`;
   }
   return `pkg:${purlType}/${name}@${encodeURIComponent(dep.version)}`;
 }

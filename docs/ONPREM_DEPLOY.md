@@ -69,7 +69,33 @@ AZURE_DEVOPS_WEBHOOK_SECRET=<shared-secret>      # = the service-hook Basic-auth
 # ── Internal CA (trust ADO Server / LLM over internal HTTPS) ──
 NODE_EXTRA_CA_CERTS=/certs/internal-ca.pem       # Node: API + fetch
 GIT_SSL_CAINFO=/certs/internal-ca.pem            # git clone in the worker
+
+# ── Outbound proxy (only if internet egress goes through a proxy) ──
+HTTPS_PROXY=http://proxy.corp.local:3128
+HTTP_PROXY=http://proxy.corp.local:3128
+NO_PROXY=ado.corp.local,.corp.local              # internal hosts that must NOT use the proxy
 ```
+
+### Outbound proxy
+
+When egress goes through a proxy, set `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY`
+in `.env`. The images set `NODE_USE_ENV_PROXY=1`, so every outbound call from
+Node (LLM providers, OSV / deps.dev / EPSS, repository APIs) uses the proxy;
+`git`, `svn` and Trivy read the same variables.
+
+- **`NO_PROXY` must list your internal hosts** — the Azure DevOps Server, an
+  internal Ollama / LLM endpoint, SMTP relay. The compose files already append
+  `localhost`, `127.0.0.1` and the internal services (`postgres`, `redis`,
+  `minio`, `sast-api`, `sast-worker`).
+- Proxy credentials go in the URL (`http://user:pass@proxy:3128`); they are
+  redacted in logs.
+- A proxy that intercepts TLS needs its CA in `NODE_EXTRA_CA_CERTS` /
+  `GIT_SSL_CAINFO` (section 2).
+- Check the startup logs of `sast-api` and `sast-worker` for
+  `[proxy] outbound proxy active: …`. A warning there means Node will not use
+  the proxy (see the message for why).
+- Manual (non-Docker) installs: run Node ≥ 22.21 (or ≥ 24.5) and export
+  `NODE_USE_ENV_PROXY=1` for both the web app and the worker.
 
 ## 2. Mount the internal CA — `docker-compose.override.yml`
 

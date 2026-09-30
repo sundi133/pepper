@@ -39,6 +39,9 @@ COPY --from=api-build /app/scripts/docker-entrypoint-api.sh /usr/local/bin/docke
 RUN chmod +x /usr/local/bin/docker-entrypoint-api.sh
 
 ENV NODE_ENV=production
+# Route Node's fetch/http(s) (LLM SDKs, OSV, repository APIs) through
+# HTTP(S)_PROXY / NO_PROXY when they are set; no effect otherwise.
+ENV NODE_USE_ENV_PROXY=1
 ENV PORT=3000
 EXPOSE 3000
 

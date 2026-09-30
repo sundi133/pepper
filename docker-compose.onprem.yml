@@ -86,6 +86,10 @@ services:
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required in .env}
       MINIO_USE_SSL: "false"
       MINIO_BUCKET: pepper-artifacts
+      # Internal services never go through an outbound proxy; anything you set
+      # in NO_PROXY (e.g. your Azure DevOps Server host) is kept in front.
+      NO_PROXY: "${NO_PROXY:-},localhost,127.0.0.1,postgres,redis,minio,sast-api,sast-worker,host.docker.internal"
+      no_proxy: "${NO_PROXY:-},localhost,127.0.0.1,postgres,redis,minio,sast-api,sast-worker,host.docker.internal"
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required in .env}
       NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL is required in .env}
       ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL is required in .env}
@@ -130,6 +134,10 @@ services:
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required in .env}
       MINIO_USE_SSL: "false"
       MINIO_BUCKET: pepper-artifacts
+      # Internal services never go through an outbound proxy; anything you set
+      # in NO_PROXY (e.g. your Azure DevOps Server host) is kept in front.
+      NO_PROXY: "${NO_PROXY:-},localhost,127.0.0.1,postgres,redis,minio,sast-api,sast-worker,host.docker.internal"
+      no_proxy: "${NO_PROXY:-},localhost,127.0.0.1,postgres,redis,minio,sast-api,sast-worker,host.docker.internal"
       NODE_ENV: production
     deploy:
       replicas: 1

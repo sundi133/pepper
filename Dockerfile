@@ -41,6 +41,9 @@ RUN chmod +x /usr/local/bin/docker-entrypoint-api.sh
 
 ENV NODE_ENV=production
 ENV PORT=3000
+# Route Node's fetch/http(s) (LLM SDKs, OSV, repository APIs) through
+# HTTP(S)_PROXY / NO_PROXY when they are set; no effect otherwise.
+ENV NODE_USE_ENV_PROXY=1
 EXPOSE 3000
 
 # Apply schema (migrate + push), seed, then start the Next.js server.
@@ -49,6 +52,9 @@ CMD ["/usr/local/bin/docker-entrypoint-api.sh"]
 # ─── Worker ─────────────────────────────────────────────────────────
 FROM base AS worker
 ENV NODE_ENV=production
+# Route Node's fetch/http(s) (LLM SDKs, OSV, repository APIs) through
+# HTTP(S)_PROXY / NO_PROXY when they are set; no effect otherwise.
+ENV NODE_USE_ENV_PROXY=1
 
 # Worker needs git for cloning repositories, subversion for SVN repos
 RUN apk add --no-cache subversion

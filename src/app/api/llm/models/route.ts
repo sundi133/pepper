@@ -22,7 +22,12 @@ const PRESETS: Record<string, string[]> = {
     "claude-sonnet-4-5",
     "claude-3-5-haiku-latest",
   ],
-  openrouter: [],
+  openrouter: [
+    "z-ai/glm-5.3",
+    "anthropic/claude-sonnet-5",
+    "google/gemini-2.5-flash",
+    "google/gemini-2.5-pro",
+  ],
   ollama: [],
   // Deployment names vary per Foundry resource, so these are only a hint; the
   // live /models call (or a manually typed model) takes precedence.

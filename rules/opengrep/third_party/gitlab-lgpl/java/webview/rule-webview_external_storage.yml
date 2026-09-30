@@ -1,0 +1,73 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://github.com/mobsf/mobsfscan/blob/main/mobsfscan/rules/semgrep/webview/webview_external_storage.yaml
+# hash: e29e85c3
+# yamllint enable
+---
+rules:
+  - id: rules_lgpl_java_webview_rule-webview-external-storage
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $X = <... $E.getExternalStorageDirectory() ...>;
+              ...
+              $WV.loadUrl(<... $X ...>);
+          - pattern: |
+              $WV.loadUrl(<... $E.getExternalStorageDirectory().$F() ...>);
+          - pattern: |
+              $X = <... Environment.getExternalStorageDirectory().$F() ...>;
+              ...
+              $WV.loadUrl(<... $X ...>);
+          - pattern: |
+              $X = <... $E.getExternalFilesDir(...) ...>;
+              ...
+              $WV.loadUrl(<... $X ...>);
+    message: |
+      WebView load files from external storage. Files in external storage can be
+      modified by any application.
+      
+      Loading files from external storage in a WebView can introduce security risks, 
+      as it allows web content to access potentially sensitive data stored on the 
+      device's external storage. This can lead to unauthorized access to user data, 
+      including personal files, credentials, or other sensitive information, by 
+      malicious web content.
+
+      To fix this security issue, you should avoid loading files directly from external 
+      storage in a WebView. Instead, you should use a Content Provider or a secure file 
+      storage mechanism to access files and provide them to the WebView as content.
+      
+      Here's a general approach to fix this problem:
+      (1) Use a Content Provider: If you need to load files from external storage in a WebView, 
+      consider using a Content Provider to securely access the files. Content Providers 
+      provide controlled access to files stored on external storage and allow you to define 
+      permissions for accessing them.
+      (2) Secure File Storage: Store files containing sensitive data in a secure location, such 
+      as internal storage or encrypted storage, and provide access to them through a secure 
+      API. Avoid exposing sensitive files directly to the WebView.
+      (3) Restrict WebView Access: Configure the WebView to restrict access to external resources 
+      and content. Use methods like setAllowFileAccess() to control file access and 
+      setAllowContentAccess() to control access to content from other origins.
+      Here's an example of how you can use a Content Provider to provide secure access to 
+      files in a WebView:
+      ```
+      // Define the URI of the content provider for accessing files
+      Uri contentProviderUri = Uri.parse("content://com.example.myapp.provider/files");
+      // Load the content from the Content Provider into the WebView
+      webView.loadUrl(contentProviderUri.toString());
+      ```
+      In the above code, we define the URI of a Content Provider that provides access to files 
+      stored in the app's external storage. The content is loaded from the Content Provider into 
+      the WebView using loadUrl(), which ensures that access to files is controlled and secure, 
+      preventing unauthorized access to sensitive data.
+    languages:
+      - java
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-749"
+      shortDescription: "Exposed dangerous method or function"
+      owasp:
+        - "A5:2017-Broken Access Control"
+        - "A01:2021-Broken Access Control"
+        - "A01:2025-Broken Access Control"
+      security-severity: CRITICAL

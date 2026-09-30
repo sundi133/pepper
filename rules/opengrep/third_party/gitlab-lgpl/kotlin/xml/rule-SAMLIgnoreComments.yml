@@ -1,0 +1,23 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://find-sec-bugs.github.io/bugs.htm
+# yamllint enable
+---
+rules:
+  - id: "kotlin_xml_rule-SAMLIgnoreComments"
+    languages:
+      - "kotlin"
+    message: |
+      Ignoring XML comments in SAML may lead to authentication bypass
+    metadata:
+      shortDescription: "Weak authentication"
+      cwe: "CWE-1390"
+      category: "security"
+      owasp:
+        - "A2:2017-Broken Authentication"
+        - "A07:2021-Identification and Authentication Failures"
+        - "A07:2025-Authentication Failures"
+      security-severity: "MEDIUM"
+    severity: "WARNING"
+
+    pattern: "($POOL: org.opensaml.xml.parse.BasicParserPool).setIgnoreComments(false);"

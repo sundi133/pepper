@@ -1,0 +1,28 @@
+rules:
+  - id: pepper.java.tls-trust-all
+    languages: [java]
+    severity: ERROR
+    message: >-
+      TLS certificate or hostname verification is disabled (a TrustManager
+      that accepts every certificate, or a HostnameVerifier that always
+      returns true). Connections can be intercepted (man-in-the-middle).
+      Fix: use the default TrustManager / HostnameVerifier; for an internal
+      CA, load it into a KeyStore and build an SSLContext from it.
+    metadata:
+      cwe: "CWE-295: Improper Certificate Validation"
+      owasp: "A02:2021 - Cryptographic Failures"
+      category: security
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+    pattern-either:
+      - pattern: |
+          public void checkServerTrusted(...) {}
+      - pattern: |
+          public void checkServerTrusted(...) throws $E {}
+      - patterns:
+          - pattern: |
+              public boolean verify(String $H, SSLSession $S) { return true; }
+      - pattern: $C.setHostnameVerifier((...) -> true)
+      - pattern: HttpsURLConnection.setDefaultHostnameVerifier((...) -> true)
+      - pattern: NoopHostnameVerifier.INSTANCE

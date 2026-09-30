@@ -1,0 +1,51 @@
+rules:
+  - id: pepper.csharp.command-injection
+    mode: taint
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      Request input reaches a process command line. An attacker can run
+      arbitrary commands on the server.
+      Fix: start a fixed executable, pass validated values through
+      ProcessStartInfo.ArgumentList (not a single Arguments string), and never
+      invoke cmd.exe or /bin/sh with user input.
+    metadata:
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+    pattern-sources:
+      - patterns:
+          - pattern-inside: |
+              class $CLASS : $BASE { ... }
+          - metavariable-regex:
+              metavariable: $BASE
+              regex: .*(Controller|ControllerBase|PageModel|ApiController)\b.*
+          - pattern-inside: |
+              public $RET $ACTION(..., $TYPE $PARAM, ...) { ... }
+          # Numeric / boolean / Guid / date parameters cannot carry an injection.
+          - metavariable-regex:
+              metavariable: $TYPE
+              regex: ^(?!(int|long|short|byte|sbyte|uint|ulong|ushort|bool|decimal|double|float|Guid|DateTime|DateTimeOffset|TimeSpan)\??$).*
+          - pattern: $PARAM
+      - pattern-either:
+          - pattern: Request.Query[...]
+          - pattern: Request.Form[...]
+          - pattern: Request.Headers[...]
+          - pattern: Request.Cookies[...]
+          - pattern: Request.QueryString[...]
+          - pattern: HttpContext.Request.Query[...]
+          - pattern: HttpContext.Request.Form[...]
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Process.Start($CMD, ...)
+              - pattern: Process.Start($EXE, $CMD)
+              - pattern: new ProcessStartInfo($CMD, ...)
+              - pattern: new ProcessStartInfo($EXE, $CMD)
+              - pattern: $PSI.Arguments = $CMD
+              - pattern: $PSI.FileName = $CMD
+          - focus-metavariable: $CMD

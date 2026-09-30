@@ -5,7 +5,7 @@ import {
   ScanResult,
   SuppressedVulnerability,
 } from "./types";
-import { sastLlmScanner } from "./sast";
+import { sastLlmScanner, sastPatternScanner } from "./sast";
 import { scaScanner, parseDependencies } from "./sca";
 import { secretsPatternScanner, secretsLlmScanner } from "./secrets";
 import { iacScanner } from "./iac";
@@ -43,6 +43,11 @@ export function getScanners(
   const includeZeroDay = ["FULL", "ZERO_DAY_ONLY", "INCREMENTAL"].includes(scanType);
   const includeContainer = ["FULL", "CONTAINER_ONLY"].includes(scanType);
   const includeK8s = ["FULL", "K8S_ONLY"].includes(scanType);
+
+  if (includeSast) {
+    // Rule-based SAST (OpenGrep) is deterministic and offline: always run it.
+    scanners.push(sastPatternScanner);
+  }
 
   if (includeSast && orgSettings.enableLlmSast) {
     scanners.push(sastLlmScanner);

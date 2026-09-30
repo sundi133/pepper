@@ -1,0 +1,31 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://find-sec-bugs.github.io/bugs.htm
+# yamllint enable
+---
+rules:
+  - id: "kotlin_xxe_rule-XMLRdr"
+    languages:
+      - "kotlin"
+    message: |
+      XML External Entity (XXE) attacks can occur when an XML parser supports XML
+      entities while processing XML received from an untrusted source.
+    metadata:
+      shortDescription: "Improper restriction of XML external entity reference ('XXE')"
+      category: "security"
+      cwe: "CWE-611"
+      owasp:
+        - "A4:2017-XML External Entities (XXE)"
+        - "A05:2021-Security Misconfiguration"
+        - "A02:2025-Security Misconfiguration"
+      security-severity: "CRITICAL"
+    severity: "ERROR"
+
+    patterns:
+      - pattern-inside: |
+          $R = XMLReaderFactory.createXMLReader()
+          ...
+      - pattern-not-inside: |
+          $R.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+          ...
+      - pattern: "$R.parse(...)"

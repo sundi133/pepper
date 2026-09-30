@@ -1,0 +1,50 @@
+rules:
+  - id: pepper.csharp.open-redirect
+    mode: taint
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      Request input decides where the user is redirected. Attackers can send
+      phishing links that bounce through this trusted site.
+      Fix: only redirect to local URLs (LocalRedirect(url) or check
+      Url.IsLocalUrl(url) first) or to an allow-list of destinations.
+    metadata:
+      cwe: "CWE-601: URL Redirection to Untrusted Site ('Open Redirect')"
+      owasp: "A01:2021 - Broken Access Control"
+      category: security
+      confidence: MEDIUM
+      likelihood: HIGH
+      impact: HIGH
+    pattern-sources:
+      - patterns:
+          - pattern-inside: |
+              class $CLASS : $BASE { ... }
+          - metavariable-regex:
+              metavariable: $BASE
+              regex: .*(Controller|ControllerBase|PageModel|ApiController)\b.*
+          - pattern-inside: |
+              public $RET $ACTION(..., $TYPE $PARAM, ...) { ... }
+          # Numeric / boolean / Guid / date parameters cannot carry an injection.
+          - metavariable-regex:
+              metavariable: $TYPE
+              regex: ^(?!(int|long|short|byte|sbyte|uint|ulong|ushort|bool|decimal|double|float|Guid|DateTime|DateTimeOffset|TimeSpan)\??$).*
+          - pattern: $PARAM
+      - pattern-either:
+          - pattern: Request.Query[...]
+          - pattern: Request.Form[...]
+          - pattern: Request.Headers[...]
+          - pattern: Request.Cookies[...]
+          - pattern: Request.QueryString[...]
+          - pattern: HttpContext.Request.Query[...]
+          - pattern: HttpContext.Request.Form[...]
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Redirect($U)
+              - pattern: RedirectPermanent($U)
+              - pattern: Response.Redirect($U, ...)
+          - pattern-not-inside: |
+              if (Url.IsLocalUrl($U)) { ... }
+          - pattern-not-inside: |
+              if (Url.IsLocalUrl($U)) { ... } else { ... }
+          - focus-metavariable: $U

@@ -1,0 +1,48 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://github.com/mobsf/mobsfscan/blob/main/mobsfscan/rules/semgrep/webview/webview_debugging.yaml
+# hash: e29e85c3
+# yamllint enable
+---
+rules:
+  - id: rules_lgpl_java_webview_rule-webview-debugging
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $WB.setWebContentsDebuggingEnabled(true);
+          - pattern: |
+              $X = true;
+              ...
+              $WB.setWebContentsDebuggingEnabled($X);
+    message: |
+      Remote WebView debugging is enabled. This allows an attacker with
+      debugging access to interact with the webview and steal or corrupt data.
+      To fix these security issues, it is recommended to disable remote 
+      debugging and restrict file access in the WebView. 
+      Here's how you can do it:
+      ```
+      WebView webView = new WebView(context);
+
+      // Disable remote debugging
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+          WebView.setWebContentsDebuggingEnabled(false);
+      }
+
+      // Restrict file access from file URLs
+      webView.getSettings().setAllowFileAccessFromFileURLs(false);
+
+      // Load a web page
+      webView.loadUrl("https://example.com");
+      ```
+    languages:
+      - java
+    severity: WARNING
+    metadata:
+      category: security
+      cwe: "CWE-489"
+      shortDescription: "Active debug code"
+      owasp:
+        - "A6:2017-Security Misconfiguration"
+        - "A05:2021-Security Misconfiguration"
+        - "A02:2025-Security Misconfiguration"
+      security-severity: MEDIUM

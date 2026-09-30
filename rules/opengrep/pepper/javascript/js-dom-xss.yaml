@@ -1,0 +1,47 @@
+rules:
+  - id: pepper.js.dom-xss
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Data from the URL (location / query string / hash) is written into the
+      page as HTML. An attacker can craft a link that runs script in the
+      victim's session (DOM XSS).
+      Fix: use `textContent` instead of `innerHTML`, or sanitise with a vetted
+      library such as DOMPurify before inserting HTML.
+    metadata:
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html
+    pattern-sources:
+      - pattern-either:
+          - pattern: location.hash
+          - pattern: location.search
+          - pattern: location.href
+          - pattern: window.location.hash
+          - pattern: window.location.search
+          - pattern: window.location.href
+          - pattern: document.URL
+          - pattern: document.location
+          - pattern: document.referrer
+          - pattern: window.name
+          - pattern: new URLSearchParams(...).get(...)
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: DOMPurify.sanitize(...)
+          - pattern: $X.sanitize(...)
+          - pattern: encodeURIComponent(...)
+    pattern-sinks:
+      - pattern-either:
+          - pattern: $EL.innerHTML = $X
+          - pattern: $EL.outerHTML = $X
+          - pattern: $EL.insertAdjacentHTML($POS, $X)
+          - pattern: document.write($X)
+          - pattern: document.writeln($X)
+          - pattern: |
+              <$C dangerouslySetInnerHTML={{__html: $X}} />

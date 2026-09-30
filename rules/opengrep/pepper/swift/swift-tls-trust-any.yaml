@@ -1,0 +1,25 @@
+rules:
+  - id: pepper.swift.tls-trust-any
+    languages: [swift]
+    severity: ERROR
+    message: >-
+      The URLSession delegate accepts the server certificate without
+      evaluating it, so any certificate is trusted (man-in-the-middle).
+      Fix: evaluate the trust with SecTrustEvaluateWithError (and pin if
+      required) before calling completionHandler(.useCredential, ...), or use
+      .performDefaultHandling.
+    metadata:
+      cwe: "CWE-295: Improper Certificate Validation"
+      owasp: "M5: Insecure Communication (OWASP Mobile Top 10 2024)"
+      category: security
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+    patterns:
+      - pattern: |
+          $HANDLER(.useCredential, URLCredential(trust: $TRUST))
+      - pattern-not-inside: |
+          if SecTrustEvaluateWithError(...) { ... }
+      - pattern-not-inside: |
+          guard SecTrustEvaluateWithError(...) else { ... }
+          ...

@@ -1,0 +1,64 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://github.com/mobsf/mobsfscan/blob/main/mobsfscan/rules/semgrep/webview/webview_ignore_ssl_errors.yaml
+# hash: e29e85c3
+# yamllint enable
+---
+rules:
+  - id: rules_lgpl_java_webview_rule-ignore-ssl-certificate-errors
+    pattern: >
+      $RET onReceivedSslError(WebView $W, SslErrorHandler $H, SslError
+      $E) {
+        ...
+        $H.proceed();
+      }
+    message: |
+      Insecure WebView Implementation. leading to a security problem known as SSL certificate 
+      validation bypass. This occurs when the app fails to properly validate SSL certificates, 
+      allowing potentially malicious or spoofed certificates to be accepted, leading to a 
+      Man-in-the-Middle (MitM) attack where an attacker intercepts and manipulates communication 
+      between the app and the server. 
+      
+      To fix this security issue, you should properly handle SSL errors and only proceed with 
+      the connection if the SSL certificate is valid and trusted. Here's an example code in Java:
+      ```      
+      public class MyWebViewClient extends WebViewClient {      
+        @Override
+        public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+          // Check the SSL error type
+          switch (error.getPrimaryError()) {
+            case SslError.SSL_UNTRUSTED:
+              // Certificate is untrusted
+              // Handle the error appropriately, such as showing an error message
+              break;
+            case SslError.SSL_EXPIRED:
+              // Certificate has expired
+              // Handle the error appropriately
+              break;
+            case SslError.SSL_IDMISMATCH:
+              // Certificate hostname mismatch
+              // Handle the error appropriately
+              break;
+            case SslError.SSL_NOTYETVALID:
+              // Certificate is not yet valid
+              // Handle the error appropriately
+              break;
+          }
+          // Cancel the connection
+          // This prevents the WebView from loading the content
+          handler.cancel();
+        }
+      }
+      ```
+    languages:
+      - java
+    severity: WARNING
+    metadata:
+      category: security
+      cwe: "CWE-295"
+      shortDescription: Improper certificate validation"
+      owasp:
+        - "A3:2017-Sensitive Data Exposure"
+        - "A07:2021-Identification and Authentication Failures"
+        - "A07:2025-Authentication Failures"
+      security-severity: MEDIUM

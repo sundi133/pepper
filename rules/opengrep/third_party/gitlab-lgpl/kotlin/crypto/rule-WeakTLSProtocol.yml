@@ -1,0 +1,28 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://find-sec-bugs.github.io/bugs.htm
+# yamllint enable
+---
+rules:
+  - id: "kotlin_crypto_rule-WeakTLSProtocol"
+    languages:
+      - "kotlin"
+    message: |
+      A HostnameVerifier that accept any host are often use because of certificate
+      reuse on many hosts. As a consequence, this is vulnerable to Man-in-the-middleattacks
+      attacks since the client will trust any certificate.
+    metadata:
+      shortDescription: "Improper certificate validation"
+      category: "security"
+      cwe: "CWE-295"
+      owasp:
+        - "A3:2017-Sensitive Data Exposure"
+        - "A07:2021-Identification and Authentication Failures"
+        - "A07:2025-Authentication Failures"
+      security-severity: "MEDIUM"
+    severity: "WARNING"
+
+    patterns:
+      - pattern-either:
+          - pattern: "org.apache.http.impl.client.DefaultHttpClient()"
+          - pattern: "javax.net.ssl.SSLContext.getInstance(\"SSL\")"

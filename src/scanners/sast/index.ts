@@ -1,11 +1,15 @@
 import { ScanContext, ScannerPlugin } from "../types";
 import { runLlmSastScanner } from "./llm-analyzer";
+import { runOpengrepScanner } from "./opengrep";
 
-/** Pattern-based SAST is quarantined — never registered or run. */
+/**
+ * Rule-based SAST: OpenGrep with the curated packs in rules/opengrep.
+ * Deterministic and offline, so it runs whether or not LLM SAST is enabled.
+ */
 export const sastPatternScanner: ScannerPlugin = {
   name: "SAST_PATTERN",
-  async scan(): Promise<never[]> {
-    return [];
+  async scan(ctx: ScanContext) {
+    return runOpengrepScanner(ctx);
   },
 };
 

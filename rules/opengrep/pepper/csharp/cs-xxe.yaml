@@ -1,0 +1,22 @@
+rules:
+  - id: pepper.csharp.xxe
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      The XML parser resolves DTDs / external entities. Parsing untrusted XML
+      can read local files or reach internal URLs (XXE).
+      Fix: set XmlResolver = null and DtdProcessing = DtdProcessing.Prohibit
+      (the default on modern .NET) on XmlDocument / XmlReaderSettings.
+    metadata:
+      cwe: "CWE-611: Improper Restriction of XML External Entity Reference"
+      owasp: "A05:2021 - Security Misconfiguration"
+      category: security
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+    pattern-either:
+      - pattern: $X.XmlResolver = new XmlUrlResolver()
+      - pattern: $X.DtdProcessing = DtdProcessing.Parse
+      - pattern: |
+          new XmlReaderSettings { ..., DtdProcessing = DtdProcessing.Parse, ... }
+      - pattern: $X.ProhibitDtd = false

@@ -1,0 +1,49 @@
+# yamllint disable
+# License: GNU Lesser General Public License v3.0
+# source (original): https://find-sec-bugs.github.io/bugs.htm
+# yamllint enable
+---
+rules:
+  - id: "kotlin_endpoint_rule-UnvalidatedRedirect"
+    languages:
+      - "kotlin"
+    message: |
+      Unvalidated redirects occur when an application redirects a user to a
+      destination URL specified by a user supplied parameter that is not validated.
+      Such vulnerabilities can be used to facilitate phishing attacks.
+    metadata:
+      category: "security"
+      cwe: "CWE-601"
+      owasp:
+        - "A1:2017-Injection"
+        - "A01:2021-Broken Access Control"
+        - "A01:2025-Broken Access Control"
+      shortDescription: "URL redirection to untrusted site ('Open Redirect')"
+      security-severity: "CRITICAL"
+    severity: "ERROR"
+
+    mode: "taint"
+    pattern-sources:
+      - patterns:
+          - pattern: |
+              $URL = ($REQ: $X.servlet.http.HttpServletRequest).$M(...);
+          - metavariable-regex:
+              metavariable: "$M"
+              regex: "(getParameter|getCookies|getHeader|getHeaders|getHeaderNames|getPathInfo|getPathTranslated|getContextPath|getQueryString|getRemoteUser|getRequestedSessionId|getRequestURI|getRequestURL|getServletPath|getParts|getPart|getReader)"
+    pattern-sinks:
+      - pattern-either:
+          - pattern: |
+              ($RES: $X.servlet.http.HttpServletResponse).sendRedirect($URL)
+          - pattern: |
+              ($RES: $X.servlet.http.HttpServletResponse).addHeader("Location", $URL)
+    pattern-sanitizers:
+      - patterns:
+          - pattern-inside: |
+              if ($SAFE.contains($URL)){
+                ...
+              }
+          - pattern-either:
+              - pattern: |
+                  ($RES: $X.servlet.http.HttpServletResponse).sendRedirect($URL)
+              - pattern: |
+                  ($RES: $X.servlet.http.HttpServletResponse).addHeader("Location", $URL)

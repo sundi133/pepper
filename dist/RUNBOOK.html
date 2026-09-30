@@ -1,0 +1,512 @@
+<!doctype html>
+<!-- Customer install runbook. scripts/package-install-bundle.sh fills in
+     __PEPPER_VERSION__; publish the packaged copy, not this template. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pepper Install Runbook</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  /* Layout: single reading column, numbered steps down the page, commands in copyable blocks */
+  :root {
+    --bg: #fbf9f7;
+    --surface: #ffffff;
+    --fg: #1f1a17;
+    --muted: #6b605a;
+    --line: #e7dfd9;
+    --accent: #b4451f;
+    --accent-soft: #fbe9e1;
+    --code-bg: #f4efeb;
+    --ok: #2f7a4d;
+    --warn-bg: #fff6e0;
+    --warn-line: #e8c46b;
+    --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #171412; --surface: #201c19; --fg: #efe8e3; --muted: #a79a92; --line: #37302b;
+      --accent: #f08a5d; --accent-soft: #3a2519; --code-bg: #26211d; --ok: #6cc08e;
+      --warn-bg: #2e2715; --warn-line: #8a7336; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #171412; --surface: #201c19; --fg: #efe8e3; --muted: #a79a92; --line: #37302b;
+    --accent: #f08a5d; --accent-soft: #3a2519; --code-bg: #26211d; --ok: #6cc08e;
+    --warn-bg: #2e2715; --warn-line: #8a7336; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6; padding: 0 16px; }
+  main { max-width: 820px; margin: 0 auto; padding-block: 40px 80px; display: grid; gap: 28px; }
+  /* Grid columns may shrink below their content, and long inline URLs wrap, so nothing scrolls sideways on phones. */
+  main, header, section.plain, .body, details > div { grid-template-columns: minmax(0, 1fr); }
+  :not(pre) > code { overflow-wrap: anywhere; }
+  li { min-width: 0; }
+  h1, h2, h3 { text-wrap: balance; line-height: 1.25; margin: 0; }
+  h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 20px; font-weight: 600; }
+  h3 { font-size: 15px; font-weight: 600; }
+  p, ul, ol { margin: 0; }
+  ul, ol { padding-left: 1.3em; display: grid; gap: 4px; }
+  a { color: var(--accent); }
+  code { font-family: var(--font-mono); font-size: 0.9em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+  header { display: grid; gap: 10px; }
+  header p { color: var(--muted); max-width: 65ch; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button { font: 500 13px var(--font-body); cursor: pointer; border-radius: 6px; }
+  .btn-primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); padding: 8px 14px; }
+  :root[data-theme="dark"] .btn-primary { color: #1b1310; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn-primary { color: #1b1310; } }
+  .btn-primary:focus-visible, .copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .status { font-size: 13px; color: var(--ok); min-height: 1em; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .facts div { background: var(--surface); padding: 12px 14px; display: grid; gap: 2px; min-width: 0; }
+  .facts span { font-size: 12px; color: var(--muted); }
+  .facts strong { font-family: var(--font-mono); font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+  section.step { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 4px 14px; padding-top: 22px; border-top: 1px solid var(--line); }
+  .num { font-family: var(--font-mono); font-weight: 500; font-size: 13px; color: var(--accent); background: var(--accent-soft); border-radius: 50%; width: 30px; height: 30px; display: grid; place-items: center; }
+  .body { display: grid; gap: 12px; min-width: 0; }
+  .body > p { max-width: 68ch; }
+  section.plain { display: grid; gap: 12px; padding-top: 22px; border-top: 1px solid var(--line); }
+  .cmd { position: relative; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+  .cmd pre { margin: 0; padding: 14px 16px; padding-right: 76px; overflow-x: auto; font: 13px/1.6 var(--font-mono); white-space: pre; }
+  .cmd .copy { position: absolute; top: 8px; right: 8px; background: var(--surface); color: var(--fg); border: 1px solid var(--line); padding: 4px 10px; font-size: 12px; }
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 8px; padding: 12px 14px; font-size: 14px; }
+  .check { color: var(--muted); font-size: 14px; }
+  .check strong { color: var(--ok); font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 500; background: var(--surface); }
+  tr:last-child td { border-bottom: 0; }
+  td:first-child { font-family: var(--font-mono); font-size: 13px; white-space: nowrap; }
+  ol.qs { gap: 8px; max-width: 72ch; }
+  ol.qs ul { margin-top: 6px; }
+  #questions h3 { margin-top: 6px; color: var(--accent); }
+  details { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  details > summary { cursor: pointer; padding: 12px 14px; font-weight: 600; }
+  details > div { padding: 0 14px 14px; display: grid; gap: 12px; }
+  #env h3 { margin-top: 8px; }
+  #env td:nth-child(2) { font-family: var(--font-mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .tag { display: inline-block; font: 500 11px var(--font-body); letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 6px; margin-left: 6px; vertical-align: 1px; }
+  /* Narrow screens: each setting becomes a stacked block (name, default, purpose) instead of three squeezed columns. */
+  @media (max-width: 640px) {
+    #env table, #env tbody, #env tr, #env td { display: block; }
+    #env thead { display: none; }
+    #env tr { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    #env tr:last-child { border-bottom: 0; }
+    #env td { padding: 0; border: 0; white-space: normal; }
+    #env td + td { margin-top: 4px; }
+    #env td:empty { display: none; }
+  }
+  @media (max-width: 520px) { section.step { grid-template-columns: minmax(0, 1fr); } .num { width: 26px; height: 26px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<main id="runbook">
+  <header>
+    <div class="eyebrow">Pepper · on-prem installation</div>
+    <h1>Pepper Install Runbook</h1>
+    <p>Steps for installing Pepper on a Linux VM that already runs Docker. Pepper
+      runs as five containers from prebuilt images, so no source code or build is needed.
+      Allow about 30 minutes. First, send us the answers to the questions in
+      <a href="#questions">Information we need from you</a>.</p>
+    <div class="toolbar">
+      <button class="btn-primary" id="copy-all" type="button">Copy all steps as text</button>
+      <span class="status" id="copy-status" role="status"></span>
+    </div>
+  </header>
+
+  <div class="facts">
+    <div><span>Pepper version</span><strong>__PEPPER_VERSION__</strong></div>
+    <div><span>Install bundle</span><strong>pepper-install-__PEPPER_VERSION__.tar.gz</strong></div>
+    <div><span>Images</span><strong>docker.io/sundi133/pepper-api<br>docker.io/sundi133/pepper-worker</strong></div>
+    <div><span>Web UI port</span><strong>3000/tcp</strong></div>
+  </div>
+
+  <section class="plain" id="questions">
+    <h2>Information we need from you</h2>
+    <p>Please send us answers to these before the install. Items marked <em>if used</em> only apply if you want that feature.</p>
+
+    <h3>General</h3>
+    <ol class="qs">
+      <li>What does <code>uname -m</code> print on the VM (<code>x86_64</code> or <code>aarch64</code>)?</li>
+      <li>What URL will Pepper have (for example <code>https://pepper.yourcompany.local</code>)? Do you have a TLS certificate for it, or a reverse proxy that terminates TLS?</li>
+      <li>Can the VM reach Docker Hub and quay.io, directly or through a proxy? If not, we'll send an offline image archive.</li>
+      <li>Is there an outbound proxy? Please send its address and the internal hosts that must bypass it.</li>
+      <li>Which AI model endpoint should Pepper use (internal gateway, Azure OpenAI or other)? Is internet access allowed for it?</li>
+      <li>Do your internal services use certificates from an internal CA? If so, please send the CA certificate (PEM).</li>
+      <li>Are there files or folders whose content must never be sent to the AI model (for example production configuration)? Passwords, keys and tokens in code are masked automatically, and key files are never sent.</li>
+      <li>How long may Pepper keep uploaded source code, scan history and the audit log? By default everything is kept.</li>
+    </ol>
+
+    <h3>Single sign-on (SAML)</h3>
+    <ol class="qs">
+      <li>Which identity provider do you use (Microsoft Entra ID, ADFS, Okta, Ping, other)? If it is Entra ID, can we use OpenID Connect ("Sign in with Microsoft") instead of SAML? It is simpler to set up and handles users in many groups.</li>
+      <li>Please register Pepper in your IdP with these values (replace <code>&lt;url&gt;</code> with the answer to General question 2):
+        <ul>
+          <li>Entity ID / Identifier: <code>https://&lt;url&gt;/api/auth/saml/metadata</code></li>
+          <li>Reply URL / ACS: <code>https://&lt;url&gt;/api/auth/saml/acs</code></li>
+          <li>Sign-on URL: <code>https://&lt;url&gt;/api/auth/saml/login</code></li>
+        </ul>
+        Once Pepper is running, you can also import our metadata from the Entity ID URL.</li>
+      <li>Please send the IdP sign-on URL and the token-signing certificate (Base64).</li>
+      <li>Does your IdP sign the whole response or only the assertion? Pepper requires at least one of them to be signed.</li>
+      <li>Which claims carry the user's email, display name and group memberships? Please send the claim names, or confirm the standard ones.</li>
+      <li>Which groups should map to which Pepper role (Admin, Security, Developer, Viewer)? For Entra ID, please send the group object IDs or app role values. Are any users members of more than 150 groups?</li>
+      <li>Users who match none of those groups: should they get Viewer access, or be blocked from signing in?</li>
+      <li>What session timeout do you require? When a user is removed in the IdP, Pepper blocks their next sign-in, but a session that is already open lasts until it expires. Automatic removal via SCIM is not supported. Is that acceptable?</li>
+      <li>Should we keep one local password administrator as a break-glass account, and turn off self-registration?</li>
+    </ol>
+
+    <h3>Azure DevOps Server</h3>
+    <ol class="qs">
+      <li>Which version do you run (2019, 2020, 2022 or 2022.1)?</li>
+      <li>What is the exact server URL, including any virtual directory (for example <code>https://tfs.yourcompany.local/tfs</code>)? Which collections and projects should Pepper scan?</li>
+      <li>Does the server use a certificate from an internal CA? If so, please send the CA certificate (PEM).</li>
+      <li>Can the Pepper VM reach the server over HTTPS? On which port? Is there a proxy in between?</li>
+      <li>Are personal access tokens (PATs) allowed? Please create one for a service account with these scopes:
+        <ul>
+          <li><strong>Code (Read)</strong> to scan repositories</li>
+          <li><strong>Code (Read &amp; write)</strong> if Pepper should open fix pull requests</li>
+          <li><strong>Pull Request Threads (Read &amp; write)</strong> for pull request comments</li>
+          <li><strong>Project and Team (Read)</strong></li>
+          <li><strong>Work Items (Read &amp; write)</strong> if Pepper should create Azure Boards work items</li>
+        </ul>
+        Who will rotate the PAT, and when does it expire?</li>
+      <li><em>If used:</em> should Pepper scan pull requests automatically? This needs a service hook from your server to Pepper's URL, secured with a shared Basic-auth password. Should a failed scan block merging through a branch policy?</li>
+      <li><em>If used:</em> should findings become Azure Boards work items? If so, which project, and which process template (Agile, Scrum, CMMI or Basic)? Which area and iteration paths? Which severities should be filed automatically? Which state should an item move to when Pepper no longer detects the issue?</li>
+      <li>Do you have very large repositories, or repositories that use Git LFS?</li>
+    </ol>
+  </section>
+
+  <section class="plain">
+    <h2>Before you start</h2>
+    <ul>
+      <li><strong>VM:</strong> Linux x86-64 (amd64). 4 vCPU and 16 GB RAM recommended (minimum 2 vCPU / 8 GB), 100 GB disk for Docker data.</li>
+      <li><strong>Docker Engine 24 or newer</strong> with the <strong>Compose v2 plugin</strong>.</li>
+      <li><strong>Outbound access from the VM</strong>, directly or through your proxy:
+        <ul>
+          <li>Docker Hub (<code>registry-1.docker.io</code>) and <code>quay.io</code>. Only needed to pull images; without it, use the offline route in step 4.</li>
+          <li>Your Git servers, for example Azure DevOps Server.</li>
+          <li>Your LLM endpoint.</li>
+          <li><code>api.osv.dev</code> (optional, for dependency vulnerability data).</li>
+        </ul>
+      </li>
+      <li><strong>A DNS name for Pepper</strong>, for example <code>pepper.yourcompany.local</code>, and ideally a TLS certificate for it.</li>
+      <li><strong>Commands below</strong> assume your user can run <code>docker</code>. If not, prefix them with <code>sudo</code>.</li>
+    </ul>
+  </section>
+
+  <section class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h2>Check the VM</h2>
+      <div class="cmd"><pre>uname -m                                          # must print x86_64
+docker version --format '{{.Server.Version}}'     # 24 or newer
+docker compose version                            # Docker Compose version v2.x
+df -h /var/lib/docker                             # at least 40 GB free
+free -g                                           # 8 GB or more</pre></div>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h2>Copy and unpack the install bundle</h2>
+      <p>Copy <code>pepper-install-__PEPPER_VERSION__.tar.gz</code> to the VM (for example to your home directory), then:</p>
+      <div class="cmd"><pre>sudo mkdir -p /opt/pepper && sudo chown "$USER" /opt/pepper
+cd /opt/pepper
+tar -xzf ~/pepper-install-__PEPPER_VERSION__.tar.gz --strip-components=1
+ls -la          # docker-compose.yml  .env.example  setup.sh  INSTALL.md  RUNBOOK.html  certs/</pre></div>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h2>Create the configuration</h2>
+      <p>Create <code>.env</code> and fill in random secrets. Use hex values: a <code>/</code> or <code>+</code> in the database password would break its connection string.</p>
+      <div class="cmd"><pre>cd /opt/pepper
+cp .env.example .env && chmod 600 .env
+sed -i "s|^NEXTAUTH_SECRET=.*|NEXTAUTH_SECRET=\"$(openssl rand -hex 32)\"|" .env
+sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=\"$(openssl rand -hex 24)\"|" .env
+sed -i "s|^MINIO_ROOT_PASSWORD=.*|MINIO_ROOT_PASSWORD=\"$(openssl rand -hex 24)\"|" .env
+sed -i "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=\"$(openssl rand -hex 12)\"|" .env</pre></div>
+      <p>Now open <code>.env</code> (<code>vi .env</code>) and set these values:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Setting</th><th>What to enter</th></tr></thead>
+        <tbody>
+          <tr><td>NEXTAUTH_URL</td><td>The exact address users will open, for example <code>https://pepper.yourcompany.local</code>. For a first test without TLS: <code>http://&lt;vm-ip&gt;:3000</code>.</td></tr>
+          <tr><td>ADMIN_EMAIL</td><td>Email for the first Pepper administrator.</td></tr>
+          <tr><td>LLM_PROVIDER<br>LLM_BASE_URL<br>LLM_MODEL<br>LLM_API_KEY</td><td>Your AI model endpoint. Examples for OpenAI, Azure OpenAI, Anthropic, internal gateways and Ollama are in the comments of <code>.env</code>. You can change this later in the UI.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Every other setting is optional; see <a href="#env">Configuration reference</a>. Leave <code>PEPPER_VERSION</code> as <code>__PEPPER_VERSION__</code>. Keep a secure copy of <code>.env</code>: <code>NEXTAUTH_SECRET</code> encrypts stored credentials and can't be recovered.</p>
+      <div class="cmd"><pre>grep -E '^(ADMIN_EMAIL|ADMIN_PASSWORD)=' .env     # the first sign-in</pre></div>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="num">4</div>
+    <div class="body">
+      <h2>Start Pepper</h2>
+      <div class="cmd"><pre>cd /opt/pepper
+docker compose pull
+docker compose up -d</pre></div>
+      <p>The first start creates the database, which takes 1–3 minutes. Wait until it answers:</p>
+      <div class="cmd"><pre>until curl -fsS http://localhost:3000/api/health; do echo "waiting..."; sleep 10; done
+docker compose ps</pre></div>
+      <p class="check">Expected: all five services <strong>running</strong>, and <code>pepper-api</code>, <code>postgres</code>, <code>redis</code> and <code>minio</code> <strong>healthy</strong>.</p>
+      <details>
+        <summary>The VM can't reach Docker Hub (offline route)</summary>
+        <div>
+          <p>On any machine with internet access and Docker, download the images into one file:</p>
+          <div class="cmd"><pre>V=__PEPPER_VERSION__
+for i in docker.io/sundi133/pepper-api:$V docker.io/sundi133/pepper-worker:$V \
+         postgres:16-alpine redis:7-alpine quay.io/minio/minio:latest; do
+  docker pull --platform linux/amd64 "$i"
+done
+docker save -o pepper-images-$V.tar docker.io/sundi133/pepper-api:$V \
+  docker.io/sundi133/pepper-worker:$V postgres:16-alpine redis:7-alpine quay.io/minio/minio:latest
+sha256sum pepper-images-$V.tar > pepper-images-$V.tar.sha256</pre></div>
+          <p>Copy both files to <code>/opt/pepper</code> on the VM, then load them and start without pulling:</p>
+          <div class="cmd"><pre>cd /opt/pepper
+sha256sum -c pepper-images-__PEPPER_VERSION__.tar.sha256
+docker load -i pepper-images-__PEPPER_VERSION__.tar
+docker compose up -d</pre></div>
+          <p>If you run an internal registry (Harbor, Artifactory, Nexus), you can push the two Pepper images there instead. Then set <code>PEPPER_API_IMAGE</code> and <code>PEPPER_WORKER_IMAGE</code> in <code>.env</code>; see <code>INSTALL.md</code> section 3.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="num">5</div>
+    <div class="body">
+      <h2>Open the port and sign in</h2>
+      <p>Allow the web port through the VM firewall, if one is active:</p>
+      <div class="cmd"><pre># RHEL / Rocky / Alma
+sudo firewall-cmd --add-port=3000/tcp --permanent && sudo firewall-cmd --reload
+# Ubuntu / Debian
+sudo ufw allow 3000/tcp</pre></div>
+      <p>Open <code>NEXTAUTH_URL</code> in a browser and sign in with <code>ADMIN_EMAIL</code> / <code>ADMIN_PASSWORD</code>. Then:</p>
+      <ol>
+        <li>Open <strong>Settings → LLM Config</strong> and click <strong>Test connection</strong>. The <strong>Data Sent to AI</strong> card there shows that secret masking is on and which files are never sent.</li>
+        <li>Open <strong>Settings → Integrations</strong> and connect Azure DevOps (or GitHub, GitLab, Bitbucket) with a personal access token.</li>
+        <li>Run a first scan: <strong>New scan</strong>, pick a repository, <strong>Full scan</strong>.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="num">6</div>
+    <div class="body">
+      <h2>Put HTTPS in front (recommended)</h2>
+      <p>Point your existing reverse proxy or load balancer (nginx, IIS ARR, F5) at <code>http://&lt;vm&gt;:3000</code>, terminate TLS there, and allow long-lived responses, because scan progress is streamed. Then update the URL and restart:</p>
+      <div class="cmd"><pre>cd /opt/pepper
+sed -i 's|^NEXTAUTH_URL=.*|NEXTAUTH_URL="https://pepper.yourcompany.local"|' .env
+echo 'PEPPER_BIND_ADDRESS=127.0.0.1' >> .env      # only if the proxy runs on this VM
+docker compose up -d</pre></div>
+      <p>An nginx example is in <code>INSTALL.md</code> section 4. Set proxy read timeouts to at least 1 hour and turn buffering off.</p>
+    </div>
+  </section>
+
+  <section class="plain">
+    <h2>If your network needs it</h2>
+    <details>
+      <summary>Outbound proxy or internal certificate authority</summary>
+      <div>
+        <p>Put your internal CA certificate (PEM) in <code>/opt/pepper/certs/internal-ca.pem</code>. Then add the lines you need to <code>.env</code>:</p>
+        <div class="cmd"><pre>NODE_EXTRA_CA_CERTS="/certs/internal-ca.pem"
+GIT_SSL_CAINFO="/certs/internal-ca.pem"
+HTTPS_PROXY="http://proxy.yourcompany.local:8080"
+HTTP_PROXY="http://proxy.yourcompany.local:8080"
+NO_PROXY="tfs.yourcompany.local,.yourcompany.local"</pre></div>
+        <p>Apply with <code>docker compose up -d</code>. On SELinux-enforcing hosts, if the containers can't read the certificate, relabel the folder with <code>sudo chcon -Rt container_file_t /opt/pepper/certs</code>.</p>
+      </div>
+    </details>
+    <details>
+      <summary>Azure DevOps Server (on-prem)</summary>
+      <div>
+        <p>Set the REST API version that matches your server in <code>.env</code>, then connect it in <strong>Settings → Integrations → Azure DevOps</strong> with the server URL, collection and a PAT:</p>
+        <div class="cmd"><pre>AZURE_DEVOPS_API_VERSION="7.0"     # 6.0 for Server 2020, 7.0 for Server 2022</pre></div>
+      </div>
+    </details>
+    <details>
+      <summary>Sign-in with Microsoft Entra ID</summary>
+      <div>
+        <p>Register an app in Entra (single tenant). Use redirect URI <code>https://pepper.yourcompany.local/api/auth/callback/entra</code> and create a client secret. Then add to <code>.env</code> and run <code>docker compose up -d</code>:</p>
+        <div class="cmd"><pre>ENABLE_ENTRA_SSO="true"
+ENTRA_TENANT_ID="&lt;directory-tenant-id&gt;"
+ENTRA_CLIENT_ID="&lt;application-client-id&gt;"
+ENTRA_CLIENT_SECRET="&lt;client-secret&gt;"
+ENTRA_ROLE_MAP='{"Pepper.Admin":"ADMIN","Pepper.Security":"SECURITY","Pepper.Developer":"DEVELOPER"}'
+ALLOW_PUBLIC_REGISTRATION="false"</pre></div>
+        <p>The role values are app roles you create on the Entra app registration. SAML is also supported; see the comments in <code>.env</code>.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="plain" id="env">
+    <h2>Configuration reference (.env)</h2>
+    <p>All settings live in <code>/opt/pepper/.env</code>. Only the first group is required. After any change run <code>docker compose up -d</code>; only the affected containers restart.</p>
+
+    <h3>Required</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Setting</th><th>Example</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>PEPPER_VERSION</td><td>__PEPPER_VERSION__</td><td>Pepper image tag. Change it only to upgrade.</td></tr>
+        <tr><td>NEXTAUTH_URL</td><td>https://pepper.corp.local</td><td>Exact address users open, including <code>https</code> and any port.</td></tr>
+        <tr><td>NEXTAUTH_SECRET</td><td>openssl rand -hex 32</td><td>Signs sessions and encrypts stored credentials. Never change it after setup; back it up.</td></tr>
+        <tr><td>POSTGRES_PASSWORD</td><td>openssl rand -hex 24</td><td>Database password (hex only).</td></tr>
+        <tr><td>MINIO_ROOT_USER<br>MINIO_ROOT_PASSWORD</td><td>pepper / hex</td><td>Object storage credentials.</td></tr>
+        <tr><td>ADMIN_EMAIL<br>ADMIN_PASSWORD</td><td></td><td>First administrator, created on first start.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>AI model</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Setting</th><th>Default</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>LLM_PROVIDER</td><td>openrouter</td><td><code>openai</code>, <code>azure</code>, <code>anthropic</code>, <code>custom</code> (any OpenAI-compatible gateway), <code>ollama</code> …</td></tr>
+        <tr><td>LLM_BASE_URL<br>LLM_MODEL<br>LLM_API_KEY</td><td></td><td>Endpoint, model and key. Can also be changed later in <strong>Settings → LLM Config</strong>.</td></tr>
+        <tr><td>LLM_MASK_SECRETS<span class="tag">new</span></td><td>true</td><td>Replaces passwords, keys, tokens and connection-string passwords in code with placeholders before anything is sent to the model. Fix pull requests still contain the real values.</td></tr>
+        <tr><td>LLM_EXCLUDE_PATHS<span class="tag">new</span></td><td>(none)</td><td>Comma-separated globs of files never sent to the model, for example <code>config/prod/**,*.tfvars</code>. A pattern without <code>/</code> matches the file name anywhere. Key and keystore files (<code>*.pem</code>, <code>*.key</code>, <code>*.p12</code>, <code>*.pfx</code>, <code>*.jks</code>, <code>id_rsa</code> …) are always excluded. Rule-based scanners still scan these files.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Data retention<span class="tag">new</span></h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Setting</th><th>Default</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>UPLOAD_RETENTION_DAYS</td><td>forever</td><td>Uploaded source archives are deleted this many days after upload (minimum 1). Scan results stay; rescanning that project asks for the archive again.</td></tr>
+        <tr><td>SCAN_HISTORY_RETENTION_DAYS</td><td>forever</td><td>Scan history and finished AI fix runs older than this are deleted (minimum 30). Each project's latest scan is always kept.</td></tr>
+        <tr><td>AUDIT_LOG_RETENTION_DAYS</td><td>forever</td><td>Audit entries older than this (minimum 30) are archived to object storage, then deleted. Can be overridden in <strong>Settings → Audit log</strong>.</td></tr>
+      </tbody>
+    </table></div>
+    <p>Retention runs in the worker at most every 6 hours and records what it deleted in the audit log.</p>
+
+    <h3>Network and certificates</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Setting</th><th>Default</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>PEPPER_PORT<br>PEPPER_BIND_ADDRESS</td><td>3000<br>0.0.0.0</td><td>Web port on the VM and the address it listens on. Use <code>127.0.0.1</code> when a reverse proxy runs on the same VM.</td></tr>
+        <tr><td>HTTPS_PROXY<br>HTTP_PROXY<br>NO_PROXY</td><td>(none)</td><td>Outbound proxy for the AI model, vulnerability data and Git hosts. List internal hosts (Azure DevOps Server) in <code>NO_PROXY</code>.</td></tr>
+        <tr><td>NODE_EXTRA_CA_CERTS<br>GIT_SSL_CAINFO</td><td>(none)</td><td>Internal CA certificate, as <code>/certs/internal-ca.pem</code> (the file goes in <code>/opt/pepper/certs/</code>).</td></tr>
+        <tr><td>PEPPER_API_IMAGE<br>PEPPER_WORKER_IMAGE</td><td>Docker Hub</td><td>Pull the Pepper images from an internal registry instead.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Sign-in</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Setting</th><th>Default</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>ENABLE_ENTRA_SSO<br>ENTRA_TENANT_ID<br>ENTRA_CLIENT_ID<br>ENTRA_CLIENT_SECRET</td><td>false</td><td>Sign in with Microsoft Entra ID. Redirect URI: <code>{NEXTAUTH_URL}/api/auth/callback/entra</code>.</td></tr>
+        <tr><td>ENTRA_ROLE_MAP</td><td></td><td>App role or group → Pepper role (<code>ADMIN</code>, <code>SECURITY</code>, <code>DEVELOPER</code>, <code>VIEWER</code>).</td></tr>
+        <tr><td>ENTRA_REQUIRE_ROLE</td><td>false</td><td>Block users who match no role.</td></tr>
+        <tr><td>ENTRA_ROLE_SYNC</td><td>raise</td><td><code>raise</code> only promotes; <code>exact</code> also demotes to match Entra on every sign-in.</td></tr>
+        <tr><td>ENABLE_SAML_SSO<br>SAML_ENTRY_POINT<br>SAML_IDP_CERT</td><td>false</td><td>SAML 2.0 with any IdP. ACS URL: <code>{NEXTAUTH_URL}/api/auth/saml/acs</code>.</td></tr>
+        <tr><td>SAML_ROLE_MAP<br>SAML_DEFAULT_ROLE</td><td><br>VIEWER</td><td>IdP group → Pepper role, and the role for users who match none.</td></tr>
+        <tr><td>SESSION_MAX_AGE_HOURS</td><td>720</td><td>Session lifetime. Shorter means SSO removals take effect sooner.</td></tr>
+        <tr><td>ALLOW_PUBLIC_REGISTRATION</td><td>true</td><td>Self-registration page. Usually <code>false</code> with SSO.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Integrations, email and scanning</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Setting</th><th>Default</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>AZURE_DEVOPS_API_VERSION</td><td>7.1</td><td><code>6.0</code> for Server 2020, <code>7.0</code> for Server 2022.</td></tr>
+        <tr><td>AZURE_DEVOPS_WEBHOOK_SECRET</td><td>(none)</td><td>Basic-auth password on the pull request service hook.</td></tr>
+        <tr><td>SMTP_HOST<br>SMTP_PORT<br>SMTP_USER<br>SMTP_PASSWORD<br>SMTP_FROM</td><td><br>587</td><td>Email notifications.</td></tr>
+        <tr><td>WORKER_CONCURRENCY</td><td>2</td><td>Scans in parallel per worker.</td></tr>
+        <tr><td>MAX_LLM_CONCURRENCY</td><td>5</td><td>Parallel requests to the AI model.</td></tr>
+        <tr><td>ENABLE_OPENGREP_SAST<br>ENABLE_TRIVY_IAC</td><td>true</td><td>Rule-based code and IaC / Kubernetes checks (no AI needed).</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="plain">
+    <h2>Day-to-day commands</h2>
+    <div class="cmd"><pre>cd /opt/pepper
+docker compose ps                                   # status
+docker compose logs -f pepper-api                   # web app logs
+docker compose logs -f pepper-worker                # scan logs
+docker compose exec -T postgres pg_dump -U pepper pepper | gzip > pepper-db-$(date +%F).sql.gz   # backup
+docker compose down                                 # stop (data is kept)</pre></div>
+    <p>A full backup has three parts: the database dump above, object storage (uploads, SBOMs, audit archives), and a secure copy of <code>.env</code>. Without the same <code>NEXTAUTH_SECRET</code>, stored credentials can't be decrypted after a restore.</p>
+    <div class="cmd"><pre>cd /opt/pepper
+docker run --rm -v pepper_miniodata:/data -v "$PWD":/backup alpine \
+  tar czf /backup/pepper-minio-$(date +%F).tar.gz -C /data .</pre></div>
+    <p>To upgrade, back up the database, set the new <code>PEPPER_VERSION</code> in <code>.env</code>, then run <code>docker compose pull && docker compose up -d</code>. Database changes apply automatically.</p>
+  </section>
+
+  <section class="plain">
+    <h2>If something doesn't work</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Symptom</th><th>What to check</th></tr></thead>
+      <tbody>
+        <tr><td>"… is required in .env"</td><td>A required setting is empty in <code>.env</code>.</td></tr>
+        <tr><td>pull: unauthorized / timeout</td><td>The VM can't reach Docker Hub or quay.io. Check your proxy, or use the offline route in step 4.</td></tr>
+        <tr><td>pepper-api not healthy</td><td><code>docker compose logs pepper-api</code>. Usually disk space or a changed database password.</td></tr>
+        <tr><td>Sign-in loops back</td><td><code>NEXTAUTH_URL</code> must match the browser address exactly.</td></tr>
+        <tr><td>Scans stay "Queued"</td><td><code>docker compose logs pepper-worker</code></td></tr>
+        <tr><td>Clone fails / x509 errors</td><td>Proxy and <code>NO_PROXY</code>, or the internal CA settings above.</td></tr>
+      </tbody>
+    </table></div>
+    <p>To get help, send us the output of these two commands. Neither prints your secrets.</p>
+    <div class="cmd"><pre>cd /opt/pepper
+docker compose ps > pepper-status.txt
+docker compose logs --tail 300 pepper-api pepper-worker > pepper-logs.txt</pre></div>
+  </section>
+</main>
+
+<script>
+  (function () {
+    const status = document.getElementById("copy-status");
+    function flash(msg) { status.textContent = msg; setTimeout(() => { status.textContent = ""; }, 2500); }
+    function copyText(text, onDone) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(onDone, () => fallback(text, onDone));
+      } else fallback(text, onDone);
+    }
+    function fallback(text, onDone) {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      let ok = false; try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      if (ok) onDone(); else flash("Select the text and copy it manually.");
+    }
+    document.querySelectorAll(".cmd").forEach((box) => {
+      const btn = document.createElement("button");
+      btn.type = "button"; btn.className = "copy"; btn.textContent = "Copy";
+      btn.addEventListener("click", () => {
+        copyText(box.querySelector("pre").textContent, () => {
+          btn.textContent = "Copied"; setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+        });
+      });
+      box.appendChild(btn);
+    });
+    document.getElementById("copy-all").addEventListener("click", () => {
+      const root = document.getElementById("runbook").cloneNode(true);
+      root.querySelectorAll("button, .toolbar").forEach((el) => el.remove());
+      root.querySelectorAll("details").forEach((d) => d.setAttribute("open", ""));
+      root.querySelectorAll("pre").forEach((p) => { p.textContent = "\n" + p.textContent.replace(/^/gm, "    ") + "\n"; });
+      root.querySelectorAll("h1, h2").forEach((h) => { h.textContent = "\n" + h.textContent.toUpperCase() + "\n"; });
+      root.querySelectorAll(".num").forEach((n) => { n.textContent = "Step " + n.textContent + " — "; });
+      root.style.position = "fixed"; root.style.left = "-9999px"; root.style.whiteSpace = "pre-wrap";
+      document.body.appendChild(root);
+      const text = root.innerText.replace(/\n{3,}/g, "\n\n").trim();
+      document.body.removeChild(root);
+      copyText(text, () => flash("Copied — paste it into your email."));
+    });
+  })();
+</script>
+</body>
+</html>

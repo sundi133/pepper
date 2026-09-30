@@ -10,6 +10,7 @@ contains everything:
 | `.env.example` | Configuration template (copied to `.env`) |
 | `setup.sh` | Optional guided setup (Linux / macOS) |
 | `INSTALL.md` | This guide |
+| `RUNBOOK.html` | Step-by-step install runbook with a full `.env` reference (open in a browser) |
 
 ## 1. Requirements
 

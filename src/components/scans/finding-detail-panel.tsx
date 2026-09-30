@@ -58,6 +58,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -2059,6 +2066,7 @@ function FindingActionButtons({
       <CopyReportButton finding={finding} />
       <CopyAiPromptButton finding={finding} sourceContext={sourceContext} tool="claude" />
       <CopyAiPromptButton finding={finding} sourceContext={sourceContext} tool="cursor" />
+      <RaiseTicketButton finding={finding} />
       {sourceContext?.scanId ? (
         <>
           <SuggestAiFixButton finding={finding} scanId={sourceContext.scanId} />
@@ -2067,6 +2075,95 @@ function FindingActionButtons({
         </>
       ) : null}
     </div>
+  );
+}
+
+type RaiseTicketResponse = {
+  ok: boolean;
+  error?: string;
+  results?: {
+    slack?: { destinationCount: number; results: Array<{ ok: boolean; error?: string }> };
+    jira?: {
+      destinationCount: number;
+      results: Array<{ ok: boolean; key?: string; url?: string; error?: string }>;
+    };
+  };
+};
+
+function RaiseTicketButton({ finding }: { finding: Finding }) {
+  const [busy, setBusy] = useState<null | "all" | "slack" | "jira">(null);
+
+  async function raise(channel: "all" | "slack" | "jira") {
+    setBusy(channel);
+    try {
+      const res = await fetch(`/api/findings/${finding.id}/integrations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel }),
+      });
+      const j = (await res.json()) as RaiseTicketResponse;
+      if (!res.ok) throw new Error(j.error || "Failed to raise ticket");
+
+      const parts: string[] = [];
+      j.results?.slack?.results
+        .filter((r) => r.ok)
+        .forEach(() => parts.push("Slack sent"));
+      j.results?.jira?.results
+        .filter((r) => r.ok)
+        .forEach((r) =>
+          parts.push(
+            r.url ? `Jira ${r.key} created` : `Jira created`,
+          ),
+        );
+      if (parts.length === 0) {
+        throw new Error("No integration delivered the finding");
+      }
+      toast.success(parts.join(" · "));
+      j.results?.jira?.results
+        .filter((r) => r.ok && r.url)
+        .forEach((r) => {
+          if (r.url) window.open(r.url, "_blank");
+        });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to raise ticket");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 text-xs font-medium"
+          disabled={busy !== null}
+        >
+          <Siren className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {busy === "slack"
+            ? "Sending to Slack…"
+            : busy === "jira"
+              ? "Creating Jira…"
+              : busy === "all"
+                ? "Raising…"
+                : "Raise ticket"}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuItem onSelect={() => void raise("slack")}>
+          Send to Slack
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void raise("jira")}>
+          Create Jira ticket
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => void raise("all")}>
+          Send to both
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

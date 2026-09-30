@@ -214,6 +214,7 @@ model Project {
   buildGate    BuildGate?
   schedule     ScanSchedule?
   snapshots    ScanSnapshot[]
+  tickets      FindingTicket[]
 
   @@unique([organizationId, githubRepoId])
   @@unique([organizationId, bitbucketRepoUuid])
@@ -698,7 +699,7 @@ model ApiKey {
   organization Organization @relation(fields: [organizationId], references: [id])
 }
 
-/// Outbound integrations: Jira, Slack, SIEM (HTTPS/syslog).
+/// Outbound integrations: Jira, Slack, SIEM (HTTPS/syslog), Azure Boards.
 model IntegrationConfig {
   id             String          @id @default(cuid())
   organizationId String
@@ -711,6 +712,7 @@ model IntegrationConfig {
   updatedAt      DateTime        @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tickets      FindingTicket[]
 
   @@index([organizationId, kind])
 }
@@ -721,6 +723,45 @@ enum IntegrationKind {
   SIEM
   CODE_SIGNING
   WEBHOOK
+  AZURE_BOARDS
+}
+
+/// A work item / ticket filed in an external tracker for a finding. Keyed by
+/// the finding's cross-scan fingerprint so an issue is filed once, not once
+/// per scan, and so a later scan can tell the tracker it was fixed.
+model FindingTicket {
+  id              String    @id @default(cuid())
+  organizationId  String
+  projectId       String
+  /// Integration that filed it; null once that integration is deleted.
+  integrationId   String?
+  /// Tracker kind, e.g. AZURE_BOARDS.
+  system          String
+  /// Board identity (host / organization / project), so re-adding the same
+  /// board after deleting the integration doesn't file duplicates.
+  target          String
+  fingerprint     String
+  /// Scanner that reported the issue (decides when absence counts as fixed).
+  scanner         String
+  /// Branch of the scan it was filed from; only scans of this branch close it.
+  branch          String?
+  /// Latest finding row with this fingerprint (finding rows are per scan).
+  findingId       String?
+  externalId      String
+  url             String
+  /// Consecutive scans (same branch, scanner ran) that didn't detect it.
+  missedScans     Int       @default(0)
+  /// When Pepper told the tracker the issue is gone; cleared if it returns.
+  fixedNotifiedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  integration IntegrationConfig? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, system, target, fingerprint])
+  @@index([findingId])
+  @@index([organizationId])
 }
 
 model AuditLog {

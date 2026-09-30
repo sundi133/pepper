@@ -339,7 +339,7 @@
         gate decides whether the merge can proceed.
       </p>
 
-      <h2 id="integrations">9 · Integrations (Jira, Slack, SIEM, IDE)</h2>
+      <h2 id="integrations">9 · Integrations (Jira, Azure Boards, Slack, SIEM, IDE)</h2>
       <p>
         Outbound integrations are stored encrypted in the
         <code>IntegrationConfig</code> table and dispatched at scan-completion time. All
@@ -361,6 +361,22 @@
               finding (configurable). Includes severity, file:line, rule id, CVE/CWE,
               and a back-link to the Pepper scan. Severity is mapped onto Jira
               priorities.</td>
+          </tr>
+          <tr>
+            <td><strong>Azure Boards</strong></td>
+            <td>Azure DevOps Services or Azure DevOps Server (set the server URL and
+              collection; older servers may need an API version such as
+              <code>6.0</code>). Uses its own PAT (Work Items: Read &amp; write) or
+              reuses the Azure DevOps repository connection. Files one work item per
+              issue (tracked by the finding's cross-scan fingerprint, so rescans never
+              duplicate it) from the finding panel's <em>Raise ticket</em> menu, and
+              optionally automatically after branch scans for chosen severities (up to
+              25 per scan; pull request scans never file). When scans of the same branch
+              no longer detect the issue (the reporting scanner ran; LLM-found issues
+              must be missing from two scans in a row), Pepper comments on the work
+              item and can move it to a chosen state; if the issue returns, Pepper
+              comments again. Leave the project
+              blank to file into each repository's own Azure DevOps project.</td>
           </tr>
           <tr>
             <td><strong>SIEM</strong></td>

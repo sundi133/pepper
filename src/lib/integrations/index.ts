@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { decryptSecret, encryptSecret } from "@/lib/token-encryption";
 import type {
+  AzureBoardsConfig,
   IntegrationConfigData,
   JiraConfig,
   SlackConfig,
@@ -9,6 +10,7 @@ import type {
 } from "./types";
 
 export type {
+  AzureBoardsConfig,
   IntegrationConfigData,
   JiraConfig,
   SlackConfig,
@@ -77,14 +79,17 @@ export async function upsertIntegration(
   const configEnc = encryptSecret(JSON.stringify(data.config));
   const name = data.name || defaultNameFor(data);
   if (data.id) {
-    return prisma.integrationConfig.update({
-      where: { id: data.id },
+    // Scoped to the org: an id alone would let one org overwrite another's.
+    const updated = await prisma.integrationConfig.updateMany({
+      where: { id: data.id, organizationId: orgId },
       data: {
         name,
         enabled: data.enabled ?? true,
         configEnc,
       },
     });
+    if (updated.count === 0) throw new IntegrationNotFoundError();
+    return prisma.integrationConfig.findUniqueOrThrow({ where: { id: data.id } });
   }
   return prisma.integrationConfig.create({
     data: {
@@ -95,6 +100,13 @@ export async function upsertIntegration(
       configEnc,
     },
   });
+}
+
+export class IntegrationNotFoundError extends Error {
+  constructor() {
+    super("Integration not found");
+    this.name = "IntegrationNotFoundError";
+  }
 }
 
 export async function deleteIntegration(orgId: string, id: string) {
@@ -111,6 +123,10 @@ function defaultNameFor(data: IntegrationConfigData): string {
       return `Slack (${(data.config as SlackConfig).channel || "default"})`;
     case "SIEM":
       return `SIEM (${(data.config as SiemConfig).format.toUpperCase()})`;
+    case "AZURE_BOARDS": {
+      const ab = data.config as AzureBoardsConfig;
+      return `Azure Boards (${ab.project?.trim() || "repository's project"})`;
+    }
     case "WEBHOOK": {
       const wh = data.config as WebhookConfig;
       try {

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import {
+  IntegrationNotFoundError,
   listIntegrations,
   upsertIntegration,
   type IntegrationConfigData,
 } from "@/lib/integrations";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
+import { boardsConfigError } from "@/lib/integrations/azure-boards";
 
 export async function GET() {
   const auth = await requireAuth();
@@ -39,7 +41,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const row = await upsertIntegration(orgId, body);
+  if (body.kind === "AZURE_BOARDS") {
+    const error = boardsConfigError(body.config);
+    if (error) return NextResponse.json({ error }, { status: 400 });
+  }
+
+  let row;
+  try {
+    row = await upsertIntegration(orgId, body);
+  } catch (e) {
+    if (e instanceof IntegrationNotFoundError) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    throw e;
+  }
 
   await writeAuditLog({
     organizationId: orgId,

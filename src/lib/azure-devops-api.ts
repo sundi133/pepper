@@ -174,6 +174,36 @@ export async function azurePut<T>(
   return readJson<T>(res);
 }
 
+/** A JSON Patch operation, as the work item tracking API expects. */
+export interface JsonPatchOp {
+  op: "add" | "replace" | "remove" | "test";
+  path: string;
+  value?: unknown;
+}
+
+/**
+ * POST/PATCH with `application/json-patch+json` — the only content type the
+ * work item create/update endpoints accept (plain JSON gets a 415).
+ */
+export async function azureJsonPatch<T>(
+  auth: AzureDevOpsAuth,
+  method: "POST" | "PATCH",
+  path: string,
+  ops: JsonPatchOp[],
+  apiVersion?: string,
+): Promise<AzureDevOpsResponse<T>> {
+  const res = await fetch(buildUrl(auth, path, apiVersion), {
+    method,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json-patch+json",
+      Authorization: basicAuthHeader(auth.pat),
+    },
+    body: JSON.stringify(ops),
+  });
+  return readJson<T>(res);
+}
+
 /** ADO error envelopes vary; combine the common shapes into one line. */
 export function parseAzureErrorBody(data: unknown, raw: string): string {
   const body = data as {

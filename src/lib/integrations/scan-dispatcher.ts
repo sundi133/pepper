@@ -7,6 +7,7 @@ import {
 import { createJiraIssueForFinding, shouldOpenJiraTicket } from "./jira";
 import { forwardToSiem, type SiemFindingEvent } from "./siem";
 import { fireWebhook, type WebhookScanPayload, type WebhookFindingPayload } from "./webhook";
+import { syncAzureBoardsForScan } from "./finding-tickets";
 import type { JiraConfig, SlackConfig, SiemConfig, WebhookConfig } from "./types";
 
 interface DecryptedRow<TKind extends string, TConfig> {
@@ -45,8 +46,8 @@ function scanWebUrl(scanId: string): string | undefined {
 }
 
 /**
- * Fire Slack notifications, open Jira tickets for severe findings, and
- * forward all findings to SIEM. Best-effort; failures are swallowed and
+ * Fire Slack notifications, open Jira tickets for severe findings, file and
+ * sync Azure Boards work items, and forward all findings to SIEM. Best-effort; failures are swallowed and
  * logged via console (caller has its own pino logger context).
  */
 export async function dispatchScanCompleteIntegrations(scanId: string) {
@@ -130,6 +131,13 @@ export async function dispatchScanCompleteIntegrations(scanId: string) {
         }
       }
     }
+  }
+
+  // ----- Azure Boards (file once per issue, sync fixes) -----
+  try {
+    await syncAzureBoardsForScan(scan.id, scanUrl);
+  } catch (e) {
+    console.warn("[integrations] Azure Boards sync failed:", e);
   }
 
   // ----- SIEM (all findings, batched) -----

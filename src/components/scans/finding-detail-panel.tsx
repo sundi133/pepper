@@ -2078,6 +2078,8 @@ function FindingActionButtons({
   );
 }
 
+type RaiseTicketChannel = "all" | "slack" | "jira" | "azure-boards";
+
 type RaiseTicketResponse = {
   ok: boolean;
   error?: string;
@@ -2087,13 +2089,33 @@ type RaiseTicketResponse = {
       destinationCount: number;
       results: Array<{ ok: boolean; key?: string; url?: string; error?: string }>;
     };
+    azureBoards?: {
+      destinationCount: number;
+      results: Array<{ ok: boolean; workItemId?: string; url?: string; existing?: boolean; error?: string }>;
+    };
   };
 };
 
-function RaiseTicketButton({ finding }: { finding: Finding }) {
-  const [busy, setBusy] = useState<null | "all" | "slack" | "jira">(null);
+type LinkedTicket = { system: string; externalId: string; url: string; fixed: boolean };
 
-  async function raise(channel: "all" | "slack" | "jira") {
+function RaiseTicketButton({ finding }: { finding: Finding }) {
+  const [busy, setBusy] = useState<null | RaiseTicketChannel>(null);
+  const [tickets, setTickets] = useState<LinkedTicket[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/findings/${finding.id}/integrations`)
+      .then((r) => (r.ok ? (r.json() as Promise<{ tickets?: LinkedTicket[] }>) : null))
+      .then((j) => {
+        if (!cancelled) setTickets(j?.tickets ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [finding.id]);
+
+  async function raise(channel: RaiseTicketChannel) {
     setBusy(channel);
     try {
       const res = await fetch(`/api/findings/${finding.id}/integrations`, {
@@ -2115,15 +2137,46 @@ function RaiseTicketButton({ finding }: { finding: Finding }) {
             r.url ? `Jira ${r.key} created` : `Jira created`,
           ),
         );
+      j.results?.azureBoards?.results
+        .filter((r) => r.ok)
+        .forEach((r) =>
+          parts.push(
+            r.existing
+              ? `Already tracked as work item ${r.workItemId}`
+              : `Work item ${r.workItemId} created`,
+          ),
+        );
       if (parts.length === 0) {
         throw new Error("No integration delivered the finding");
       }
       toast.success(parts.join(" · "));
+      const failed = [
+        ...(j.results?.jira?.results ?? []),
+        ...(j.results?.azureBoards?.results ?? []),
+      ].filter((r) => !r.ok && r.error);
+      if (failed.length > 0) toast.error(failed.map((r) => r.error).join(" · "));
       j.results?.jira?.results
         .filter((r) => r.ok && r.url)
         .forEach((r) => {
           if (r.url) window.open(r.url, "_blank");
         });
+      const boards = j.results?.azureBoards?.results.filter((r) => r.ok && r.url) ?? [];
+      boards
+        .filter((r) => !r.existing)
+        .forEach((r) => {
+          if (r.url) window.open(r.url, "_blank");
+        });
+      if (boards.length > 0) {
+        setTickets((prev) => {
+          const next = [...prev];
+          for (const r of boards) {
+            if (!next.some((t) => t.url === r.url)) {
+              next.push({ system: "AZURE_BOARDS", externalId: r.workItemId ?? "", url: r.url!, fixed: false });
+            }
+          }
+          return next;
+        });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to raise ticket");
     } finally {
@@ -2132,38 +2185,59 @@ function RaiseTicketButton({ finding }: { finding: Finding }) {
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1.5 text-xs font-medium"
-          disabled={busy !== null}
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-xs font-medium"
+            disabled={busy !== null}
+          >
+            <Siren className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {busy === "slack"
+              ? "Sending to Slack…"
+              : busy === "jira"
+                ? "Creating Jira…"
+                : busy === "azure-boards"
+                  ? "Creating work item…"
+                  : busy === "all"
+                    ? "Raising…"
+                    : "Raise ticket"}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuItem onSelect={() => void raise("slack")}>
+            Send to Slack
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void raise("jira")}>
+            Create Jira ticket
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void raise("azure-boards")}>
+            Create Azure Boards work item
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => void raise("all")}>
+            Send to all
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {tickets.map((t) => (
+        <a
+          key={t.url}
+          href={t.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={t.fixed ? "Pepper reported this issue fixed on the work item" : "Linked work item"}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
-          <Siren className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          {busy === "slack"
-            ? "Sending to Slack…"
-            : busy === "jira"
-              ? "Creating Jira…"
-              : busy === "all"
-                ? "Raising…"
-                : "Raise ticket"}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuItem onSelect={() => void raise("slack")}>
-          Send to Slack
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void raise("jira")}>
-          Create Jira ticket
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => void raise("all")}>
-          Send to both
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {t.system === "AZURE_BOARDS" ? `AB#${t.externalId}` : t.externalId}
+          {t.fixed && <span className="text-emerald-600 dark:text-emerald-400">fixed</span>}
+        </a>
+      ))}
+    </>
   );
 }
 

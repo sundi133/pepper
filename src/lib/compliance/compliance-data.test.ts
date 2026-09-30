@@ -22,10 +22,13 @@ const VALID_SCANNERS = new Set([
   "MALICIOUS_PKG",
   "ZERO_DAY",
   "CONTAINER",
+  "K8S",
 ]);
 
 const VALID_COVERAGE = new Set(["assessable", "partial", "not-assessable"]);
 const CWE_RE = /^CWE-\d+$/;
+// Scanner check ids as findings carry them: KSV-0017, AWS-0086, DOCKERFILE-NO-USER.
+const RULE_RE = /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)+$/;
 
 const frameworks = loadAllFrameworks();
 
@@ -61,6 +64,22 @@ describe("compliance framework data integrity", () => {
         }
       });
 
+      it("ruleMapping entries are normalized check ids", () => {
+        for (const c of fw.controls) {
+          for (const r of c.ruleMapping || []) {
+            expect(RULE_RE.test(r), `${fw.name} ${c.controlId}: malformed rule id "${r}"`).toBe(true);
+          }
+        }
+      });
+
+      it("levels are ASVS levels 1-3", () => {
+        for (const c of fw.controls) {
+          for (const l of c.levels || []) {
+            expect([1, 2, 3].includes(l), `${fw.name} ${c.controlId}: invalid level ${l}`).toBe(true);
+          }
+        }
+      });
+
       it("appliesTo scanners are valid Scanner enum values", () => {
         for (const c of fw.controls) {
           for (const s of c.appliesTo?.scanners || []) {
@@ -84,15 +103,17 @@ describe("compliance framework data integrity", () => {
       });
 
       it("assessable controls actually carry a mapping", () => {
-        // A control marked assessable must have either a CWE crosswalk or an
-        // activity-level rule — otherwise nothing can ever map to it.
+        // A control marked assessable must have a CWE crosswalk, a rule-id
+        // crosswalk or an activity-level rule — otherwise nothing can ever map to it.
         for (const c of fw.controls) {
           if (c.coverage === "assessable") {
             const hasMapping =
-              (c.cweMapping && c.cweMapping.length > 0) || !!c.appliesTo;
+              (c.cweMapping && c.cweMapping.length > 0) ||
+              (c.ruleMapping && c.ruleMapping.length > 0) ||
+              !!c.appliesTo;
             expect(
               hasMapping,
-              `${fw.name} ${c.controlId}: marked assessable but has no cweMapping/appliesTo`,
+              `${fw.name} ${c.controlId}: marked assessable but has no cweMapping/ruleMapping/appliesTo`,
             ).toBe(true);
           }
         }

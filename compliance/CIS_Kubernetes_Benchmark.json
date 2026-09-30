@@ -1,0 +1,1501 @@
+{
+  "name": "CIS Kubernetes Benchmark",
+  "version": "1.23",
+  "fileName": "CIS_Kubernetes_Benchmark.json",
+  "source": "Control ids, titles and check mappings from aquasecurity/trivy-checks pkg/compliance/k8s-cis-1.23.yaml (MIT) @ 3ae9f4cc196767047a2a1fdae2d24a82944dfd6b",
+  "license": "Mapping data MIT (Aqua Security). CIS® and CIS Benchmarks® are trademarks of the Center for Internet Security; the full benchmark text is available from cisecurity.org.",
+  "mapping": "Deterministic by rule id for checks Pepper runs on code (KSV). Other controls need a running cluster / account and are listed as not assessable from code.",
+  "controls": [
+    {
+      "controlId": "1.1.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.1",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the API server pod specification file permissions are set to 600 or more restrictive",
+      "summary": "Ensure that the API server pod specification file has permissions of 600 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.2",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.2",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the API server pod specification file ownership is set to root:root",
+      "summary": "Ensure that the API server pod specification file ownership is set to root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.3",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.3",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the controller manager pod specification file permissions are set to 600 or more restrictive",
+      "summary": "Ensure that the controller manager pod specification file has permissions of 600 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.4",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.4",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the controller manager pod specification file ownership is set to root:root",
+      "summary": "Ensure that the controller manager pod specification file ownership is set to root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.5",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.5",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the scheduler pod specification file permissions are set to 600 or more restrictive",
+      "summary": "Ensure that the scheduler pod specification file has permissions of 600 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.6",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.6",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the scheduler pod specification file ownership is set to root:root",
+      "summary": "Ensure that the scheduler pod specification file ownership is set to root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.7",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.7",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the etcd pod specification file permissions are set to 600 or more restrictive",
+      "summary": "Ensure that the etcd pod specification file has permissions of 600 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.8",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.8",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the etcd pod specification file ownership is set to root:root",
+      "summary": "Ensure that the etcd pod specification file ownership is set to root:root.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.9",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.9",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the Container Network Interface file permissions are set to 600 or more restrictive",
+      "summary": "Ensure that the Container Network Interface files have permissions of 600 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.10",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.10",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the Container Network Interface file ownership is set to root:root",
+      "summary": "Ensure that the Container Network Interface files have ownership set to root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.11",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.11",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the etcd data directory permissions are set to 700 or more restrictive",
+      "summary": "Ensure that the etcd data directory has permissions of 700 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.12",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.12",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the etcd data directory ownership is set to etcd:etcd",
+      "summary": "Ensure that the etcd data directory ownership is set to etcd:etcd",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.13",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.13",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the admin.conf file permissions are set to 600",
+      "summary": "Ensure that the admin.conf file has permissions of 600",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.14",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.14",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the admin.conf file ownership is set to root:root",
+      "summary": "Ensure that the admin.conf file ownership is set to root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.15",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.15",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the scheduler.conf file permissions are set to 600 or more restrictive",
+      "summary": "Ensure that the scheduler.conf file has permissions of 600 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.16",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.16",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the scheduler.conf file ownership is set to root:root",
+      "summary": "Ensure that the scheduler.conf file ownership is set to root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.17",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.17",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the controller-manager.conf file permissions are set to 600 or more restrictive",
+      "summary": "Ensure that the controller-manager.conf file has permissions of 600 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.18",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.18",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the controller-manager.conf file ownership is set to root:root",
+      "summary": "Ensure that the controller-manager.conf file ownership is set to root:root.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.19",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.19",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the Kubernetes PKI directory and file ownership is set to root:root",
+      "summary": "Ensure that the Kubernetes PKI directory and file ownership is set to root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.20",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.20",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the Kubernetes PKI certificate file permissions are set to 600 or more restrictive",
+      "summary": "Ensure that Kubernetes PKI certificate files have permissions of 600 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.1.21",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.1.21",
+      "type": "CIS_Benchmark",
+      "theme": "1.1 Control Plane Node Configuration Files",
+      "title": "Ensure that the Kubernetes PKI key file permissions are set to 600",
+      "summary": "Ensure that Kubernetes PKI key files have permissions of 600",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.1",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --anonymous-auth argument is set to false",
+      "summary": "Disable anonymous requests to the API server",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.2",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.2",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --token-auth-file parameter is not set",
+      "summary": "Do not use token based authentication",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.3",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.3",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --DenyServiceExternalIPs is not set",
+      "summary": "This admission controller rejects all net-new usage of the Service field externalIPs",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.4",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.4",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --kubelet-https argument is set to true",
+      "summary": "Use https for kubelet connections",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.5",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.5",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --kubelet-client-certificate and --kubelet-client-key arguments are set as appropriate",
+      "summary": "Enable certificate based kubelet authentication",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.6",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.6",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --kubelet-certificate-authority argument is set as appropriate",
+      "summary": "Verify kubelets certificate before establishing connection",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.7",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.7",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --authorization-mode argument is not set to AlwaysAllow",
+      "summary": "Do not always authorize all requests",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.8",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.8",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --authorization-mode argument includes Node",
+      "summary": "Restrict kubelet nodes to reading only objects associated with them",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.9",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.9",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --authorization-mode argument includes RBAC",
+      "summary": "Turn on Role Based Access Control",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.10",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.10",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the admission control plugin EventRateLimit is set",
+      "summary": "Limit the rate at which the API server accepts requests",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.11",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.11",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the admission control plugin AlwaysAdmit is not set",
+      "summary": "Do not allow all requests",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.12",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.12",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the admission control plugin AlwaysPullImages is set",
+      "summary": "Always pull images",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.13",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.13",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the admission control plugin SecurityContextDeny is set if PodSecurityPolicy is not used",
+      "summary": "The SecurityContextDeny admission controller can be used to deny pods which make use of some SecurityContext fields which could allow for privilege escalation in the cluster. This should be used where PodSecurityPolicy is not in place within the cluster",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.14",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.14",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the admission control plugin ServiceAccount is set",
+      "summary": "Automate service accounts management",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.15",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.15",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the admission control plugin NamespaceLifecycle is set",
+      "summary": "Reject creating objects in a namespace that is undergoing termination",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.16",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.16",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the admission control plugin NodeRestriction is set",
+      "summary": "Limit the Node and Pod objects that a kubelet could modify",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.17",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.17",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --secure-port argument is not set to 0",
+      "summary": "Do not disable the secure port",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.18",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.18",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --profiling argument is set to false",
+      "summary": "Disable profiling, if not needed",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.19",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.19",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --audit-log-path argument is set",
+      "summary": "Enable auditing on the Kubernetes API Server and set the desired audit log path.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.20",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.20",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --audit-log-maxage argument is set to 30 or as appropriate",
+      "summary": "Retain the logs for at least 30 days or as appropriate",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.21",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.21",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --audit-log-maxbackup argument is set to 10 or as appropriate",
+      "summary": "Retain 10 or an appropriate number of old log file",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.22",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.22",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --audit-log-maxsize argument is set to 100 or as appropriate",
+      "summary": "Rotate log files on reaching 100 MB or as appropriate",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.24",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.24",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --service-account-lookup argument is set to true",
+      "summary": "Validate service account before validating token",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.25",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.25",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --service-account-key-file argument is set as appropriate",
+      "summary": "Explicitly set a service account public key file for service accounts on the apiserver",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.26",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.26",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --etcd-certfile and --etcd-keyfile arguments are set as appropriate",
+      "summary": "etcd should be configured to make use of TLS encryption for client connections",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.27",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.27",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --tls-cert-file and --tls-private-key-file arguments are set as appropriate",
+      "summary": "Setup TLS connection on the API server",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.28",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.28",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --client-ca-file argument is set appropriate",
+      "summary": "Setup TLS connection on the API server",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.29",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.29",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --etcd-cafile argument is set as appropriate",
+      "summary": "etcd should be configured to make use of TLS encryption for client connections.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.2.30",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.2.30",
+      "type": "CIS_Benchmark",
+      "theme": "1.2 API Server",
+      "title": "Ensure that the --encryption-provider-config argument is set as appropriate",
+      "summary": "Encrypt etcd key-value store",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.3.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.3.1",
+      "type": "CIS_Benchmark",
+      "theme": "1.3 Controller Manager",
+      "title": "Ensure that the --terminated-pod-gc-threshold argument is set as appropriate",
+      "summary": "Activate garbage collector on pod termination, as appropriate",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.3.3",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.3.3",
+      "type": "CIS_Benchmark",
+      "theme": "1.3 Controller Manager",
+      "title": "Ensure that the --use-service-account-credentials argument is set to true",
+      "summary": "Use individual service account credentials for each controller",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.3.4",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.3.4",
+      "type": "CIS_Benchmark",
+      "theme": "1.3 Controller Manager",
+      "title": "Ensure that the --service-account-private-key-file argument is set as appropriate",
+      "summary": "Explicitly set a service account private key file for service accounts on the controller manager",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.3.5",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.3.5",
+      "type": "CIS_Benchmark",
+      "theme": "1.3 Controller Manager",
+      "title": "Ensure that the --root-ca-file argument is set as appropriate",
+      "summary": "Allow pods to verify the API servers serving certificate before establishing connections",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.3.6",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.3.6",
+      "type": "CIS_Benchmark",
+      "theme": "1.3 Controller Manager",
+      "title": "Ensure that the RotateKubeletServerCertificate argument is set to true",
+      "summary": "Enable kubelet server certificate rotation on controller-manager",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.3.7",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.3.7",
+      "type": "CIS_Benchmark",
+      "theme": "1.3 Controller Manager",
+      "title": "Ensure that the --bind-address argument is set to 127.0.0.1",
+      "summary": "Do not bind the scheduler service to non-loopback insecure addresses",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.4.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.4.1",
+      "type": "CIS_Benchmark",
+      "theme": "1.4 Scheduler",
+      "title": "Ensure that the --profiling argument is set to false",
+      "summary": "Disable profiling, if not needed",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "1.4.2",
+      "chunkId": "CIS_Kubernetes_Benchmark-1.4.2",
+      "type": "CIS_Benchmark",
+      "theme": "1.4 Scheduler",
+      "title": "Ensure that the --bind-address argument is set to 127.0.0.1",
+      "summary": "Do not bind the scheduler service to non-loopback insecure addresses",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "2.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-2.1",
+      "type": "CIS_Benchmark",
+      "theme": "2 etcd",
+      "title": "Ensure that the --cert-file and --key-file arguments are set as appropriate",
+      "summary": "Configure TLS encryption for the etcd service",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "2.2",
+      "chunkId": "CIS_Kubernetes_Benchmark-2.2",
+      "type": "CIS_Benchmark",
+      "theme": "2 etcd",
+      "title": "Ensure that the --client-cert-auth argument is set to true",
+      "summary": "Enable client authentication on etcd service",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "2.3",
+      "chunkId": "CIS_Kubernetes_Benchmark-2.3",
+      "type": "CIS_Benchmark",
+      "theme": "2 etcd",
+      "title": "Ensure that the --auto-tls argument is not set to true",
+      "summary": "Do not use self-signed certificates for TLS",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "2.4",
+      "chunkId": "CIS_Kubernetes_Benchmark-2.4",
+      "type": "CIS_Benchmark",
+      "theme": "2 etcd",
+      "title": "Ensure that the --peer-cert-file and --peer-key-file arguments are set as appropriate",
+      "summary": "etcd should be configured to make use of TLS encryption for peer connections.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "2.5",
+      "chunkId": "CIS_Kubernetes_Benchmark-2.5",
+      "type": "CIS_Benchmark",
+      "theme": "2 etcd",
+      "title": "Ensure that the --peer-client-cert-auth argument is set to true",
+      "summary": "etcd should be configured for peer authentication",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "2.6",
+      "chunkId": "CIS_Kubernetes_Benchmark-2.6",
+      "type": "CIS_Benchmark",
+      "theme": "2 etcd",
+      "title": "Ensure that the --peer-auto-tls argument is not set to true",
+      "summary": "Do not use self-signed certificates for TLS",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.1.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-3.1.1",
+      "type": "CIS_Benchmark",
+      "theme": "3.1 Authentication and Authorization",
+      "title": "Client certificate authentication should not be used for users",
+      "summary": "Kubernetes provides the option to use client certificates for user authentication. However as there is no way to revoke these certificates when a user leaves an organization or loses their credential, they are not suitable for this purpose",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.2.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-3.2.1",
+      "type": "CIS_Benchmark",
+      "theme": "3.2 Logging",
+      "title": "Ensure that a minimal audit policy is created",
+      "summary": "Kubernetes can audit the details of requests made to the API server. The --audit- policy-file flag must be set for this logging to be enabled.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.2.2",
+      "chunkId": "CIS_Kubernetes_Benchmark-3.2.2",
+      "type": "CIS_Benchmark",
+      "theme": "3.2 Logging",
+      "title": "Ensure that the audit policy covers key security concerns",
+      "summary": "Ensure that the audit policy created for the cluster covers key security concerns",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.1.1",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 Worker Node Configuration Files",
+      "title": "Ensure that the kubelet service file permissions are set to 600 or more restrictive",
+      "summary": "Ensure that the kubelet service file has permissions of 600 or more restrictive.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.2",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.1.2",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 Worker Node Configuration Files",
+      "title": "Ensure that the kubelet service file ownership is set to root:root",
+      "summary": "Ensure that the kubelet service file ownership is set to root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.3",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.1.3",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 Worker Node Configuration Files",
+      "title": "If proxy kubeconfig file exists ensure permissions are set to 600 or more restrictive",
+      "summary": "If kube-proxy is running, and if it is using a file-based kubeconfig file, ensure that the proxy kubeconfig file has permissions of 600 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.4",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.1.4",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 Worker Node Configuration Files",
+      "title": "If proxy kubeconfig file exists ensure ownership is set to root:root",
+      "summary": "If kube-proxy is running, ensure that the file ownership of its kubeconfig file is set to root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.5",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.1.5",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 Worker Node Configuration Files",
+      "title": "Ensure that the --kubeconfig kubelet.conf file permissions are set to 600 or more restrictive",
+      "summary": "Ensure that the kubelet.conf file has permissions of 600 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.6",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.1.6",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 Worker Node Configuration Files",
+      "title": "Ensure that the --kubeconfig kubelet.conf file ownership is set to root:root",
+      "summary": "Ensure that the kubelet.conf file ownership is set to root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.7",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.1.7",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 Worker Node Configuration Files",
+      "title": "Ensure that the certificate authorities file permissions are set to 600 or more restrictive",
+      "summary": "Ensure that the certificate authorities file has permissions of 600 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.8",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.1.8",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 Worker Node Configuration Files",
+      "title": "Ensure that the client certificate authorities file ownership is set to root:root",
+      "summary": "Ensure that the certificate authorities file ownership is set to root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.9",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.1.9",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 Worker Node Configuration Files",
+      "title": "If the kubelet config.yaml configuration file is being used validate permissions set to 600 or more restrictive",
+      "summary": "Ensure that if the kubelet refers to a configuration file with the --config argument, that file has permissions of 600 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.10",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.1.10",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 Worker Node Configuration Files",
+      "title": "If the kubelet config.yaml configuration file is being used validate file ownership is set to root:root",
+      "summary": "Ensure that if the kubelet refers to a configuration file with the --config argument, that file is owned by root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.2.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.2.1",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Kubelet",
+      "title": "Ensure that the --anonymous-auth argument is set to false",
+      "summary": "Disable anonymous requests to the Kubelet server",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.2.2",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.2.2",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Kubelet",
+      "title": "Ensure that the --authorization-mode argument is not set to AlwaysAllow",
+      "summary": "Do not allow all requests. Enable explicit authorization",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.2.3",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.2.3",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Kubelet",
+      "title": "Ensure that the --client-ca-file argument is set as appropriate",
+      "summary": "Enable Kubelet authentication using certificates",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.2.4",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.2.4",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Kubelet",
+      "title": "Verify that the --read-only-port argument is set to 0",
+      "summary": "Disable the read-only port",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.2.5",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.2.5",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Kubelet",
+      "title": "Ensure that the --streaming-connection-idle-timeout argument is not set to 0",
+      "summary": "Do not disable timeouts on streaming connections",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.2.6",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.2.6",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Kubelet",
+      "title": "Ensure that the --protect-kernel-defaults argument is set to true",
+      "summary": "Protect tuned kernel parameters from overriding kubelet default kernel parameter values",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.2.7",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.2.7",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Kubelet",
+      "title": "Ensure that the --make-iptables-util-chains argument is set to true",
+      "summary": "Allow Kubelet to manage iptables",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.2.8",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.2.8",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Kubelet",
+      "title": "Ensure that the --hostname-override argument is not set",
+      "summary": "Do not override node hostnames",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.2.9",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.2.9",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Kubelet",
+      "title": "Ensure that the --event-qps argument is set to 0 or a level which ensures appropriate event capture",
+      "summary": "Security relevant information should be captured. The --event-qps flag on the Kubelet can be used to limit the rate at which events are gathered",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.2.10",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.2.10",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Kubelet",
+      "title": "Ensure that the --tls-cert-file and --tls-private-key-file arguments are set as appropriate",
+      "summary": "Setup TLS connection on the Kubelets",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.2.11",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.2.11",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Kubelet",
+      "title": "Ensure that the --rotate-certificates argument is not set to false",
+      "summary": "Enable kubelet client certificate rotation",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.2.12",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.2.12",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Kubelet",
+      "title": "Verify that the RotateKubeletServerCertificate argument is set to true",
+      "summary": "Enable kubelet server certificate rotation",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.2.13",
+      "chunkId": "CIS_Kubernetes_Benchmark-4.2.13",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Kubelet",
+      "title": "Ensure that the Kubelet only makes use of Strong Cryptographic Ciphers",
+      "summary": "Ensure that the Kubelet is configured to only use strong cryptographic ciphers",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.1.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.1.1",
+      "type": "CIS_Benchmark",
+      "theme": "5.1 RBAC and Service Accounts",
+      "title": "Ensure that the cluster-admin role is only used where required",
+      "summary": "The RBAC role cluster-admin provides wide-ranging powers over the environment and should be used only where and when needed",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0111"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0111"
+      ]
+    },
+    {
+      "controlId": "5.1.2",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.1.2",
+      "type": "CIS_Benchmark",
+      "theme": "5.1 RBAC and Service Accounts",
+      "title": "Minimize access to secrets",
+      "summary": "The Kubernetes API stores secrets, which may be service account tokens for the Kubernetes API or credentials used by workloads in the cluster",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0041"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0041"
+      ]
+    },
+    {
+      "controlId": "5.1.3",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.1.3",
+      "type": "CIS_Benchmark",
+      "theme": "5.1 RBAC and Service Accounts",
+      "title": "Minimize wildcard use in Roles and ClusterRoles",
+      "summary": "Kubernetes Roles and ClusterRoles provide access to resources based on sets of objects and actions that can be taken on those objects. It is possible to set either of these to be the wildcard \"*\" which matches all items",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0044",
+        "KSV-0045",
+        "KSV-0046"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0044, KSV-0045, KSV-0046"
+      ]
+    },
+    {
+      "controlId": "5.1.6",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.1.6",
+      "type": "CIS_Benchmark",
+      "theme": "5.1 RBAC and Service Accounts",
+      "title": "Ensure that Service Account Tokens are only mounted where necessary",
+      "summary": "Service accounts tokens should not be mounted in pods except where the workload running in the pod explicitly needs to communicate with the API server",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0036"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0036"
+      ]
+    },
+    {
+      "controlId": "5.1.8",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.1.8",
+      "type": "CIS_Benchmark",
+      "theme": "5.1 RBAC and Service Accounts",
+      "title": "Limit use of the Bind, Impersonate and Escalate permissions in the Kubernetes cluster",
+      "summary": "Cluster roles and roles with the impersonate, bind or escalate permissions should not be granted unless strictly required",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0043"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0043"
+      ]
+    },
+    {
+      "controlId": "5.2.2",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.2.2",
+      "type": "CIS_Benchmark",
+      "theme": "5.2 Pod Security Standards",
+      "title": "Minimize the admission of privileged containers",
+      "summary": "Do not generally permit containers to be run with the securityContext.privileged flag set to true",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0017"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0017"
+      ]
+    },
+    {
+      "controlId": "5.2.3",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.2.3",
+      "type": "CIS_Benchmark",
+      "theme": "5.2 Pod Security Standards",
+      "title": "Minimize the admission of containers wishing to share the host process ID namespace",
+      "summary": "Do not generally permit containers to be run with the hostPID flag set to true.",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0010"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0010"
+      ]
+    },
+    {
+      "controlId": "5.2.4",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.2.4",
+      "type": "CIS_Benchmark",
+      "theme": "5.2 Pod Security Standards",
+      "title": "Minimize the admission of containers wishing to share the host IPC namespace",
+      "summary": "Do not generally permit containers to be run with the hostIPC flag set to true",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0008"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0008"
+      ]
+    },
+    {
+      "controlId": "5.2.5",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.2.5",
+      "type": "CIS_Benchmark",
+      "theme": "5.2 Pod Security Standards",
+      "title": "Minimize the admission of containers wishing to share the host network namespace",
+      "summary": "Do not generally permit containers to be run with the hostNetwork flag set to true",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0009"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0009"
+      ]
+    },
+    {
+      "controlId": "5.2.6",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.2.6",
+      "type": "CIS_Benchmark",
+      "theme": "5.2 Pod Security Standards",
+      "title": "Minimize the admission of containers with allowPrivilegeEscalation",
+      "summary": "Do not generally permit containers to be run with the allowPrivilegeEscalation flag set to true",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0001"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0001"
+      ]
+    },
+    {
+      "controlId": "5.2.7",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.2.7",
+      "type": "CIS_Benchmark",
+      "theme": "5.2 Pod Security Standards",
+      "title": "Minimize the admission of root containers",
+      "summary": "Do not generally permit containers to be run as the root user",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0012"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0012"
+      ]
+    },
+    {
+      "controlId": "5.2.8",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.2.8",
+      "type": "CIS_Benchmark",
+      "theme": "5.2 Pod Security Standards",
+      "title": "Minimize the admission of containers with the NET_RAW capability",
+      "summary": "Do not generally permit containers with the potentially dangerous NET_RAW capability",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0022"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0022"
+      ]
+    },
+    {
+      "controlId": "5.2.9",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.2.9",
+      "type": "CIS_Benchmark",
+      "theme": "5.2 Pod Security Standards",
+      "title": "Minimize the admission of containers with added capabilities",
+      "summary": "Do not generally permit containers with capabilities assigned beyond the default set",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0004"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0004"
+      ]
+    },
+    {
+      "controlId": "5.2.10",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.2.10",
+      "type": "CIS_Benchmark",
+      "theme": "5.2 Pod Security Standards",
+      "title": "Minimize the admission of containers with capabilities assigned",
+      "summary": "Do not generally permit containers with capabilities",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0003"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0003"
+      ]
+    },
+    {
+      "controlId": "5.2.11",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.2.11",
+      "type": "CIS_Benchmark",
+      "theme": "5.2 Pod Security Standards",
+      "title": "Minimize the admission of containers with capabilities assigned",
+      "summary": "Do not generally permit containers with capabilities",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0103"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0103"
+      ]
+    },
+    {
+      "controlId": "5.2.12",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.2.12",
+      "type": "CIS_Benchmark",
+      "theme": "5.2 Pod Security Standards",
+      "title": "Minimize the admission of HostPath volumes",
+      "summary": "Do not generally admit containers which make use of hostPath volumes",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0023"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0023"
+      ]
+    },
+    {
+      "controlId": "5.2.13",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.2.13",
+      "type": "CIS_Benchmark",
+      "theme": "5.2 Pod Security Standards",
+      "title": "Minimize the admission of containers which use HostPorts",
+      "summary": "Do not generally permit containers which require the use of HostPorts",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0024"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0024"
+      ]
+    },
+    {
+      "controlId": "5.3.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.3.1",
+      "type": "CIS_Benchmark",
+      "theme": "5.3 Network Policies and CNI",
+      "title": "Ensure that the CNI in use supports Network Policies",
+      "summary": "There are a variety of CNI plugins available for Kubernetes. If the CNI in use does not support Network Policies it may not be possible to effectively restrict traffic in the cluster",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.3.2",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.3.2",
+      "type": "CIS_Benchmark",
+      "theme": "5.3 Network Policies and CNI",
+      "title": "Ensure that all Namespaces have Network Policies defined",
+      "summary": "Use network policies to isolate traffic in your cluster network",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0038"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0038"
+      ]
+    },
+    {
+      "controlId": "5.4.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.4.1",
+      "type": "CIS_Benchmark",
+      "theme": "5.4 Secrets Management",
+      "title": "Prefer using secrets as files over secrets as environment variables",
+      "summary": "Kubernetes supports mounting secrets as data volumes or as environment variables. Minimize the use of environment variable secrets",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.4.2",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.4.2",
+      "type": "CIS_Benchmark",
+      "theme": "5.4 Secrets Management",
+      "title": "Consider external secret storage",
+      "summary": "Consider the use of an external secrets storage and management system, instead of using Kubernetes Secrets directly, if you have more complex secret management needs",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.5.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.5.1",
+      "type": "CIS_Benchmark",
+      "theme": "5.5 Extensible Admission Control",
+      "title": "Configure Image Provenance using ImagePolicyWebhook admission controller",
+      "summary": "Configure Image Provenance for your deployment",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.7.1",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.7.1",
+      "type": "CIS_Benchmark",
+      "theme": "5.7 General Policies",
+      "title": "Create administrative boundaries between resources using namespaces",
+      "summary": "Use namespaces to isolate your Kubernetes objects",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.7.2",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.7.2",
+      "type": "CIS_Benchmark",
+      "theme": "5.7 General Policies",
+      "title": "Ensure that the seccomp profile is set to docker/default in your pod definitions",
+      "summary": "Enable docker/default seccomp profile in your pod definitions",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0104"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0104"
+      ]
+    },
+    {
+      "controlId": "5.7.3",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.7.3",
+      "type": "CIS_Benchmark",
+      "theme": "5.7 General Policies",
+      "title": "Apply Security Context to Your Pods and Containers",
+      "summary": "Apply Security Context to Your Pods and Containers",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0005",
+        "KSV-0020",
+        "KSV-0021",
+        "KSV-0025",
+        "KSV-0030",
+        "KSV-0104"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0005, KSV-0020, KSV-0021, KSV-0025, KSV-0030, KSV-0104"
+      ]
+    },
+    {
+      "controlId": "5.7.4",
+      "chunkId": "CIS_Kubernetes_Benchmark-5.7.4",
+      "type": "CIS_Benchmark",
+      "theme": "5.7 General Policies",
+      "title": "The default namespace should not be used",
+      "summary": "Kubernetes provides a default namespace, where objects are placed if no namespace is specified for them",
+      "coverage": "assessable",
+      "ruleMapping": [
+        "KSV-0110"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0110"
+      ]
+    }
+  ]
+}

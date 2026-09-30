@@ -431,16 +431,29 @@
 
       <h2 id="compliance">11 · Compliance mapping</h2>
       <p>
-        Findings are mapped to OWASP Top 10, NIST SP 800-53, and ISO 27001 controls.
-        Generate a per-scan compliance report from the scan detail page or
+        Findings are mapped to OWASP Top 10, OWASP ASVS, OWASP API Top 10, CWE Top 25,
+        PCI DSS, NIST SP 800-53, NIST SSDF, ISO 27001, SOC 2, HIPAA, GDPR and CIS
+        benchmarks. Generate a per-scan compliance report from the scan detail page or
         <code>/scans/&lt;id&gt;/compliance</code>.
       </p>
       <ul>
-        <li>Framework PDFs (used as ground truth for the LLM mapper) live in
-          <code>compliance/</code>.</li>
-        <li>The mapper itself is <code>src/lib/compliance/llm-mapper.ts</code> — it
-          accepts a finding and returns the control IDs that apply.</li>
-        <li>The compliance UI shows control coverage and per-control finding counts.</li>
+        <li><strong>OWASP ASVS 4.0.3</strong> is mapped per requirement (278
+          requirements, e.g. V5.3.4) using OWASP's official CWE mapping, with a
+          breakdown by level (L1 / L2 / L3).</li>
+        <li><strong>CIS Kubernetes 1.23, CIS Amazon EKS 1.4, CIS AWS Foundations
+          1.4 and CIS Docker 1.6</strong> are mapped by the exact check that raised
+          the finding (e.g. <code>KSV-0017</code> → 5.2.x). Controls that need a
+          running cluster, host or cloud account are listed as not assessable from
+          code.</li>
+        <li><em>Fast</em> mode uses only the deterministic crosswalks (reproducible, no
+          LLM). <em>Deep</em> mode lets an LLM refine them and verifies each
+          mapping.</li>
+        <li>Export as PDF, HTML, a findings CSV, or a <strong>control matrix
+          CSV</strong> (one row per control, including controls with no findings and
+          those code scanning can't assess).</li>
+        <li>Catalogs live in <code>compliance/</code> as JSON (see
+          <code>compliance/NOTICE.md</code> for sources and licenses). Add your own
+          framework as a JSON or text PDF file in that folder.</li>
       </ul>
 
       <h2 id="audit">12 · Audit log</h2>

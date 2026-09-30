@@ -1,0 +1,745 @@
+{
+  "name": "CIS AWS Foundations Benchmark",
+  "version": "1.4",
+  "fileName": "CIS_AWS_Foundations_Benchmark.json",
+  "source": "Control ids, titles and check mappings from aquasecurity/trivy-checks pkg/compliance/aws-cis-1.4.yaml (MIT) @ 3ae9f4cc196767047a2a1fdae2d24a82944dfd6b",
+  "license": "Mapping data MIT (Aqua Security). CIS® and CIS Benchmarks® are trademarks of the Center for Internet Security; the full benchmark text is available from cisecurity.org.",
+  "mapping": "Deterministic by rule id for checks Pepper runs on code (AWS). Other controls need a running cluster / account and are listed as not assessable from code. Controls marked mappingSource \"pepper\" (2.1.5, 2.2.1, 2.3.1, 3.1, 3.2, 3.7, 3.9, 5.2) are Pepper's IaC mapping, not part of the upstream spec.",
+  "controls": [
+    {
+      "controlId": "1.4",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.4",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "enforce-user-mfa",
+      "summary": "IAM Users should have MFA enforcement activated.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0141",
+        "AWS-0145"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0141, AWS-0145"
+      ]
+    },
+    {
+      "controlId": "1.5",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.5",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "enforce-root-mfa",
+      "summary": "The \"root\" account has unrestricted access to all resources in the AWS account. It is highly recommended that this account have MFA enabled.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0142"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0142"
+      ]
+    },
+    {
+      "controlId": "1.6",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.6",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "enforce-root-hardware-mfa",
+      "summary": "The \"root\" account has unrestricted access to all resources in the AWS account. It is highly recommended that this account have hardware MFA enabled.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0165"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0165"
+      ]
+    },
+    {
+      "controlId": "1.7",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.7",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "limit-root-account-usage",
+      "summary": "The \"root\" account has unrestricted access to all resources in the AWS account. It is highly recommended that the use of this account be avoided.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0140"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0140"
+      ]
+    },
+    {
+      "controlId": "1.8",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.8",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "set-minimum-password-length",
+      "summary": "IAM Password policy should have minimum password length of 14 or more characters.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0063"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0063"
+      ]
+    },
+    {
+      "controlId": "1.9",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.9",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "no-password-reuse",
+      "summary": "IAM Password policy should prevent password reuse.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0056"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0056"
+      ]
+    },
+    {
+      "controlId": "1.12",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.12",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "disable-unused-credentials-45-days",
+      "summary": "AWS IAM users can access AWS resources using different types of credentials, such as passwords or access keys. It is recommended that all credentials that have been unused in 45 or greater days be deactivated or removed.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0166"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0166"
+      ]
+    },
+    {
+      "controlId": "1.13",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.13",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "limit-user-access-keys",
+      "summary": "No user should have more than one active access key.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0167"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0167"
+      ]
+    },
+    {
+      "controlId": "1.14",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.14",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "rotate-access-keys",
+      "summary": "Access keys should be rotated at least every 90 days",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0146"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0146"
+      ]
+    },
+    {
+      "controlId": "1.15",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.15",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "no-user-attached-policies",
+      "summary": "IAM policies should not be granted directly to users.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0143"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0143"
+      ]
+    },
+    {
+      "controlId": "1.16",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.16",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "no-policy-wildcards",
+      "summary": "IAM policy should avoid use of wildcards and instead apply the principle of least privilege",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0057"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0057"
+      ]
+    },
+    {
+      "controlId": "1.17",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.17",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "require-support-role",
+      "summary": "Missing IAM Role to allow authorized users to manage incidents with AWS Support.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0169"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0169"
+      ]
+    },
+    {
+      "controlId": "1.19",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.19",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "remove-expired-certificates",
+      "summary": "Delete expired TLS certificates",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0168"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0168"
+      ]
+    },
+    {
+      "controlId": "1.20",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-1.20",
+      "type": "CIS_Benchmark",
+      "theme": "1 Identity and Access Management",
+      "title": "enable-access-analyzer",
+      "summary": "Enable IAM Access analyzer for IAM policies about all resources in each region.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0175"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0175"
+      ]
+    },
+    {
+      "controlId": "2.1.3",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-2.1.3",
+      "type": "CIS_Benchmark",
+      "theme": "2.1 Simple Storage Service (S3)",
+      "title": "require-mfa-delete",
+      "summary": "Buckets should have MFA deletion protection enabled.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0170"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0170"
+      ]
+    },
+    {
+      "controlId": "2.1.5",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-2.1.5",
+      "type": "CIS_Benchmark",
+      "theme": "2.1 Simple Storage Service (S3)",
+      "title": "Ensure that S3 Buckets are configured with 'Block public access (bucket settings)'",
+      "summary": "Ensure that S3 Buckets are configured with 'Block public access (bucket settings)'",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0086",
+        "AWS-0087",
+        "AWS-0091",
+        "AWS-0093",
+        "AWS-0094"
+      ],
+      "mappingSource": "pepper",
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0086, AWS-0087, AWS-0091, AWS-0093, AWS-0094"
+      ]
+    },
+    {
+      "controlId": "2.2.1",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-2.2.1",
+      "type": "CIS_Benchmark",
+      "theme": "2.2 Elastic Compute Cloud (EC2)",
+      "title": "Ensure EBS volume encryption is enabled",
+      "summary": "Ensure EBS volume encryption is enabled",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0026",
+        "AWS-0131"
+      ],
+      "mappingSource": "pepper",
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0026, AWS-0131"
+      ]
+    },
+    {
+      "controlId": "2.3.1",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-2.3.1",
+      "type": "CIS_Benchmark",
+      "theme": "2.3 Relational Database Service (RDS)",
+      "title": "Ensure that encryption is enabled for RDS Instances",
+      "summary": "Ensure that encryption is enabled for RDS Instances",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0079",
+        "AWS-0080"
+      ],
+      "mappingSource": "pepper",
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0079, AWS-0080"
+      ]
+    },
+    {
+      "controlId": "3.1",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-3.1",
+      "type": "CIS_Benchmark",
+      "theme": "3 Logging",
+      "title": "Ensure CloudTrail is enabled in all regions",
+      "summary": "Ensure CloudTrail is enabled in all regions",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0014"
+      ],
+      "mappingSource": "pepper",
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0014"
+      ]
+    },
+    {
+      "controlId": "3.2",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-3.2",
+      "type": "CIS_Benchmark",
+      "theme": "3 Logging",
+      "title": "Ensure CloudTrail log file validation is enabled",
+      "summary": "Ensure CloudTrail log file validation is enabled",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0016"
+      ],
+      "mappingSource": "pepper",
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0016"
+      ]
+    },
+    {
+      "controlId": "3.3",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-3.3",
+      "type": "CIS_Benchmark",
+      "theme": "3 Logging",
+      "title": "no-public-log-access",
+      "summary": "The S3 Bucket backing Cloudtrail should be private",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0161"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0161"
+      ]
+    },
+    {
+      "controlId": "3.4",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-3.4",
+      "type": "CIS_Benchmark",
+      "theme": "3 Logging",
+      "title": "ensure-cloudwatch-integration",
+      "summary": "CloudTrail logs should be stored in S3 and also sent to CloudWatch Logs",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0162"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0162"
+      ]
+    },
+    {
+      "controlId": "3.6",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-3.6",
+      "type": "CIS_Benchmark",
+      "theme": "3 Logging",
+      "title": "require-bucket-access-logging",
+      "summary": "You should enable bucket access logging on the CloudTrail S3 bucket.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0163"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0163"
+      ]
+    },
+    {
+      "controlId": "3.7",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-3.7",
+      "type": "CIS_Benchmark",
+      "theme": "3 Logging",
+      "title": "Ensure CloudTrail logs are encrypted at rest using KMS CMKs",
+      "summary": "Ensure CloudTrail logs are encrypted at rest using KMS CMKs",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0015"
+      ],
+      "mappingSource": "pepper",
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0015"
+      ]
+    },
+    {
+      "controlId": "3.9",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-3.9",
+      "type": "CIS_Benchmark",
+      "theme": "3 Logging",
+      "title": "Ensure VPC flow logging is enabled in all VPCs",
+      "summary": "Ensure VPC flow logging is enabled in all VPCs",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0178"
+      ],
+      "mappingSource": "pepper",
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0178"
+      ]
+    },
+    {
+      "controlId": "3.10",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-3.10",
+      "type": "CIS_Benchmark",
+      "theme": "3 Logging",
+      "title": "enable-object-write-logging",
+      "summary": "S3 object-level API operations such as GetObject, DeleteObject, and PutObject are called data events. By default, CloudTrail trails don't log data events and so it is recommended to enable Object-level logging for S3 buckets.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0171"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0171"
+      ]
+    },
+    {
+      "controlId": "3.11",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-3.11",
+      "type": "CIS_Benchmark",
+      "theme": "3 Logging",
+      "title": "enable-object-read-logging",
+      "summary": "S3 object-level API operations such as GetObject, DeleteObject, and PutObject are called data events. By default, CloudTrail trails don't log data events and so it is recommended to enable Object-level logging for S3 buckets.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0172"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0172"
+      ]
+    },
+    {
+      "controlId": "4.1",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.1",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-unauthorised-api-call-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for unauthorized API calls",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0147"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0147"
+      ]
+    },
+    {
+      "controlId": "4.2",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.2",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-non-mfa-login-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for AWS Management Console sign-in without MFA",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0148"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0148"
+      ]
+    },
+    {
+      "controlId": "4.3",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.3",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-root-user-usage-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for usage of root user",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0149"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0149"
+      ]
+    },
+    {
+      "controlId": "4.4",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.4",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-iam-policy-change-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for IAM policy changes",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0150"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0150"
+      ]
+    },
+    {
+      "controlId": "4.5",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.5",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-cloud-trail-change-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for CloudTrail configuration changes",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0151"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0151"
+      ]
+    },
+    {
+      "controlId": "4.6",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.6",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-console-login-failures-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for AWS Management Console authentication failures",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0152"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0152"
+      ]
+    },
+    {
+      "controlId": "4.7",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.7",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-cmk-disabled-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for disabling or scheduled deletion of customer managed keys",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0153"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0153"
+      ]
+    },
+    {
+      "controlId": "4.8",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.8",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-s3-bucket-policy-change-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for S3 bucket policy changes",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0154"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0154"
+      ]
+    },
+    {
+      "controlId": "4.9",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.9",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-config-configuration-changes-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for AWS Config configuration changes",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0155"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0155"
+      ]
+    },
+    {
+      "controlId": "4.10",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.10",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-sg-change-alarms",
+      "summary": "Ensure a log metric filter and alarm exist for security group changes",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0156"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0156"
+      ]
+    },
+    {
+      "controlId": "4.11",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.11",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-nacl-changes-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for changes to Network Access Control Lists (NACL)",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0157"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0157"
+      ]
+    },
+    {
+      "controlId": "4.12",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.12",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-network-gateway-changes-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for changes to network gateways",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0158"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0158"
+      ]
+    },
+    {
+      "controlId": "4.13",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.13",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-network-gateway-changes-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for route table changes",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0159"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0159"
+      ]
+    },
+    {
+      "controlId": "4.14",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.14",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-vpc-changes-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for VPC changes",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0160"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0160"
+      ]
+    },
+    {
+      "controlId": "4.15",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-4.15",
+      "type": "CIS_Benchmark",
+      "theme": "4 Monitoring",
+      "title": "require-org-changes-alarm",
+      "summary": "Ensure a log metric filter and alarm exist for organisation changes",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0174"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0174"
+      ]
+    },
+    {
+      "controlId": "5.1",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-5.1",
+      "type": "CIS_Benchmark",
+      "theme": "5 Networking",
+      "title": "aws-vpc-no-public-ingress-acl",
+      "summary": "Network ACLs should not allow ingress from 0.0.0.0/0 to port 22 or port 3389.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0105"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0105"
+      ]
+    },
+    {
+      "controlId": "5.2",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-5.2",
+      "type": "CIS_Benchmark",
+      "theme": "5 Networking",
+      "title": "Ensure no security groups allow ingress from 0.0.0.0/0 to remote server administration ports",
+      "summary": "Ensure no security groups allow ingress from 0.0.0.0/0 to remote server administration ports",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0107"
+      ],
+      "mappingSource": "pepper",
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0107"
+      ]
+    },
+    {
+      "controlId": "5.3",
+      "chunkId": "CIS_AWS_Foundations_Benchmark-5.3",
+      "type": "CIS_Benchmark",
+      "theme": "5 Networking",
+      "title": "restrict-all-in-default-sg",
+      "summary": "Default security group should restrict all traffic",
+      "coverage": "partial",
+      "ruleMapping": [
+        "AWS-0173"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: AWS-0173"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,714 @@
+{
+  "name": "CIS Amazon EKS Benchmark",
+  "version": "1.4",
+  "fileName": "CIS_EKS_Benchmark.json",
+  "source": "Control ids, titles and check mappings from aquasecurity/trivy-checks pkg/compliance/eks-cis-1.4.yaml (MIT) @ 3ae9f4cc196767047a2a1fdae2d24a82944dfd6b",
+  "license": "Mapping data MIT (Aqua Security). CIS® and CIS Benchmarks® are trademarks of the Center for Internet Security; the full benchmark text is available from cisecurity.org.",
+  "mapping": "Deterministic by rule id for checks Pepper runs on code (KSV, AWS). Other controls need a running cluster / account and are listed as not assessable from code.",
+  "controls": [
+    {
+      "controlId": "2.1.1",
+      "chunkId": "CIS_EKS_Benchmark-2.1.1",
+      "type": "CIS_Benchmark",
+      "theme": "2.1 Logging",
+      "title": "Enable audit Logs",
+      "summary": "Control plane logs provide visibility into operation of the EKS Control plane components systems. The API server audit logs record all accepted and rejected requests in the cluster. When enabled via EKS configuration the control plane logs for a cluster are exported to a CloudWatch Log Group for persistence.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.1.1",
+      "chunkId": "CIS_EKS_Benchmark-3.1.1",
+      "type": "CIS_Benchmark",
+      "theme": "3.1 Worker Node Configuration Files",
+      "title": "Ensure that the kubeconfig file permissions are set to 644 or more restrictive",
+      "summary": "If kubelet is running, and if it is configured by a kubeconfig file, ensure that the proxy kubeconfig file has permissions of 644 or more restrictive Check with the following command: > sudo systemctl status kubelet",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.1.2",
+      "chunkId": "CIS_EKS_Benchmark-3.1.2",
+      "type": "CIS_Benchmark",
+      "theme": "3.1 Worker Node Configuration Files",
+      "title": "Ensure that the kubelet service file ownership is set to root:root",
+      "summary": "Ensure that the kubelet service file ownership is set to root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.1.3",
+      "chunkId": "CIS_EKS_Benchmark-3.1.3",
+      "type": "CIS_Benchmark",
+      "theme": "3.1 Worker Node Configuration Files",
+      "title": "Ensure that the kubelet configuration file has permissions set to 644 or more restrictive",
+      "summary": "Ensure that if the kubelet refers to a configuration file with the --config argument, that file has permissions of 600 or more restrictive",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.1.4",
+      "chunkId": "CIS_EKS_Benchmark-3.1.4",
+      "type": "CIS_Benchmark",
+      "theme": "3.1 Worker Node Configuration Files",
+      "title": "Ensure that the kubelet configuration file ownership is set to root:root",
+      "summary": "Ensure that if the kubelet refers to a configuration file with the --config argument, that file is owned by root:root",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.2.1",
+      "chunkId": "CIS_EKS_Benchmark-3.2.1",
+      "type": "CIS_Benchmark",
+      "theme": "3.2 Kubelet",
+      "title": "Ensure that the Anonymous Auth is Not Enabled",
+      "summary": "Disable anonymous requests to the Kubelet server.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.2.2",
+      "chunkId": "CIS_EKS_Benchmark-3.2.2",
+      "type": "CIS_Benchmark",
+      "theme": "3.2 Kubelet",
+      "title": "Ensure that the --authorization-mode argument is not set to AlwaysAllow",
+      "summary": "Do not allow all requests. Enable explicit authorization.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.2.3",
+      "chunkId": "CIS_EKS_Benchmark-3.2.3",
+      "type": "CIS_Benchmark",
+      "theme": "3.2 Kubelet",
+      "title": "Ensure that a Client CA File is Configured",
+      "summary": "Enable Kubelet authentication using certificates.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.2.4",
+      "chunkId": "CIS_EKS_Benchmark-3.2.4",
+      "type": "CIS_Benchmark",
+      "theme": "3.2 Kubelet",
+      "title": "Ensure that the --read-only-port is disabled",
+      "summary": "The Kubelet process provides a read-only API in addition to the main Kubelet API. Unauthenticated access is provided to this read-only API which could possibly retrieve potentially sensitive information about the cluster.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.2.5",
+      "chunkId": "CIS_EKS_Benchmark-3.2.5",
+      "type": "CIS_Benchmark",
+      "theme": "3.2 Kubelet",
+      "title": "Ensure that the --streaming-connection-idle-timeout argument is not set to 0",
+      "summary": "Do not disable timeouts on streaming connections.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.2.6",
+      "chunkId": "CIS_EKS_Benchmark-3.2.6",
+      "type": "CIS_Benchmark",
+      "theme": "3.2 Kubelet",
+      "title": "Ensure that the --make-iptables-util-chains argument is set to true",
+      "summary": "Allow Kubelet to manage iptables.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.2.7",
+      "chunkId": "CIS_EKS_Benchmark-3.2.7",
+      "type": "CIS_Benchmark",
+      "theme": "3.2 Kubelet",
+      "title": "Ensure that the --eventRecordQPS argument is set to 0 or a level which ensures appropriate event capture",
+      "summary": "Security relevant information should be captured. The eventRecordQPS on the Kubelet configuration can be used to limit the rate at which events are gathered and sets the maximum event creations per second. Setting this too low could result in relevant events not being logged, however the unlimited setting of 0 could result in a denial of service on the kubelet.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.2.8",
+      "chunkId": "CIS_EKS_Benchmark-3.2.8",
+      "type": "CIS_Benchmark",
+      "theme": "3.2 Kubelet",
+      "title": "Ensure that the --rotate-certificates argument is not present or is set to true",
+      "summary": "Enable kubelet client certificate rotation.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.2.9",
+      "chunkId": "CIS_EKS_Benchmark-3.2.9",
+      "type": "CIS_Benchmark",
+      "theme": "3.2 Kubelet",
+      "title": "Ensure that the RotateKubeletServerCertificate argument is set to true",
+      "summary": "Enable kubelet server certificate rotation.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "3.3.1",
+      "chunkId": "CIS_EKS_Benchmark-3.3.1",
+      "type": "CIS_Benchmark",
+      "theme": "Section 3",
+      "title": "Prefer using a container-optimized OS when possible",
+      "summary": "If a container-optimized OS is required examine the nodes in EC2 and click on their AMI to ensure that it is a container-optimized OS like Amazon Bottlerocket; or connect to the worker node and check its OS.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.1",
+      "chunkId": "CIS_EKS_Benchmark-4.1.1",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 RBAC and Service Accounts",
+      "title": "Ensure that the cluster-admin role is only used where required",
+      "summary": "The RBAC role cluster-admin provides wide-ranging powers over the environment and should be used only where and when needed.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0111"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0111"
+      ]
+    },
+    {
+      "controlId": "4.1.2",
+      "chunkId": "CIS_EKS_Benchmark-4.1.2",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 RBAC and Service Accounts",
+      "title": "Minimize access to secrets",
+      "summary": "The Kubernetes API stores secrets, which may be service account tokens for the Kubernetes API or credentials used by workloads in the cluster. Access to these secrets should be restricted to the smallest possible group of users to reduce the risk of privilege escalation.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0041"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0041"
+      ]
+    },
+    {
+      "controlId": "4.1.3",
+      "chunkId": "CIS_EKS_Benchmark-4.1.3",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 RBAC and Service Accounts",
+      "title": "Minimize wildcard use in Roles and ClusterRoles",
+      "summary": "Kubernetes Roles and ClusterRoles provide access to resources based on sets of objects and actions that can be taken on those objects. It is possible to set either of these to be the wildcard \"*\" which matches all items. Use of wildcards is not optimal from a security perspective as it may allow for inadvertent access to be granted when new resources are added to the Kubernetes API either as CRDs or in later versions of the product.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0044",
+        "KSV-0045",
+        "KSV-0046"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0044, KSV-0045, KSV-0046"
+      ]
+    },
+    {
+      "controlId": "4.1.4",
+      "chunkId": "CIS_EKS_Benchmark-4.1.4",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 RBAC and Service Accounts",
+      "title": "Minimize access to create pods",
+      "summary": "The ability to create pods in a namespace can provide a number of opportunities for privilege escalation, such as assigning privileged service accounts to these pods or mounting hostPaths with access to sensitive data (unless Pod Security Policies are implemented to restrict this access) As such, access to create new pods should be restricted to the smallest possible group of users.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.5",
+      "chunkId": "CIS_EKS_Benchmark-4.1.5",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 RBAC and Service Accounts",
+      "title": "Ensure that default service accounts are not actively used.",
+      "summary": "The default service account should not be used to ensure that rights granted to applications can be more easily audited and reviewed.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.6",
+      "chunkId": "CIS_EKS_Benchmark-4.1.6",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 RBAC and Service Accounts",
+      "title": "Ensure that Service Account Tokens are only mounted where necessary",
+      "summary": "Service accounts tokens should not be mounted in pods except where the workload running in the pod explicitly needs to communicate with the API server",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.7",
+      "chunkId": "CIS_EKS_Benchmark-4.1.7",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 RBAC and Service Accounts",
+      "title": "Avoid use of system:masters group",
+      "summary": "The special group system:masters should not be used to grant permissions to any user or service account, except where strictly necessary (e.g. bootstrapping access prior to RBAC being fully available)",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.1.8",
+      "chunkId": "CIS_EKS_Benchmark-4.1.8",
+      "type": "CIS_Benchmark",
+      "theme": "4.1 RBAC and Service Accounts",
+      "title": "Limit use of the Bind, Impersonate and Escalate permissions in the Kubernetes cluster",
+      "summary": "The special group system:masters should not be used to grant permissions to any user or service account, except where strictly necessary (e.g. bootstrapping access prior to RBAC being fully available)",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0123"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0123"
+      ]
+    },
+    {
+      "controlId": "4.2.1",
+      "chunkId": "CIS_EKS_Benchmark-4.2.1",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Pod Security Standards",
+      "title": "Minimize the admission of privileged containers",
+      "summary": "Do not generally permit containers to be run with the securityContext.privileged flag set to true.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0017"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0017"
+      ]
+    },
+    {
+      "controlId": "4.2.2",
+      "chunkId": "CIS_EKS_Benchmark-4.2.2",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Pod Security Standards",
+      "title": "Minimize the admission of containers wishing to share the host process ID namespace",
+      "summary": "Do not generally permit containers to be run with the hostPID flag set to true.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0010"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0010"
+      ]
+    },
+    {
+      "controlId": "4.2.3",
+      "chunkId": "CIS_EKS_Benchmark-4.2.3",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Pod Security Standards",
+      "title": "Minimize the admission of containers wishing to share the host IPC namespace",
+      "summary": "Do not generally permit containers to be run with the hostIPC flag set to true.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0008"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0008"
+      ]
+    },
+    {
+      "controlId": "4.2.4",
+      "chunkId": "CIS_EKS_Benchmark-4.2.4",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Pod Security Standards",
+      "title": "Minimize the admission of containers wishing to share the host network namespace",
+      "summary": "Do not generally permit containers to be run with the hostNetwork flag set to true.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0009"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0009"
+      ]
+    },
+    {
+      "controlId": "4.2.5",
+      "chunkId": "CIS_EKS_Benchmark-4.2.5",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Pod Security Standards",
+      "title": "Minimize the admission of containers with allowPrivilegeEscalation",
+      "summary": "Do not generally permit containers to be run with the allowPrivilegeEscalation flag set to true. Allowing this right can lead to a process running a container getting more rights than it started with.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0001"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0001"
+      ]
+    },
+    {
+      "controlId": "4.2.6",
+      "chunkId": "CIS_EKS_Benchmark-4.2.6",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Pod Security Standards",
+      "title": "Minimize the admission of root containers",
+      "summary": "Do not generally permit containers to be run as the root user.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0012"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0012"
+      ]
+    },
+    {
+      "controlId": "4.2.7",
+      "chunkId": "CIS_EKS_Benchmark-4.2.7",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Pod Security Standards",
+      "title": "Minimize the admission of containers with added capabilities",
+      "summary": "Do not generally permit containers with capabilities assigned beyond the default set.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0004"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0004"
+      ]
+    },
+    {
+      "controlId": "4.2.8",
+      "chunkId": "CIS_EKS_Benchmark-4.2.8",
+      "type": "CIS_Benchmark",
+      "theme": "4.2 Pod Security Standards",
+      "title": "Minimize the admission of containers with capabilities assigned",
+      "summary": "Do not generally permit containers with capabilities",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0003",
+        "KSV-0103"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0003, KSV-0103"
+      ]
+    },
+    {
+      "controlId": "4.3.1",
+      "chunkId": "CIS_EKS_Benchmark-4.3.1",
+      "type": "CIS_Benchmark",
+      "theme": "4.3 CNI Plugin",
+      "title": "Ensure CNI plugin supports network policies",
+      "summary": "There are a variety of CNI plugins available for Kubernetes. If the CNI in use does not support Network Policies it may not be possible to effectively restrict traffic in the cluster",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.3.2",
+      "chunkId": "CIS_EKS_Benchmark-4.3.2",
+      "type": "CIS_Benchmark",
+      "theme": "4.3 CNI Plugin",
+      "title": "Ensure that all Namespaces have Network Policies defined",
+      "summary": "Use network policies to isolate traffic in your cluster network.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0038"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0038"
+      ]
+    },
+    {
+      "controlId": "4.4.1",
+      "chunkId": "CIS_EKS_Benchmark-4.4.1",
+      "type": "CIS_Benchmark",
+      "theme": "4.4 Secrets Management",
+      "title": "Prefer using secrets as files over secrets as environment variables",
+      "summary": "Kubernetes supports mounting secrets as data volumes or as environment variables. Minimize the use of environment variable secrets.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.4.2",
+      "chunkId": "CIS_EKS_Benchmark-4.4.2",
+      "type": "CIS_Benchmark",
+      "theme": "4.4 Secrets Management",
+      "title": "Consider external secret storage",
+      "summary": "Consider the use of an external secrets storage and management system, instead of using Kubernetes Secrets directly, if you have more complex secret management needs. Ensure the solution requires authentication to access secrets, has auditing of access to and use of secrets, and encrypts secrets. Some solutions also make it easier to rotate secrets",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.5.1",
+      "chunkId": "CIS_EKS_Benchmark-4.5.1",
+      "type": "CIS_Benchmark",
+      "theme": "4.5 Extensible Admission Control",
+      "title": "Create administrative boundaries between resources using namespaces",
+      "summary": "Use namespaces to isolate your Kubernetes objects.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "4.5.2",
+      "chunkId": "CIS_EKS_Benchmark-4.5.2",
+      "type": "CIS_Benchmark",
+      "theme": "4.5 Extensible Admission Control",
+      "title": "Apply Security Context to Your Pods and Containers",
+      "summary": "Apply Security Context to Your Pods and Containers",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0005",
+        "KSV-0020",
+        "KSV-0021",
+        "KSV-0025",
+        "KSV-0030",
+        "KSV-0104"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0005, KSV-0020, KSV-0021, KSV-0025, KSV-0030, KSV-0104"
+      ]
+    },
+    {
+      "controlId": "4.5.3",
+      "chunkId": "CIS_EKS_Benchmark-4.5.3",
+      "type": "CIS_Benchmark",
+      "theme": "4.5 Extensible Admission Control",
+      "title": "The default namespace should not be used",
+      "summary": "Kubernetes provides a default namespace, where objects are placed if no namespace is specified for them. Placing objects in this namespace makes application of RBAC and other controls more difficult.",
+      "coverage": "partial",
+      "ruleMapping": [
+        "KSV-0110"
+      ],
+      "implementationChecklist": [],
+      "evidenceExamples": [
+        "Pepper IaC checks: KSV-0110"
+      ]
+    },
+    {
+      "controlId": "5.1.1",
+      "chunkId": "CIS_EKS_Benchmark-5.1.1",
+      "type": "CIS_Benchmark",
+      "theme": "5.1 Image Registry and Image Scanning",
+      "title": "Ensure Image Vulnerability Scanning using Amazon ECR image scanning or a third party provider",
+      "summary": "Scan images being deployed to Amazon EKS for vulnerabilities.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.1.2",
+      "chunkId": "CIS_EKS_Benchmark-5.1.2",
+      "type": "CIS_Benchmark",
+      "theme": "5.1 Image Registry and Image Scanning",
+      "title": "Minimize user access to Amazon ECR",
+      "summary": "Restrict user access to Amazon ECR, limiting interaction with build images to only authorized personnel and service accounts.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.1.3",
+      "chunkId": "CIS_EKS_Benchmark-5.1.3",
+      "type": "CIS_Benchmark",
+      "theme": "5.1 Image Registry and Image Scanning",
+      "title": "Minimize cluster access to read-only for Amazon ECR",
+      "summary": "Configure the Cluster Service Account with Storage Object Viewer Role to only allow read-only access to Amazon ECR",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.1.4",
+      "chunkId": "CIS_EKS_Benchmark-5.1.4",
+      "type": "CIS_Benchmark",
+      "theme": "5.1 Image Registry and Image Scanning",
+      "title": "Minimize Container Registries to only those approved",
+      "summary": "Use approved container registries.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.2.1",
+      "chunkId": "CIS_EKS_Benchmark-5.2.1",
+      "type": "CIS_Benchmark",
+      "theme": "5.2 Identity and Access Management (IAM)",
+      "title": "Prefer using dedicated EKS Service Accounts",
+      "summary": "Kubernetes workloads should not use cluster node service accounts to authenticate to Amazon EKS APIs. Each Kubernetes workload that needs to authenticate to other AWS services using AWS IAM should be provisioned with a dedicated Service account.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.3.1",
+      "chunkId": "CIS_EKS_Benchmark-5.3.1",
+      "type": "CIS_Benchmark",
+      "theme": "5.3 AWS EKS Key Management Service",
+      "title": "Ensure Kubernetes Secrets are encrypted using Customer Master Keys (CMKs) managed in AWS KMS",
+      "summary": "Encrypt Kubernetes secrets, stored in etcd, using secrets encryption feature during Amazon EKS cluster creation.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.4.1",
+      "chunkId": "CIS_EKS_Benchmark-5.4.1",
+      "type": "CIS_Benchmark",
+      "theme": "5.4 Cluster Networking",
+      "title": "Restrict Access to the Control Plane Endpoint",
+      "summary": "Enable Endpoint Private Access to restrict access to the cluster's control plane to only an allowlist of authorized IPs",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.4.2",
+      "chunkId": "CIS_EKS_Benchmark-5.4.2",
+      "type": "CIS_Benchmark",
+      "theme": "5.4 Cluster Networking",
+      "title": "Ensure clusters are created with Private Endpoint Enabled and Public Access Disabled",
+      "summary": "Disable access to the Kubernetes API from outside the node network if it is not required.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.4.3",
+      "chunkId": "CIS_EKS_Benchmark-5.4.3",
+      "type": "CIS_Benchmark",
+      "theme": "5.4 Cluster Networking",
+      "title": "Ensure clusters are created with Private Nodes",
+      "summary": "Disable public IP addresses for cluster nodes, so that they only have private IP addresses. Private Nodes are nodes with no public IP addresses.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.4.4",
+      "chunkId": "CIS_EKS_Benchmark-5.4.4",
+      "type": "CIS_Benchmark",
+      "theme": "5.4 Cluster Networking",
+      "title": "Ensure Network Policy is Enabled and set as appropriate",
+      "summary": "Amazon EKS provides two ways to implement network policy. You choose a network policy option when you create an EKS cluster. The policy option can't be changed after the cluster is created: Calico Network Policies, an open-source network and network security solution founded by Tigera. Both implementations use Linux IPTables to enforce the specified policies. Policies are translated into sets of allowed and disallowed IP pairs. These pairs are then programmed as IPTable filter rules",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.4.5",
+      "chunkId": "CIS_EKS_Benchmark-5.4.5",
+      "type": "CIS_Benchmark",
+      "theme": "5.4 Cluster Networking",
+      "title": "Encrypt traffic to HTTPS load balancers with TLS certificates",
+      "summary": "Encrypt traffic to HTTPS load balancers using TLS certificates.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.5.1",
+      "chunkId": "CIS_EKS_Benchmark-5.5.1",
+      "type": "CIS_Benchmark",
+      "theme": "5.5 Authentication and Authorization",
+      "title": "Manage Kubernetes RBAC users with AWS IAM Authenticator for Kubernetes or Upgrade to AWS CLI v1.16.156 or greater",
+      "summary": "Amazon EKS uses IAM to provide authentication to your Kubernetes cluster through the AWS IAM Authenticator for Kubernetes. You can configure the stock kubectl client to work with Amazon EKS by installing the AWS IAM Authenticator for Kubernetes and modifying your kubectl configuration file to use it for authentication",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    },
+    {
+      "controlId": "5.6.1",
+      "chunkId": "CIS_EKS_Benchmark-5.6.1",
+      "type": "CIS_Benchmark",
+      "theme": "5.6 Other Cluster Configurations",
+      "title": "Consider Fargate for running untrusted workloads",
+      "summary": "It is Best Practice to restrict or fence untrusted workloads when running in a multi-tenant environment.",
+      "coverage": "not-assessable",
+      "ruleMapping": [],
+      "assessment": "manual",
+      "implementationChecklist": [],
+      "evidenceExamples": []
+    }
+  ]
+}

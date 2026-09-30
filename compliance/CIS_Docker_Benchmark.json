@@ -1,6 +1,9 @@
 {
   "name": "CIS Docker Benchmark v1.6",
+  "version": "1.6.0",
+  "revision": "rule-mapping-1",
   "fileName": "CIS_Docker_Benchmark.json",
+  "mapping": "Deterministic by rule id for Dockerfile checks Pepper runs (Dockerfile lint, Trivy DS checks). Daemon, host and runtime controls need a running Docker host and are listed as not assessable from code.",
   "controls": [
     {
       "controlId": "2.1",
@@ -119,7 +122,13 @@
       "evidenceExamples": [
         "Dockerfile containing USER directive",
         "docker inspect showing non-root user"
-      ]
+      ],
+      "ruleMapping": [
+        "DOCKERFILE-NO-USER",
+        "DOCKERFILE-ROOT-USER",
+        "DS-0002"
+      ],
+      "coverage": "assessable"
     },
     {
       "controlId": "4.2",
@@ -170,7 +179,12 @@
       "evidenceExamples": [
         "Dockerfile HEALTHCHECK instruction",
         "docker inspect showing health check configuration"
-      ]
+      ],
+      "ruleMapping": [
+        "DOCKERFILE-NO-HEALTHCHECK",
+        "DS-0026"
+      ],
+      "coverage": "assessable"
     },
     {
       "controlId": "4.9",
@@ -187,7 +201,11 @@
       "evidenceExamples": [
         "Dockerfile using COPY instead of ADD",
         "Static analysis scan results"
-      ]
+      ],
+      "ruleMapping": [
+        "DS-0005"
+      ],
+      "coverage": "assessable"
     },
     {
       "controlId": "4.10",
@@ -204,7 +222,12 @@
       "evidenceExamples": [
         "Dockerfile free of hardcoded credentials",
         "Secret scanning tool reports"
-      ]
+      ],
+      "ruleMapping": [
+        "DOCKERFILE-HARDCODED-SECRET-ENV",
+        "DOCKERFILE-HARDCODED-SECRET-RUN"
+      ],
+      "coverage": "assessable"
     },
     {
       "controlId": "5.1",

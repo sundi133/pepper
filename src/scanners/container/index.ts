@@ -153,6 +153,9 @@ async function scanImageWithTrivy(
         "image",
         "--quiet",
         "--no-progress",
+        // Keep scan data on-prem: no anonymous usage data, no update notices.
+        "--disable-telemetry",
+        "--skip-version-check",
         "--scanners",
         "vuln",
         "--format",

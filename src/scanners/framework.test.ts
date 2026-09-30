@@ -39,7 +39,8 @@ describe("scanner framework", () => {
   });
 
   it("IAC_ONLY and ZERO_DAY_ONLY run dedicated scanners", () => {
-    expect(getScanners("IAC_ONLY", llmOn).map((s) => s.name)).toEqual(["IAC"]);
+    // Rule-based checks (trivy config) always run; the LLM IaC scanner adds to them.
+    expect(getScanners("IAC_ONLY", llmOn).map((s) => s.name)).toEqual(["IAC_RULES", "IAC"]);
     expect(getScanners("ZERO_DAY_ONLY", llmOn).map((s) => s.name)).toEqual([
       "ZERO_DAY",
     ]);

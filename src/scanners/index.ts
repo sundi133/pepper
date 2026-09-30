@@ -9,6 +9,7 @@ import { sastLlmScanner } from "./sast";
 import { scaScanner, parseDependencies } from "./sca";
 import { secretsPatternScanner, secretsLlmScanner } from "./secrets";
 import { iacScanner } from "./iac";
+import { iacRulesScanner } from "./iac/trivy-config";
 import { maliciousPkgScanner } from "./sca/malicious-pkg";
 import { zeroDayScanner } from "./zero-day";
 import { containerScanner } from "./container";
@@ -60,6 +61,12 @@ export function getScanners(
     if (orgSettings.enableLlmSecrets) {
       scanners.push(secretsLlmScanner);
     }
+  }
+
+  if (includeIac || includeK8s) {
+    // Rule-based IaC / Kubernetes / Helm checks (trivy config): deterministic
+    // and offline, so they run whether or not LLM analysis is enabled.
+    scanners.push(iacRulesScanner);
   }
 
   if (includeIac && orgSettings.enableLlmSast) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { buildGithubAuthorizeUrl } from "@/lib/github-oauth";
 import {
   createGithubOAuthState,
@@ -18,6 +18,8 @@ export async function GET(req: NextRequest) {
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+  const roleAuth = await requireRole(orgId, "SECURITY");
+  if ("error" in roleAuth) return roleAuth.error;
 
   if (!isGithubRepoOAuthConfigured()) {
     return NextResponse.json(

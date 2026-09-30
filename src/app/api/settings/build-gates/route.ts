@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -20,6 +20,8 @@ export async function PUT(req: NextRequest) {
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+  const roleAuth = await requireRole(orgId, "SECURITY");
+  if ("error" in roleAuth) return roleAuth.error;
 
   try {
     const body = await req.json();

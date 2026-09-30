@@ -175,7 +175,10 @@ export function FindingsTable({
         }),
       });
 
-      if (!res.ok) throw new Error("Failed to update");
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Failed to update findings");
+      }
       const result = await res.json();
       toast.success(
         `Updated ${result.updated} findings to ${bulkStatus.replace("_", " ").toLowerCase()}`,
@@ -183,8 +186,8 @@ export function FindingsTable({
       setSelected(new Set());
       setBulkStatus("");
       onBulkStatusChange?.();
-    } catch {
-      toast.error("Failed to update findings");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to update findings");
     } finally {
       setBulkLoading(false);
     }
@@ -234,14 +237,17 @@ export function FindingsTable({
           statusNote: "AI batch verification — marked as false positive",
         }),
       });
-      if (!res.ok) throw new Error("Failed to apply");
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Failed to apply false positive status");
+      }
       const result = await res.json();
       toast.success(`Marked ${result.updated} findings as false positive`);
       setVerifyDialogOpen(false);
       setSelected(new Set());
       onBulkStatusChange?.();
-    } catch {
-      toast.error("Failed to apply false positive status");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to apply false positive status");
     }
   }
 

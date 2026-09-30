@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import {
   deleteOrgGithubConnection,
   getGithubConnectionStatus,
@@ -32,6 +32,8 @@ export async function DELETE() {
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+  const roleAuth = await requireRole(orgId, "SECURITY");
+  if ("error" in roleAuth) return roleAuth.error;
 
   const token = await getOrgGithubAccessToken(orgId);
   if (token) {

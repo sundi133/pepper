@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireRiskDecisionRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import {
   createLlmClient,
   analyzeWithLlm,
@@ -62,6 +63,8 @@ export async function POST(req: NextRequest) {
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+  const roleAuth = await requireRole(orgId, "DEVELOPER");
+  if ("error" in roleAuth) return roleAuth.error;
 
   let body;
   try {
@@ -74,6 +77,11 @@ export async function POST(req: NextRequest) {
       );
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+  // Auto-applying marks findings FALSE_POSITIVE — a risk decision.
+  if (body.autoApply) {
+    const denied = await requireRiskDecisionRole(orgId);
+    if (denied) return denied;
   }
 
   const findings = await prisma.finding.findMany({

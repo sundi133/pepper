@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { loadAllFrameworks } from "@/lib/compliance/pdf-parser";
 import { hasDeterministicMapping } from "@/lib/compliance/crosswalk-mapper";
 import { FindingForMapping } from "@/lib/compliance/llm-mapper";
@@ -227,6 +227,8 @@ export async function DELETE(
   const orgId = getDefaultOrgId(auth.session);
   if (!orgId)
     return NextResponse.json({ error: "No organization" }, { status: 403 });
+  const roleAuth = await requireRole(orgId, "DEVELOPER");
+  if ("error" in roleAuth) return roleAuth.error;
 
   const scan = await prisma.scan.findFirst({
     where: { id: scanId, project: { organizationId: orgId } },

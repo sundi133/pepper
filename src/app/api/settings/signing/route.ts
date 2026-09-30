@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { prisma } from "@/lib/prisma";
 import { encryptSecret } from "@/lib/token-encryption";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
@@ -35,6 +35,8 @@ export async function PUT(req: NextRequest) {
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+  const roleAuth = await requireRole(orgId, "SECURITY");
+  if ("error" in roleAuth) return roleAuth.error;
   const body = (await req.json()) as {
     enabled?: boolean;
     mode?: "keyless" | "key";

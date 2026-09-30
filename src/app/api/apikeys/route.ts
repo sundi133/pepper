@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, requireRole, getDefaultOrgId } from "@/lib/auth-guard";
 import { createApiKey, listApiKeys } from "@/lib/api-key";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import { prisma } from "@/lib/prisma";
@@ -29,6 +29,11 @@ export async function POST(req: NextRequest) {
       const orgExists = await prisma.organization.findUnique({ where: { id: orgId } });
       if (!orgExists) {
         orgId = null;
+      } else {
+        // Keys act as (at most) DEVELOPER, so a read-only member must not be
+        // able to mint one. A user bootstrapping a new org below is its ADMIN.
+        const roleAuth = await requireRole(orgId, "DEVELOPER");
+        if ("error" in roleAuth) return roleAuth.error;
       }
     }
 

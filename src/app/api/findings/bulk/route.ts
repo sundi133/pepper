@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isRiskDecisionStatus, requireRiskDecisionRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { z } from "zod";
 import { generateSuppressionRule } from "@/lib/suppression-rules";
 
@@ -23,10 +24,16 @@ export async function PATCH(req: NextRequest) {
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+  const roleAuth = await requireRole(orgId, "DEVELOPER");
+  if ("error" in roleAuth) return roleAuth.error;
 
   try {
     const body = await req.json();
     const data = bulkUpdateSchema.parse(body);
+    if (isRiskDecisionStatus(data.status)) {
+      const denied = await requireRiskDecisionRole(orgId);
+      if (denied) return denied;
+    }
 
     const result = await prisma.finding.updateMany({
       where: {

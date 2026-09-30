@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { revokeApiKey } from "@/lib/api-key";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
@@ -13,6 +13,8 @@ export async function DELETE(
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+  const roleAuth = await requireRole(orgId, "DEVELOPER");
+  if ("error" in roleAuth) return roleAuth.error;
   const { id } = await params;
   const res = await revokeApiKey(orgId, id);
   if (res.count === 0) {

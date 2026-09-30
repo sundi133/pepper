@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { connectBitbucketRepositories } from "@/lib/connect-bitbucket-repositories";
 import {
   BitbucketCredentialsInvalidError,
@@ -31,6 +31,8 @@ export async function POST(req: NextRequest) {
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+  const roleAuth = await requireRole(orgId, "DEVELOPER");
+  if ("error" in roleAuth) return roleAuth.error;
 
   try {
     const status = await getBitbucketConnectionStatus(orgId);

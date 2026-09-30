@@ -2124,7 +2124,10 @@ function VerifyFpButton({
           statusNote: `AI verification (${Math.round((data?.confidence ?? 0) * 100)}% confidence): ${data?.reasoning ?? ""}`,
         }),
       });
-      if (!res.ok) throw new Error("Failed to update status");
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Failed to update status");
+      }
       toast.success("Marked as false positive");
       setOpen(false);
       onStatusChange?.();
@@ -2474,13 +2477,16 @@ export function FindingDetailPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (!res.ok) throw new Error("Failed to update status");
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Failed to update status");
+      }
       toast.success(
         `Status updated to ${newStatus.replace("_", " ").toLowerCase()}`,
       );
       onStatusChange?.(finding.id, newStatus);
-    } catch {
-      toast.error("Failed to update finding status");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to update finding status");
     }
   };
 
@@ -2586,13 +2592,16 @@ export function FindingDetailInline({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (!res.ok) throw new Error("Failed to update status");
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Failed to update status");
+      }
       toast.success(
         `Status updated to ${newStatus.replace("_", " ").toLowerCase()}`,
       );
       onStatusChange?.(finding.id, newStatus);
-    } catch {
-      toast.error("Failed to update finding status");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to update finding status");
     }
   };
 

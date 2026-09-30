@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth-guard";
+import { requireAuth, requireRole, getDefaultOrgId } from "@/lib/auth-guard";
 import { computeNextRun } from "@/lib/schedule-utils";
 import { z } from "zod";
 
@@ -22,14 +22,42 @@ const scheduleSchema = z.object({
   branch: z.string().optional(),
 });
 
+/**
+ * Resolve the caller's org and confirm the project belongs to it. Without
+ * this, any signed-in user could read or change another org's schedules by
+ * project id.
+ */
+async function authorizeProject(
+  projectId: string,
+  minRole?: "DEVELOPER",
+): Promise<{ error: NextResponse } | { ok: true }> {
+  const auth = await requireAuth();
+  if ("error" in auth) return { error: auth.error as NextResponse };
+  const orgId = getDefaultOrgId(auth.session);
+  if (!orgId) {
+    return { error: NextResponse.json({ error: "No organization" }, { status: 403 }) };
+  }
+  if (minRole) {
+    const roleAuth = await requireRole(orgId, minRole);
+    if ("error" in roleAuth) return { error: roleAuth.error as NextResponse };
+  }
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, organizationId: orgId },
+    select: { id: true },
+  });
+  if (!project) {
+    return { error: NextResponse.json({ error: "Project not found" }, { status: 404 }) };
+  }
+  return { ok: true };
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
-  const auth = await requireAuth();
-  if ("error" in auth) return auth.error;
-
   const { projectId } = await params;
+  const access = await authorizeProject(projectId);
+  if ("error" in access) return access.error;
 
   const schedule = await prisma.scanSchedule.findUnique({
     where: { projectId },
@@ -42,10 +70,9 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
-  const auth = await requireAuth();
-  if ("error" in auth) return auth.error;
-
   const { projectId } = await params;
+  const access = await authorizeProject(projectId, "DEVELOPER");
+  if ("error" in access) return access.error;
 
   try {
     const body = await req.json();
@@ -85,10 +112,9 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
-  const auth = await requireAuth();
-  if ("error" in auth) return auth.error;
-
   const { projectId } = await params;
+  const access = await authorizeProject(projectId, "DEVELOPER");
+  if ("error" in access) return access.error;
 
   await prisma.scanSchedule.deleteMany({ where: { projectId } });
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireRiskDecisionRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import {
   createLlmClient,
   analyzeWithLlm,
@@ -52,6 +53,8 @@ export async function POST(
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+  const roleAuth = await requireRole(orgId, "DEVELOPER");
+  if ("error" in roleAuth) return roleAuth.error;
 
   const { findingId } = await params;
 
@@ -61,6 +64,11 @@ export async function POST(
     autoApply = body?.autoApply === true;
   } catch {
     // No body or invalid JSON — that's fine, defaults apply
+  }
+  // Auto-applying marks the finding FALSE_POSITIVE — a risk decision.
+  if (autoApply) {
+    const denied = await requireRiskDecisionRole(orgId);
+    if (denied) return denied;
   }
 
   const finding = await prisma.finding.findFirst({

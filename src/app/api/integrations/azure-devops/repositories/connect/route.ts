@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { connectAzureDevOpsRepositories } from "@/lib/connect-azure-devops-repositories";
 import { AzureDevOpsCredentialsInvalidError } from "@/lib/azure-devops-connection";
 
@@ -28,6 +28,8 @@ export async function POST(req: NextRequest) {
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
+  const roleAuth = await requireRole(orgId, "DEVELOPER");
+  if ("error" in roleAuth) return roleAuth.error;
 
   try {
     const body = bodySchema.parse(await req.json());

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import {
   getGitLabConnectionStatus,
   saveOrgGitLabConnection,
@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
   if ("error" in auth) return auth.error;
   const orgId = getDefaultOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
+  const roleAuth = await requireRole(orgId, "SECURITY");
+  if ("error" in roleAuth) return roleAuth.error;
 
   const body = (await req.json()) as { accessToken?: string; hostUrl?: string };
   const accessToken = body.accessToken?.trim();
@@ -65,6 +67,8 @@ export async function DELETE(req: NextRequest) {
   if ("error" in auth) return auth.error;
   const orgId = getDefaultOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
+  const roleAuth = await requireRole(orgId, "SECURITY");
+  if ("error" in roleAuth) return roleAuth.error;
 
   await deleteOrgGitLabConnection(orgId);
 

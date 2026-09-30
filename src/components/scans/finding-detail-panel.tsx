@@ -2084,14 +2084,14 @@ type RaiseTicketResponse = {
   ok: boolean;
   error?: string;
   results?: {
-    slack?: { destinationCount: number; results: Array<{ ok: boolean; error?: string }> };
+    slack?: { destinationCount: number; results: Array<{ name?: string; ok: boolean; error?: string }> };
     jira?: {
       destinationCount: number;
-      results: Array<{ ok: boolean; key?: string; url?: string; error?: string }>;
+      results: Array<{ name?: string; ok: boolean; key?: string; url?: string; existing?: boolean; error?: string }>;
     };
     azureBoards?: {
       destinationCount: number;
-      results: Array<{ ok: boolean; workItemId?: string; url?: string; existing?: boolean; error?: string }>;
+      results: Array<{ name?: string; ok: boolean; workItemId?: string; url?: string; existing?: boolean; error?: string }>;
     };
   };
 };
@@ -2126,40 +2126,51 @@ function RaiseTicketButton({ finding }: { finding: Finding }) {
       const j = (await res.json()) as RaiseTicketResponse;
       if (!res.ok) throw new Error(j.error || "Failed to raise ticket");
 
+      // Name each destination: several boards can be configured.
+      const named = (name: string | undefined, text: string) => (name ? `${name}: ${text}` : text);
       const parts: string[] = [];
       j.results?.slack?.results
         .filter((r) => r.ok)
-        .forEach(() => parts.push("Slack sent"));
+        .forEach((r) => parts.push(named(r.name, "Slack sent")));
       j.results?.jira?.results
         .filter((r) => r.ok)
         .forEach((r) =>
-          parts.push(
-            r.url ? `Jira ${r.key} created` : `Jira created`,
-          ),
+          parts.push(named(r.name, r.existing ? `already tracked as ${r.key}` : r.url ? `Jira ${r.key} created` : "Jira created")),
         );
       j.results?.azureBoards?.results
         .filter((r) => r.ok)
         .forEach((r) =>
           parts.push(
-            r.existing
-              ? `Already tracked as work item ${r.workItemId}`
-              : `Work item ${r.workItemId} created`,
+            named(r.name, r.existing ? `already tracked as work item ${r.workItemId}` : `work item ${r.workItemId} created`),
           ),
         );
-      if (parts.length === 0) {
-        throw new Error("No integration delivered the finding");
-      }
-      toast.success(parts.join(" · "));
       const failed = [
+        ...(j.results?.slack?.results ?? []),
         ...(j.results?.jira?.results ?? []),
         ...(j.results?.azureBoards?.results ?? []),
       ].filter((r) => !r.ok && r.error);
-      if (failed.length > 0) toast.error(failed.map((r) => r.error).join(" · "));
-      j.results?.jira?.results
-        .filter((r) => r.ok && r.url)
+      if (parts.length === 0 && failed.length === 0) {
+        throw new Error("No integration delivered the finding");
+      }
+      if (parts.length > 0) toast.success(parts.join(" · "));
+      for (const r of failed) toast.error(named(r.name, r.error ?? "failed"));
+      const jiras = j.results?.jira?.results.filter((r) => r.ok && r.url) ?? [];
+      jiras
+        .filter((r) => !r.existing)
         .forEach((r) => {
           if (r.url) window.open(r.url, "_blank");
         });
+      if (jiras.length > 0) {
+        setTickets((prev) => {
+          const next = [...prev];
+          for (const r of jiras) {
+            if (!next.some((t) => t.url === r.url)) {
+              next.push({ system: "JIRA", externalId: r.key ?? "", url: r.url!, fixed: false });
+            }
+          }
+          return next;
+        });
+      }
       const boards = j.results?.azureBoards?.results.filter((r) => r.ok && r.url) ?? [];
       boards
         .filter((r) => !r.existing)

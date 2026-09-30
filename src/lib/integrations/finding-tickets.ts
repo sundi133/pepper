@@ -25,7 +25,8 @@ import {
   type BoardsFindingInput,
   type WorkItemRef,
 } from "./azure-boards";
-import type { AzureBoardsConfig } from "./types";
+import { createJiraIssueForFinding } from "./jira";
+import type { AzureBoardsConfig, JiraConfig } from "./types";
 
 /** Most work items one scan may file automatically. */
 const AUTO_CREATE_CAP = 25;
@@ -307,6 +308,77 @@ export async function syncAzureBoardsForScan(scanId: string, scanUrl?: string): 
       log.info({ filed, candidates: candidates.length }, "Azure Boards auto-create capped for this scan");
     }
   }
+}
+
+export const JIRA_SYSTEM = "JIRA";
+
+export interface JiraIntegration {
+  id: string;
+  name: string;
+  config: JiraConfig;
+}
+
+/** The Jira project's identity, so the same issue is filed there once. */
+export function jiraTarget(config: JiraConfig): string {
+  return `${config.baseUrl.trim().replace(/\/+$/, "").toLowerCase()}/${config.projectKey.trim().toUpperCase()}`;
+}
+
+/**
+ * File a Jira issue for a finding, or return the one already filed for the
+ * same issue (cross-scan fingerprint) in this Jira project.
+ */
+export async function raiseJiraIssue(params: {
+  integration: JiraIntegration;
+  repo: Pick<TicketRepo, "id" | "organizationId">;
+  finding: TicketFinding;
+  branch: string | null;
+  scanUrl?: string;
+}): Promise<{ key: string; url: string; existing: boolean }> {
+  const { integration, repo, finding, branch, scanUrl } = params;
+  const key = {
+    projectId: repo.id,
+    system: JIRA_SYSTEM,
+    target: jiraTarget(integration.config),
+    fingerprint: findingFingerprint(finding),
+  };
+  const existing = await prisma.findingTicket.findUnique({ where: { projectId_system_target_fingerprint: key } });
+  if (existing) {
+    if (existing.findingId !== finding.id) {
+      await prisma.findingTicket.update({ where: { id: existing.id }, data: { findingId: finding.id } });
+    }
+    return { key: existing.externalId, url: existing.url, existing: true };
+  }
+  const created = await createJiraIssueForFinding(integration.config, {
+    pepperFindingId: finding.id,
+    title: finding.title,
+    severity: finding.severity as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO",
+    description: finding.description,
+    filePath: finding.filePath,
+    line: finding.startLine,
+    ruleId: finding.ruleId,
+    cveId: finding.cveId,
+    cweId: finding.cweId,
+    scanId: finding.scanId,
+    scanUrl,
+  });
+  try {
+    await prisma.findingTicket.create({
+      data: {
+        ...key,
+        organizationId: repo.organizationId,
+        integrationId: integration.id,
+        scanner: finding.scanner,
+        branch,
+        findingId: finding.id,
+        externalId: created.key,
+        url: created.url,
+      },
+    });
+  } catch (e) {
+    if (!isUniqueViolation(e)) throw e;
+    logger.warn({ projectId: repo.id, issue: created.key }, "Duplicate Jira issue filed concurrently");
+  }
+  return { ...created, existing: false };
 }
 
 /** Work items already linked to this finding's issue, for the finding panel. */

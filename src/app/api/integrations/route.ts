@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import {
   IntegrationNotFoundError,
+  findSameTargetIntegration,
   listIntegrations,
   upsertIntegration,
   type IntegrationConfigData,
@@ -48,6 +49,16 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error }, { status: 400 });
   }
 
+  // Saving a board / Jira project that already has an integration updates it.
+  let updatedExisting = false;
+  if (!body.id) {
+    const existingId = await findSameTargetIntegration(orgId, body);
+    if (existingId) {
+      body.id = existingId;
+      updatedExisting = true;
+    }
+  }
+
   let row;
   try {
     row = await upsertIntegration(orgId, body);
@@ -73,5 +84,6 @@ export async function POST(req: NextRequest) {
     kind: row.kind,
     name: row.name,
     enabled: row.enabled,
+    updatedExisting,
   });
 }

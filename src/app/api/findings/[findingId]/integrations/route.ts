@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { decryptSecret } from "@/lib/token-encryption";
 import { notifySlackFinding } from "@/lib/integrations/slack";
-import { createJiraIssueForFinding } from "@/lib/integrations/jira";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import type { JiraConfig, SlackConfig } from "@/lib/integrations/types";
 import { logger } from "@/lib/logger";
@@ -13,6 +12,7 @@ import {
   listFindingTickets,
   loadBoardsIntegrations,
   raiseAzureBoardsWorkItem,
+  raiseJiraIssue,
 } from "@/lib/integrations/finding-tickets";
 
 const FINDING_SEVERITIES = new Set([
@@ -176,7 +176,7 @@ export async function POST(
   // ----- Slack -----
   if (channel === "all" || channel === "slack") {
     const slacks = await loadEnabled<SlackConfig>(orgId, "SLACK");
-    const slackResults: Array<{ id: string; ok: boolean; error?: string }> = [];
+    const slackResults: Array<{ id: string; name: string; ok: boolean; error?: string }> = [];
     for (const s of slacks) {
       try {
         await notifySlackFinding(s.config, {
@@ -190,10 +190,11 @@ export async function POST(
           cweId: finding.cweId,
           scanUrl,
         });
-        slackResults.push({ id: s.id, ok: true });
+        slackResults.push({ id: s.id, name: s.name, ok: true });
       } catch (e) {
         slackResults.push({
           id: s.id,
+          name: s.name,
           ok: false,
           error: e instanceof Error ? e.message : String(e),
         });
@@ -210,30 +211,34 @@ export async function POST(
     const jiras = await loadEnabled<JiraConfig>(orgId, "JIRA");
     const jiraResults: Array<{
       id: string;
+      name: string;
       ok: boolean;
       key?: string;
       url?: string;
+      existing?: boolean;
       error?: string;
     }> = [];
+    const repo = finding.scan.project;
+    const ticketFinding =
+      jiras.length > 0 && repo
+        ? await prisma.finding.findUniqueOrThrow({ where: { id: finding.id }, select: TICKET_FINDING_SELECT })
+        : null;
     for (const j of jiras) {
       try {
-        const created = await createJiraIssueForFinding(j.config, {
-          pepperFindingId: finding.id,
-          title: finding.title,
-          severity: finding.severity as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
-          description: finding.description,
-          filePath: finding.filePath,
-          line: finding.startLine,
-          ruleId: finding.ruleId,
-          cveId: finding.cveId,
-          cweId: finding.cweId,
-          scanId: finding.scanId,
+        if (!repo || !ticketFinding) throw new Error("Finding has no repository");
+        // One Jira issue per issue (fingerprint) and Jira project; raising again returns it.
+        const issue = await raiseJiraIssue({
+          integration: j,
+          repo: { id: repo.id, organizationId: orgId },
+          finding: ticketFinding,
+          branch: finding.scan.branch,
           scanUrl,
         });
-        jiraResults.push({ id: j.id, ok: true, key: created.key, url: created.url });
+        jiraResults.push({ id: j.id, name: j.name, ok: true, key: issue.key, url: issue.url, existing: issue.existing });
       } catch (e) {
         jiraResults.push({
           id: j.id,
+          name: j.name,
           ok: false,
           error: e instanceof Error ? e.message : String(e),
         });
@@ -250,6 +255,7 @@ export async function POST(
     const boards = await loadBoardsIntegrations(orgId);
     const boardResults: Array<{
       id: string;
+      name: string;
       ok: boolean;
       workItemId?: string;
       url?: string;
@@ -277,10 +283,11 @@ export async function POST(
             branch: finding.scan.branch,
             scanUrl,
           });
-          boardResults.push({ id: b.id, ok: true, workItemId: item.id, url: item.url, existing: item.existing });
+          boardResults.push({ id: b.id, name: b.name, ok: true, workItemId: item.id, url: item.url, existing: item.existing });
         } catch (e) {
           boardResults.push({
             id: b.id,
+            name: b.name,
             ok: false,
             error: e instanceof Error ? e.message : String(e),
           });

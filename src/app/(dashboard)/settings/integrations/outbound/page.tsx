@@ -147,7 +147,13 @@ export default function OutboundIntegrationsPage() {
       toast.error(j.error || "Save failed");
       return;
     }
-    toast.success(`${payload.kind === "AZURE_BOARDS" ? "Azure Boards" : payload.kind} integration saved`);
+    const saved = (await res.json().catch(() => ({}))) as { updatedExisting?: boolean };
+    const label = payload.kind === "AZURE_BOARDS" ? "Azure Boards" : payload.kind;
+    toast.success(
+      saved.updatedExisting
+        ? `${label} integration updated (an integration for this ${payload.kind === "JIRA" ? "Jira project" : "board"} already existed)`
+        : `${label} integration saved`,
+    );
     void reload();
   }
 

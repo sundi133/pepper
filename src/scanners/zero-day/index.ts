@@ -22,6 +22,7 @@ import {
   ZERO_DAY_LLM_FILES,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import { llmExcludedPath } from "@/lib/llm-exclusions";
 
 interface ZeroDayLlmFinding {
   title: string;
@@ -68,6 +69,7 @@ export const zeroDayScanner: ScannerPlugin = {
       const ext = path.extname(filePath).toLowerCase();
       if (BINARY_EXTENSIONS.has(ext) || !FILE_EXTENSIONS[ext]) continue;
       if (filePath.split(path.sep).some((p) => SKIP_DIRECTORIES.has(p))) continue;
+      if (llmExcludedPath(filePath)) continue;
 
       try {
         const content = fs.readFileSync(

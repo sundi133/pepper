@@ -28,6 +28,7 @@ import {
   type ImageRef,
 } from "./discover";
 import { parseDockerfile, lintDockerfile } from "./dockerfile-parser";
+import { llmExcludedPath } from "@/lib/llm-exclusions";
 
 const execFileP = promisify(execFile);
 
@@ -314,6 +315,7 @@ async function scanContainerConfig(
     ) {
       continue;
     }
+    if (llmExcludedPath(rel)) continue;
     try {
       configFiles.push({
         path: rel,

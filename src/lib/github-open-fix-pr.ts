@@ -14,6 +14,8 @@ import {
   analyzeWithLlm,
   parseLlmJsonResponse,
 } from "@/lib/llm-gateway";
+import { createRedactionSession } from "@/lib/llm-redaction";
+import { llmExcludedPath } from "@/lib/llm-exclusions";
 
 const MAX_FILE_CHARS = 200_000;
 
@@ -126,6 +128,13 @@ export async function openGithubSecurityFixPr(
   }
 
   const repoRelativePath = normalizeRepoFilePath(filePath);
+  if (llmExcludedPath(repoRelativePath)) {
+    return {
+      ok: false,
+      status: 400,
+      error: `${repoRelativePath} is excluded from AI analysis (LLM_EXCLUDE_PATHS or a key file), so it can't be fixed automatically.`,
+    };
+  }
   const fileReadFallback =
     `Could not read "${repoRelativePath}" on ${owner}/${repo} (branch "${resolvedBase}"). ` +
     "The path must match the repository layout on GitHub (same as in the scan). " +
@@ -194,6 +203,8 @@ export async function openGithubSecurityFixPr(
     model: llm.model,
   });
 
+  // Secrets in the file are masked for the model and put back in its fix.
+  const redaction = createRedactionSession();
   let raw: string;
   try {
     raw = await analyzeWithLlm(
@@ -201,7 +212,7 @@ export async function openGithubSecurityFixPr(
       llm.model,
       FILE_FIX_SYSTEM,
       JSON.stringify(userPayload),
-      { temperature: 0.1, maxTokens: 32768 },
+      { temperature: 0.1, maxTokens: 32768, redaction },
     );
   } catch (e) {
     return {
@@ -217,7 +228,7 @@ export async function openGithubSecurityFixPr(
   }>(raw, {});
 
   const fixedFile =
-    typeof parsed.fixedFile === "string" ? parsed.fixedFile : "";
+    typeof parsed.fixedFile === "string" ? redaction.restore(parsed.fixedFile) : "";
   const commitMessage =
     typeof parsed.commitMessage === "string" && parsed.commitMessage.trim()
       ? parsed.commitMessage.trim().slice(0, 72)

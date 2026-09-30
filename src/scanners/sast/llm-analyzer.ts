@@ -43,6 +43,7 @@ import {
 } from "@/lib/severity-calibration";
 import { SAST_EXCLUDED_EXTENSIONS } from "../shared/extension-filters";
 import { scanMissingHardeningHeaders } from "./hardening-headers";
+import { llmExcludedPath } from "@/lib/llm-exclusions";
 
 // Dependency manifest files excluded from SAST analysis (more aggressive filtering)
 const DEPENDENCY_MANIFEST_FILES = new Set([
@@ -445,6 +446,7 @@ export async function runLlmSastScanner(
 
     const parts = filePath.split(path.sep);
     if (parts.some((p) => SKIP_DIRECTORIES.has(p))) continue;
+    if (llmExcludedPath(filePath)) continue;
 
     // Exclude config, data, and lock files from SAST
     if (SAST_EXCLUDED_EXTENSIONS.has(ext)) continue;

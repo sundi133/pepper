@@ -57,6 +57,10 @@ LLM_PROVIDER=openai
 LLM_BASE_URL=https://llm.corp.local/v1
 LLM_API_KEY=<key>
 LLM_MODEL=<your-model-id>
+# Secrets in code are masked before any LLM request (default on). Files matching
+# these globs are never sent; key/keystore files (*.pem, *.key, id_rsa, …) never are.
+# LLM_MASK_SECRETS=true
+# LLM_EXCLUDE_PATHS=config/prod/**,*.tfvars
 
 # ── SAML SSO ──
 ENABLE_SAML_SSO=true

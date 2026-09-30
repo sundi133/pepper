@@ -28,6 +28,7 @@ import {
   Sparkles,
   Database,
   AlertTriangle,
+  EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
@@ -160,6 +161,12 @@ const DEFAULT_SETTINGS = {
 
 type LlmSettings = typeof DEFAULT_SETTINGS;
 
+interface DataProtection {
+  maskSecrets: boolean;
+  excludedPaths: string[];
+  builtinExcludes: string[];
+}
+
 function ProviderIcon({ provider }: { provider: string }) {
   const icons: Record<string, string> = {
     openai: "⚡",
@@ -183,6 +190,7 @@ export default function LlmSettingsPage() {
   >("idle");
   const [testError, setTestError] = useState("");
   const [settings, setSettings] = useState<LlmSettings>(DEFAULT_SETTINGS);
+  const [dataProtection, setDataProtection] = useState<DataProtection | null>(null);
   const [useCustomModel, setUseCustomModel] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [deletingKey, setDeletingKey] = useState(false);
@@ -192,7 +200,10 @@ export default function LlmSettingsPage() {
   useEffect(() => {
     fetch("/api/settings/llm")
       .then((res) => res.json())
-      .then((data) => setSettings((s) => ({ ...s, ...data })));
+      .then(({ dataProtection: dp, ...data }) => {
+        setSettings((s) => ({ ...s, ...data }));
+        setDataProtection(dp ?? null);
+      });
   }, []);
 
   async function saveSettings(nextSettings: LlmSettings, silent = false) {
@@ -658,6 +669,50 @@ export default function LlmSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {dataProtection && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <EyeOff className="h-5 w-5 text-primary" />
+              <div>
+                <CardTitle>Data Sent to AI</CardTitle>
+                <CardDescription>
+                  Set by your administrator in the server environment
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label>Secret masking</Label>
+                <p className="text-sm text-muted-foreground">
+                  Passwords, keys and tokens in code are replaced with placeholders before
+                  anything is sent to the AI model. Fix PRs still contain the original values.
+                </p>
+              </div>
+              <Badge variant={dataProtection.maskSecrets ? "default" : "destructive"}>
+                {dataProtection.maskSecrets ? "On" : "Off"}
+              </Badge>
+            </div>
+            <div className="space-y-2">
+              <Label>Files never sent to AI</Label>
+              <p className="text-sm text-muted-foreground">
+                Rule-based scanners still check these files. Set <code>LLM_EXCLUDE_PATHS</code> to add
+                more.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {[...dataProtection.builtinExcludes, ...dataProtection.excludedPaths].map((p) => (
+                  <Badge key={p} variant="secondary" className="font-mono text-xs">
+                    {p}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

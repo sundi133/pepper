@@ -21,6 +21,7 @@ import {
 } from "@/lib/llm-gateway";
 import { writeAuditLog } from "@/lib/audit-log";
 import { RemediationEventSink } from "./event-sink";
+import { createRedactionSession } from "@/lib/llm-redaction";
 import {
   applyEditsToContent,
   diffHasPlaceholder,
@@ -55,6 +56,7 @@ import {
   remediationBranchName,
   resolveFindingPath,
 } from "./workspace";
+import { llmExcludedPath } from "@/lib/llm-exclusions";
 import type {
   RemediationRunStatus,
   RemediationStep,
@@ -425,6 +427,9 @@ type ItemResult =
   | { outcome: "FAILED" | "SKIPPED"; reason: string };
 
 async function remediateItem(ctx: ItemContext): Promise<ItemResult> {
+  // One masking session for the whole item: a secret keeps the same token in
+  // every prompt, and the fix's edits get real values back before applying.
+  const redaction = createRedactionSession();
   const { item, ws, sink, client, model } = ctx;
   const itemId = item.id;
   const finding = item.finding;
@@ -471,6 +476,12 @@ async function remediateItem(ctx: ItemContext): Promise<ItemResult> {
       : primaryPath
         ? `${primaryPath} is binary or too large to edit safely.`
         : `${finding.filePath} was not found in the repository (it may have moved or been deleted).`;
+    await step("locate", "failed", reason);
+    await conclude("FAILED", reason);
+    return { outcome: "FAILED", reason };
+  }
+  if (llmExcludedPath(primaryPath)) {
+    const reason = `${primaryPath} is excluded from AI analysis (LLM_EXCLUDE_PATHS or a key file), so it can't be fixed automatically.`;
     await step("locate", "failed", reason);
     await conclude("FAILED", reason);
     return { outcome: "FAILED", reason };
@@ -524,7 +535,7 @@ async function remediateItem(ctx: ItemContext): Promise<ItemResult> {
           wrapFile(primaryPath, primary.text.slice(0, 40_000), primary.note),
           `Other repository paths:\n${candidates.join("\n")}`,
         ].join("\n\n"),
-        { temperature: 0, maxTokens: 1500 },
+        { temperature: 0, maxTokens: 1500, redaction },
       );
       const plan = parseLlmJsonResponse<{ files?: unknown; reasoning?: unknown }>(raw, {});
       const allowed = new Set(candidates);
@@ -544,6 +555,7 @@ async function remediateItem(ctx: ItemContext): Promise<ItemResult> {
     const out: Array<{ path: string; content: string }> = [];
     let total = 0;
     for (const p of contextPaths) {
+      if (llmExcludedPath(p)) continue;
       const c = ws.read(p);
       if (c === null) continue;
       const clipped = c.slice(0, CONTEXT_FILE_LIMIT);
@@ -587,7 +599,7 @@ async function remediateItem(ctx: ItemContext): Promise<ItemResult> {
           ].join("\n\n"),
         },
       ],
-      { temperature: 0.2, maxTokens: 2500 },
+      { temperature: 0.2, maxTokens: 2500, redaction },
     );
     for await (const chunk of stream) {
       analysis += chunk;
@@ -653,7 +665,7 @@ async function remediateItem(ctx: ItemContext): Promise<ItemResult> {
         ]
           .filter(Boolean)
           .join("\n\n"),
-        { temperature: 0.1, maxTokens: 16000 },
+        { temperature: 0.1, maxTokens: 16000, redaction },
       );
       parsed = parseLlmJsonResponse(raw, {});
     } catch (e) {
@@ -670,8 +682,9 @@ async function remediateItem(ctx: ItemContext): Promise<ItemResult> {
       if (typeof r?.path !== "string" || typeof r.replace !== "string") continue;
       edits.push({
         path: r.path,
-        search: typeof r.search === "string" ? r.search : "",
-        replace: r.replace,
+        // The model saw masked secrets; edits must match the real file.
+        search: typeof r.search === "string" ? redaction.restore(r.search) : "",
+        replace: redaction.restore(r.replace),
       });
     }
     const summary =
@@ -709,6 +722,10 @@ async function remediateItem(ctx: ItemContext): Promise<ItemResult> {
     const newContents = new Map<string, string>();
     if (applyErrors.length === 0) {
       for (const [p, pathEdits] of byPath) {
+        if (llmExcludedPath(p)) {
+          applyErrors.push(`${p} is excluded from AI analysis and can't be edited`);
+          continue;
+        }
         const before = ws.exists(p) ? ws.read(p) : null;
         if (ws.exists(p) && before === null) {
           applyErrors.push(`${p} is binary or too large to edit`);

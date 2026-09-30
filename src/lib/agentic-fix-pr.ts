@@ -19,6 +19,8 @@ import {
   parseLlmJsonResponse,
 } from "@/lib/llm-gateway";
 import type { OpenFixPrInput, OpenFixPrResult } from "@/lib/github-open-fix-pr";
+import { createRedactionSession } from "@/lib/llm-redaction";
+import { llmExcludedPath } from "@/lib/llm-exclusions";
 
 // ─── Constants ──────────────────────────────────────────────────────
 
@@ -177,6 +179,9 @@ export async function openAgenticSecurityFixPr(
     apiKey: llm.apiKey,
     model: llm.model,
   });
+  // One session for plan, fix and verify: secrets keep the same token, and
+  // real values are put back in the generated files before they're committed.
+  const redaction = createRedactionSession();
 
   // ── Phase 1: PLAN ───────────────────────────────────────────────
 
@@ -217,7 +222,7 @@ export async function openAgenticSecurityFixPr(
       const planRaw = await analyzeWithLlm(
         client, llm.model, PLAN_SYSTEM,
         JSON.stringify(planPayload),
-        { temperature: 0.1, maxTokens: 2048 },
+        { temperature: 0.1, maxTokens: 2048, redaction },
       );
 
       const planResult = parseLlmJsonResponse<{
@@ -253,6 +258,7 @@ export async function openAgenticSecurityFixPr(
 
   for (const fp of filesToExamine) {
     if (totalChars >= MAX_TOTAL_CONTEXT_CHARS) break;
+    if (llmExcludedPath(fp)) continue;
 
     const file = await getFileOnRef(token, owner, repo, fp, resolvedBase);
     if (!file.ok || file.content == null) {
@@ -274,6 +280,14 @@ export async function openAgenticSecurityFixPr(
   trace.push({ type: "gather", filesRead: gatheredMeta });
 
   const primaryPath = resolvedPrimaryPath;
+  if (llmExcludedPath(primaryPath)) {
+    return {
+      ok: false,
+      status: 400,
+      error: `${primaryPath} is excluded from AI analysis (LLM_EXCLUDE_PATHS or a key file), so it can't be fixed automatically.`,
+      agentTrace: trace,
+    };
+  }
   if (!gatheredFiles[primaryPath]) {
     return {
       ok: false,
@@ -316,7 +330,7 @@ export async function openAgenticSecurityFixPr(
     const fixRaw = await analyzeWithLlm(
       client, llm.model, systemPrompt,
       JSON.stringify(fixPayload),
-      { temperature: 0.1, maxTokens: 32768 },
+      { temperature: 0.1, maxTokens: 32768, redaction },
     );
 
     const parsed = parseLlmJsonResponse<{
@@ -328,9 +342,9 @@ export async function openAgenticSecurityFixPr(
     if (!Array.isArray(parsed.files) || parsed.files.length === 0) return null;
 
     // Validate each file has content
-    const validFiles = parsed.files.filter(
-      (f) => typeof f.path === "string" && typeof f.content === "string" && f.content.length > 0,
-    );
+    const validFiles = parsed.files
+      .filter((f) => typeof f.path === "string" && typeof f.content === "string" && f.content.length > 0)
+      .map((f) => ({ ...f, content: redaction.restore(f.content) }));
     if (validFiles.length === 0) return null;
 
     return {
@@ -394,7 +408,7 @@ export async function openAgenticSecurityFixPr(
     const verifyRaw = await analyzeWithLlm(
       client, llm.model, VERIFY_SYSTEM,
       JSON.stringify(verifyPayload),
-      { temperature: 0.1, maxTokens: 2048 },
+      { temperature: 0.1, maxTokens: 2048, redaction },
     );
 
     const verifyResult = parseLlmJsonResponse<{

@@ -15,6 +15,7 @@ import { buildDeepRepoContext } from "../shared/repo-context";
 import { buildRepoContextSummary } from "@/lib/llm-repo-context";
 import { validateSecretCandidate, getEntropyLabel } from "./entropy-validator";
 import { classifySecrets } from "./llm-classifier";
+import { createRedactionSession } from "@/lib/llm-redaction";
 import {
   PATTERN_DETECTORS,
   isLikelyPlaceholderSecret,
@@ -31,6 +32,7 @@ import {
   SECRETS_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import { llmExcludedPath } from "@/lib/llm-exclusions";
 
 interface SecretLlmFinding {
   title: string;
@@ -211,6 +213,7 @@ export const secretsLlmScanner: ScannerPlugin = {
       if (isSkippedPath(filePath)) continue;
 
       if (!isSecretScanCandidate(filePath, "llm")) continue;
+      if (llmExcludedPath(filePath)) continue;
 
       const fullPath = path.join(ctx.workDir, filePath);
       try {
@@ -312,13 +315,23 @@ async function analyzeSecretChunk(
 ): Promise<RawFinding[]> {
   const userContent = `${pathSummary}\n${deepContext}\n--- FILE CHUNK ---\n${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n\`\`\`\n${chunk.content}\n\`\`\``;
 
+  // Values are masked before the chunk goes to the model; the model reports
+  // the token, and the real value is put back here, locally, for validation
+  // and masking.
+  const redaction = createRedactionSession();
   try {
     const raw = await analyzeWithLlm(client, model, SECRETS_AI_PROMPT, userContent, {
       maxTokens: LLM_MAX_RESPONSE_TOKENS,
+      redaction,
     });
     const parsed = parseLlmJsonResponse<{ findings: SecretLlmFinding[] }>(raw, {
       findings: [],
     });
+    for (const f of parsed.findings || []) {
+      if (typeof f.exposedValue === "string") {
+        f.exposedValue = redaction.restore(f.exposedValue.replace(/^\[?\[?(SECRET_\d+)\]?\]?$/, "[[$1]]"));
+      }
+    }
 
     return (parsed.findings || [])
       .filter(

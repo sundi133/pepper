@@ -7,6 +7,7 @@ import {
   BINARY_EXTENSIONS,
   LLM_MAX_FILE_SIZE_BYTES,
 } from "@/lib/constants";
+import { llmExcludedPath } from "@/lib/llm-exclusions";
 
 export type FileRole =
   | "route"
@@ -168,6 +169,8 @@ export function buildDeepRepoContext(
 
   for (const filePath of scannable) {
     fileRoles.set(filePath, classifyFileRole(filePath));
+    // Excluded files keep their role (the path isn't sensitive) but not their content.
+    if (llmExcludedPath(filePath)) continue;
     try {
       const full = path.join(workDir, filePath);
       const stat = fs.statSync(full);

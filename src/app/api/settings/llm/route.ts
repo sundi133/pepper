@@ -4,6 +4,17 @@ import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { encryptSecret } from "@/lib/token-encryption";
 import { z } from "zod";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
+import { llmMaskingEnabled } from "@/lib/llm-redaction";
+import { BUILTIN_LLM_EXCLUDES, configuredLlmExcludes } from "@/lib/llm-exclusions";
+
+/** Instance-wide data protection (set by the administrator in the server environment). */
+function dataProtection() {
+  return {
+    maskSecrets: llmMaskingEnabled(),
+    excludedPaths: configuredLlmExcludes(),
+    builtinExcludes: BUILTIN_LLM_EXCLUDES,
+  };
+}
 
 export async function GET() {
   const auth = await requireAuth();
@@ -27,6 +38,7 @@ export async function GET() {
       enableLlmSecrets: true,
       osvApiUrl: "https://api.osv.dev",
       vulnDbMode: "online",
+      dataProtection: dataProtection(),
     });
   }
 
@@ -39,6 +51,7 @@ export async function GET() {
     enableLlmSecrets: settings.enableLlmSecrets,
     osvApiUrl: settings.osvApiUrl,
     vulnDbMode: settings.vulnDbMode,
+    dataProtection: dataProtection(),
   });
 }
 

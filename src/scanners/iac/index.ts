@@ -23,6 +23,7 @@ import {
   IAC_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import { llmExcludedPath } from "@/lib/llm-exclusions";
 
 export const IAC_STACK_PROMPT = `You are an expert IaC security auditor performing STACK-LEVEL analysis.
 Analyze ALL files in the stack together (Dockerfile+compose, Terraform module+vars, K8s+Helm, CI+deploy configs).
@@ -227,6 +228,7 @@ async function analyzeStack(
   const lineMaps = new Map<string, string[]>();
 
   for (const { filePath, iacType } of stack.files) {
+    if (llmExcludedPath(filePath)) continue;
     try {
       const fullPath = path.join(ctx.workDir, filePath);
       const content = fs.readFileSync(fullPath, "utf-8");

@@ -53,4 +53,16 @@ ENV NODE_ENV=production
 # Worker needs git for cloning repositories, subversion for SVN repos
 RUN apk add --no-cache subversion
 
+# Trivy powers container image CVE scanning. Without it on PATH the container
+# scanner can report no CVEs, which looks the same as a clean image — so it
+# ships in the worker. Copied from the official image so the version is pinned
+# (keep in sync with Dockerfile.worker).
+COPY --from=aquasec/trivy:0.72.0 /usr/local/bin/trivy /usr/local/bin/trivy
+
+# Trivy's vulnerability DB cache. Mount a volume here to keep it across
+# restarts; for air-gapped installs mount a pre-populated cache and set the
+# organization's vulnerability DB mode to "offline".
+ENV TRIVY_CACHE_DIR=/var/cache/trivy
+RUN mkdir -p /var/cache/trivy && trivy --version
+
 CMD ["npx", "tsx", "src/worker/index.ts"]

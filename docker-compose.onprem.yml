@@ -131,6 +131,9 @@ services:
       MINIO_USE_SSL: "false"
       MINIO_BUCKET: pepper-artifacts
       NODE_ENV: production
+    volumes:
+      # Trivy vulnerability DB cache (container scanning); kept across restarts.
+      - trivycache:/var/cache/trivy
     deploy:
       replicas: 1
 
@@ -138,3 +141,4 @@ volumes:
   pgdata:
   redisdata:
   miniodata:
+  trivycache:

@@ -103,7 +103,8 @@ export function boardsProjectFor(config: AzureBoardsConfig, repo: Pick<TicketRep
 export function boardsAuthResolver(orgId: string) {
   let conn: Promise<AzureDevOpsAuth | null> | undefined;
   return async (config: AzureBoardsConfig) => {
-    if (config.pat?.trim()) return boardsAuth(config, null);
+    // The connection is also where a blank Server URL is inferred from.
+    if (config.pat?.trim() && config.serverUrl?.trim()) return boardsAuth(config, null);
     conn ??= getOrgAzureDevOpsAuth(orgId);
     return boardsAuth(config, await conn);
   };

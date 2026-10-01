@@ -20,6 +20,7 @@ const raise = vi.fn();
 vi.mock("@/lib/integrations/bulk-tickets", () => ({
   BULK_TICKET_LIMIT: 3,
   TICKET_KIND_LABELS: { AZURE_BOARDS: "Azure Boards", JIRA: "Jira" },
+  ticketTargetDetail: () => "poc2 · Issue",
   loadTicketIntegrations: (...a: unknown[]) => load(...a),
   raiseTicketsForFindings: (...a: unknown[]) => raise(...a),
 }));
@@ -41,7 +42,9 @@ describe("scan tickets API", () => {
   it("lists ticket systems without their secrets", async () => {
     const res = await GET(new NextRequest("http://localhost/api/scans/s1/tickets"), params);
     const body = await res!.json();
-    expect(body.targets).toEqual([{ id: "b1", name: "Azure Boards (poc2)", kind: "AZURE_BOARDS", kindLabel: "Azure Boards" }]);
+    expect(body.targets).toEqual([
+      { id: "b1", name: "Azure Boards (poc2)", kind: "AZURE_BOARDS", kindLabel: "Azure Boards", detail: "poc2 · Issue" },
+    ]);
     expect(JSON.stringify(body)).not.toContain("secret");
   });
 

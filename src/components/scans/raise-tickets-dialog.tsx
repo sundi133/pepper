@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type Target = { id: string; name: string; kind: "AZURE_BOARDS" | "JIRA"; kindLabel: string };
+type Target = { id: string; name: string; kind: "AZURE_BOARDS" | "JIRA"; kindLabel: string; detail?: string };
 
 type Result = {
   integrationId: string;
@@ -171,8 +171,13 @@ export function RaiseTicketsDialog({
                       })
                     }
                   />
-                  <span>{t.name}</span>
-                  <span className="text-xs text-muted-foreground">{t.kindLabel}</span>
+                  <span className="min-w-0">
+                    <span className="block">{t.name}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t.kindLabel}
+                      {t.detail ? ` · ${t.detail}` : ""}
+                    </span>
+                  </span>
                 </label>
               ))}
               {tooMany && (

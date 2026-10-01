@@ -69,3 +69,12 @@ describe("raiseTicketsForFindings", () => {
     expect(raiseBoards).not.toHaveBeenCalled();
   });
 });
+
+describe("ticketTargetDetail", () => {
+  it("tells integrations of the same kind apart without secrets", async () => {
+    const { ticketTargetDetail } = await import("./bulk-tickets");
+    expect(ticketTargetDetail({ ...boards, config: { organization: "x", project: "poc2", workItemType: "Issue", pat: "secret" } })).toBe("poc2 · Issue");
+    expect(ticketTargetDetail({ ...boards, config: { organization: "x" } })).toBe("each repository's project · Bug, or Issue");
+    expect(ticketTargetDetail(jira)).toBe("SEC · Bug");
+  });
+});

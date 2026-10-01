@@ -7,6 +7,7 @@ import {
   BULK_TICKET_LIMIT,
   TICKET_KIND_LABELS,
   loadTicketIntegrations,
+  ticketTargetDetail,
   raiseTicketsForFindings,
 } from "@/lib/integrations/bulk-tickets";
 
@@ -38,7 +39,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ sca
   const integrations = await loadTicketIntegrations(orgId);
   return NextResponse.json({
     limit: BULK_TICKET_LIMIT,
-    targets: integrations.map((i) => ({ id: i.id, name: i.name, kind: i.kind, kindLabel: TICKET_KIND_LABELS[i.kind] })),
+    targets: integrations.map((i) => ({
+      id: i.id,
+      name: i.name,
+      kind: i.kind,
+      kindLabel: TICKET_KIND_LABELS[i.kind],
+      detail: ticketTargetDetail(i),
+    })),
   });
 }
 

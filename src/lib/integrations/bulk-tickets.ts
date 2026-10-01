@@ -33,6 +33,15 @@ export type TicketIntegration =
   | { id: string; name: string; kind: "AZURE_BOARDS"; config: AzureBoardsConfig }
   | { id: string; name: string; kind: "JIRA"; config: JiraConfig };
 
+/** What tells two integrations of the same kind apart (never secrets). */
+export function ticketTargetDetail(i: TicketIntegration): string {
+  if (i.kind === "AZURE_BOARDS") {
+    const c = i.config;
+    return [c.project?.trim() || "each repository's project", c.workItemType?.trim() || "Bug, or Issue"].join(" · ");
+  }
+  return [i.config.projectKey, i.config.issueType?.trim() || "Bug"].join(" · ");
+}
+
 /** The organization's enabled ticket systems (optionally only these ids). */
 export async function loadTicketIntegrations(orgId: string, ids?: string[]): Promise<TicketIntegration[]> {
   const rows = await prisma.integrationConfig.findMany({

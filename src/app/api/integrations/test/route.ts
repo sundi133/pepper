@@ -19,6 +19,14 @@ import {
   validateBoardsConfig,
 } from "@/lib/integrations/azure-boards";
 import { boardsAuthResolver } from "@/lib/integrations/finding-tickets";
+import { explainFetchError } from "@/lib/network-error";
+
+/** The address a test talks to, for explaining network failures. */
+function testTarget(body: IntegrationConfigData): string | undefined {
+  const c = body?.config as { serverUrl?: string; baseUrl?: string; webhookUrl?: string; url?: string } | undefined;
+  if (body?.kind === "AZURE_BOARDS") return c?.serverUrl?.trim() || "https://dev.azure.com";
+  return c?.baseUrl || c?.webhookUrl || c?.url || undefined;
+}
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
@@ -118,7 +126,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Test failed" },
+      { error: explainFetchError(e, testTarget(body)) || "Test failed" },
       { status: 500 },
     );
   }

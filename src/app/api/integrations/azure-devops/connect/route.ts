@@ -6,6 +6,7 @@ import {
   getAzureDevOpsConnectionStatus,
 } from "@/lib/azure-devops-connection";
 import { azureGet } from "@/lib/azure-devops-api";
+import { explainFetchError } from "@/lib/network-error";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 /** GET — current connection status for the calling user's default org. */
@@ -93,11 +94,20 @@ export async function POST(req: NextRequest) {
     ...(azureServerUrl ? { serverUrl: azureServerUrl } : {}),
   };
   type ConnData = { authenticatedUser?: { providerDisplayName?: string } };
-  let probe = await azureGet<ConnData>(probeAuth, "/_apis/connectionData");
-  // Some Azure DevOps Server versions reject api-version on connectionData with
-  // a 400 — retry without it before deciding the credentials are bad.
-  if (!probe.ok && probe.status === 400) {
-    probe = await azureGet<ConnData>(probeAuth, "/_apis/connectionData", "");
+  let probe;
+  try {
+    probe = await azureGet<ConnData>(probeAuth, "/_apis/connectionData");
+    // Some Azure DevOps Server versions reject api-version on connectionData with
+    // a 400 — retry without it before deciding the credentials are bad.
+    if (!probe.ok && probe.status === 400) {
+      probe = await azureGet<ConnData>(probeAuth, "/_apis/connectionData", "");
+    }
+  } catch (e) {
+    // No HTTP response at all: unreachable host, DNS, TLS trust…
+    return NextResponse.json(
+      { error: explainFetchError(e, azureServerUrl ?? "https://dev.azure.com") },
+      { status: 502 },
+    );
   }
 
   if (!probe.ok) {

@@ -46,12 +46,19 @@ describe("scanner framework", () => {
     ]);
   });
 
-  it("INCREMENTAL runs SAST, SCA, secrets, and zero-day (webhook PR scans)", () => {
+  it("INCREMENTAL runs SAST, SCA, secrets, zero-day, IaC, K8s and container (webhook PR scans)", () => {
     const names = getScanners("INCREMENTAL", llmOn).map((s) => s.name);
-    expect(names).toContain("SAST_LLM");
+    for (const n of ["SAST_PATTERN", "SAST_LLM", "SCA", "ZERO_DAY", "IAC_RULES", "IAC", "K8S", "CONTAINER"]) {
+      expect(names, n).toContain(n);
+    }
+  });
+
+  it("INCREMENTAL keeps the rule-based IaC and container checks when LLM analysis is off", () => {
+    const names = getScanners("INCREMENTAL", { enableLlmSast: false, enableLlmSecrets: false }).map((s) => s.name);
+    expect(names).toContain("IAC_RULES");
+    expect(names).toContain("CONTAINER");
     expect(names).toContain("SCA");
-    expect(names).toContain("ZERO_DAY");
-    expect(names).not.toContain("IAC");
+    for (const n of ["IAC", "K8S", "SAST_LLM", "ZERO_DAY"]) expect(names, n).not.toContain(n);
   });
 
   it("pattern scanners never emit findings", async () => {

@@ -13,6 +13,7 @@ import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { detectIacFileType } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import type { RawFinding, ScanContext, SeverityLevel } from "../types";
 
@@ -280,8 +281,23 @@ export function buildTrivyConfigArgs(opts: { policy: IacPolicy; scanners: string
   ];
 }
 
+const normRepoPath = (p: string) => p.replace(/\\/g, "/").replace(/^\.\//, "");
+
+/**
+ * trivy scans the whole checkout. On a PR (INCREMENTAL) scan only the changed
+ * files and the stacks they belong to are in scope, so findings elsewhere in
+ * the repository are dropped: a PR is not the place to report the backlog.
+ */
+export function limitToFilesInScope(findings: RawFinding[], ctx: Pick<ScanContext, "scanType" | "fileList">): RawFinding[] {
+  if (ctx.scanType !== "INCREMENTAL") return findings;
+  const inScope = new Set(ctx.fileList.map(normRepoPath));
+  return findings.filter((f) => !!f.filePath && inScope.has(normRepoPath(f.filePath)));
+}
+
 export async function runTrivyIacScanner(ctx: ScanContext): Promise<RawFinding[]> {
   if (!trivyIacEnabled()) return [];
+  // PR scan that touches no IaC / Kubernetes file: nothing to check.
+  if (ctx.scanType === "INCREMENTAL" && !ctx.fileList.some((f) => detectIacFileType(f))) return [];
   const bin = resolveTrivyBinary();
   if (!bin) return [];
   const policy = loadIacPolicy();
@@ -317,7 +333,7 @@ export async function runTrivyIacScanner(ctx: ScanContext): Promise<RawFinding[]
     });
     if (!fs.existsSync(outputFile)) return [];
     const output = JSON.parse(fs.readFileSync(outputFile, "utf8")) as TrivyConfigOutput;
-    const findings = mapTrivyConfigResults(output, policy);
+    const findings = limitToFilesInScope(mapTrivyConfigResults(output, policy), ctx);
     logger.info({ findings: findings.length, scanners }, "Trivy IaC scan complete");
     ctx.onProgress?.(`Trivy: ${findings.length} configuration findings`);
     return findings;

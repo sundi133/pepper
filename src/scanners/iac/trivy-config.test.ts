@@ -7,6 +7,7 @@ import { applyQualityGates } from "../shared/quality-gates";
 import { getScanners } from "../index";
 import {
   buildTrivyConfigArgs,
+  limitToFilesInScope,
   loadIacPolicy,
   mapTrivyConfigResults,
   misconfigScannersFor,
@@ -176,4 +177,28 @@ describe.skipIf(!hasTrivy)("trivy config end-to-end", () => {
     expect(got.some((g) => g.startsWith("K8S KSV-0017 charts/web"))).toBe(true);
     expect(got.some((g) => g.includes("KSV-0118"))).toBe(false);
   }, 180_000);
+});
+
+describe("PR (INCREMENTAL) scans", () => {
+  const finding = (filePath: string) => ({ filePath, title: "t" }) as never;
+  const all = [finding("infra/main.tf"), finding("./infra/variables.tf"), finding("legacy/old.tf"), finding("k8s/deploy.yaml")];
+
+  it("reports only on the changed files and their stack, not the repository's backlog", () => {
+    const kept = limitToFilesInScope(all, { scanType: "INCREMENTAL", fileList: ["infra/variables.tf", "infra/main.tf", "src/app.ts"] });
+    expect(kept.map((f) => f.filePath)).toEqual(["infra/main.tf", "./infra/variables.tf"]);
+  });
+
+  it("leaves full and IaC-only scans untouched", () => {
+    expect(limitToFilesInScope(all, { scanType: "FULL", fileList: [] })).toHaveLength(4);
+    expect(limitToFilesInScope(all, { scanType: "IAC_ONLY", fileList: ["infra/main.tf"] })).toHaveLength(4);
+  });
+
+  it("skips trivy entirely when the PR touches no IaC or Kubernetes file", async () => {
+    const findings = await runTrivyIacScanner({ scanType: "INCREMENTAL", fileList: ["src/app.ts", "README.md"], workDir: "/nonexistent" } as never);
+    expect(findings).toEqual([]);
+  });
+
+  it("checks both IaC and Kubernetes types on a PR scan", () => {
+    expect(misconfigScannersFor("INCREMENTAL", policy)).toEqual(policy.misconfigScanners);
+  });
 });

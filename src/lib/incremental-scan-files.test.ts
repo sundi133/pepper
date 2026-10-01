@@ -45,4 +45,16 @@ describe("incremental-scan-files", () => {
     expect(result.sastAndSecretsFiles).toEqual(all);
     expect(result.scaFiles).toEqual(["package.json"]);
   });
+
+  it("expands a changed IaC file to the rest of its stack, and nothing else", () => {
+    const all = ["src/index.ts", "infra/main.tf", "infra/variables.tf", "k8s/deployment.yaml", "Dockerfile"];
+    const result = applyIncrementalFileFilter(all, ["infra/variables.tf"]);
+    expect(result.sastAndSecretsFiles).toEqual(expect.arrayContaining(["infra/variables.tf", "infra/main.tf"]));
+    expect(result.sastAndSecretsFiles).toHaveLength(2);
+  });
+
+  it("a PR with no IaC changes pulls in no IaC files", () => {
+    const all = ["src/index.ts", "infra/main.tf", "k8s/deployment.yaml"];
+    expect(applyIncrementalFileFilter(all, ["src/index.ts"]).sastAndSecretsFiles).toEqual(["src/index.ts"]);
+  });
 });

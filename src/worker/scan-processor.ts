@@ -5,6 +5,7 @@ import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import { ScanJobData } from "@/lib/queue";
 import { downloadObject } from "@/lib/minio";
+import { clearPreviousAttempt } from "./scan-reset";
 import { runScanners } from "@/scanners";
 import { ScanContext, RawFinding } from "@/scanners/types";
 import { createScanLogger } from "@/lib/logger";
@@ -94,6 +95,12 @@ export async function processScanJob(job: Job<ScanJobData>) {
     abortController.abort();
     log.info("Scan was cancelled before worker started");
     return;
+  }
+
+  // The queue re-runs a job whose worker was restarted mid-scan; start clean.
+  const staleFindings = await clearPreviousAttempt(scanId);
+  if (staleFindings > 0) {
+    log.warn({ removed: staleFindings }, "Cleared findings saved by an interrupted earlier attempt of this scan");
   }
 
   async function assertScanActive() {

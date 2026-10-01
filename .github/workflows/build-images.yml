@@ -98,3 +98,62 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  # Version tags (v1.1.0) also publish the customer install bundle: the same
+  # files scripts/package-install-bundle.sh produces, pinned to this version's
+  # images, attached to a GitHub Release with checksums.
+  release:
+    name: Publish customer release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Version from tag
+        id: v
+        # v1.1.0 → 1.1.0, the image tag docker/metadata-action publishes.
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Check both images are published
+        env:
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          for img in pepper-api pepper-worker; do
+            docker manifest inspect "docker.io/sundi133/$img:$V" > /dev/null \
+              || { echo "::error::docker.io/sundi133/$img:$V is not on Docker Hub"; exit 1; }
+          done
+
+      - name: Package install bundle
+        run: scripts/package-install-bundle.sh "${{ steps.v.outputs.version }}"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          cd release
+          sha256sum "pepper-install-$V.tar.gz" "pepper-install-$V.zip" > "pepper-install-$V.sha256"
+          {
+            echo "## Install"
+            echo
+            echo "Send the customer \`pepper-install-$V.tar.gz\` (Linux) or \`.zip\` (same files). Unpack it on the VM and follow \`RUNBOOK.html\` (step by step, with the full \`.env\` reference) or \`INSTALL.md\`."
+            echo
+            echo "Images (linux/amd64, public on Docker Hub):"
+            echo "- \`docker.io/sundi133/pepper-api:$V\`"
+            echo "- \`docker.io/sundi133/pepper-worker:$V\`"
+            echo
+            echo "## Checksums (SHA-256)"
+            echo
+            echo '```'
+            cat "pepper-install-$V.sha256"
+            echo '```'
+          } > notes.md
+          gh release create "$GITHUB_REF_NAME" \
+            "pepper-install-$V.tar.gz#Install bundle (Linux, tar.gz)" \
+            "pepper-install-$V.zip#Install bundle (zip)" \
+            "pepper-install-$V.sha256#SHA-256 checksums" \
+            --title "Pepper $V" --notes-file notes.md --generate-notes --verify-tag

@@ -1,10 +1,18 @@
 # On-prem Pepper deployment (Docker) — with SAML, Azure DevOps Server & internal CA
 
 > **Installing for a customer?** Give them the install bundle instead of this
-> repository: `scripts/package-install-bundle.sh <image-tag>` produces
-> `release/pepper-install-<tag>.tar.gz` (compose file, `.env.example`,
-> `setup.sh`, `INSTALL.md`) that runs the published images with no source code.
-> Add `IMAGES=1` to also write an offline image archive for air-gapped sites.
+> repository. It holds the compose file, `.env.example`, `setup.sh`,
+> `INSTALL.md` and `RUNBOOK.html`, and runs the published images with no
+> source code.
+>
+> - **Release (normal):** push a version tag, e.g.
+>   `git tag v1.1.0 && git push origin v1.1.0`. CI builds the `1.1.0` images,
+>   then publishes a GitHub Release with `pepper-install-1.1.0.tar.gz` / `.zip`
+>   and SHA-256 checksums attached.
+> - **By hand:** `scripts/package-install-bundle.sh <image-tag>` (any published
+>   tag, e.g. `sha-7e34e25`) writes `release/pepper-install-<tag>.tar.gz`. Add
+>   `IMAGES=1` to also write an offline image archive for air-gapped sites.
+>
 > This document covers building from source.
 
 Single-VM, hardened deployment using `docker-compose.onprem.yml`. Only the app is

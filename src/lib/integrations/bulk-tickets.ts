@@ -7,6 +7,7 @@
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/token-encryption";
 import { logger } from "@/lib/logger";
+import { explainFetchError } from "@/lib/network-error";
 import type { AzureBoardsConfig, JiraConfig } from "./types";
 import {
   boardsAuthResolver,
@@ -32,6 +33,11 @@ const SAME_ERROR_STOP = 3;
 export type TicketIntegration =
   | { id: string; name: string; kind: "AZURE_BOARDS"; config: AzureBoardsConfig }
   | { id: string; name: string; kind: "JIRA"; config: JiraConfig };
+
+/** The server an integration talks to, for explaining network failures. */
+function ticketServer(i: TicketIntegration): string {
+  return i.kind === "AZURE_BOARDS" ? i.config.serverUrl?.trim() || "https://dev.azure.com" : i.config.baseUrl;
+}
 
 /** What tells two integrations of the same kind apart (never secrets). */
 export function ticketTargetDetail(i: TicketIntegration): string {
@@ -122,7 +128,7 @@ export async function raiseTicketsForFindings(params: {
         else result.created++;
         sameErrorRun = 0;
       } catch (e) {
-        const error = e instanceof Error ? e.message : String(e);
+        const error = explainFetchError(e, ticketServer(integration));
         result.failed.push({ findingId: finding.id, title: finding.title, error });
         sameErrorRun = error === lastError ? sameErrorRun + 1 : 1;
         lastError = error;

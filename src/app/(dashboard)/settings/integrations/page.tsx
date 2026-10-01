@@ -102,9 +102,10 @@ export default function IntegrationsPage() {
           ...(azureServerUrl ? { azureServerUrl } : {}),
         }),
       });
-      const data = (await res.json()) as { error?: string };
+      // A proxy or crash can return an empty / non-JSON body.
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        throw new Error(data.error || "Failed to connect Azure DevOps");
+        throw new Error(data.error || `Failed to connect Azure DevOps (HTTP ${res.status})`);
       }
       toast.success("Azure DevOps connected");
       setAzureForm({ azureOrganization: "", pat: "", azureServerUrl: "" });

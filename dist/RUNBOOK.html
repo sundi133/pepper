@@ -166,7 +166,7 @@
     <h3>Azure DevOps Server</h3>
     <ol class="qs">
       <li>Which version do you run (2019, 2020, 2022 or 2022.1)?</li>
-      <li>What is the exact server URL, including any virtual directory (for example <code>https://tfs.yourcompany.local/tfs</code>)? Which collections and projects should Pepper scan?</li>
+      <li>What is the exact server URL, with the fully qualified host name and any virtual directory (for example <code>https://tfs.yourcompany.local/tfs</code>)? Which collections and projects should Pepper scan?</li>
       <li>Does the server use a certificate from an internal CA? If so, please send the CA certificate (PEM).</li>
       <li>Can the Pepper VM reach the server over HTTPS? On which port? Is there a proxy in between?</li>
       <li>Are personal access tokens (PATs) allowed? Please create one for a service account with these scopes:
@@ -366,6 +366,7 @@ VARS</pre></div>
       <summary>Azure DevOps Server (on-prem)</summary>
       <div>
         <p>Set the REST API version that matches your server in <code>.env</code>, then connect it in <strong>Settings → Integrations → Azure DevOps</strong> with the server URL, collection and a PAT:</p>
+        <p class="note">Enter the server's <strong>fully qualified name</strong> (<code>https://tfs.yourcompany.local/tfs</code>) or its IP address, and list that name or its domain in <code>NO_PROXY</code>. A short name such as <code>http://tfs</code> works in a browser but doesn't resolve inside Pepper's containers.</p>
         <div class="cmd"><pre>AZURE_DEVOPS_API_VERSION="7.0"     # 6.0 for Server 2020, 7.0 for Server 2022</pre></div>
       </div>
     </details>

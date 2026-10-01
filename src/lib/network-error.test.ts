@@ -15,7 +15,11 @@ describe("explainFetchError", () => {
   });
 
   it("explains DNS, timeout and certificate failures", () => {
-    expect(explainFetchError(fetchFailed({ code: "ENOTFOUND" }), "http://ado-server")).toMatch(/Could not find ado-server.*DNS/);
+    expect(explainFetchError(fetchFailed({ code: "ENOTFOUND" }), "http://tfs.corp.local/tfs")).toMatch(/Could not find tfs\.corp\.local.*DNS/);
+    // Short names rely on a DNS search suffix, which the containers don't apply.
+    expect(explainFetchError(fetchFailed({ code: "EAI_AGAIN" }), "http://ado-server")).toMatch(
+      /Could not find ado-server: short host names aren't resolved.*fully qualified name, e\.g\. ado-server\.yourcompany\.local/,
+    );
     expect(explainFetchError(fetchFailed({ code: "UND_ERR_CONNECT_TIMEOUT" }), "https://tfs.corp")).toMatch(/Timed out connecting to tfs\.corp/);
     expect(explainFetchError(fetchFailed({ code: "SELF_SIGNED_CERT_IN_CHAIN" }), "https://tfs.corp")).toMatch(/certificate Pepper doesn't trust.*NODE_EXTRA_CA_CERTS/);
     expect(explainFetchError(fetchFailed(undefined), "https://tfs.corp")).toMatch(/Could not reach tfs\.corp/);

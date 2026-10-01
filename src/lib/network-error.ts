@@ -41,11 +41,14 @@ export function explainFetchError(err: unknown, target?: string): string {
 
   let host = target ?? "the server";
   let isLocalhost = false;
+  let isShortName = false;
   try {
     if (target) {
       const u = new URL(target);
       host = u.host;
       isLocalhost = ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname);
+      // "tfs", "ado-server": relies on a DNS search suffix.
+      isShortName = !isLocalhost && !u.hostname.includes(".") && !u.hostname.includes(":");
     }
   } catch {
     /* target wasn't a URL; use it as given */
@@ -57,7 +60,11 @@ export function explainFetchError(err: unknown, target?: string): string {
     : " Check the address, and that the Pepper server can reach it (firewall, NO_PROXY for internal hosts).";
 
   if (has("ECONNREFUSED")) return `Could not connect to ${host}: connection refused.${fromServer}`;
-  if (has("ENOTFOUND", "EAI_AGAIN")) return `Could not find ${host}: the name doesn't resolve from the Pepper server. Check the address and DNS.`;
+  if (has("ENOTFOUND", "EAI_AGAIN")) {
+    return isShortName
+      ? `Could not find ${host}: short host names aren't resolved inside Pepper's containers (no DNS search suffix). Use the fully qualified name, e.g. ${host}.yourcompany.local, or the IP address.`
+      : `Could not find ${host}: the name doesn't resolve from the Pepper server. Check the address and DNS.`;
+  }
   if (has("ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT")) return `Timed out connecting to ${host}.${fromServer}`;
   if (codes.some((c) => CERT_CODES.has(c))) {
     return `${host} presented a certificate Pepper doesn't trust. Add your internal CA (NODE_EXTRA_CA_CERTS; see the install guide's certificate section).`;

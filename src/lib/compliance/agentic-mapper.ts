@@ -297,8 +297,12 @@ async function verifyBatch(
   frameworkName: string,
 ): Promise<Map<string, ControlMapping[]>> {
   // Flatten proposals for the critique prompt.
+  // The model can return a finding id that isn't in this batch (invented, or
+  // from another batch); those can't be verified or stored, so drop them.
+  const batchIds = new Set(batch.map((f) => f.id));
   const proposals: Array<{ findingId: string; control: ControlMapping }> = [];
   for (const [findingId, controls] of mapped) {
+    if (!batchIds.has(findingId)) continue;
     for (const c of controls) proposals.push({ findingId, control: c });
   }
   if (proposals.length === 0) return mapped;

@@ -107,6 +107,27 @@ describe("mapFindingsAgentic", () => {
     expect(mockLlm).toHaveBeenCalledTimes(2);
   });
 
+  it("ignores mappings for a finding that isn't in the batch instead of losing the batch", async () => {
+    wire(
+      {
+        mappings: [
+          { findingId: "f1", controls: [{ controlId: "C-INJ", relevance: "direct", reasoning: "sqli", confidence: 0.9 }] },
+          // An id the model made up (or carried over from another batch).
+          { findingId: "ghost", controls: [{ controlId: "C-INJ", relevance: "direct", reasoning: "?", confidence: 0.9 }] },
+        ],
+      },
+      { verdicts: [{ index: 0, verdict: "uphold", confidence: 0.9 }] },
+    );
+    const results = await mapFindingsAgentic([finding({ id: "f1", cweId: "CWE-89", scanner: "SAST_LLM" })], fx, {
+      provider: "openai", baseUrl: "x", apiKey: "k", model: "m",
+    });
+    const f1 = results.find((r) => r.findingId === "f1")!;
+    // The verified AI mapping is kept (previously the whole batch fell back to priors).
+    expect(f1.controls.map((c) => c.controlId)).toEqual(["C-INJ"]);
+    expect(f1.controls[0].verified).toBe(true);
+    expect(results.some((r) => r.findingId === "ghost")).toBe(false);
+  });
+
   it("degrades gracefully when the LLM returns unparseable output", async () => {
     // Reason returns junk → no mappings parsed → verify has nothing to review.
     mockLlm.mockResolvedValue("not json at all");

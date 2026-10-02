@@ -14,11 +14,23 @@ export class RegisterUserError extends Error {
 }
 
 function defaultOrgSettings() {
-  const apiKey = process.env.LLM_API_KEY;
+  const provider = process.env.LLM_PROVIDER || "openrouter";
+  const apiKey =
+    process.env.LLM_API_KEY || process.env.OPENROUTER_API_KEY;
+  const baseUrl =
+    process.env.LLM_BASE_URL ||
+    (provider.toLowerCase() === "openrouter"
+      ? "https://openrouter.ai/api/v1"
+      : "https://api.openai.com/v1");
+  const model =
+    process.env.LLM_MODEL ||
+    (provider.toLowerCase() === "openrouter"
+      ? process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash"
+      : "gpt-4o-mini");
   return {
-    llmProvider: process.env.LLM_PROVIDER || "openrouter",
-    llmBaseUrl: process.env.LLM_BASE_URL || "https://openrouter.ai/api/v1",
-    llmModel: process.env.LLM_MODEL || "google/gemini-2.5-flash",
+    llmProvider: provider,
+    llmBaseUrl: baseUrl,
+    llmModel: model,
     ...(apiKey ? { llmApiKey: "enc:" + encryptSecret(apiKey) } : {}),
   };
 }

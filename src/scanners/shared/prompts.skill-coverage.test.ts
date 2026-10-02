@@ -3,8 +3,11 @@ import {
   SECRETS_AI_PROMPT,
   CONTAINER_CONFIG_PROMPT,
   K8S_MANIFEST_PROMPT,
+  MALICIOUS_VALIDATION_PROMPT,
 } from "./prompts";
 import { SYSTEM_PROMPT as SECRETS_CLASSIFIER_PROMPT } from "../secrets/llm-classifier";
+import { ZERO_DAY_SYSTEM_PROMPT } from "../zero-day/prompts";
+import { IAC_STACK_PROMPT } from "../iac";
 
 /**
  * Coverage guards: each scanner prompt must explicitly name the high-signal
@@ -131,5 +134,118 @@ describe("secrets classifier prompt detection coverage", () => {
 
   it("does not discount base64/encoded-looking real secrets", () => {
     expect(SECRETS_CLASSIFIER_PROMPT).toMatch(/base64/i);
+  });
+
+  it("names committed credential files and modern provider formats", () => {
+    expect(SECRETS_CLASSIFIER_PROMPT).toMatch(/\.git-credentials|kubeconfig|terraform\.tfstate/i);
+    expect(SECRETS_CLASSIFIER_PROMPT).toMatch(/github_pat_|Azure Storage|SAS token/i);
+  });
+});
+
+/**
+ * Guards drawn from the detecting-malicious-npm-packages / supply-chain
+ * simulation skills: install-script malware has concrete behavioural markers
+ * that must be named so the validator emits them rather than dismissing a
+ * script as a "normal build step".
+ */
+describe("malicious-package validation prompt detection coverage", () => {
+  it("covers credential/secret exfiltration from install scripts", () => {
+    expect(MALICIOUS_VALIDATION_PROMPT).toMatch(/exfiltrat/i);
+    expect(MALICIOUS_VALIDATION_PROMPT).toMatch(/\.npmrc|process\.env/i);
+  });
+
+  it("covers remote code execution and obfuscation markers", () => {
+    expect(MALICIOUS_VALIDATION_PROMPT).toMatch(/curl\/wget\s+piped\s+to/i);
+    expect(MALICIOUS_VALIDATION_PROMPT).toMatch(/base64|eval|Buffer\.from/i);
+  });
+
+  it("covers reverse shells, cryptomining and worming", () => {
+    expect(MALICIOUS_VALIDATION_PROMPT).toMatch(/reverse shell|nc\/socat/i);
+    expect(MALICIOUS_VALIDATION_PROMPT).toMatch(/xmrig|mining pool|stratum/i);
+    expect(MALICIOUS_VALIDATION_PROMPT).toMatch(/worming|self-propagat/i);
+  });
+
+  it("covers dependency confusion", () => {
+    expect(MALICIOUS_VALIDATION_PROMPT).toMatch(/dependency confusion/i);
+  });
+});
+
+/**
+ * Guards drawn from the container-hardening / container-escape skills: beyond
+ * the classic privileged/root checks, these are the concrete build-time
+ * primitives that let a container image become an attack vector.
+ */
+describe("container prompt additional hardening coverage", () => {
+  it("covers remote ADD and curl-pipe RUN execution", () => {
+    expect(CONTAINER_CONFIG_PROMPT).toMatch(/Remote\s+ADD|curl-pipe\s+RUN/i);
+    expect(CONTAINER_CONFIG_PROMPT).toMatch(/checksum\/signature|chmod\s+\+x/i);
+  });
+
+  it("covers no-new-privileges and untrusted base images", () => {
+    expect(CONTAINER_CONFIG_PROMPT).toMatch(/no-new-privileges/i);
+    expect(CONTAINER_CONFIG_PROMPT).toMatch(/Untrusted\s+base\s+image|verified\s+publisher/i);
+  });
+
+  it("covers credentials copied in and ONBUILD triggers", () => {
+    expect(CONTAINER_CONFIG_PROMPT).toMatch(/\.git-credentials|id_rsa/i);
+    expect(CONTAINER_CONFIG_PROMPT).toMatch(/ONBUILD/i);
+  });
+});
+
+/**
+ * Guards drawn from the pod-security / network-policy skills: exposure and
+ * schema-level misconfigurations that the pod-template-only checks miss.
+ */
+describe("k8s prompt additional hardening coverage", () => {
+  it("covers port and service exposure", () => {
+    expect(K8S_MANIFEST_PROMPT).toMatch(/hostPort|NodePort/i);
+    expect(K8S_MANIFEST_PROMPT).toMatch(/externalIPs/i);
+  });
+
+  it("covers unsafe sysctls and deprecated API versions", () => {
+    expect(K8S_MANIFEST_PROMPT).toMatch(/sysctls/i);
+    expect(K8S_MANIFEST_PROMPT).toMatch(/extensions\/v1beta1|policy\/v1beta1/i);
+  });
+
+  it("covers init/ephemeral container security gaps and default namespace", () => {
+    expect(K8S_MANIFEST_PROMPT).toMatch(/initContainers|ephemeralContainers/i);
+    expect(K8S_MANIFEST_PROMPT).toMatch(/default\s+namespace|default\s+service\s+account/i);
+  });
+});
+
+/**
+ * Guards drawn from the Terraform/cloud-CIS skills: provider-specific
+ * misconfigurations that must be named to be detected.
+ */
+describe("IaC prompt cloud hardening coverage", () => {
+  it("covers IMDSv1 and S3 block-public-access gaps", () => {
+    expect(IAC_STACK_PROMPT).toMatch(/IMDSv1|http_tokens/i);
+    expect(IAC_STACK_PROMPT).toMatch(/Block\s+Public\s+Access/i);
+  });
+
+  it("covers CloudTrail and public database exposure", () => {
+    expect(IAC_STACK_PROMPT).toMatch(/CloudTrail/i);
+    expect(IAC_STACK_PROMPT).toMatch(/publicly_accessible/i);
+  });
+
+  it("covers EKS/GKE/Azure control-plane and NSG exposure", () => {
+    expect(IAC_STACK_PROMPT).toMatch(/enable_legacy_abac|public_access_cidrs/i);
+    expect(IAC_STACK_PROMPT).toMatch(/NSG\s+rule|any\/any/i);
+  });
+});
+
+/**
+ * Guards drawn from the web-app/access-control testing skills: authentication
+ * lifecycle flaws that per-file SAST and pattern rules commonly miss.
+ */
+describe("zero-day prompt auth-lifecycle coverage", () => {
+  it("covers account enumeration and forced browsing", () => {
+    expect(ZERO_DAY_SYSTEM_PROMPT).toMatch(/enumeration/i);
+    expect(ZERO_DAY_SYSTEM_PROMPT).toMatch(/Forced browsing|function-level authorization/i);
+  });
+
+  it("covers rounding and gift-card/refund abuse", () => {
+    expect(ZERO_DAY_SYSTEM_PROMPT).toMatch(/rounding arbitrage/i);
+    expect(ZERO_DAY_SYSTEM_PROMPT).toMatch(/Gift card|refund abuse/i);
   });
 });

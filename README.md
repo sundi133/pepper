@@ -339,11 +339,6 @@ Pepper ships with end-to-end pipeline security primitives:
   Azure Boards (one work item per issue on Azure DevOps Services or Server,
   commented / moved when later scans no longer detect it), SIEM (CEF / LEEF /
   JSON over HTTPS or syslog), and code signing (cosign keyless via Fulcio + Rekor, or RSA fallback).
-- **DAST** — integrates with [dapper](https://github.com/sundi133/dapper)
-  via HTTP API, local Dapper CLI, or an automatic local Dapper workspace
-  orchestration flow. Configure once under Settings → DAST, optionally paste a
-  Dapper YAML config there, set `DAPPER_WORKSPACE_DIR=./dapper` for local runs,
-  and set a `dastTargetUrl` per project.
 - **CI/CD templates** — download ready-to-use GitHub Actions, GitLab CI and
   Jenkinsfile templates from `/api/cicd-templates/<platform>`.
 - **API keys** — manage CI/IDE/precommit credentials under Settings → API Keys.

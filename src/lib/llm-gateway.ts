@@ -38,10 +38,23 @@ function decryptLlmApiKey(stored: string | null | undefined): string | undefined
  * If no API key in DB, use .env only.
  */
 export function getLlmConfig(orgSettings?: Record<string, unknown> | null): { provider: string; baseUrl: string; apiKey: string; model: string } {
-  const envProvider = process.env.LLM_PROVIDER || "openai";
-  const envBaseUrl = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
-  const envApiKey = process.env.LLM_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim() || "";
-  const envModel = process.env.LLM_MODEL || "gpt-4o-mini";
+  const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
+  // Provider inference: an explicit LLM_PROVIDER always wins; otherwise the
+  // presence of an OpenRouter key implies OpenRouter, and OpenAI is the default.
+  const envProvider =
+    process.env.LLM_PROVIDER || (openrouterKey ? "openrouter" : "openai");
+  const isOpenRouter = envProvider.toLowerCase() === "openrouter";
+  const envBaseUrl =
+    process.env.LLM_BASE_URL ||
+    (isOpenRouter ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1");
+  const envApiKey =
+    process.env.LLM_API_KEY?.trim() ||
+    process.env.OPENAI_API_KEY?.trim() ||
+    openrouterKey ||
+    "";
+  const envModel =
+    process.env.LLM_MODEL ||
+    (isOpenRouter ? process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash" : "gpt-4o-mini");
 
   const str = (k: string) => {
     const v = orgSettings?.[k];
@@ -100,7 +113,11 @@ function createOpenAIClient(config: LlmConfig): OpenAI {
   // OpenRouter requires specific headers and base URL
   if (provider === "openrouter") {
     return new OpenAI({
-      apiKey: config.apiKey || "",
+      apiKey:
+        config.apiKey ||
+        process.env.OPENROUTER_API_KEY?.trim() ||
+        process.env.LLM_API_KEY?.trim() ||
+        "",
       baseURL: config.baseUrl || "https://openrouter.ai/api/v1",
       defaultHeaders: {
         "HTTP-Referer": process.env.OPENROUTER_REFERER || "https://pepper.dev",
@@ -409,10 +426,11 @@ export async function analyzeWithLlm(
   // OpenRouter path — many models don't support response_format, so we
   // enforce JSON via the prompt and parse the response manually.
   if (llmClient.type === "openrouter") {
+    const useModel = model || llmClient.model;
     try {
       const jsonSystemPrompt = `${systemPrompt}\n\nIMPORTANT: You MUST respond with valid JSON only. No markdown, no explanation, no code fences — just raw JSON.`;
       const response = await llmClient.client.chat.completions.create({
-        model: model || llmClient.model,
+        model: useModel,
         messages: [
           { role: "system", content: jsonSystemPrompt },
           { role: "user", content: userContent },
@@ -421,7 +439,15 @@ export async function analyzeWithLlm(
         max_tokens: options?.maxTokens ?? 8192,
       });
       return response.choices[0]?.message?.content || "{}";
-    } catch {
+    } catch (err) {
+      // Degrade to "{}" like the other providers, but log: a bad key, base URL,
+      // model slug (e.g. a missing vendor prefix), or credit balance must be
+      // visible in the worker logs instead of silently producing 0 findings.
+      const status = (err as { status?: number })?.status;
+      logger.warn(
+        { model: useModel, status, err: err instanceof Error ? err.message : err },
+        "OpenRouter API call failed",
+      );
       return "{}";
     }
   }

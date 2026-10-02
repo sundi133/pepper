@@ -32,7 +32,6 @@
             <li><a href="#sbom">SBOM (CycloneDX + SPDX)</a></li>
             <li><a href="#sast">SAST</a></li>
             <li><a href="#sca">SCA</a></li>
-            <li><a href="#dast">DAST (dapper)</a></li>
             <li><a href="#container">Container scanning</a></li>
             <li><a href="#code-signing">Code signing</a></li>
             <li><a href="#precommit">Pre-commit hook</a></li>
@@ -75,14 +74,13 @@
           <tr><td>2</td><td>Software Composition Analysis (SCA)</td><td>✅</td><td><a href="#sca">SCA</a></td></tr>
           <tr><td>3</td><td>SBOM generation (CycloneDX &amp; SPDX)</td><td>✅</td><td><a href="#sbom">SBOM</a></td></tr>
           <tr><td>4</td><td>Static Application Security Testing (SAST)</td><td>✅</td><td><a href="#sast">SAST</a></td></tr>
-          <tr><td>5</td><td>Dynamic Application Security Testing (DAST)</td><td>✅</td><td><a href="#dast">DAST</a></td></tr>
-          <tr><td>6</td><td>VCS pre-commit / pre-merge + secrets</td><td>✅</td><td><a href="#precommit">Pre-commit</a></td></tr>
-          <tr><td>7</td><td>Code signing (cosign / RSA)</td><td>✅</td><td><a href="#code-signing">Signing</a></td></tr>
-          <tr><td>8</td><td>Container &amp; artifact scanning</td><td>✅</td><td><a href="#container">Containers</a></td></tr>
-          <tr><td>9</td><td>AI prioritisation &amp; remediation</td><td>✅</td><td><a href="#ai">AI</a></td></tr>
-          <tr><td>10</td><td>Ticketing / SIEM / IDE integrations</td><td>✅</td><td><a href="#integrations">Integrations</a></td></tr>
-          <tr><td>11</td><td>Compliance mapping &amp; dashboards</td><td>✅</td><td><a href="#compliance">Compliance</a></td></tr>
-          <tr><td>12</td><td>Audit log &amp; trend analysis</td><td>✅</td><td><a href="#audit">Audit</a> / <a href="#trends">Trends</a></td></tr>
+          <tr><td>5</td><td>VCS pre-commit / pre-merge + secrets</td><td>✅</td><td><a href="#precommit">Pre-commit</a></td></tr>
+          <tr><td>6</td><td>Code signing (cosign / RSA)</td><td>✅</td><td><a href="#code-signing">Signing</a></td></tr>
+          <tr><td>7</td><td>Container &amp; artifact scanning</td><td>✅</td><td><a href="#container">Containers</a></td></tr>
+          <tr><td>8</td><td>AI prioritisation &amp; remediation</td><td>✅</td><td><a href="#ai">AI</a></td></tr>
+          <tr><td>9</td><td>Ticketing / SIEM / IDE integrations</td><td>✅</td><td><a href="#integrations">Integrations</a></td></tr>
+          <tr><td>10</td><td>Compliance mapping &amp; dashboards</td><td>✅</td><td><a href="#compliance">Compliance</a></td></tr>
+          <tr><td>11</td><td>Audit log &amp; trend analysis</td><td>✅</td><td><a href="#audit">Audit</a> / <a href="#trends">Trends</a></td></tr>
         </tbody>
       </table>
 
@@ -220,50 +218,7 @@
           cannot do.</li>
       </ul>
 
-      <h2 id="dast">5 · Dynamic Application Security Testing (DAST)</h2>
-      <p>
-        Pepper delegates DAST to
-        <a href="https://github.com/sundi133/dapper">dapper</a>, an AI-driven pentester
-        that exercises a running application. The DAST scanner lives at
-        <code>src/scanners/dast/</code> and can talk to dapper three ways:
-      </p>
-      <ol>
-        <li>
-          <strong>HTTP mode</strong> — recommended. Set <code>dastEndpoint</code> under
-          <em>Settings → DAST</em>. Pepper <code>POST</code>s the target URL to dapper,
-          polls <code>GET /scans/&lt;id&gt;</code> until <code>COMPLETED</code>, then
-          ingests the findings.
-        </li>
-        <li>
-          <strong>Local workspace orchestration</strong> — when <code>dastEndpoint</code>
-          is unset, Pepper can bootstrap a sibling <code>../dapper</code> checkout (or a
-          path from <code>DAPPER_WORKSPACE_DIR</code>), stage the scan workspace into
-          <code>dapper/repos/&lt;repo&gt;</code>, run <code>dapper start</code>, export
-          deliverables with <code>scripts/export-findings-csv.js</code>, and ingest the
-          generated reports automatically.
-        </li>
-        <li>
-          <strong>CLI fallback</strong> — when <code>dastEndpoint</code> is unset but the
-          <code>dapper</code> binary is on the worker, Pepper invokes
-          <code>dapper start URL=… OUTPUT=json</code> and parses the local JSON report.
-        </li>
-      </ol>
-      <p><strong>Configuration:</strong></p>
-      <ul>
-        <li><em>Settings → DAST</em> — enable, set the dapper endpoint and API key.</li>
-        <li>Optional local orchestration YAML — paste a Dapper config into
-          <em>Settings → DAST</em> and Pepper will write it into the Dapper workspace
-          when no HTTP endpoint is configured.</li>
-        <li>Per project — <code>dastTargetUrl</code> (set under project settings or via
-          <code>PATCH /api/projects/&lt;id&gt;</code>).</li>
-        <li>Scan types — <code>DAST_ONLY</code> runs dapper alone; <code>FULL</code> runs
-          it alongside SAST/SCA/secrets when enabled.</li>
-        <li>Optional local orchestration env — <code>DAPPER_WORKSPACE_DIR</code>,
-          <code>DAPPER_REPO_URL</code>, <code>DAPPER_CONFIG_PATH</code>,
-          <code>DAPPER_EXPORT_MODEL</code>, <code>DAPPER_EXPORT_MAX_TURNS</code>.</li>
-      </ul>
-
-      <h2 id="container">6 · Container &amp; artifact scanning</h2>
+      <h2 id="container">5 · Container &amp; artifact scanning</h2>
       <p>
         The <code>CONTAINER</code> scanner discovers image references in source — both
         <code>FROM</code> directives in Dockerfiles and <code>image:</code> entries in
@@ -293,7 +248,7 @@
         next scan will pick it up automatically.
       </p>
 
-      <h2 id="code-signing">7 · Code signing</h2>
+      <h2 id="code-signing">6 · Code signing</h2>
       <p>
         Pepper signs every SBOM it produces, so downstream consumers can prove the
         artifact came from your Pepper instance. Two modes are supported:
@@ -319,7 +274,7 @@
         signed file.
       </p>
 
-      <h2 id="precommit">8 · Pre-commit hook + secret detection</h2>
+      <h2 id="precommit">7 · Pre-commit hook + secret detection</h2>
       <p>
         Pepper blocks commits that introduce HIGH/CRITICAL secrets or SAST issues by
         installing a git pre-commit hook that calls
@@ -356,7 +311,7 @@
         gate decides whether the merge can proceed.
       </p>
 
-      <h2 id="integrations">9 · Integrations (Jira, Azure Boards, Slack, SIEM, IDE)</h2>
+      <h2 id="integrations">8 · Integrations (Jira, Azure Boards, Slack, SIEM, IDE)</h2>
       <p>
         Outbound integrations are stored encrypted in the
         <code>IntegrationConfig</code> table and dispatched at scan-completion time. All
@@ -423,7 +378,7 @@
         <code>POST /api/integrations/test</code>.
       </p>
 
-      <h2 id="ai">10 · AI features</h2>
+      <h2 id="ai">9 · AI features</h2>
       <p>
         Pepper uses LLMs in five distinct places, all configured from
         <em>Settings → LLM Config</em>:
@@ -462,7 +417,7 @@
         <code>llmModel</code> in <em>Settings → LLM Config</em>.
       </p>
 
-      <h2 id="compliance">11 · Compliance mapping</h2>
+      <h2 id="compliance">10 · Compliance mapping</h2>
       <p>
         Findings are mapped to OWASP Top 10, OWASP ASVS, OWASP API Top 10, CWE Top 25,
         PCI DSS, NIST SP 800-53, NIST SSDF, ISO 27001, SOC 2, HIPAA, GDPR and CIS
@@ -489,7 +444,7 @@
           framework as a JSON or text PDF file in that folder.</li>
       </ul>
 
-      <h2 id="audit">12 · Audit log</h2>
+      <h2 id="audit">11 · Audit log</h2>
       <p>
         Every security-relevant action is appended to the <code>AuditLog</code> table
         (the application never edits or deletes entries, except through the retention

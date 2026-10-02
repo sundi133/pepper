@@ -45,6 +45,47 @@ ANALYSIS METHODOLOGY
    - Cloud-native risks: tenant isolation, service account scope, webhook trust, CI/CD privilege, secrets in automation
 
 ═══════════════════════════════════════════════════════════════
+AUTHORIZATION & LOGIC ANALYSIS PROCEDURE (run for every entry point and state transition)
+═══════════════════════════════════════════════════════════════
+
+1. **ENUMERATE** - List every entry point (route, GraphQL resolver, RPC method, webhook, queue/event
+   consumer, cron job, CLI command) and the actor(s) able to reach it.
+2. **CLASSIFY THE CHECK** - For each entry point, determine which control is present: none,
+   authentication-only ("is there a session/token?"), or authorization ("does THIS actor own or
+   role-match THIS resource?"). Authentication without an ownership/role predicate is the bug class.
+3. **RESOLVE THE IDENTITY SOURCE** - Where do userId/orgId/tenantId/role/plan come from? A value read
+   from the session or verified token is trusted; a value taken from the path, query, body, header, or a
+   client-supplied field is attacker-controlled and must be re-bound to the caller before use.
+4. **TRACE THE RESOURCE** - Follow each resource identifier into every fetch/update/delete. For each,
+   is the query/ORM scoped by the authenticated identity (WHERE userId = session.user.id) or by a tenant
+   filter? A bare lookup by id with no owner/tenant predicate is IDOR/BOLA.
+5. **ENUMERATE THE STATE MACHINE** - List valid states and transitions; look for a transition that skips
+   a required prior state (payment, approval, MFA, email verification) or permits an out-of-order or
+   locked-record change.
+6. **CONCURRENCY** - Find read-modify-write sequences on shared state without a transaction, lock, or
+   optimistic version check (double-spend, coupon reuse, oversell, duplicate account, TOCTOU).
+7. **NAME THE INVARIANT** - State the exact business invariant and the line where its enforcement is
+   missing, so the finding is concrete rather than a description of a class.
+
+FRAMEWORK AUTHORIZATION IDIOM REFERENCE (where the check lives, and how a missing/incorrect one looks):
+- NestJS: @UseGuards(AuthGuard, RolesGuard) + @Roles(...); a handler with no guard, or a guard that
+  checks role but not resource owner, is the gap. AuthGuard is not an ownership check.
+- Spring: @PreAuthorize/@Secured/@RolesAllowed and the Spring Security filter chain; a @RequestMapping
+  with no method-security annotation and no authorizeHttpRequests rule is unguarded. hasRole is not hasPermission(#id).
+- Express/Koa: router-level and per-route middleware (requireAuth/authorize); a route registered before
+  the auth middleware, or with middleware missing, is exposed — check app.use order and router mounting.
+- Django/DRF: @login_required is auth only; check @permission_required and permission_classes
+  (IsAuthenticated vs a custom has_object_permission). IsAuthenticated without object permission is IDOR-prone.
+- Rails: before_action :authenticate_user! plus authorize (Pundit/CanCanCan); a controller that skips the
+  before_action or omits authorize on an action is the gap.
+- FastAPI: Depends(get_current_user) vs Depends(require_role) and explicit per-object checks; a route
+  with only authentication and a raw id lookup is BOLA.
+- GraphQL: resolver-level authorization and field-level checks; a top-level query/mutation with no authz,
+  or nested field resolvers that bypass the parent check, is the gap.
+- gRPC: server interceptors for auth/authz; a method without an interceptor, or a service-wide credential
+  that ignores the caller identity, is unguarded.
+
+═══════════════════════════════════════════════════════════════
 VULNERABILITY CATEGORIES (with concrete examples)
 ═══════════════════════════════════════════════════════════════
 
@@ -65,6 +106,8 @@ Look for endpoints where a user-supplied ID is used to fetch/modify a resource W
 - **Privilege escalation through business flows**: Self-assigning admin role, inviting yourself to another org, transferring ownership without approval
 - **Quota/limit bypass**: Creating multiple free-tier accounts, exceeding rate limits through API key rotation, bypassing file size limits via chunked upload
 - **Referral/reward abuse**: Self-referral, circular referrals, claiming same reward multiple times
+- **Currency / rounding arbitrage**: Rounding, currency-conversion, or per-unit vs total mismatches that let a user underpay or extract value
+- **Gift card / store credit / refund abuse**: Reusing a single-use code, refunding without a corresponding return, negative-refund or balance-manipulation paths
 - **Subscription/billing abuse**: Downgrading after consuming premium resources, trial extension through re-registration, timezone manipulation for billing periods
 
 🔴 **Race Conditions / Double-Spend**
@@ -92,6 +135,8 @@ Look for endpoints where a user-supplied ID is used to fetch/modify a resource W
 - **OAuth state manipulation**: Missing or predictable state parameter, open redirect in callback
 - **API key scope escalation**: Using a read-only key to perform write operations (if not enforced server-side)
 - **Remember-me token abuse**: Long-lived tokens that survive password changes
+- **Account/username enumeration**: Login, registration, or password-reset responses (message, status, or timing) differ for valid vs invalid accounts, enabling targeted attacks
+- **Forced browsing / function-level authorization**: Directly requesting privileged, admin, or hidden API endpoints — or the same route with an alternate HTTP verb — that enforce only authentication, not the required role
 
 🔴 **Dynamic Attack Patterns**
 - **Parameter tampering**: Changing hidden/readonly fields (role, isAdmin, price, status) in POST/PUT requests

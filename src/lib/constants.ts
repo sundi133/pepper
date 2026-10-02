@@ -294,6 +294,33 @@ export const OLLAMA_MAX_RESPONSE_TOKENS = parseInt(
   process.env.OLLAMA_MAX_RESPONSE_TOKENS || "6144",
 );
 
+// ─── Whole-file SAST review ──────────────────────────────────────────────────
+// A file whose estimated tokens fit under this budget is sent to the model as
+// ONE line-numbered chunk covering the whole file, so the reviewer can reason
+// across every line (guards, imports, control flow) instead of a slice of it.
+// Larger files fall back to overlapped chunking. Raise via env for models with
+// a large context window; lower it for small local models.
+export const LLM_WHOLE_FILE_TOKEN_BUDGET = parseInt(
+  process.env.LLM_WHOLE_FILE_TOKENS || String(MAX_CHUNK_TOKENS * 2),
+);
+export const OLLAMA_WHOLE_FILE_TOKEN_BUDGET = parseInt(
+  process.env.OLLAMA_WHOLE_FILE_TOKENS || String(OLLAMA_MAX_CHUNK_TOKENS),
+);
+
+// ─── Deterministic evidence verification (anti-hallucination) ────────────────
+// After the model returns findings, cited sink/parameter identifiers are
+// checked against the actual file text. A finding naming identifiers that do
+// not exist anywhere in the file is a hallucination and is dropped. Enabled by
+// default; set LLM_EVIDENCE_VERIFICATION=false to disable.
+export const LLM_EVIDENCE_VERIFICATION =
+  (process.env.LLM_EVIDENCE_VERIFICATION ?? "true").toLowerCase() !== "false";
+
+// Characters of full-file source handed to the pass-2 validator per candidate,
+// centered on the finding's lines, so it can see guards outside the chunk.
+export const LLM_VALIDATION_CONTEXT_CHARS = parseInt(
+  process.env.LLM_VALIDATION_CONTEXT_CHARS || "6000",
+);
+
 // ─── Exploit validation (adversarial pass over AI findings) ──────────────────
 // Off by default: enabling it changes which SAST/ZERO_DAY findings survive, so
 // it is opt-in per install until validated in the field.

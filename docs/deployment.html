@@ -67,8 +67,7 @@
         Optional dependencies installed on the worker:
         <code>trivy</code> (container scanning),
         <code>cosign</code> (keyless signing),
-        <code>svn</code> (Subversion checkouts),
-        <code>dapper</code> CLI (when not using the HTTP DAST mode).
+        <code>svn</code> (Subversion checkouts).
       </p>
 
       <h2>Quickstart — Docker (recommended)</h2>
@@ -183,7 +182,6 @@ RUN apk add --no-cache git unzip subversion \
           <tr><td><code>trivy</code></td><td>Real container vulnerability scanning (otherwise inventory only).</td></tr>
           <tr><td><code>cosign</code></td><td>Keyless SBOM signing (otherwise RSA fallback only).</td></tr>
           <tr><td><code>svn</code></td><td>Subversion source checkouts.</td></tr>
-          <tr><td><code>dapper</code></td><td>Local DAST CLI fallback and workspace orchestration.</td></tr>
         </tbody>
       </table>
 

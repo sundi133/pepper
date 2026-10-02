@@ -1,6 +1,32 @@
 import { Chunk } from "../types";
 import { MAX_CHUNK_TOKENS, CHUNK_OVERLAP_TOKENS } from "@/lib/constants";
 
+/** Rough token estimate (~4 chars/token) used for chunk-budget decisions. */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Wrap a whole file as a single line-numbered chunk when it fits the budget.
+ * Returns null when the file is too large and must be chunked instead.
+ */
+export function wholeFileChunk(
+  content: string,
+  filePath: string,
+  budgetTokens: number,
+): Chunk | null {
+  if (!content.trim()) return null;
+  const lines = content.split("\n");
+  if (estimateTokens(content) > budgetTokens) return null;
+  return {
+    content: addLineNumbers(lines, 1),
+    startLine: 1,
+    endLine: lines.length,
+    filePath,
+    wholeFile: true,
+  };
+}
+
 export function chunkFile(
   content: string,
   filePath: string,

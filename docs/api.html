@@ -141,9 +141,9 @@
 
       <h2 id="artifacts">Artifacts &amp; SBOMs</h2>
       <p>
-        Every scan can produce up to seven artifact types stored in MinIO:
+        Every scan can produce up to six artifact types stored in MinIO:
         <code>SARIF</code>, <code>SBOM_CYCLONEDX</code>, <code>SBOM_SPDX</code>,
-        <code>SCAN_LOG</code>, <code>CONTAINER_REPORT</code>, <code>DAST_REPORT</code>,
+        <code>SCAN_LOG</code>, <code>CONTAINER_REPORT</code>,
         <code>SIGNATURE</code>.
       </p>
       <pre><code>GET /api/scans/&lt;scanId&gt;/artifacts
@@ -153,7 +153,6 @@ GET /api/scans/&lt;scanId&gt;/artifacts/cyclonedx     # CycloneDX 1.5 JSON
 GET /api/scans/&lt;scanId&gt;/artifacts/spdx          # SPDX 2.3 JSON
 GET /api/scans/&lt;scanId&gt;/artifacts/sarif         # SARIF v2 (when written)
 GET /api/scans/&lt;scanId&gt;/artifacts/container     # Trivy raw report (when run)
-GET /api/scans/&lt;scanId&gt;/artifacts/dast          # dapper report (when DAST ran)
 GET /api/scans/&lt;scanId&gt;/artifacts/signature     # cosign / RSA signature bundle
 GET /api/scans/&lt;scanId&gt;/artifacts/log           # JSON log lines</code></pre>
 
@@ -182,7 +181,7 @@ GET /api/scans/&lt;scanId&gt;/findings/export?format=csv | html | sarif</code></
 POST   /api/projects                              # create
 GET    /api/projects/&lt;projectId&gt;
 PATCH  /api/projects/&lt;projectId&gt;            # name, description, repoUrl,
-                                                  # defaultBranch, dastTargetUrl
+                                                  # defaultBranch
 DELETE /api/projects/&lt;projectId&gt;
 POST   /api/projects/&lt;projectId&gt;/schedule   # nightly / weekly cron</code></pre>
 
@@ -224,11 +223,7 @@ POST   /api/findings/&lt;id&gt;/integrations   # { "channel": "slack" | "jira" |
   "config": { "endpoint": "https://splunk.example.com:8088/services/collector/raw",
               "format": "cef" | "leef" | "json",
               "apiKey": "Splunk &lt;token&gt;" } }
-// Syslog target also supported: "udp://siem.example.com:514"
-
-// Dapper (DAST)
-{ "kind": "DAST", "name": "Dapper",
-  "config": { "endpoint": "http://dapper:8080", "apiKey": "…" } }</code></pre>
+// Syslog target also supported: "udp://siem.example.com:514"</code></pre>
 
       <h2 id="apikeys">API keys</h2>
       <pre><code>GET    /api/apikeys                # list (no plaintext)

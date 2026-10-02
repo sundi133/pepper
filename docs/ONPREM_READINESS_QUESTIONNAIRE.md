@@ -113,14 +113,12 @@ If yes, can your VCS reach the Pepper URL (network path / firewall)? ☐ Yes ☐
 
 Which scan types do you want enabled?
 ☐ SAST (pattern + AI) ☐ SCA (dependencies) ☐ Secrets ☐ IaC ☐ Container images
-☐ DAST (dynamic) ☐ Zero-day / reachability
+☐ Zero-day / reachability
 
 8.1 **Container scanning** — which registries hold your images, and how do we auth?
 ☐ Docker Hub ☐ ECR ☐ GCR ☐ GHCR ☐ Custom: ______  (credentials owner: ______)
 
-8.2 **DAST** — target URL(s) to scan, if any: ______________
-
-8.3 **Dependency vuln data** — ☐ Online (OSV/EPSS/KEV) ☐ Offline mirror (air-gapped)
+8.2 **Dependency vuln data** — ☐ Online (OSV/EPSS/KEV) ☐ Offline mirror (air-gapped)
 
 ## 9. Compliance reporting (optional)
 

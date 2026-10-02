@@ -65,6 +65,8 @@ Look for endpoints where a user-supplied ID is used to fetch/modify a resource W
 - **Privilege escalation through business flows**: Self-assigning admin role, inviting yourself to another org, transferring ownership without approval
 - **Quota/limit bypass**: Creating multiple free-tier accounts, exceeding rate limits through API key rotation, bypassing file size limits via chunked upload
 - **Referral/reward abuse**: Self-referral, circular referrals, claiming same reward multiple times
+- **Currency / rounding arbitrage**: Rounding, currency-conversion, or per-unit vs total mismatches that let a user underpay or extract value
+- **Gift card / store credit / refund abuse**: Reusing a single-use code, refunding without a corresponding return, negative-refund or balance-manipulation paths
 - **Subscription/billing abuse**: Downgrading after consuming premium resources, trial extension through re-registration, timezone manipulation for billing periods
 
 🔴 **Race Conditions / Double-Spend**
@@ -92,6 +94,8 @@ Look for endpoints where a user-supplied ID is used to fetch/modify a resource W
 - **OAuth state manipulation**: Missing or predictable state parameter, open redirect in callback
 - **API key scope escalation**: Using a read-only key to perform write operations (if not enforced server-side)
 - **Remember-me token abuse**: Long-lived tokens that survive password changes
+- **Account/username enumeration**: Login, registration, or password-reset responses (message, status, or timing) differ for valid vs invalid accounts, enabling targeted attacks
+- **Forced browsing / function-level authorization**: Directly requesting privileged, admin, or hidden API endpoints — or the same route with an alternate HTTP verb — that enforce only authentication, not the required role
 
 🔴 **Dynamic Attack Patterns**
 - **Parameter tampering**: Changing hidden/readonly fields (role, isAdmin, price, status) in POST/PUT requests

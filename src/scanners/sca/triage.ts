@@ -101,6 +101,7 @@ function truncateAdvisory(text: string | undefined, maxChars: number): string {
 function toSuppressed(
   finding: RawFinding,
   reason: string,
+  vexJustification?: string,
 ): SuppressedVulnerability {
   const meta = finding.metadata || {};
   const vulnerabilityId =
@@ -124,6 +125,7 @@ function toSuppressed(
       introducedBy: meta.introducedBy,
       dependencyPathText: meta.dependencyPathText,
       fixVersion: meta.fixVersion,
+      vexJustification,
     },
   };
 }
@@ -259,6 +261,9 @@ export async function triageScaFindings(
             toSuppressed(
               f,
               decision.reason || "Assessed by automated triage as not applicable",
+              typeof decision.metadata?.vexJustification === "string"
+                ? decision.metadata.vexJustification
+                : undefined,
             ),
           );
           continue;

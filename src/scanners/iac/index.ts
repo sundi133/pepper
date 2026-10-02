@@ -76,6 +76,13 @@ CLOUD HARDENING PATTERNS (AWS/Azure/GCP) — report with explicit evidence:
 - Terraform/cloud state or backend exposing secrets (state stored unencrypted, remote state without locking/encryption, backend config with hardcoded keys)
 - KMS/CMK key rotation or deletion protection disabled on sensitive keys
 - Data-at-rest encryption downgrades (explicit encryption: false, kms_key_id removed, or SSL enforced=false on a service)
+- IMDSv1 still permitted (AWS metadata_options absent or http_tokens = "optional"), so an SSRF on the instance can steal role credentials. CWE-918.
+- S3 account/bucket Block Public Access disabled (ignore_public_acls = false, block_public_acls/policy = false) or bucket ACL set to public-read/public-read-write. CWE-284.
+- CloudTrail not multi-region, log-file validation disabled, trail not encrypted, or logging disabled outright — an attacker can operate without durable audit. CWE-778.
+- Database exposed to the internet (RDS publicly_accessible = true, public snapshot, Aurora public endpoint) or RDS storage/backups unencrypted. CWE-284.
+- EKS/GKE control-plane exposed publicly with no CIDR restriction (public_access_cidrs = 0.0.0.0/0), or GKE enable_legacy_abac = true, master_authorized_networks disabled, or shielded nodes off. CWE-284.
+- Azure NSG rule with source/destination "*" (any/any) or management ports (22/3389/3306/5432/6379/9200) open to Internet; Azure Storage public blob access allowed, minimum TLS < 1.2, or shared-key access permitted. CWE-284.
+- GCP storage bucket bound to allUsers/allAuthenticatedUsers, or a firewall ingress rule 0.0.0.0/0 to SSH/RDP/DB/cache ports; GCP bucket uniform access disabled. CWE-284.
 
 LOW-SEVERITY PATTERNS (report only if part of a larger attack chain):
 - readOnlyRootFilesystem missing (only if combined with writable mount points or secrets)

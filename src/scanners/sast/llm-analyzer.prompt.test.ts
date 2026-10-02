@@ -61,4 +61,25 @@ describe("SYSTEM_PROMPT detection coverage", () => {
     expect(SYSTEM_PROMPT).toMatch(/NOT an authorization\/AdminGuard/i);
     expect(SYSTEM_PROMPT).toMatch(/Do not map this class to CWE-285/i);
   });
+
+  it("covers account enumeration and session fixation", () => {
+    expect(SYSTEM_PROMPT).toMatch(/username\s+enumeration/i);
+    expect(SYSTEM_PROMPT).toMatch(/Session\s+fixation\s+\(CWE-384\)/i);
+  });
+
+  it("covers MFA bypass and insecure password reset", () => {
+    expect(SYSTEM_PROMPT).toMatch(/MFA\s+step\s+bypass\s+\(CWE-287\)/i);
+    expect(SYSTEM_PROMPT).toMatch(/Insecure\s+password\s+reset\s+\(CWE-640\)/i);
+  });
+
+  it("covers function-level authorization and third-party API trust", () => {
+    expect(SYSTEM_PROMPT).toMatch(/function-level\s+authorization\s+\(CWE-862\)/i);
+    expect(SYSTEM_PROMPT).toMatch(/third-party\s+API\s+trust|API9\/API10/i);
+  });
+
+  it("demands line-by-line completeness and forbids fabricated identifiers", () => {
+    expect(SYSTEM_PROMPT).toMatch(/LINE-BY-LINE COMPLETENESS/i);
+    expect(SYSTEM_PROMPT).toMatch(/NO FABRICATED IDENTIFIERS/i);
+    expect(SYSTEM_PROMPT).toMatch(/dis\s?carded as a hallucination/i);
+  });
 });

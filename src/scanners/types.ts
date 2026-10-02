@@ -105,6 +105,8 @@ export interface Chunk {
   startLine: number;
   endLine: number;
   filePath: string;
+  /** True when this chunk is the entire file (whole-file review mode). */
+  wholeFile?: boolean;
 }
 
 export interface PatternRule {

@@ -7,6 +7,8 @@ import {
   CONTAINER_CONFIG_PROMPT,
   K8S_MANIFEST_PROMPT,
   EXPLOIT_VALIDATION_PROMPT,
+  SAST_PASS2_PROMPT,
+  WEB_CORROBORATION_PROMPT,
 } from "./prompts";
 import { SYSTEM_PROMPT as SAST_SYSTEM_PROMPT } from "../sast/llm-analyzer";
 import { ZERO_DAY_SYSTEM_PROMPT } from "../zero-day/prompts";
@@ -83,5 +85,66 @@ describe("SCA triage prompt", () => {
 
   it("forbids guessing fix versions", () => {
     expect(SCA_TRIAGE_PROMPT).toMatch(/Never guess a version number/i);
+  });
+
+  it("uses an SSVC-aligned decision framework with exploitation and impact factors", () => {
+    expect(SCA_TRIAGE_PROMPT).toMatch(/DECISION FRAMEWORK/i);
+    expect(SCA_TRIAGE_PROMPT).toMatch(/Exploitation status/i);
+    expect(SCA_TRIAGE_PROMPT).toMatch(/Technical impact/i);
+    expect(SCA_TRIAGE_PROMPT).toMatch(/Automatable/i);
+  });
+
+  it("requires a machine-readable VEX justification on keep=false", () => {
+    expect(SCA_TRIAGE_PROMPT).toMatch(/VEX JUSTIFICATION/i);
+    expect(SCA_TRIAGE_PROMPT).toMatch(/component_not_present/);
+    expect(SCA_TRIAGE_PROMPT).toMatch(/vulnerable_code_not_in_execute_path/);
+    expect(SCA_TRIAGE_PROMPT).toMatch(/vexJustification/);
+  });
+});
+
+describe("SAST pass-2 cross-file validation prompt", () => {
+  it("requires source, flow, sink, guard and reachability to be established", () => {
+    expect(SAST_PASS2_PROMPT).toMatch(/VALIDATION CHECKLIST/i);
+    expect(SAST_PASS2_PROMPT).toMatch(/SOURCE:/i);
+    expect(SAST_PASS2_PROMPT).toMatch(/SINK:/i);
+    expect(SAST_PASS2_PROMPT).toMatch(/GUARD:/i);
+    expect(SAST_PASS2_PROMPT).toMatch(/REACHABILITY:/i);
+  });
+
+  it("rejects a candidate when a sufficient guard is present in context", () => {
+    expect(SAST_PASS2_PROMPT).toMatch(/guard that\s+is present in context REJECTS/i);
+  });
+
+  it("forbids confirming on pattern familiarity alone", () => {
+    expect(SAST_PASS2_PROMPT).toMatch(/well-known vulnerability class/i);
+  });
+});
+
+describe("exploit validation prompt review quality", () => {
+  it("defines what counts as an attacker-controllable source", () => {
+    expect(EXPLOIT_VALIDATION_PROMPT).toMatch(/SOURCE TAXONOMY/i);
+    expect(EXPLOIT_VALIDATION_PROMPT).toMatch(/webhook\/queue\/event payloads/i);
+  });
+
+  it("defines guard classes that break the chain", () => {
+    expect(EXPLOIT_VALIDATION_PROMPT).toMatch(/GUARD TAXONOMY/i);
+    expect(EXPLOIT_VALIDATION_PROMPT).toMatch(/parameterised\/bound query|auto-escaping/i);
+  });
+
+  it("refuses to confirm on pattern familiarity and keeps severity out of the verdict", () => {
+    expect(EXPLOIT_VALIDATION_PROMPT).toMatch(/Do NOT confirm on pattern familiarity/i);
+    expect(EXPLOIT_VALIDATION_PROMPT).toMatch(/severity does not override the evidence/i);
+  });
+});
+
+describe("web corroboration prompt source-quality rules", () => {
+  it("weighs source quality and rejects single weak pages", () => {
+    expect(WEB_CORROBORATION_PROMPT).toMatch(/SOURCE QUALITY/i);
+    expect(WEB_CORROBORATION_PROMPT).toMatch(/single\s+weak\s+page/i);
+  });
+
+  it("requires same name and same registry and forbids fabricated references", () => {
+    expect(WEB_CORROBORATION_PROMPT).toMatch(/same package name on the same\s+registry/i);
+    expect(WEB_CORROBORATION_PROMPT).toMatch(/never fabricate or guess a URL/i);
   });
 });

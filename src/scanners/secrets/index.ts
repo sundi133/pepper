@@ -18,7 +18,10 @@ import { classifySecrets } from "./llm-classifier";
 import { createRedactionSession } from "@/lib/llm-redaction";
 import {
   PATTERN_DETECTORS,
-  isLikelyPlaceholderSecret,
+  isCredibleSecretMatch,
+  isInlineTestCode,
+  isObviousNonSecret,
+  isPrivateKeyBlock,
   isSecretScanCandidate,
 } from "./patterns";
 import {
@@ -82,8 +85,13 @@ export const secretsPatternScanner: ScannerPlugin = {
               const lineNumber =
                 content.substring(0, match.index).split("\n").length;
 
+              // A header quoted in docs, an example or a format string is not a key.
+              const headerLine = content.split("\n")[lineNumber - 1] ?? "";
+              if (!isCredibleSecretMatch(credentialType, matchedValue, headerLine, filePath)) continue;
+              if (!isPrivateKeyBlock(content, match.index)) continue;
+
               const masked = maskSecretValue(matchedValue.substring(0, 50) + "...");
-              const base: RawFinding = applySeverityCalibration({
+              const base: RawFinding = lowerInTestCode(isInlineTestCode(filePath, content, match.index), applySeverityCalibration({
                 scanner: "SECRETS_PATTERN",
                 severity: config.severity,
                 title: `${credentialType}: Exposed secret pattern detected`,
@@ -103,7 +111,7 @@ export const secretsPatternScanner: ScannerPlugin = {
                   weaknessClass: "Hardcoded Credential",
                   detectionMethod: "Pattern matching",
                 },
-              });
+              }));
 
               findings.push(
                 enrichFinding(base, base.metadata as Record<string, unknown>, {
@@ -123,10 +131,14 @@ export const secretsPatternScanner: ScannerPlugin = {
 
       // Then check single-line patterns
       const lines = content.split("\n");
+      const lineOffsets: number[] = [];
+      for (let i = 0, offset = 0; i < lines.length; offset += lines[i].length + 1, i++) lineOffsets.push(offset);
       for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
         const line = lines[lineIdx];
         const lineNumber = lineIdx + 1;
 
+        // Text already reported on this line: a later, more general detector doesn't report it again.
+        const reportedSpans: Array<[number, number]> = [];
         for (const [credentialType, config] of Object.entries(PATTERN_DETECTORS)) {
           // Skip multi-line patterns for single-line scanning
           if (credentialType.includes("KEY") && config.patterns.some(p => p.source.includes("BEGIN"))) {
@@ -140,11 +152,15 @@ export const secretsPatternScanner: ScannerPlugin = {
             while ((match = pattern.exec(line)) !== null) {
               const matchedValue = match[0];
 
-              // Skip common false positives
-              if (isLikelyPlaceholderSecret(matchedValue)) continue;
+              // Skip placeholders, examples, templates and local defaults
+              if (!isCredibleSecretMatch(credentialType, matchedValue, line, filePath)) continue;
+              const span: [number, number] = [match.index, match.index + matchedValue.length];
+              if (reportedSpans.some(([a, b]) => span[0] < b && a < span[1])) continue;
+              reportedSpans.push(span);
 
               const masked = maskSecretValue(matchedValue);
-              const base: RawFinding = applySeverityCalibration({
+              const inTest = isInlineTestCode(filePath, content, lineOffsets[lineIdx] + match.index);
+              const base: RawFinding = lowerInTestCode(inTest, applySeverityCalibration({
                 scanner: "SECRETS_PATTERN",
                 severity: config.severity,
                 title: `${credentialType}: Exposed secret pattern detected`,
@@ -155,7 +171,8 @@ export const secretsPatternScanner: ScannerPlugin = {
                 snippet: `${lineNumber}: [MASKED ${credentialType}]`,
                 ruleId: `SECRET-${credentialType}`,
                 cweId: "CWE-798",
-                confidence: 0.95,
+                // A named setting holding key material is less certain than a provider's token format.
+                confidence: credentialType === "GENERIC_SECRET" ? 0.72 : 0.95,
                 masked: true,
                 metadata: {
                   credentialType,
@@ -164,7 +181,7 @@ export const secretsPatternScanner: ScannerPlugin = {
                   weaknessClass: "Hardcoded Credential",
                   detectionMethod: "Pattern matching",
                 },
-              });
+              }));
 
               findings.push(
                 enrichFinding(base, base.metadata as Record<string, unknown>, {
@@ -297,6 +314,14 @@ export const secretsLlmScanner: ScannerPlugin = {
   },
 };
 
+/** A secret in test-only code is one severity level lower, like one under a test path. */
+function lowerInTestCode(inTest: boolean, finding: RawFinding): RawFinding {
+  if (!inTest) return finding;
+  const down = { CRITICAL: "HIGH", HIGH: "MEDIUM", MEDIUM: "LOW" } as const;
+  const severity = down[finding.severity as keyof typeof down] ?? finding.severity;
+  return { ...finding, severity, metadata: { ...(finding.metadata as object), inTestCode: true } };
+}
+
 function isSkippedPath(filePath: string): boolean {
   const parts = filePath.split(path.sep);
   if (parts.some((p) => SKIP_DIRECTORIES.has(p))) return true;
@@ -338,7 +363,9 @@ async function analyzeSecretChunk(
         (f) =>
           f.title &&
           f.credentialType &&
-          (f.confidence ?? 0) >= SECRETS_MIN_CONFIDENCE_DEFAULT,
+          (f.confidence ?? 0) >= SECRETS_MIN_CONFIDENCE_DEFAULT &&
+          // Whatever the model thought, a reference, template or stand-in is not a secret.
+          !(typeof f.exposedValue === "string" && isObviousNonSecret(f.exposedValue)),
       )
       .map((f) => {
         // The LLM's free-text justification often quotes the literal secret

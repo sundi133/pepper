@@ -103,6 +103,8 @@ export default function ScanDetailPage() {
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [scannerFilter, setScannerFilter] = useState<string>("all");
   const [newOnlyFilter, setNewOnlyFilter] = useState(false);
+  // Findings triaged as false positives are hidden unless the user asks for them.
+  const [showFalsePositives, setShowFalsePositives] = useState(false);
   const [sortBy, setSortBy] = useState<string>("severity");
   const [rescanning, setRescanning] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -124,6 +126,7 @@ export default function ScanDetailPage() {
   if (severityFilter !== "all") filters.severity = severityFilter;
   if (scannerFilter !== "all") filters.scanner = scannerFilter;
   if (newOnlyFilter) filters.isNew = "true";
+  if (showFalsePositives) filters.includeFalsePositives = "true";
   if (sortBy !== "severity") filters.sort = sortBy;
 
   // The selected tab is a server-side filter, not a slice of an already-fetched
@@ -148,6 +151,7 @@ export default function ScanDetailPage() {
   const {
     findings,
     scannerCounts,
+    falsePositiveCount,
     pagination,
     refresh: refreshFindings,
   } = useFindings(
@@ -775,6 +779,23 @@ export default function ScanDetailPage() {
                       )}
                     >
                       {(scan as { newFindingCount?: number }).newFindingCount} new
+                    </button>
+                  ) : null}
+                  {falsePositiveCount > 0 || showFalsePositives ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowFalsePositives((v) => !v)}
+                      title="Findings marked as false positives are hidden by default and don't count towards the totals"
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold transition-colors",
+                        showFalsePositives
+                          ? "bg-slate-600 text-white"
+                          : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
+                      )}
+                    >
+                      {showFalsePositives
+                        ? "Hide false positives"
+                        : `Show ${falsePositiveCount} false positive${falsePositiveCount === 1 ? "" : "s"}`}
                     </button>
                   ) : null}
                 </div>

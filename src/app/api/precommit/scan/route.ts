@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyApiKey } from "@/lib/api-key";
 import { SECRET_PATTERNS } from "@/lib/precommit-secret-patterns";
-import { isLikelyPlaceholderSecret } from "@/scanners/secrets/patterns";
+import { isCredibleSecretMatch } from "@/scanners/secrets/patterns";
 
 interface PrecommitFile {
   path: string;
@@ -28,6 +28,8 @@ function detectInFile(file: PrecommitFile): PrecommitFinding[] {
   const findings: PrecommitFinding[] = [];
   const lines = file.content.split("\n");
 
+  // Text already reported: a later, more general detector doesn't report it again.
+  const reportedSpans: Array<[number, number]> = [];
   for (const pattern of SECRET_PATTERNS) {
     // Keep the pattern's own flags (e.g. case-insensitive) and add g + m.
     const flags = new Set([...(pattern.pattern.flags ?? ""), "g", "m"]);
@@ -35,8 +37,14 @@ function detectInFile(file: PrecommitFile): PrecommitFinding[] {
     const matches = file.content.matchAll(regex);
     for (const match of matches) {
       if (pattern.allowlist?.some((allow) => allow.test(match[0]))) continue;
-      if (isLikelyPlaceholderSecret(match[0])) continue;
       const lineNum = file.content.substring(0, match.index).split("\n").length - 1;
+      // Same bar as the repository scan: no placeholders, examples, templates or local defaults.
+      // (A private key header alone still blocks: the content here may be a partial file.)
+      const type = pattern.id.replace(/^SECRET-/, "").replace(/-\d+$/, "");
+      if (!isCredibleSecretMatch(type, match[0], lines[lineNum] || "", file.path)) continue;
+      const span: [number, number] = [match.index ?? 0, (match.index ?? 0) + match[0].length];
+      if (reportedSpans.some(([a, b]) => span[0] < b && a < span[1])) continue;
+      reportedSpans.push(span);
       // Never echo the secret back: mask it in the reported line.
       const line = (lines[lineNum] || "").split(match[0]).join(maskMatch(match[0]));
       findings.push({

@@ -134,20 +134,55 @@ const LOCK_FILE_NAMES = new Set([
 /** Ecosystems with no public vulnerability database: inventory / SBOM only. */
 const NO_VULNERABILITY_DB = new Set(["CocoaPods"]);
 
+/** The directory is the root of a Cargo, npm, yarn or pnpm workspace. */
+function isWorkspaceRoot(workDir: string, dir: string): boolean {
+  const read = (name: string) => {
+    try {
+      return fs.readFileSync(path.join(workDir, dir, name), "utf-8");
+    } catch {
+      return null;
+    }
+  };
+  if (/^\[workspace\]/m.test(read("Cargo.toml") ?? "")) return true;
+  if (read("pnpm-workspace.yaml") !== null) return true;
+  try {
+    return Boolean((JSON.parse(read("package.json") ?? "{}") as { workspaces?: unknown }).workspaces);
+  } catch {
+    return false;
+  }
+}
+
 /**
- * When a lock file in the same directory resolves a package, the manifest's
- * entry for it is dropped: `^1.2.3` in package.json would otherwise be looked
- * up as 1.2.3, a version that isn't installed (false-positive CVEs). The
- * package is still remembered as a direct dependency.
+ * When a lock file resolves a package, the manifest's entry for it is dropped:
+ * `^1.2.3` in package.json would otherwise be looked up as 1.2.3, a version
+ * that isn't installed (false-positive CVEs). That is the lock file in the
+ * manifest's own directory, or the one at the root of the workspace it belongs
+ * to (Cargo, npm, yarn, pnpm), which resolves every member's manifest.
+ * The package is still remembered as a direct dependency.
  */
-function preferLockedVersions(deps: Dependency[]): { dependencies: Dependency[]; directNames: string[] } {
-  const key = (d: Dependency) =>
-    `${d.ecosystem.toLowerCase()}|${path.dirname(d.sourceFile ?? "")}|${d.name.toLowerCase()}`;
+function preferLockedVersions(
+  deps: Dependency[],
+  workDir: string,
+): { dependencies: Dependency[]; directNames: string[] } {
+  const key = (d: Dependency, dir: string) => `${d.ecosystem.toLowerCase()}|${dir}|${d.name.toLowerCase()}`;
+  const dirOf = (d: Dependency) => path.dirname(d.sourceFile ?? "");
   const isLock = (d: Dependency) => LOCK_FILE_NAMES.has(path.basename(d.sourceFile ?? ""));
-  const locked = new Set(deps.filter(isLock).map(key));
+  const locked = new Set(deps.filter(isLock).map((d) => key(d, dirOf(d))));
+  const workspaceRoots = new Map<string, boolean>();
+  const isLocked = (d: Dependency) => {
+    const own = dirOf(d);
+    if (locked.has(key(d, own))) return true;
+    for (let dir = own; dir !== "." && dir !== "/" && dir !== ""; ) {
+      dir = path.dirname(dir);
+      if (!locked.has(key(d, dir))) continue;
+      if (!workspaceRoots.has(dir)) workspaceRoots.set(dir, isWorkspaceRoot(workDir, dir));
+      if (workspaceRoots.get(dir)) return true;
+    }
+    return false;
+  };
   const directNames = new Set<string>();
   const dependencies = deps.filter((d) => {
-    if (isLock(d) || !locked.has(key(d))) return true;
+    if (isLock(d) || !isLocked(d)) return true;
     directNames.add(d.name);
     return false;
   });
@@ -204,7 +239,7 @@ export function parseDependencies(
     }
   }
 
-  return { ...preferLockedVersions(dependencies), parsedFiles };
+  return { ...preferLockedVersions(dependencies, workDir), parsedFiles };
 }
 
 export const scaScanner: ScannerPlugin = {

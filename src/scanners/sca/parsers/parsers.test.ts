@@ -230,6 +230,30 @@ describe("parseDependencies", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  it("in a workspace, the root lock file resolves the members' manifests", () => {
+    const lock = `version = 3\n\n[[package]]\nname = "openssl"\nversion = "0.10.72"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n\n[[package]]\nname = "router"\nversion = "0.1.0"\ndependencies = [\n "openssl",\n]\n`;
+    const { dir, files } = repo({
+      "Cargo.toml": `[workspace]\nmembers = ["crates/*"]\n`,
+      "Cargo.lock": lock,
+      "crates/router/Cargo.toml": `[package]\nname = "router"\nversion = "0.1.0"\n\n[dependencies]\nopenssl = "0.10"\n`,
+    });
+    const { dependencies, directNames } = parseDependencies(dir, files);
+    // Not openssl@0.10 from the member manifest, and not the workspace's own crate.
+    expect(coords(dependencies)).toEqual(["openssl@0.10.72"]);
+    expect(directNames).toEqual(["openssl"]);
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  it("an npm workspace root lock file resolves the packages' manifests", () => {
+    const { dir, files } = repo({
+      "package.json": JSON.stringify({ workspaces: ["packages/*"] }),
+      "package-lock.json": JSON.stringify({ lockfileVersion: 3, packages: { "": {}, "node_modules/lodash": { version: "4.17.21" } } }),
+      "packages/web/package.json": JSON.stringify({ dependencies: { lodash: "^4.17.5" } }),
+    });
+    expect(coords(parseDependencies(dir, files).dependencies)).toEqual(["lodash@4.17.21"]);
+    fs.rmSync(dir, { recursive: true });
+  });
+
   it("recognises every new dependency file", () => {
     for (const f of ["gradle.lockfile", "gradle/libs.versions.toml", "Directory.Packages.props", "src/packages.lock.json", "ios/Podfile.lock", "Cartfile.resolved", "yarn.lock", "pnpm-lock.yaml", "src/App.csproj"]) {
       expect(isDependencyFile(f), f).toBe(true);

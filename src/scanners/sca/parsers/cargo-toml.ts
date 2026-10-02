@@ -37,6 +37,10 @@ export const cargoTomlParser: DependencyParser = {
           continue;
         }
 
+        // A path dependency is a crate in this repository, not one from
+        // crates.io: looking it up by name would find an unrelated crate.
+        if (/^[a-zA-Z0-9_-]+\s*=\s*\{.*\bpath\s*=/.test(line)) continue;
+
         // Table form: name = { version = "..." }
         const tableMatch = line.match(
           /^([a-zA-Z0-9_-]+)\s*=\s*\{.*version\s*=\s*"([^"]+)"/,

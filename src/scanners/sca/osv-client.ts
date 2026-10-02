@@ -110,6 +110,40 @@ interface OsvBatchResponse {
   results: Array<{ vulns?: OsvVulnerability[] }>;
 }
 
+/**
+ * One record per vulnerability. Databases publish the same issue under their
+ * own ids (GHSA-…, RUSTSEC-…, PYSEC-…, GO-…), linked through `aliases`; each
+ * came back as its own finding, so one bug in one package was reported twice.
+ * The record with the highest CVSS score is kept (GitHub's, usually), and the
+ * others' ids are added to its aliases.
+ */
+export function mergeAliasedVulns(vulns: OsvVulnerability[]): OsvVulnerability[] {
+  const groups: OsvVulnerability[][] = [];
+  for (const vuln of vulns) {
+    const ids = new Set([vuln.id, ...(vuln.aliases ?? [])]);
+    const matches = groups.filter((g) => g.some((o) => ids.has(o.id) || (o.aliases ?? []).some((a) => ids.has(a))));
+    if (matches.length === 0) {
+      groups.push([vuln]);
+      continue;
+    }
+    matches[0].push(vuln);
+    // This record links groups that were separate until now.
+    for (const other of matches.slice(1)) {
+      matches[0].push(...other);
+      groups.splice(groups.indexOf(other), 1);
+    }
+  }
+  // Highest score first, so merging never lowers the reported severity.
+  const rank = (v: OsvVulnerability) => (osvSeverity(v).cvssScore ?? -1) * 10 + (v.id.startsWith("GHSA-") ? 1 : 0);
+  return groups.map((group) => {
+    if (group.length === 1) return group[0];
+    const best = group.reduce((a, b) => (rank(b) > rank(a) ? b : a));
+    const aliases = new Set(group.flatMap((v) => [v.id, ...(v.aliases ?? [])]));
+    aliases.delete(best.id);
+    return { ...best, aliases: [...aliases] };
+  });
+}
+
 export async function queryOsvBatch(
   dependencies: Dependency[],
   apiUrl = "https://api.osv.dev",
@@ -142,8 +176,7 @@ export async function queryOsvBatch(
 
         const dep = batch[j];
 
-        for (const summaryVuln of vulns) {
-          const vuln = details.get(summaryVuln.id) ?? summaryVuln;
+        for (const vuln of mergeAliasedVulns(vulns.map((v) => details.get(v.id) ?? v))) {
           const { severity, cvssScore } = osvSeverity(vuln);
           const cveId =
             vuln.aliases?.find((a) => a.startsWith("CVE-")) ??

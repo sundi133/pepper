@@ -9,6 +9,7 @@ import {
 import { z } from "zod";
 import { generateSuppressionRule } from "@/lib/suppression-rules";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
+import { recountScanSeverities } from "@/lib/scan-severity-counts";
 
 const updateStatusSchema = z.object({
   status: z.enum([
@@ -81,6 +82,9 @@ export async function PATCH(
       },
       ipAddress: ipFromHeaders(req.headers),
     });
+
+    // Keep the scan's severity totals in step with the new status.
+    if (data.status) await recountScanSeverities(finding.scanId).catch(() => undefined);
 
     // Auto-create suppression rule when marking as false positive
     if (data.status === "FALSE_POSITIVE") {

@@ -13,6 +13,7 @@ import { runRemediation } from "@/lib/remediation/agent";
 import { startScheduler } from "./scheduler";
 import { startAuditRetention } from "@/lib/audit-retention";
 import { startDataRetention } from "@/lib/data-retention";
+import { scheduleRetiredFindingsCleanup } from "@/lib/retired-findings";
 import { logger } from "@/lib/logger";
 import { logOutboundProxy } from "@/lib/outbound-proxy";
 import { prisma } from "@/lib/prisma";
@@ -118,6 +119,7 @@ async function main() {
   const schedulerInterval = startScheduler();
   const auditRetentionInterval = startAuditRetention();
   const dataRetentionInterval = startDataRetention();
+  scheduleRetiredFindingsCleanup();
   const shutdown = async () => {
     logger.info("Shutting down worker...");
     clearInterval(schedulerInterval);

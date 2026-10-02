@@ -5,6 +5,7 @@ import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import { z } from "zod";
 import { generateSuppressionRule } from "@/lib/suppression-rules";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
+import { recountScanSeverities } from "@/lib/scan-severity-counts";
 
 const bulkUpdateSchema = z.object({
   findingIds: z.array(z.string()).min(1).max(500),
@@ -63,6 +64,16 @@ export async function PATCH(req: NextRequest) {
       },
       ipAddress: ipFromHeaders(req.headers),
     });
+
+    // Keep the scans' severity totals in step with the new statuses.
+    if (result.count > 0) {
+      const scans = await prisma.finding.findMany({
+        where: { id: { in: data.findingIds }, scan: { project: { organizationId: orgId } } },
+        select: { scanId: true },
+        distinct: ["scanId"],
+      });
+      await Promise.allSettled(scans.map((s) => recountScanSeverities(s.scanId)));
+    }
 
     // Auto-create suppression rules when bulk-marking as false positive
     if (data.status === "FALSE_POSITIVE" && result.count > 0) {

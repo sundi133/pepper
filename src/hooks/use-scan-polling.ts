@@ -96,6 +96,8 @@ export function useFindings(
     findings: data?.findings || [],
     /** Per-scanner totals across all findings, independent of the page size. */
     scannerCounts: (data?.scannerCounts || {}) as Record<string, number>,
+    /** False positives hidden under the current filters. */
+    falsePositiveCount: (data?.falsePositiveCount ?? 0) as number,
     pagination: data?.pagination,
     error,
     isLoading,

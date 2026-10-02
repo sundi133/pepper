@@ -16,6 +16,11 @@ const TITLES: Record<string, string> = {
   OPENAI_API_KEY: "OpenAI API key",
   API_KEY: "Hard-coded API key",
   SECRET_KEY: "Hard-coded secret key",
+  AWS_SECRET_ACCESS_KEY: "AWS secret access key",
+  SLACK_WEBHOOK: "Slack webhook URL",
+  AZURE_STORAGE_KEY: "Azure storage account key",
+  ANTHROPIC_API_KEY: "Anthropic API key",
+  GENERIC_SECRET: "Hard-coded secret",
 };
 
 /**

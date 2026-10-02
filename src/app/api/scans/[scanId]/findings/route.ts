@@ -33,6 +33,9 @@ export async function GET(
   const filePath = searchParams.get("filePath");
   const status = searchParams.get("status")?.split(",");
   const isNewParam = searchParams.get("isNew");
+  // Findings triaged as false positives are hidden unless asked for: they are
+  // not issues to fix. An explicit status filter still returns exactly that.
+  const includeFalsePositives = searchParams.get("includeFalsePositives") === "true";
   const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
   const limit = Math.min(
     500,
@@ -45,6 +48,7 @@ export async function GET(
   if (scanner) where.scanner = { in: scanner };
   if (filePath) where.filePath = { contains: filePath };
   if (status) where.status = { in: status };
+  else if (!includeFalsePositives) where.status = { not: "FALSE_POSITIVE" };
   if (isNewParam === "true") where.isNew = true;
   else if (isNewParam === "false") where.isNew = false;
 
@@ -73,7 +77,7 @@ export async function GET(
   // Deriving them from the page made a whole scanner's tab disappear once the
   // results ran past the limit: with severity sorting, 400+ criticals filled the
   // page and lower-severity SCA findings fell outside it entirely.
-  const [findings, total, byScanner] = await Promise.all([
+  const [findings, total, byScanner, falsePositiveCount] = await Promise.all([
     prisma.finding.findMany({
       where,
       orderBy,
@@ -89,6 +93,8 @@ export async function GET(
       where: countsWhere,
       _count: { _all: true },
     }),
+    // How many the "show false positives" toggle would add under these filters.
+    status ? Promise.resolve(0) : prisma.finding.count({ where: { ...where, status: "FALSE_POSITIVE" } }),
   ]);
 
   const scannerCounts: Record<string, number> = {};
@@ -112,6 +118,8 @@ export async function GET(
     findings: enrichedFindings,
     /** Totals per scanner across all matching findings, for the section tabs. */
     scannerCounts,
+    /** False positives under the same filters (hidden unless includeFalsePositives=true). */
+    falsePositiveCount,
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }

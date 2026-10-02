@@ -11,6 +11,7 @@ interface RunSummary {
   prUrl: string | null;
   fixedCount: number;
   failedCount: number;
+  errorMessage?: string | null;
   total: number;
   createdAt: string;
 }
@@ -23,6 +24,24 @@ const LABEL: Record<string, string> = {
   FAILED: "failed",
   CANCELLED: "cancelled",
 };
+
+/**
+ * What happened, in one line. A run that fixed findings but could not open its
+ * pull request is "failed", yet "failed — 1/1 fixed" says two opposite things.
+ */
+export function remediationSummary(run: Pick<RunSummary, "status" | "fixedCount" | "total" | "prUrl">): string {
+  const fixed = `${run.fixedCount}/${run.total} fixed`;
+  switch (run.status) {
+    case "QUEUED":
+    case "RUNNING":
+      return `AI remediation ${LABEL[run.status]}`;
+    case "FAILED":
+      if (run.fixedCount > 0 && !run.prUrl) return `AI remediation: ${fixed}, pull request not opened`;
+      return "AI remediation failed: no fix was applied";
+    default:
+      return `AI remediation ${LABEL[run.status] ?? run.status.toLowerCase()} — ${fixed}`;
+  }
+}
 
 /** Latest AI remediation run for a scan, with links to the live view and PR. */
 export function RemediationRunsStrip({ scanId }: { scanId: string }) {
@@ -42,10 +61,12 @@ export function RemediationRunsStrip({ scanId }: { scanId: string }) {
       ) : (
         <Bot className="h-4 w-4 text-primary" aria-hidden />
       )}
-      <span>
-        AI remediation {LABEL[latest.status] ?? latest.status.toLowerCase()}
-        {!active && ` — ${latest.fixedCount}/${latest.total} fixed`}
-      </span>
+      <span>{remediationSummary(latest)}</span>
+      {latest.status === "FAILED" && latest.errorMessage && (
+        <span className="max-w-xl truncate text-muted-foreground" title={latest.errorMessage}>
+          {latest.errorMessage}
+        </span>
+      )}
       <Link href={`/remediation/${latest.id}`} className="text-primary hover:underline">
         {active ? "Watch live" : "View run"}
       </Link>

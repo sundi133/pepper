@@ -189,9 +189,14 @@ export async function GET(
     select: { projectId: true },
   });
   if (!scan) return NextResponse.json({ error: "Scan not found" }, { status: 404 });
-  // Runs belong to the repository, so they stay visible after a rescan.
+  // Runs started from this scan, plus any run still working on the repository
+  // (so it can be watched from a newer scan). A finished run from an earlier
+  // scan is not shown here: on a fresh rescan it reads as that scan's result.
   const runs = await prisma.remediationRun.findMany({
-    where: { organizationId: orgId, OR: [{ scanId }, { projectId: scan.projectId }] },
+    where: {
+      organizationId: orgId,
+      OR: [{ scanId }, { projectId: scan.projectId, status: { in: ["QUEUED", "RUNNING"] } }],
+    },
     orderBy: { createdAt: "desc" },
     take: 10,
     select: {
@@ -200,6 +205,7 @@ export async function GET(
       prUrl: true,
       fixedCount: true,
       failedCount: true,
+      errorMessage: true,
       createdAt: true,
       completedAt: true,
       _count: { select: { items: true } },

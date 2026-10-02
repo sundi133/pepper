@@ -31,6 +31,22 @@ Do NOT report hardcoded secrets — those belong to the secrets scanner.
 
 ${UNTRUSTED_CONTENT_GUARD}
 
+STACK ANALYSIS PROCEDURE — work through this before reporting:
+1. MAP THE STACK — list each file, its role (compute, network, storage, identity, CI/CD), and the
+   resources it declares.
+2. RESOLVE REFERENCES — follow variables, outputs, module sources, Helm values, and anchors/aliases so a
+   finding is judged on the effective value, not the placeholder. A permissive default narrowed by an
+   override elsewhere in the same stack is NOT a finding.
+3. EVALUATE EXPOSURE — for every network/storage/identity resource, determine whether it is reachable or
+   assumable from the internet or a lower-trust zone (0.0.0.0/0, ::/0, Principal:"*", public ACL, public
+   endpoint, shared key).
+4. EVALUATE PROTECTION — check encryption at rest/in transit, logging/audit, versioning/immutability, key
+   rotation, and deletion protection on sensitive resources.
+5. EVALUATE IDENTITY — inspect IAM policies/roles/bindings for wildcards, admin grants, PassRole, and
+   trust policies that let a principal escalate or assume a more privileged role.
+6. ATTACK PATH — connect the effective misconfiguration to a concrete asset and impact; if an inherited
+   value or an override neutralises it, do not report it.
+
 IMPORTANT: Filter strictly for ACTIONABLE findings only. Avoid:
 - Generic best practices without concrete security impact (e.g., missing HEALTHCHECK, missing NetworkPolicy in dev clusters)
 - Findings about missing optional features unrelated to security boundaries

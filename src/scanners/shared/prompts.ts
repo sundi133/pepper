@@ -118,6 +118,39 @@ WHY REAL — judge by context, not just shape:
 - A credential is ALSO real when it is masked only partially (e.g. a hardcoded prefix + the remainder assembled at runtime) or obfuscated (base64/hex of a real key, split literals rejoined in code) — deobfuscate the obvious ones and report the original.
 - A credential is NOT real when it is referenced only as an environment variable name (process.env.DB_PASSWORD with no literal), appears inside docs/comments as an example, is short or low-entropy, is a mock/test fixture (jest, mocha, seed scripts), contains the words example/dummy/test/placeholder/todo/fake, is a checksum/hash/commit SHA/public key/certificate, is a public identifier (account ID, bucket name, ARN) rather than a secret, or is a "demo"/"development" override that cannot reach a production path.
 
+SECRET SCANNING PROCEDURE — apply to every candidate before judging:
+1. IDENTIFY — which provider/credential class does the literal belong to? Match it against the provider
+   format reference below.
+2. VALIDATE FORMAT — confirm the literal is in that provider's live format (prefix, length, charset). A
+   malformed lookalike is not a leak.
+3. DECODE LAYERS — if the value is base64/hex/ROT13, split across literals, or assembled at runtime,
+   deobfuscate the obvious layer and judge the recovered value.
+4. CONTEXT — where does it live? A committed credential/config file, a production-reachable code path, a
+   deploy manifest, or a CI workflow means REAL. Docs, examples, tests, localhost demos, and mocks mean NOT.
+5. REACHABILITY — is there a consumer (a client that uses it, a server started with it, a config
+   referenced by a manifest)? If it is only reachable from a demo path, treat it as NOT real.
+6. IMPACT — state what the credential unlocks if used (read/write a bucket, push to a repo, forge a
+   session, read a DB, call a paid API, decrypt data).
+Report once per distinct literal, at its definition site, noting any duplicate occurrences elsewhere.
+
+PROVIDER FORMAT REFERENCE (shape → what it unlocks):
+- AWS: access key ID AKIA[0-9A-Z]{16} or ASIA… (short-lived) paired with a 40-char secret → the IAM
+  permissions of that principal.
+- GitHub: ghp_… (classic PAT), github_pat_… (fine-grained), gho_/ghu_/ghs_ (OAuth/app tokens) → repo,
+  org, and package scope.
+- GitLab glpat-… ; GitLab CI_JOB_TOKEN ; HashiCorp Vault hvs./hvb./s.… ; Databricks dapi… ; npm_… ; pypi-….
+- Anthropic sk-ant-… ; OpenAI sk-… / sk-proj-… ; Google AIza… (API key), ya29… (access), GOCSPX-… (OAuth
+  client secret) ; Hugging Face hf_….
+- Slack xox[baprs]-… ; Discord bot token ; Telegram <bot_id>:<35-char> ; Twilio SK…/AC… ; SendGrid SG.… ;
+  Mailgun key-… ; Mailchimp ; Sendinblue.
+- Stripe sk_live_/rk_live_/whsec_… ; Plaid/Square/Braintree secrets ; webhook signing secrets.
+- Azure: Storage account key (88-char base64) or SAS token (sv=…&sig=…) ; service-principal client_secret.
+- GCP: serviceAccountKey.json (private_key + client_email) ; OAuth refresh token.
+- Private keys: "BEGIN (RSA|EC|OPENSSH|PGP) PRIVATE KEY" ; kubeconfig client-key-data.
+- Connection strings: postgres://… , mysql://… , mongodb+srv://… containing a password ; redis:// and
+  amqp:// URIs with a password.
+- JWT/session signing secrets: a high-entropy literal passed to sign()/verify() with HS256/HS384/HS512.
+
 Each real secret MUST have:
 - whyReal: one sentence tying the literal to its context (which file, what it unlocks, why it is reachable/exploitable) — this is the strongest anti-false-positive field.
 - severity: live/privileged production credentials (admin AWS keys, GITHUB_TOKEN, root DB passwords, JWT/session signing secrets, private keys, OAuth client secrets) → CRITICAL. Scoped, low-privilege, expired, or clearly dev/test credentials → HIGH.
@@ -175,6 +208,23 @@ REACHABILITY — use "importEvidence" (actual import/require lines found in the 
 - If imports exist, assess whether the vulnerable function/module named in the advisory is reachable
   from those call sites. If the advisory names a specific vulnerable function that never appears,
   set reachable=false and explain which function was expected.
+
+REACHABILITY PROCEDURE (per ecosystem) — use importEvidence to decide whether the vulnerable code is
+actually invoked, not merely present:
+- npm/JavaScript: find the import/require of the package, then a call to the advisory's named function or
+  the default export (e.g. lodash.template, serialize-javascript). A bare package import with no call into
+  the named API is reachable=false.
+- Python: find "import pkg" / "from pkg import x" then the vulnerable callable (e.g. yaml.load vs
+  safe_load, pickle.loads) and check the argument is untrusted bytes.
+- Java/Maven: find the class/method from the advisory at a call site (e.g. XStream.fromXML,
+  ObjectInputStream.readObject) and whether an allow-list/type filter is configured there.
+- Go: find the imported module path and the exported function used; a module in go.mod with no call into
+  the vulnerable symbol is reachable=false.
+- Ruby: require "gem" plus the affected method (e.g. YAML.load, a where() with interpolation).
+- PHP: composer autoload plus the vulnerable function (unserialize, include, a raw query).
+When the advisory names a function that never appears at a call site, reachable=false and say which
+function was expected; when the package is not imported at all, that is the strongest non-applicability
+ground.
 
 REMEDIATION TARGET — "introducedBy" names the direct dependency that pulls the package in and
 "dependencyPath" shows the chain. When the vulnerable package is transitive, the actionable fix is
@@ -254,6 +304,21 @@ Return JSON: { "triaged": [{ "osvId", "keep": true|false, "reason", "metadata": 
 export const MALICIOUS_VALIDATION_PROMPT = `Validate supply-chain risk from EVIDENCE only (metadata, install scripts, typosquat signals, OSV MAL-*).
 Emit only if credible malicious/suspicious risk (confidence >= 0.80).
 
+INVESTIGATION PROCEDURE — for each package under review:
+1. LIST THE LIFECYCLE SCRIPTS — preinstall/install/postinstall/prepare (npm) and the ecosystem equivalents.
+   Separate recognised build steps (node-gyp, prebuild-install, cmake-js, …) from scripts needing review.
+2. DECODE — base64/hex/ROT13, split literals, eval/Function, Buffer.from(...).toString and dynamic require
+   are obfuscation markers; decode the obvious layer and judge the recovered code.
+3. TRACE CAPABILITY — does the script read credentials (process.env, ~/.npmrc, ~/.ssh, ~/.aws, cloud
+   metadata, CI env), write outside the package, or open a network connection?
+4. TRACE NETWORK — does it fetch and execute remote content, POST to a raw IP / webhook / paste site, or
+   open a reverse shell or mining connection (stratum+tcp)?
+5. COMPARE HISTORY — is this release the first to add/change the script (account-takeover pattern), or has
+   the identical script shipped for many releases (established build step)? Use the version fields.
+6. TYPOSQUAT — compare the name to the package it imitates (edit distance, prefix/suffix swap, hyphenation,
+   lookalike characters) and weigh registry ownership and release history.
+7. VERDICT — emit only with the exact script line or metadata field as evidence; otherwise report nothing.
+
 NOT findings on their own — never emit for these alone:
 - "new package" or "no repository"
 - the mere presence of an install script. Packages with native components must
@@ -317,6 +382,25 @@ Only report real misconfigurations with concrete attack impact. Do NOT report ge
 
 For each finding include: title, severity (CRITICAL|HIGH|MEDIUM|LOW), description (exact misconfiguration + concrete attack path + impact), startLine, endLine, cweId, remediation, validationSteps. Category CONTAINER_CONFIG.
 
+ANALYSIS PROCEDURE — for each Dockerfile/compose file:
+1. STAGES — split the file into build stages; note the FINAL stage, because only its contents ship.
+2. BASE — for every FROM, record image, tag, digest, and whether the registry is a vetted publisher.
+3. IDENTITY — find the effective USER in the final stage (or its absence) and any setuid/setgid binaries.
+4. SECRETS — scan ENV/ARG/RUN/COPY/ADD for literals and for files (.env, id_rsa, .git-credentials, cloud
+   credentials) that would be baked into a layer; docker history can extract them later.
+5. CONTEXT — check what COPY/ADD brings in and whether .dockerignore excludes secrets, .git and caches.
+6. RUNTIME (compose) — privileged, host namespaces, docker.sock, capabilities, published ports,
+   read-only rootfs, resource limits, security_opt.
+7. ATTACK PATH — connect each misconfiguration to a concrete impact (host compromise, credential
+   disclosure, lateral movement) or do not report it.
+
+SAFE COUNTERPARTS (if the file already does this, it is NOT a finding):
+- USER set to a non-root numeric UID; base image pinned by digest; multi-stage build that drops build
+  tooling; COPY of only required paths with a .dockerignore; secrets injected at runtime via
+  --mount=type=secret / docker secrets / a secret manager; read_only: true with tmpfs for writable paths;
+  cap_drop: [ALL] with only the needed caps re-added; no-new-privileges: true; explicit mem_limit/cpus;
+  internal-only services not published to 0.0.0.0.
+
 DOCKERFILE CHECKS:
 1. **Root user** - no USER directive, or USER root / USER 0; app runs as root, so a container compromise = host-level damage. CWE-250.
 2. **Unpinned base image** - FROM image:latest or a mutable tag with no SHA256 digest pin; a pushed-over tag silently changes the runtime. CWE-1357.
@@ -368,6 +452,18 @@ CRITICAL RULES:
 - Do NOT report issues about image content/vulnerabilities — that's covered by container scanning
 - Focus on: security context, RBAC, network policies, secret handling, resource limits, pod security, admission policies
 
+ANALYSIS PROCEDURE — walk each manifest file:
+1. ENUMERATE RESOURCES — list every resource (kind, name, namespace, apiVersion).
+2. WORKLOAD SPECS — for Pod/Deployment/StatefulSet/DaemonSet/Job/CronJob, inspect the pod-level
+   securityContext, each container securityContext, and initContainers/ephemeralContainers separately.
+3. IDENTITY & RBAC — map serviceAccountName → its Role/ClusterRole bindings; list verbs, resources,
+   apiGroups, and any wildcard, escalate, impersonate, or secrets permissions.
+4. NETWORK — list Services, Ingress, NetworkPolicies, hostPort/NodePort/externalIPs; determine what is
+   reachable from outside the cluster and whether a default-deny policy exists.
+5. SECRETS & CONFIG — find plaintext credentials in ConfigMaps/env/args, secretKeyRef usage, projected
+   token expiry, and mounted secret volumes.
+6. EXPOSURE → IMPACT — for each misconfiguration, state who can reach it and the concrete impact.
+
 KUBERNETES SECURITY CHECKS:
 1. **Privileged Containers** - securityContext.privileged: true
 2. **RBAC Overprivilege** - wildcard (*) in rules, apiGroups, or resources; cluster-admin bound to a service account or default SA; ClusterRoleBinding granting high-risk verbs (create pods, exec, impersonate, escalate, secrets get) to a workload SA
@@ -396,6 +492,17 @@ KUBERNETES SECURITY CHECKS:
 25. **Deprecated / alpha API versions** - apiVersion extensions/v1beta1, apps/v1beta1, policy/v1beta1, batch/v1beta1, or networking.k8s.io/v1beta1; removed/unsupported schemas with no policy enforcement. CWE-1104.
 26. **Default namespace / default service account** - workload with no namespace (defaults to default) or no serviceAccountName, so it runs with the namespace's default token and whatever RBAC is bound to it. CWE-250.
 27. **Init/ephemeral container security gaps** - hostPath, hostPID, hostNetwork, privileged, or missing securityContext applied on initContainers/ephemeralContainers, which are often overlooked when hardening the pod template. CWE-250.
+
+POD SECURITY STANDARD "RESTRICTED" REFERENCE — a workload meets it only when ALL hold:
+- runAsNonRoot: true and an explicit non-zero runAsUser; allowPrivilegeEscalation: false;
+  readOnlyRootFilesystem: true; capabilities.drop: ["ALL"] (re-adding only NET_BIND_SERVICE if required).
+- seccompProfile.type: RuntimeDefault at pod or container level.
+- No privileged, hostNetwork/hostPID/hostIPC, hostPath, hostPort, or host aliases.
+- automountServiceAccountToken: false where the workload does not call the API; projected tokens carry an
+  audience and expiration; a dedicated per-workload ServiceAccount (never the default).
+- Namespace labelled pod-security.kubernetes.io/enforce: restricted (baseline at minimum).
+- Resource requests and limits set; a default-deny NetworkPolicy with explicit allow rules.
+Any item missing above is a finding; the checks below name the class and its severity.
 
 SEVERITY GUIDELINES:
 - CRITICAL: Immediate compromise risk (privileged, wildcard RBAC, cluster-admin on SA, running as root in untrusted context, docker.sock/hostPath host root, hostPID/hostNetwork)

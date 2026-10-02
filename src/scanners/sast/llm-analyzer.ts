@@ -171,6 +171,26 @@ STRICT RULES:
 9. LINE-BY-LINE COMPLETENESS — read every provided line, not only the obviously dangerous ones. Guards, imports, configuration defaults, and helper functions usually live in lines that look routine; missing them is how both false positives (reporting a sink a guard already neutralises) and false negatives (missing an absent control) happen. When the header says WHOLE FILE you have every line and must reason across all of them; when it says CHUNK you see part of the file and must treat guards outside it as unknown, not absent.
 10. NO FABRICATED IDENTIFIERS — every sink, parameter, function, route, and variable you name must appear verbatim in the provided lines. If you cannot quote it from the chunk, do not name it. A finding whose cited sink/parameter identifiers do not exist in the file is automatically discarded as a hallucination, so invented detail does not increase recall — it only loses the finding.
 
+ANALYSIS PROCEDURE — work through this for every file/chunk before emitting findings, in your reasoning, not in the output:
+1. INVENTORY — list the entry points (exports, route handlers, CLI/queue/webhook consumers, message
+   listeners), the trust boundaries each crosses, every dangerous sink present, and every guard visible.
+2. BACKWARD TRACE PER SINK — for each sink, trace its arguments backward through assignments, function
+   parameters, return values, object fields and array indexing to find whether an attacker-controllable
+   source reaches it. Name the source and the exact chain.
+3. FORWARD TRACE PER SOURCE — for each attacker-controlled source, follow it forward to every sink it can
+   reach, including through string concatenation, template interpolation, path building, header writes,
+   log lines, query objects, and serialization.
+4. GUARD TEST — at every source→sink edge, look for the control that neutralises it: parameterisation/
+   binding, output encoding or auto-escaping, allowlist/type/enum validation, ownership/role/tenant
+   authorization, CSRF/Origin checks, sandboxing, a safe deserializer, explicit length/range bounds. If a
+   sufficient guard applies, the path is NOT a finding — note why and move on instead of reporting it.
+5. REACHABILITY & PRECONDITIONS — confirm the path is reachable in production (not dead code, test/fixture,
+   or developer-only config) and state the preconditions you can see (auth level, feature flag, input
+   format/encoding, prior state).
+6. EMIT — only after the above, emit the finding with the exact source, the flow, the sink, and the guard
+   that is missing. If a step cannot be completed from the provided lines, report at the honest lower
+   confidence and name the missing piece; never invent it.
+
 For each genuine vulnerability found, respond with:
 {
   "findings": [
@@ -217,6 +237,16 @@ Focus on exploitable instances of:
 - OWASP LLM/AI app risk classes: prompt injection, insecure output handling, excessive agency/tool permissions, data leakage into prompts or logs, unsafe plugin/MCP/tool boundaries, missing human approval for destructive actions
 - Supply-chain and CI/CD risk classes: unpinned actions/images, unsafe pull_request_target workflows, dependency install scripts, unsigned webhooks, build secret exposure, artifact poisoning
 - Cloud-native and identity risk classes: tenant isolation failures, service-account overpermission, missing audit trails for privileged M2M operations, insecure OAuth/OIDC scopes, webhook replay
+
+**LANGUAGE SOURCE→SINK REFERENCE (use the exact API named for the language in the file):**
+- JavaScript/TypeScript (Express/Nest/Koa/Next): sources req.body/query/params/headers/cookies, request.formData(), URL searchParams, WebSocket/SSE messages; sinks db.query/exec built by concatenation, child_process.exec/spawn with a shell, eval/Function/vm.runIn*, fs.readFile/writeFile with a path from input, res.redirect, res.render and raw ejs (<%- %>), innerHTML/outerHTML/dangerouslySetInnerHTML, new RegExp(userInput); guards: parameterised $1/? placeholders, ORM bindings, Prisma $queryRaw with a tagged template (NOT $queryRawUnsafe), helmet, csurf, express-validator/zod/joi, path.basename.
+- Python (Flask/Django/FastAPI): sources request.args/form/json/data/values/headers/cookies, path/query/body params; sinks cursor.execute with f-string/%/concat, os.system/os.popen, subprocess(..., shell=True), eval/exec, pickle.loads/marshal.loads/dill, yaml.load (not safe_load), open() with an input path, Jinja2 |safe/mark_safe, render_template_string, redirect(next); guards: parameterised %s, ORM, html.escape, path allowlists, @login_required/@permission_required, SafeLoader, FileResponse path checks.
+- Java/Spring: sources @RequestParam/@PathVariable/@RequestBody/getParameter/getHeader; sinks Statement.execute/executeQuery with concatenation, Runtime.exec/ProcessBuilder, ObjectInputStream, XMLDecoder, XPathExpression.evaluate, Files.read/write with an input path, reflection/Class.forName; guards: PreparedStatement, @PreAuthorize/@Secured, OWASP Encoder, allowlists, XML disallow-doctype.
+- PHP: sources $_GET/$_POST/$_REQUEST/$_COOKIE/$_FILES/$_SERVER; sinks mysqli_query/mysql_query concatenation, system/exec/shell_exec/passthru/proc_open, include/require with a variable path, unserialize, file_get_contents/fopen with an input path, echo of unescaped input; guards: PDO prepared statements, htmlspecialchars, basename/realpath allowlists, SafeLoader.
+- Ruby/Rails: sources params[], request.headers, cookies; sinks where("...#{params[:x]}"), find_by_sql/execute with interpolation, system/backticks/exec/spawn, eval, Marshal.load, YAML.load (not safe_load), send_file/open with an input path, raw/html_safe; guards: parameterised where(hash), strong parameters, sanitize, ERB autoescaping.
+- Go: sources r.URL.Query()/FormValue/PostFormValue/Header.Get, request bodies; sinks db.Query/Exec via fmt.Sprintf, exec.Command with input, text/template, os.Open with an input path, slice indexing by an untrusted length; guards: parameterised $1, html/template, filepath.Clean/Base allowlists.
+- C/C++: sources recv/read/argv/getenv/fread and FFI boundaries; sinks strcpy/strcat/sprintf/gets, memcpy with an attacker-influenced length, printf with an attacker format, system/popen, pointer+length from untrusted input; guards: snprintf bounds, fixed-size/constant-bounded loops, explicit length checks.
+- C#/.NET: sources Request.Query/Form/Headers/RouteData; sinks SqlCommand concatenation, Process.Start, BinaryFormatter/NetDataContractSerializer, Json.NET TypeNameHandling, Path.Combine followed by File IO; guards: SqlParameter, type allowlists, [Authorize], path sanitisation.
 
 **HIGH-SIGNAL SIGNATURE DETECTION (these exact signatures MUST be flagged when they appear in code):**
 - Unrestricted file upload: @UseInterceptors(FileInterceptor('file')), @UploadedFile, multer({ storage }), busboy/formidable upload handlers WITHOUT a server-side extension/MIME allowlist, filename sanitization, or size limit → report CWE-434/CWE-22 (the decorator/interceptor itself is the sink even if the handler body is not in the chunk)

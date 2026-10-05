@@ -91,6 +91,14 @@ export const secretsPatternScanner: ScannerPlugin = {
               if (!isPrivateKeyBlock(content, match.index)) continue;
 
               const masked = maskSecretValue(matchedValue.substring(0, 50) + "...");
+              const allContentLines = content.split("\n");
+              const startLineIdx = Math.max(0, lineNumber - 2);
+              const endLineIdx = Math.min(allContentLines.length, lineNumber + 3);
+              const privateKeySnippet = allContentLines
+                .slice(startLineIdx, endLineIdx)
+                .map((l, idx) => `${startLineIdx + idx + 1}: ${maskSecretValue(l)}`)
+                .join("\n");
+
               const base: RawFinding = lowerInTestCode(isInlineTestCode(filePath, content, match.index), applySeverityCalibration({
                 scanner: "SECRETS_PATTERN",
                 severity: config.severity,
@@ -99,7 +107,7 @@ export const secretsPatternScanner: ScannerPlugin = {
                 filePath,
                 startLine: lineNumber,
                 endLine: lineNumber,
-                snippet: `${lineNumber}: [MASKED ${credentialType}]`,
+                snippet: privateKeySnippet || `${lineNumber}: [MASKED ${credentialType}]`,
                 ruleId: `SECRET-${credentialType}`,
                 cweId: "CWE-798",
                 confidence: 0.95,
@@ -411,6 +419,27 @@ async function analyzeSecretChunk(
         }
 
         const masked = maskSecretValue(f.exposedValue || "****");
+        const chunkLines = chunk.content.split("\n");
+        const startLineNum = Math.max(1, f.startLine || chunk.startLine);
+        const relStart = Math.max(0, startLineNum - chunk.startLine);
+        const endLineNum = Math.max(startLineNum, f.endLine || startLineNum);
+        const relEnd = Math.min(chunkLines.length, (endLineNum - chunk.startLine) + 1);
+        const snippetLines = chunkLines.slice(Math.max(0, relStart - 1), Math.min(chunkLines.length, relEnd + 2));
+        const realSnippet = snippetLines.length > 0
+          ? snippetLines
+              .map((l, idx) => {
+                const lineNo = Math.max(1, startLineNum - 1) + idx;
+                let maskedLine = l;
+                if (f.exposedValue && l.includes(f.exposedValue)) {
+                  maskedLine = l.split(f.exposedValue).join(masked);
+                } else {
+                  maskedLine = maskSecretValue(l);
+                }
+                return `${lineNo}: ${maskedLine}`;
+              })
+              .join("\n")
+          : `${f.startLine}: [MASKED ${f.credentialType}]`;
+
         const base: RawFinding = applySeverityCalibration({
           scanner: "SECRETS_LLM",
           severity: (f.severity?.toUpperCase() === "CRITICAL" || !f.severity) ? "CRITICAL" : "HIGH",
@@ -419,7 +448,7 @@ async function analyzeSecretChunk(
           filePath: chunk.filePath,
           startLine: f.startLine,
           endLine: f.endLine || f.startLine,
-          snippet: `${f.startLine}: [MASKED ${f.credentialType}]`,
+          snippet: realSnippet,
           ruleId: `SECRET-${f.credentialType.toUpperCase().replace(/\s+/g, "_")}`,
           cweId: "CWE-798",
           confidence: adjustedConfidence,

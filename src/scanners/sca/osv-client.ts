@@ -2,6 +2,7 @@ import { Dependency, RawFinding } from "../types";
 import { logger } from "@/lib/logger";
 import { findPackageUsageWithLines } from "./find-package-usage";
 import { osvFixVersion, osvSeverity, type OsvRecord } from "./osv-severity";
+import { enrichFinding } from "../shared/finding-normalize";
 
 const DETAIL_CONCURRENCY = 8;
 const DETAIL_TIMEOUT_MS = 15_000;
@@ -197,7 +198,15 @@ export async function queryOsvBatch(
             }
           }
 
-          findings.push({
+          let detectedCwe = vuln.database_specific?.cwe_ids?.[0];
+          if (!detectedCwe) {
+            const cweMatch = (vuln.details || vuln.summary || "").match(/CWE-(\d+)/i);
+            if (cweMatch) {
+              detectedCwe = `CWE-${cweMatch[1]}`;
+            }
+          }
+
+          const rawFinding: RawFinding = {
             scanner: "SCA",
             severity,
             title: `${vuln.id}: ${vuln.summary || "Vulnerability in " + dep.name}`,
@@ -205,7 +214,7 @@ export async function queryOsvBatch(
             filePath: dep.sourceFile || undefined,
             ruleId: vuln.id,
             cveId,
-            cweId: vuln.database_specific?.cwe_ids?.[0],
+            cweId: detectedCwe,
             confidence: 1.0,
             metadata: {
               packageName: dep.name,
@@ -217,8 +226,28 @@ export async function queryOsvBatch(
               aliases: vuln.aliases?.length ? vuln.aliases : undefined,
               references: vuln.references?.map((r) => r.url),
               usageLocations: usageLocations.length > 0 ? usageLocations : undefined,
+              remediation: fixVersion
+                ? `Upgrade to version ${fixVersion} or later.`
+                : `Update dependency ${dep.name} to a secure version.`,
             },
-          });
+          };
+
+          findings.push(
+            enrichFinding(rawFinding, rawFinding.metadata as Record<string, unknown>, {
+              whatIsWrong: `${vuln.id}: ${vuln.summary || "Vulnerability in " + dep.name}`,
+              where: `${dep.sourceFile || "dependency manifest"}: ${dep.name}@${dep.version}`,
+              whyExploitable:
+                vuln.details ||
+                vuln.summary ||
+                `Published vulnerability ${vuln.id} affecting ${dep.name}@${dep.version}.`,
+              impact:
+                "Vulnerable third-party dependency may allow attackers to exploit known defects to impact application integrity or availability.",
+              fix: fixVersion
+                ? `Upgrade to version ${fixVersion} or later.`
+                : `Update dependency ${dep.name} to a secure version.`,
+              validation: `Confirm ${dep.name} is updated and verify with dependency audit.`,
+            }),
+          );
         }
       }
     } catch (error) {

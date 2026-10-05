@@ -18,7 +18,18 @@ import { logger } from "@/lib/logger";
 import { llmExcludedPath } from "@/lib/llm-exclusions";
 
 const K8S_FILE_PATTERNS = /\.ya?ml$/i;
-const K8S_DIRECTORIES = new Set(["k8s", "kubernetes", "helm", "manifests"]);
+const K8S_DIRECTORIES = new Set([
+  "k8s",
+  "kubernetes",
+  "helm",
+  "manifests",
+  "deploy",
+  "deployments",
+  "charts",
+  "chart",
+  "infra",
+  "cluster",
+]);
 
 interface K8sLlmFinding {
   title: string;
@@ -203,6 +214,16 @@ export const k8sScanner: ScannerPlugin = {
                 ...base.metadata,
                 remediation: f.fix || "Apply the recommended security configuration",
               } as Record<string, unknown>,
+              {
+                whatIsWrong: f.title,
+                where: `${f.filePath}${f.startLine ? `:${f.startLine}` : ""}`,
+                whyExploitable: f.description,
+                impact: (f.risk && f.risk.length > 0) ? f.risk.join("; ") : f.description,
+                fix: f.fix || "Apply the recommended security configuration",
+                validation: (f.bestPractices && f.bestPractices.length > 0)
+                  ? f.bestPractices.join("; ")
+                  : "Verify manifest with kubectl apply --dry-run=server",
+              },
             );
           });
 

@@ -750,6 +750,32 @@ function MaliciousPkgFindingReport({ finding, sourceContext }: { finding: Findin
   );
 }
 
+function getScaUpgradeCommand(ecosystem: string, pkg: string, fixVersion: string): string {
+  const eco = (ecosystem || "").toLowerCase();
+  if (eco.includes("pypi") || eco.includes("pip") || eco.includes("python")) {
+    return `pip install "${pkg}>=${fixVersion}"`;
+  }
+  if (eco.includes("go") || eco.includes("golang")) {
+    return `go get ${pkg}@v${fixVersion.replace(/^v/, "")}`;
+  }
+  if (eco.includes("cargo") || eco.includes("crates") || eco.includes("rust")) {
+    return `cargo update -p ${pkg} --precise ${fixVersion}`;
+  }
+  if (eco.includes("maven") || eco.includes("gradle")) {
+    return `Update dependency version to ${fixVersion}`;
+  }
+  if (eco.includes("packagist") || eco.includes("composer") || eco.includes("php")) {
+    return `composer require ${pkg}:^${fixVersion}`;
+  }
+  if (eco.includes("nuget") || eco.includes(".net") || eco.includes("csharp")) {
+    return `dotnet add package ${pkg} --version ${fixVersion}`;
+  }
+  if (eco.includes("rubygems") || eco.includes("gem") || eco.includes("ruby")) {
+    return `bundle update ${pkg}`;
+  }
+  return `npm install ${pkg}@${fixVersion}`;
+}
+
 function ScaFindingReport({ finding, sourceContext }: { finding: Finding; sourceContext?: FindingScanSourceContext }) {
   const [generatedDetails, setGeneratedDetails] = useState<{
     summary: string;
@@ -792,10 +818,12 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
   const metadata = finding.metadata as Record<string, unknown> | undefined;
   const fixVersion = typeof metadata?.fixVersion === "string" ? metadata.fixVersion : undefined;
   const currentVersion = typeof metadata?.currentVersion === "string" ? metadata.currentVersion : undefined;
+  const ecosystem = typeof metadata?.ecosystem === "string" ? metadata.ecosystem : "";
   // SCA findings carry the package in metadata; the rule id is the advisory id.
   const packageName =
     (metadata?.packageName as string | undefined) ||
     (metadata?.package as string | undefined);
+  const targetPackage = packageName || (metadata?.packageName as string | undefined) || finding.ruleId || "package";
   const cveId = finding.cveId || (Array.isArray(metadata?.cves) ? metadata.cves[0] : undefined);
 
   // Get AI-analyzed vulnerability data from finding metadata (analyzed during scan)
@@ -1004,30 +1032,15 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
             </div>
           </div>
 
-          {/* Severity & Risk */}
-          <div className="space-y-2">
-            <div className="rounded-lg border border-red-200 bg-red-50 p-2">
-              <h3 className="font-semibold text-xs text-red-900 mb-1">🔴 {finding.severity || "HIGH"}</h3>
-              <p className="text-xs text-red-800 leading-tight">
-                Known vulnerability. Exploit is likely.
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-green-200 bg-green-50 p-2">
-              <h3 className="font-semibold text-xs text-green-900 mb-1">✓ Fix Available</h3>
-              <p className="text-xs text-green-800 leading-tight font-mono">
-                {fixVersion ? `v${fixVersion}` : "Latest"}
-              </p>
-            </div>
-          </div>
-
           {/* Quick Fix */}
           {fixVersion && (
-            <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-              <h3 className="font-semibold text-sm text-green-900 mb-2">✓ Quick Fix Available</h3>
-              <p className="text-xs text-green-800 mb-2">Upgrade to version {fixVersion}</p>
-              <code className="text-xs font-mono bg-green-100 px-2 py-1 rounded block">
-                npm install {finding.ruleId}@{fixVersion}
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-card-foreground">
+              <h3 className="font-semibold text-xs text-emerald-700 dark:text-emerald-400 mb-1 flex items-center gap-1.5">
+                <span>✓</span> Quick Fix Available
+              </h3>
+              <p className="text-xs text-muted-foreground mb-2">Upgrade to version {fixVersion}</p>
+              <code className="text-xs font-mono bg-card px-2 py-1.5 rounded border border-emerald-500/20 block overflow-x-auto text-emerald-800 dark:text-emerald-300">
+                {getScaUpgradeCommand(ecosystem, targetPackage, fixVersion)}
               </code>
             </div>
           )}
@@ -1042,10 +1055,10 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
 
         {/* Fix Instructions */}
         {fixVersion && (
-          <div className="rounded-lg border border-green-200 bg-green-50 p-3 mb-3">
-            <p className="text-xs font-semibold text-green-900 mb-2">Upgrade Command</p>
-            <pre className="bg-white p-2 rounded border border-green-200 text-xs font-mono overflow-x-auto">
-              npm install {finding.ruleId}@{fixVersion}
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 mb-3">
+            <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5">Upgrade Command</p>
+            <pre className="bg-card p-2 rounded border border-emerald-500/20 text-xs font-mono overflow-x-auto text-emerald-800 dark:text-emerald-300">
+              {getScaUpgradeCommand(ecosystem, targetPackage, fixVersion)}
             </pre>
           </div>
         )}

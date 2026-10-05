@@ -467,35 +467,7 @@ function SastFindingReport({ finding, sourceContext }: { finding: Finding; sourc
             ) : stepsAsStr ? (
               <ReportRichText text={stepsAsStr} />
             ) : (
-              <div className="space-y-3">
-                {stepsAsArr.filter(s => s && s.trim()).map((step, idx) => {
-                  const curlMatch = step.match(/```(?:bash)?\s*\n([\s\S]*?)```/);
-                  if (curlMatch) {
-                    const before = step.replace(/```(?:bash)?\s*\n[\s\S]*?```/, "").trim();
-                    return (
-                      <div key={idx}>
-                        {before && <p className="text-sm leading-6 text-muted-foreground mb-1">{before}</p>}
-                        <pre className="overflow-x-auto rounded-lg bg-muted/80 border border-border/60 p-3 text-xs font-mono leading-relaxed text-foreground mb-2">
-                          <code>{curlMatch[1]}</code>
-                        </pre>
-                      </div>
-                    );
-                  }
-                  if (step.startsWith("http") || step.startsWith("curl")) {
-                    return (
-                      <pre key={idx} className="overflow-x-auto rounded-lg bg-muted/80 border border-border/60 p-3 text-xs font-mono leading-relaxed text-foreground mb-2">
-                        <code>{step}</code>
-                      </pre>
-                    );
-                  }
-                  return (
-                    <p key={idx} className="text-sm leading-6 text-muted-foreground">
-                      <strong className="text-foreground mr-1">{idx + 1}.</strong>
-                      {step}
-                    </p>
-                  );
-                })}
-              </div>
+              <ReportPlainList items={stepsAsArr} />
             )}
           </div>
         )}
@@ -1569,16 +1541,53 @@ function splitMarkdownBlocks(text: string): MarkdownBlock[] {
 function ReportPlainList({ items }: { items: string[] }) {
   return (
     <ol className="space-y-3 list-none">
-      {items.map((step, index) => (
-        <li key={index} className="flex gap-3">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary shrink-0">
-            {index + 1}
-          </span>
-          <div className="pt-0.5 min-w-0">
-            <InlineMarkdown text={step} />
-          </div>
-        </li>
-      ))}
+      {items.map((rawStep, index) => {
+        // Strip leading numbering e.g. "1. ", "1) ", "1: ", "1 " so badges don't display duplicate numbers
+        const cleanStep = rawStep
+          .replace(/^\s*\d+[\.):]\s*/, "")
+          .replace(/^\s*\d+\s+(?=[A-Za-z])/, "");
+
+        // Check for fenced code block e.g. ```graphql or ``bash or ```
+        const codeMatch = cleanStep.match(/`{2,3}[\w-]*\n?([\s\S]*?)`{2,3}/);
+        const isPlainCommand =
+          !codeMatch &&
+          (cleanStep.startsWith("curl ") ||
+            cleanStep.startsWith("http://") ||
+            cleanStep.startsWith("https://") ||
+            cleanStep.startsWith("graphql "));
+
+        const textPart = codeMatch
+          ? cleanStep.replace(/`{2,3}[\w-]*\n?[\s\S]*?`{2,3}/, "").trim()
+          : isPlainCommand
+            ? ""
+            : cleanStep;
+
+        const codePart = codeMatch
+          ? codeMatch[1].trim()
+          : isPlainCommand
+            ? cleanStep.trim()
+            : null;
+
+        return (
+          <li key={index} className="flex gap-3">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary shrink-0">
+              {index + 1}
+            </span>
+            <div className="pt-0.5 min-w-0 space-y-2 flex-1">
+              {textPart && (
+                <div className="text-sm leading-6 text-muted-foreground">
+                  <InlineMarkdown text={textPart} />
+                </div>
+              )}
+              {codePart && (
+                <pre className="max-w-full overflow-x-auto rounded-lg border border-border/60 bg-muted/80 p-3 text-xs font-mono leading-relaxed text-foreground">
+                  <code>{codePart}</code>
+                </pre>
+              )}
+            </div>
+          </li>
+        );
+      })}
     </ol>
   );
 }

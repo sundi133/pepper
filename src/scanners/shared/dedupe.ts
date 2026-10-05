@@ -163,8 +163,12 @@ const SEVERITY_RANK: Record<string, number> = {
 };
 
 export function compareFindingQuality(a: RawFinding, b: RawFinding): number {
+  const isAi = (s?: string) => Boolean(s && (s.includes("LLM") || s === "ZERO_DAY"));
+  const aiWeight = (f: RawFinding) => (isAi(f.scanner) ? 50 : 0);
+
   const score = (f: RawFinding) =>
     (SEVERITY_RANK[f.severity] || 0) * 100 +
+    aiWeight(f) +
     (f.confidence ?? 0) * 10 +
     (f.description?.length || 0) / 100;
   return score(a) - score(b);

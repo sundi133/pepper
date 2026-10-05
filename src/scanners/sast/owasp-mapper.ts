@@ -74,6 +74,10 @@ const CWE_TO_OWASP_MAP: Record<string, { owasp2024: string; owaspApi?: string; o
   "CWE-16": { owasp2024: "A05:2021 Security Misconfiguration" },
   "CWE-693": { owasp2024: "A05:2021 Security Misconfiguration" },
   "CWE-918": { owasp2024: "A10:2021 Server-Side Request Forgery (SSRF)", owaspApi: "A07:2023 Server Side Request Forgery" },
+  "CWE-943": { owasp2024: "A03:2021 Injection", owaspApi: "A09:2023 Improper Inventory Management" },
+  "CWE-204": { owasp2024: "A07:2021 Identification and Authentication Failures" },
+  "CWE-330": { owasp2024: "A02:2021 Cryptographic Failures" },
+  "CWE-346": { owasp2024: "A05:2021 Security Misconfiguration" },
   "CWE-1236": { owasp2024: "A03:2021 Injection" },
   "CWE-1427": { owasp2024: "A03:2021 Injection", owaspLlm: "LLM01:2025 Prompt Injection" },
 };
@@ -85,6 +89,7 @@ const CWE_CATEGORY_MAP: Record<string, string> = {
   "CWE-80": "XSS",
   "CWE-87": "XSS",
   "CWE-89": "Injection",
+  "CWE-943": "Injection",
   "CWE-90": "Injection",
   "CWE-91": "Injection",
   "CWE-93": "Injection",
@@ -106,8 +111,10 @@ const CWE_CATEGORY_MAP: Record<string, string> = {
   "CWE-798": "Secrets",
   "CWE-259": "Secrets",
   "CWE-287": "Authentication",
+  "CWE-204": "Authentication",
   "CWE-306": "Authentication",
   "CWE-307": "Authentication",
+  "CWE-285": "Authorization",
   "CWE-862": "Authorization",
   "CWE-863": "Authorization",
   "CWE-639": "Authorization",
@@ -125,6 +132,7 @@ const CWE_CATEGORY_MAP: Record<string, string> = {
   "CWE-770": "DoS",
   "CWE-16": "Misconfiguration",
   "CWE-693": "Misconfiguration",
+  "CWE-346": "Misconfiguration",
   "CWE-1333": "ReDoS",
 };
 

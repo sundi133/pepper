@@ -2071,7 +2071,7 @@ function FindingActionButtons({
   sourceContext?: FindingScanSourceContext;
 }) {
   return (
-    <div className="flex min-w-0 w-full flex-wrap gap-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
       <CopyReportButton finding={finding} />
       <CopyAiPromptButton finding={finding} sourceContext={sourceContext} tool="claude" />
       <CopyAiPromptButton finding={finding} sourceContext={sourceContext} tool="cursor" />
@@ -2798,58 +2798,60 @@ export function FindingDetailInline({
 
   return (
     <div className="finding-detail-inline min-w-0 w-full max-w-full overflow-hidden rounded-xl border bg-card shadow-sm flex flex-col">
-      <div className="min-w-0 border-b px-4 py-4 sm:px-5">
-        <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <SeverityBadge severity={finding.severity} />
-              <Badge variant="outline" className="text-xs">
-                {SCANNER_LABELS[
-                  finding.scanner as keyof typeof SCANNER_LABELS
-                ] || finding.scanner}
-              </Badge>
-              {finding.ruleId && (
-                <code className="max-w-full break-all rounded bg-muted px-1.5 py-0.5 text-xs">
-                  {finding.ruleId}
-                </code>
-              )}
-              {finding.cweId && (
-                <a
-                  href={getCweUrl(finding.cweId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                >
-                  {finding.cweId}
-                  <ExternalLink className="h-3 w-3 shrink-0" />
-                </a>
-              )}
-              {finding.cveId && (
-                <a
-                  href={getCveUrl(finding.cveId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                >
-                  {finding.cveId}
-                  <ExternalLink className="h-3 w-3 shrink-0" />
-                </a>
-              )}
-            </div>
-            <h3 className="break-words text-lg font-semibold leading-tight">
-              {finding.title}
-            </h3>
-            <FindingLocationRow finding={finding} sourceContext={sourceContext} />
+      <div className="min-w-0 border-b px-4 py-4 sm:px-5 space-y-3">
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <SeverityBadge severity={finding.severity} />
+            <Badge variant="outline" className="text-xs">
+              {SCANNER_LABELS[
+                finding.scanner as keyof typeof SCANNER_LABELS
+              ] || finding.scanner}
+            </Badge>
+            {finding.ruleId && (
+              <code className="max-w-full break-all rounded bg-muted px-1.5 py-0.5 text-xs">
+                {finding.ruleId}
+              </code>
+            )}
+            {finding.cweId && (
+              <a
+                href={getCweUrl(finding.cweId)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+              >
+                {finding.cweId}
+                <ExternalLink className="h-3 w-3 shrink-0" />
+              </a>
+            )}
+            {finding.cveId && (
+              <a
+                href={getCveUrl(finding.cveId)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+              >
+                {finding.cveId}
+                <ExternalLink className="h-3 w-3 shrink-0" />
+              </a>
+            )}
           </div>
-          <div className="flex min-w-0 w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-nowrap lg:justify-end lg:shrink-0">
-            <div className="min-w-0 flex-1 lg:flex-1 basis-full lg:basis-auto">
-              <FindingActionButtons finding={finding} sourceContext={sourceContext} />
-            </div>
+          <h3 className="break-words text-lg font-semibold leading-tight text-foreground">
+            {finding.title}
+          </h3>
+          <FindingLocationRow finding={finding} sourceContext={sourceContext} />
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 pt-3 border-t border-border/50">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <FindingActionButtons finding={finding} sourceContext={sourceContext} />
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-medium text-muted-foreground shrink-0">Status:</span>
             <Select
               value={finding.status || "OPEN"}
               onValueChange={handleStatusChange}
             >
-              <SelectTrigger className="h-8 w-full min-w-fit lg:w-[140px] text-xs">
+              <SelectTrigger className="h-8 w-[140px] text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

@@ -100,6 +100,7 @@ export function getScanners(
 export class FindingDeduplicator {
   private seen = new Map<string, RawFinding>();
   private ordered: RawFinding[] = [];
+  private replacements: Array<{ superseded: RawFinding; replacement: RawFinding }> = [];
 
   dedupe(findings: RawFinding[]): RawFinding[] {
     const gated = applyQualityGates(findings);
@@ -124,9 +125,16 @@ export class FindingDeduplicator {
         this.seen.set(matchKey, f);
         const idx = this.ordered.indexOf(existing);
         if (idx >= 0) this.ordered[idx] = f;
+        this.replacements.push({ superseded: existing, replacement: f });
       }
     }
     return novel;
+  }
+
+  drainReplacements(): Array<{ superseded: RawFinding; replacement: RawFinding }> {
+    const r = [...this.replacements];
+    this.replacements = [];
+    return r;
   }
 
   allFindings(): RawFinding[] {
@@ -154,6 +162,10 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
     onBatchFindings: ctx.onBatchFindings
       ? async (scannerName: string, findings: RawFinding[]) => {
           const deduped = deduplicator.dedupe(findings);
+          const replacements = deduplicator.drainReplacements();
+          if (replacements.length > 0 && ctx.onFindingsReplaced) {
+            await ctx.onFindingsReplaced(replacements);
+          }
           if (deduped.length > 0) {
             await ctx.onBatchFindings!(scannerName, deduped);
           }
@@ -161,14 +173,40 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
       : undefined,
   };
 
+  const hasLlmSast = scanners.some((s) => s.name === "SAST_LLM");
+  let resolveLlmSastDone: () => void = () => {};
+  const llmSastDonePromise = hasLlmSast
+    ? new Promise<void>((resolve) => {
+        resolveLlmSastDone = resolve;
+      })
+    : Promise.resolve();
+
   await Promise.allSettled(
     scanners.map(async (scanner) => {
-      await ctx.waitIfPaused?.();
-      const rawFindings = await scanner.scan(wrappedCtx);
-      await ctx.waitIfPaused?.();
-      const deduped = deduplicator.dedupe(rawFindings);
-      if (ctx.onScannerComplete) {
-        await ctx.onScannerComplete(scanner.name, deduped);
+      try {
+        await ctx.waitIfPaused?.();
+        const rawFindings = await scanner.scan(wrappedCtx);
+        await ctx.waitIfPaused?.();
+
+        // Give first priority to AI: if this is a pattern/regex scanner,
+        // wait for LLM SAST to finish so LLM findings are registered first.
+        // Pattern findings then only fill gaps not covered by AI.
+        if (scanner.name === "SAST_PATTERN" && hasLlmSast) {
+          await llmSastDonePromise;
+        }
+
+        const deduped = deduplicator.dedupe(rawFindings);
+        const replacements = deduplicator.drainReplacements();
+        if (replacements.length > 0 && ctx.onFindingsReplaced) {
+          await ctx.onFindingsReplaced(replacements);
+        }
+        if (ctx.onScannerComplete) {
+          await ctx.onScannerComplete(scanner.name, deduped);
+        }
+      } finally {
+        if (scanner.name === "SAST_LLM") {
+          resolveLlmSastDone();
+        }
       }
     }),
   );

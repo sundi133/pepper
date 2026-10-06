@@ -300,6 +300,20 @@ interface ConfigLlmFinding {
   validationSteps?: string[];
 }
 
+function buildSnippet(
+  lines: string[],
+  startLine?: number,
+  endLine?: number,
+): string | undefined {
+  if (!startLine || startLine < 1 || lines.length === 0) return undefined;
+  const start = Math.max(0, startLine - 3);
+  const end = Math.min(lines.length, (endLine || startLine) + 2);
+  return lines
+    .slice(start, end)
+    .map((line, index) => `${start + index + 1}: ${line}`)
+    .join("\n");
+}
+
 async function scanContainerConfig(
   ctx: ScanContext,
 ): Promise<RawFinding[]> {
@@ -364,6 +378,7 @@ async function scanContainerConfig(
           filePath: file.path,
           startLine: f.startLine,
           endLine: (f.endLine && f.endLine > 0) ? f.endLine : f.startLine,
+          snippet: buildSnippet(fileLines, f.startLine, f.endLine),
           cweId: f.cweId,
           confidence: f.confidence,
           ruleId: `CONTAINER-CONFIG-${f.cweId || "MISC"}`,
@@ -404,6 +419,7 @@ function scanDockerfileLints(ctx: ScanContext): RawFinding[] {
   for (const filePath of dockerfileFiles) {
     try {
       const content = fs.readFileSync(path.join(ctx.workDir, filePath), "utf-8");
+      const contentLines = content.split("\n");
       const stages = parseDockerfile(content, filePath);
       const lints = lintDockerfile(stages);
 
@@ -417,6 +433,7 @@ function scanDockerfileLints(ctx: ScanContext): RawFinding[] {
               description: lint.description,
               filePath,
               startLine: lint.line,
+              snippet: buildSnippet(contentLines, lint.line),
               ruleId: lint.ruleId,
               confidence: 1,
               metadata: {

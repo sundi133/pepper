@@ -556,9 +556,9 @@ export async function* streamChatWithLlm(
 // ─── JSON Response Parser ─────────────────────────────────────────────
 
 export function parseLlmJsonResponse<T>(raw: string, fallback: T): T {
+  let cleaned = (raw || "").trim();
   try {
     // Handle cases where LLM wraps JSON in markdown code blocks
-    let cleaned = raw.trim();
     if (cleaned.startsWith("```json")) {
       cleaned = cleaned.slice(7);
     } else if (cleaned.startsWith("```")) {
@@ -569,6 +569,21 @@ export function parseLlmJsonResponse<T>(raw: string, fallback: T): T {
     }
     return JSON.parse(cleaned.trim()) as T;
   } catch (err) {
+    // Attempt resilient recovery for truncated responses (e.g. max_tokens cutoffs)
+    if (cleaned.includes('"findings"')) {
+      const lastObjEnd = cleaned.lastIndexOf("}");
+      if (lastObjEnd !== -1) {
+        const candidate = cleaned.slice(0, lastObjEnd + 1).trim();
+        for (const suffix of ["]}", "}", "\n]}", "\n}"]) {
+          try {
+            const recovered = JSON.parse(candidate + suffix) as T;
+            logger.info("parseLlmJsonResponse: successfully recovered truncated JSON array");
+            return recovered;
+          } catch {}
+        }
+      }
+    }
+
     logger.warn(
       {
         err,

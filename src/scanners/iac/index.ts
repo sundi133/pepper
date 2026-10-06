@@ -293,15 +293,22 @@ async function analyzeStack(
       )
       .map((f) => {
         const lines = lineMaps.get(f.filePath) || [];
+        const validStartLine = lines.length > 0 && f.startLine
+          ? Math.min(lines.length, Math.max(1, f.startLine))
+          : f.startLine;
+        const validEndLine = lines.length > 0 && (f.endLine || validStartLine)
+          ? Math.min(lines.length, Math.max(validStartLine || 1, f.endLine || validStartLine || 1))
+          : f.endLine;
+
         const raw: RawFinding = {
           scanner: "IAC",
           severity: normalizeSeverity(f.severity),
           title: f.title,
           description: f.description,
           filePath: f.filePath,
-          startLine: f.startLine,
-          endLine: f.endLine,
-          snippet: buildSnippet(lines, f.startLine, f.endLine),
+          startLine: validStartLine,
+          endLine: validEndLine,
+          snippet: buildSnippet(lines, validStartLine, validEndLine),
           cweId: f.cweId,
           confidence: f.confidence ?? IAC_MIN_CONFIDENCE_DEFAULT,
           ruleId: `IAC-${f.cweId || "STACK"}`,
@@ -319,7 +326,7 @@ async function analyzeStack(
         const base = applySeverityCalibration(raw);
         return enrichFinding(base, base.metadata as Record<string, unknown>, {
           whatIsWrong: f.title,
-          where: `${f.filePath}:${f.startLine}`,
+          where: validStartLine ? `${f.filePath}:${validStartLine}` : f.filePath,
           whyExploitable:
             (f.metadata?.attackPath as string) || f.description,
           attackPath: f.metadata?.attackPath as string,

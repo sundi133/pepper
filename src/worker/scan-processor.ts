@@ -704,6 +704,28 @@ Schema:
           WHERE id = ${scanId}
         `;
       },
+      onFindingsReplaced: async (replacements) => {
+        await assertScanActive();
+        log.info(
+          { replacementsCount: replacements.length },
+          "Replacing superseded findings with higher-quality findings",
+        );
+        for (const { superseded, replacement } of replacements) {
+          try {
+            await prisma.finding.deleteMany({
+              where: {
+                scanId,
+                scanner: superseded.scanner,
+                filePath: superseded.filePath,
+                startLine: superseded.startLine,
+              },
+            });
+          } catch (err) {
+            log.warn({ err }, "Failed to delete superseded finding");
+          }
+          await insertFindings([replacement]);
+        }
+      },
     };
 
     // 4. Run scanners (findings are inserted incrementally via onScannerComplete)

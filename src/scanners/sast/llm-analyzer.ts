@@ -247,6 +247,7 @@ Focus on exploitable instances of:
 - Go: sources r.URL.Query()/FormValue/PostFormValue/Header.Get, request bodies; sinks db.Query/Exec via fmt.Sprintf, exec.Command with input, text/template, os.Open with an input path, slice indexing by an untrusted length; guards: parameterised $1, html/template, filepath.Clean/Base allowlists.
 - C/C++: sources recv/read/argv/getenv/fread and FFI boundaries; sinks strcpy/strcat/sprintf/gets, memcpy with an attacker-influenced length, printf with an attacker format, system/popen, pointer+length from untrusted input; guards: snprintf bounds, fixed-size/constant-bounded loops, explicit length checks.
 - C#/.NET: sources Request.Query/Form/Headers/RouteData; sinks SqlCommand concatenation, Process.Start, BinaryFormatter/NetDataContractSerializer, Json.NET TypeNameHandling, Path.Combine followed by File IO; guards: SqlParameter, type allowlists, [Authorize], path sanitisation.
+- Rust: sources req/body/headers/query from Actix/Axum/Rocket/Tide; sinks Command::new with shell strings, unsafe memory blocks with untrusted length/pointer offsets, raw SQL via format!/concatenation; guards: parameterized queries (sqlx/diesel), serde strongly-typed deserialization (serde_json::from_str, parse_struct into a Rust struct is SAFE typed data parsing, NOT CWE-502).
 
 **HIGH-SIGNAL SIGNATURE DETECTION (these exact signatures MUST be flagged when they appear in code):**
 - Unrestricted file upload: @UseInterceptors(FileInterceptor('file')), @UploadedFile, multer({ storage }), busboy/formidable upload handlers WITHOUT a server-side extension/MIME allowlist, filename sanitization, or size limit → report CWE-434/CWE-22 (the decorator/interceptor itself is the sink even if the handler body is not in the chunk)
@@ -328,7 +329,7 @@ The prompt below intentionally enables reporting MISSING or DISABLED controls �
 - Web-server/server-config exposure: directory listing enabled (nginx autoindex on, Apache Options +Indexes) serving source, backups, or secrets; unrestricted HTTP methods on raw locations (nginx put.raw-style location, dav_methods PUT/DELETE, missing method allowlist) allowing file writes/deletion on the server
 
 **DESERIALIZATION & FILE HANDLING:**
-- Insecure deserialization (untrusted data passed to deserialize/pickle/eval)
+- Insecure deserialization (CWE-502): Applies to dynamic object serialization formats where arbitrary code or object graphs are executed on deserialization (Python pickle/marshal/dill/yaml.load, Java ObjectInputStream/XMLDecoder, PHP unserialize, Ruby Marshal.load, .NET BinaryFormatter/TypeNameHandling, Node node-serialize). Do NOT report CWE-502 for typed data parsing into static schemas or structs (e.g. JSON.parse, Rust serde/serde_json/parse_struct, Go json.Unmarshal, Protobuf) as these do not instantiate arbitrary classes or execute code.
 - File upload exploits: missing server-side extension/type validation on upload endpoints (e.g. @UseInterceptors(FileInterceptor('file')), multer, busboy, formidable, fileUpload, UploadedFile) — no allowlist of extensions/MIME types, unfiltered filenames enabling path traversal or polyglot/writable-content upload, missing size limits
 - Prototype pollution (user input merged into object prototypes, __proto__/constructor keys)
 - Zip/XML/JSON bombs, recursive parsing, or large unbounded uploads without streaming, size limits, content-type validation, or quarantine
@@ -695,8 +696,6 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
   return [...controlFindings, ...validated];
 }
 
-const PASS2_OUTPUT_MIN = 0.75; // Pass-2 confirms candidates; output must reach high confidence
-
 /**
  * A window of the full source file centered on the finding's lines, so the
  * pass-2 validator can see guards, imports, and helpers that live outside the
@@ -775,8 +774,8 @@ async function validateCandidatesPass2(
         if (!f.title) continue; // Pass-2 SAST_PASS2_PROMPT already requires >= 0.80
 
         // Match LLM response findings to source candidates by normalized title first,
-        // then by filePath + line proximity. Never fall back to positional index —
-        // LLM may reorder, merge, or drop findings.
+        // then by filePath + line proximity. Never fall back to arbitrary index —
+        // LLM may reorder, merge, or rephrase findings.
         const fTitle = f.title.toLowerCase().replace(/[^a-z0-9]+/g, "");
         let src: (typeof batch)[0] | undefined;
         let bestScore = 0;
@@ -791,6 +790,35 @@ async function validateCandidatesPass2(
         if (src && bestScore < 2 && src.filePath !== f.filePath) {
           src = batch.find(c => c.filePath === f.filePath) || src;
         }
+
+        // Fallback: match by file path, line proximity, or CWE if title was rephrased
+        if (!src) {
+          const fileCandidates = batch.filter(c => c.filePath === f.filePath);
+          if (fileCandidates.length === 1) {
+            src = fileCandidates[0];
+          } else if (fileCandidates.length > 1) {
+            const cweMatch = f.cweId ? fileCandidates.find(c => c.cweId === f.cweId) : undefined;
+            if (cweMatch) {
+              src = cweMatch;
+            } else {
+              let minLineDiff = Infinity;
+              let closest: (typeof batch)[0] | undefined;
+              for (const c of fileCandidates) {
+                const diff = Math.abs((c.startLine ?? 0) - (f.startLine ?? 0));
+                if (diff < minLineDiff) {
+                  minLineDiff = diff;
+                  closest = c;
+                }
+              }
+              if (minLineDiff <= 30) {
+                src = closest;
+              }
+            }
+          } else if (batch.length === 1) {
+            src = batch[0];
+          }
+        }
+
         if (!src) continue; // orphan finding from LLM — skip
 
         const base: RawFinding = applySeverityCalibration({
@@ -798,13 +826,14 @@ async function validateCandidatesPass2(
           severity: parseSeverity(f.severity),
           title: f.title,
           description: f.description,
-          filePath: src?.filePath,
-          startLine: f.startLine,
-          endLine: f.endLine,
-          cweId: f.cweId,
+          filePath: src?.filePath || f.filePath,
+          startLine: f.startLine ?? src?.startLine,
+          endLine: f.endLine ?? src?.endLine,
+          cweId: f.cweId || src?.cweId,
           confidence: f.confidence,
-          ruleId: f.cweId || "CWE-UNKNOWN",
+          ruleId: f.cweId || src?.ruleId || "CWE-UNKNOWN",
           metadata: {
+            ...(src?.metadata || {}),
             ...(f.metadata || {}),
             passPhase: 2,
           },
@@ -812,7 +841,7 @@ async function validateCandidatesPass2(
         validated.push(
           enrichFinding(base, base.metadata as Record<string, unknown>, {
             whatIsWrong: f.title,
-            where: `${src?.filePath}:${f.startLine}`,
+            where: `${src?.filePath || f.filePath}:${f.startLine ?? src?.startLine}`,
             whyExploitable:
               (f.metadata?.attackPath as string) || f.description,
             fix:
@@ -933,9 +962,13 @@ async function runChunkBatches(opts: RunChunkBatchesOptions): Promise<void> {
       }
     }
 
-    // Flush this batch's findings to DB immediately so they appear in UI
-    if (batchFindings.length > 0 && ctx.onBatchFindings) {
-      await ctx.onBatchFindings("SAST_LLM", batchFindings);
+    // Flush only confirmed findings to DB immediately so they appear in UI.
+    // Tentative candidates (passPhase 1) require Pass 2 cross-file validation first.
+    const confirmedBatchFindings = batchFindings.filter(
+      (f) => f.metadata?.passPhase === 2,
+    );
+    if (confirmedBatchFindings.length > 0 && ctx.onBatchFindings) {
+      await ctx.onBatchFindings("SAST_LLM", confirmedBatchFindings);
     }
 
     onProgress?.();
@@ -987,14 +1020,14 @@ async function analyzeChunk(
       .filter((f) => {
         const confidence = f.confidence ?? 0;
         // Log near-threshold findings for visibility
-        if (confidence >= 0.65 && confidence < pass1Floor) {
+        if (confidence >= 0.50 && confidence < pass1Floor) {
           logger.debug(
             {
               filePath: chunk.filePath,
               title: f.title,
               confidence,
             },
-            "Filtered near-threshold finding (confidence 0.65-0.75 requires pass-2 validation)",
+            "Filtered near-threshold finding (confidence below pass1Floor)",
           );
         }
         return confidence >= pass1Floor;

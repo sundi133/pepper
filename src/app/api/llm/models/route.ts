@@ -23,6 +23,7 @@ const PRESETS: Record<string, string[]> = {
     "claude-3-5-haiku-latest",
   ],
   openrouter: [
+    "openrouter/free",
     "z-ai/glm-5.3",
     "anthropic/claude-sonnet-5",
     "google/gemini-2.5-flash",

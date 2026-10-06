@@ -52,6 +52,10 @@ export interface ScanContext {
     scannerName: string,
     findings: RawFinding[],
   ) => Promise<void>;
+  /** Called when a higher-quality finding (e.g. AI) supersedes an earlier finding (e.g. pattern) */
+  onFindingsReplaced?: (
+    replacements: Array<{ superseded: RawFinding; replacement: RawFinding }>,
+  ) => Promise<void>;
 }
 
 /** @see scanners/shared/finding-metadata.ts */

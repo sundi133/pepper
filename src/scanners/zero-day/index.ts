@@ -116,6 +116,15 @@ export const zeroDayScanner: ScannerPlugin = {
             (f.confidence ?? 0) >= ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
         )
         .map((f) => {
+          let snippet: string | undefined;
+          try {
+            const fileContent = fs.readFileSync(path.join(ctx.workDir, f.filePath), "utf-8");
+            const fileLines = fileContent.split("\n");
+            snippet = buildSnippet(fileLines, f.startLine, f.endLine);
+          } catch {
+            // Snippet is optional if file cannot be read
+          }
+
           const base: RawFinding = applySeverityCalibration({
             scanner: "ZERO_DAY",
             severity: normalizeSeverity(f.severity),
@@ -124,6 +133,7 @@ export const zeroDayScanner: ScannerPlugin = {
             filePath: f.filePath,
             startLine: f.startLine,
             endLine: f.endLine,
+            snippet,
             cweId: f.cweId,
             confidence: f.confidence,
             ruleId: `ZD-${f.cweId || "CHAIN"}`,
@@ -131,6 +141,10 @@ export const zeroDayScanner: ScannerPlugin = {
               ...(f.metadata || {}),
               category: f.category || "Novel",
               weaknessClass: f.category || "Business Logic",
+              remediation:
+                f.recommendation ||
+                (f.metadata?.remediation as string) ||
+                "Close the exploit chain per recommendation.",
             },
           });
           return enrichFinding(base, base.metadata as Record<string, unknown>, {
@@ -139,10 +153,12 @@ export const zeroDayScanner: ScannerPlugin = {
             whyExploitable: f.attackVector || f.description,
             attackPath: f.attackVector,
             stepsToReproduce: f.stepsToReproduce,
+            impact: (f.metadata?.impact as string) || (f.attackVector ? `Exploitation of chain in ${f.filePath} leads to compromise.` : f.description),
             fix:
               f.recommendation ||
               (f.metadata?.remediation as string) ||
               "Close the exploit chain per recommendation.",
+            validation: "Simulate exploit chain in staging environment to confirm vulnerability is neutralized.",
           });
         });
 
@@ -165,4 +181,18 @@ function normalizeSeverity(s: string): RawFinding["severity"] {
     return upper as RawFinding["severity"];
   }
   return "MEDIUM";
+}
+
+function buildSnippet(
+  lines: string[],
+  startLine?: number,
+  endLine?: number,
+): string | undefined {
+  if (!startLine || startLine < 1 || lines.length === 0) return undefined;
+  const start = Math.max(0, startLine - 3);
+  const end = Math.min(lines.length, (endLine || startLine) + 2);
+  return lines
+    .slice(start, end)
+    .map((line, index) => `${start + index + 1}: ${line}`)
+    .join("\n");
 }

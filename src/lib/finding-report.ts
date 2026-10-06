@@ -41,7 +41,25 @@ export function enrichFindingWithReport<T extends FindingReportInput>(
   )
     return finding;
 
-  const report = buildStoredFindingReport(finding);
+  let report: StoredFindingReport;
+  if (
+    metadata.generatedDetails &&
+    typeof metadata.generatedDetails === "object" &&
+    !metadata.reportSections
+  ) {
+    const gen = metadata.generatedDetails as Record<string, unknown>;
+    report = {
+      vulnerabilityName:
+        readString(gen.vulnerabilityName, gen.title) || buildVulnerabilityName(finding),
+      summary: readString(gen.summary, gen.vulnerabilityDetails) || finding.description,
+      stepsToReproduce: readStringArray(gen.stepsToReproduce),
+      impact: readString(gen.impact) || buildImpact(finding),
+      remediation: readStringArray(gen.remediation),
+    };
+  } else {
+    report = buildStoredFindingReport(finding);
+  }
+
   return {
     ...finding,
     metadata: {

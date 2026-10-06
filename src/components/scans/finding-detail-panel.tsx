@@ -291,6 +291,26 @@ function SecretFindingReport({ finding, sourceContext }: { finding: Finding; sou
   const report = buildStoredFindingReport(finding);
   const githubUrl = githubCodeUrl(sourceContext, finding);
 
+  // Generated details come from /api/findings/:id/generate-details (or cached
+  // metadata) where remediation/impact may be either a markdown string or an
+  // array depending on the LLM output. Normalize before rendering so we never
+  // pass a string to the list renderer (which calls items.map).
+  const asText = (value: unknown, fallback: string): string =>
+    typeof value === "string" && value.trim() ? value : fallback;
+  const asList = (value: unknown): string[] => {
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === "string");
+    }
+    if (typeof value === "string" && value.trim()) {
+      return value
+        .split("\n")
+        .map((line) => line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").trim())
+        .filter(Boolean);
+    }
+    return [];
+  };
+  const generatedRemediation = asList(generatedDetails?.remediation);
+
   return (
     <section className="finding-detail-report surface-card min-w-0 max-w-full space-y-5 overflow-hidden p-4">
       {/* Secrets Identified Card */}
@@ -347,7 +367,7 @@ function SecretFindingReport({ finding, sourceContext }: { finding: Finding; sou
         {loadingDetails ? (
           <span className="text-muted-foreground italic text-sm">Generating risk analysis...</span>
         ) : (
-          <ReportRichText text={generatedDetails?.impact || report.impact} />
+          <ReportRichText text={asText(generatedDetails?.impact, report.impact)} />
         )}
       </ReportBlock>
 
@@ -356,7 +376,9 @@ function SecretFindingReport({ finding, sourceContext }: { finding: Finding; sou
         {loadingDetails ? (
           <span className="text-muted-foreground italic text-sm">Generating recommendations...</span>
         ) : (
-          <ReportPlainList items={generatedDetails?.remediation || report.remediation} />
+          <ReportPlainList
+            items={generatedRemediation.length > 0 ? generatedRemediation : report.remediation}
+          />
         )}
       </ReportBlock>
     </section>

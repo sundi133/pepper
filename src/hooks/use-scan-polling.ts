@@ -24,9 +24,10 @@ export function useScanPolling(scanId: string | null) {
   return { scan: data, error, isLoading };
 }
 
-export function useScans(projectId?: string, page = 1) {
+export function useScans(projectId?: string, page = 1, q?: string) {
   const params = new URLSearchParams({ page: String(page), limit: "20" });
   if (projectId) params.set("projectId", projectId);
+  if (q?.trim()) params.set("q", q.trim());
 
   const { data, error, isLoading, mutate } = useSWR(
     `/api/scans?${params}`,

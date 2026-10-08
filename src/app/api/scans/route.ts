@@ -379,6 +379,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");
   const status = searchParams.get("status");
+  const q = searchParams.get("q")?.trim().slice(0, 200);
   const page = parseInt(searchParams.get("page") || "1");
   const limit = parseInt(searchParams.get("limit") || "20");
 
@@ -392,6 +393,16 @@ export async function GET(req: NextRequest) {
   };
   if (projectId) where.projectId = projectId;
   if (status) where.status = status;
+  // Search: repository name, source (repo URL or upload name), branch, or scan id.
+  if (q) {
+    const contains = { contains: q, mode: "insensitive" as const };
+    where.OR = [
+      { project: { name: contains } },
+      { sourceRef: contains },
+      { branch: contains },
+      { id: q },
+    ];
+  }
 
   const [scans, total] = await Promise.all([
     prisma.scan.findMany({

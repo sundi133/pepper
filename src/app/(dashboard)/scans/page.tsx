@@ -21,9 +21,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { RotateCcw, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { mutate } from "swr";
 import { useRouter } from "next/navigation";
@@ -64,7 +65,16 @@ function getScanSourceName(scan: Record<string, unknown>) {
 export default function ScansPage() {
   const { data: session } = useSession();
   const [page, setPage] = useState(1);
-  const { scans, pagination, isLoading, refresh } = useScans(undefined, page);
+  const [searchInput, setSearchInput] = useState("");
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setQuery(searchInput.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+  const { scans, pagination, isLoading, refresh } = useScans(undefined, page, query);
   const router = useRouter();
   const [rescanningId, setRescanningId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -137,14 +147,23 @@ export default function ScansPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>All Scans</CardTitle>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>All Scans</CardTitle>
+            <Input
+              placeholder="Search by repository, source, branch or scan ID…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="h-9 w-full sm:max-w-sm"
+              aria-label="Search scans"
+            />
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <p className="text-muted-foreground text-center py-8">Loading...</p>
           ) : scans.length === 0 ? (
             <p className="text-muted-foreground text-center py-8">
-              No scans yet.
+              {query ? `No scans match "${query}".` : "No scans yet."}
             </p>
           ) : (
             <Table>

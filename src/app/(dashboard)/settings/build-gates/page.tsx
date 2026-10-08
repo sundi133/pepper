@@ -60,7 +60,7 @@ export default function BuildGatesPage() {
 
   async function handleSave() {
     if (!selectedProject) {
-      toast.error("Select a project first");
+      toast.error("Select a repository first");
       return;
     }
     setLoading(true);
@@ -107,10 +107,10 @@ export default function BuildGatesPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>Project</Label>
+            <Label>Repository</Label>
             <Select value={selectedProject} onValueChange={loadGate}>
               <SelectTrigger>
-                <SelectValue placeholder="Select a project" />
+                <SelectValue placeholder="Select a repository" />
               </SelectTrigger>
               <SelectContent>
                 {projects.map((p: { id: string; name: string }) => (

@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { removeAllScansForProject } from "@/lib/remove-project-scans";
+import { cancelActiveScansForProject } from "@/lib/active-project-scans";
 import type { ScanJobData } from "@/lib/queue";
 
 /**
- * Pepper keeps one Scan row per project (`projectId` is unique).
- * Webhooks must replace an existing scan before creating a new one.
+ * Before a webhook starts a scan: a push of the same commit that is already
+ * queued or running is not scanned twice, and any other scan of the
+ * repository still in progress is stopped. Earlier scans stay as history.
  */
 export async function ensureWebhookScanSlot(params: {
   projectId: string;
@@ -12,8 +13,9 @@ export async function ensureWebhookScanSlot(params: {
   scanType: ScanJobData["scanType"];
 }): Promise<{ scanId: string; status: "ALREADY_QUEUED" } | { status: "READY" }> {
   const commitSha = params.commitSha?.trim();
-  const existing = await prisma.scan.findUnique({
+  const existing = await prisma.scan.findFirst({
     where: { projectId: params.projectId },
+    orderBy: { createdAt: "desc" },
     select: { id: true, commitSha: true, scanType: true, status: true },
   });
 
@@ -30,6 +32,6 @@ export async function ensureWebhookScanSlot(params: {
     return { scanId: existing.id, status: "ALREADY_QUEUED" };
   }
 
-  await removeAllScansForProject(params.projectId);
+  await cancelActiveScansForProject(params.projectId);
   return { status: "READY" };
 }

@@ -418,7 +418,7 @@ ALLOW_PUBLIC_REGISTRATION="false"</pre></div>
       <thead><tr><th>Setting</th><th>Default</th><th>Purpose</th></tr></thead>
       <tbody>
         <tr><td>UPLOAD_RETENTION_DAYS</td><td>forever</td><td>Uploaded source archives are deleted this many days after upload (minimum 1). Scan results stay; rescanning that project asks for the archive again.</td></tr>
-        <tr><td>SCAN_HISTORY_RETENTION_DAYS</td><td>forever</td><td>Scan history and finished AI fix runs older than this are deleted (minimum 30). Each project's latest scan is always kept.</td></tr>
+        <tr><td>SCAN_HISTORY_RETENTION_DAYS</td><td>forever</td><td>Earlier scans of each repository (with their findings), trend history and finished AI fix runs older than this are deleted (minimum 30). Each repository's latest scan and latest completed scan are always kept.</td></tr>
         <tr><td>AUDIT_LOG_RETENTION_DAYS</td><td>forever</td><td>Audit entries older than this (minimum 30) are archived to object storage, then deleted. Can be overridden in <strong>Settings → Audit log</strong>.</td></tr>
       </tbody>
     </table></div>

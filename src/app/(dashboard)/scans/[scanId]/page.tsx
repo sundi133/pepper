@@ -238,7 +238,7 @@ export default function ScanDetailPage() {
         <PageBreadcrumb
           items={[
             { label: "Dashboard", href: "/dashboard" },
-            { label: "Projects", href: "/projects" },
+            { label: "Repositories", href: "/projects" },
             { label: "Scan" },
           ]}
         />
@@ -255,7 +255,7 @@ export default function ScanDetailPage() {
         <PageBreadcrumb
           items={[
             { label: "Dashboard", href: "/dashboard" },
-            { label: "Projects", href: "/projects" },
+            { label: "Repositories", href: "/projects" },
             { label: "Scan not found" },
           ]}
         />
@@ -327,7 +327,7 @@ export default function ScanDetailPage() {
   const projectIdForCrumb = project?.id ?? (scan as { projectId?: string }).projectId;
   const breadcrumbItems = [
     { label: "Dashboard", href: "/dashboard" },
-    { label: "Projects", href: "/projects" },
+    { label: "Repositories", href: "/projects" },
     ...(project?.name && projectIdForCrumb
       ? [{ label: project.name, href: `/projects/${projectIdForCrumb}` }]
       : []),

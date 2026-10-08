@@ -60,10 +60,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const { removeAllScansForProject } = await import(
-      "@/lib/remove-project-scans"
+    const { cancelActiveScansForProject } = await import(
+      "@/lib/active-project-scans"
     );
-    await removeAllScansForProject(project.id);
+    await cancelActiveScansForProject(project.id);
 
     const settings = project.organization.settings;
 

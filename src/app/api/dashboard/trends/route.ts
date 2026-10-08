@@ -21,7 +21,7 @@ import {
  * full scan, plus AI remediation runs with the repository state before and
  * after each fix, and a before/after headline comparison.
  *
- * History comes from ScanSnapshot (a project keeps only its latest Scan row),
+ * History comes from ScanSnapshot (one per completed scan),
  * merged with current completed scans that have no snapshot yet.
  */
 export async function GET(req: NextRequest) {
@@ -62,8 +62,9 @@ export async function GET(req: NextRequest) {
       orderBy: [{ projectId: "asc" }, { completedAt: "desc" }],
       distinct: ["projectId"],
     }),
-    // One row per project (rescans replace it) — covers scans that finished
-    // before snapshots existed or whose snapshot write failed.
+    // Each project's latest completed scan — covers scans that finished
+    // before snapshots existed or whose snapshot write failed. Earlier scans
+    // have snapshots (taken when each scan completes).
     prisma.scan.findMany({
       where: {
         project: { organizationId: orgId },
@@ -71,6 +72,8 @@ export async function GET(req: NextRequest) {
         completedAt: { not: null },
         ...projectFilter,
       },
+      orderBy: [{ projectId: "asc" }, { completedAt: "desc" }],
+      distinct: ["projectId"],
       select: {
         id: true,
         projectId: true,

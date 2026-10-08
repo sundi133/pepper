@@ -1344,7 +1344,7 @@ function PatternMatchReport({ finding }: { finding: Finding }) {
       <p className="text-sm leading-relaxed text-muted-foreground">
         This match comes from a <strong className="text-foreground">pattern-based</strong>{" "}
         rule. Treat it as a quick signal: confirm in code, then use an{" "}
-        <strong className="text-foreground">AI-assisted scan</strong> on the same project for
+        <strong className="text-foreground">AI-assisted scan</strong> on the same repository for
         a full narrative, curl-style repro hints where possible, and{" "}
         <strong className="text-foreground">Suggest AI fix</strong>.
       </p>

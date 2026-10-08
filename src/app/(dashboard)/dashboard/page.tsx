@@ -277,11 +277,11 @@ export default function DashboardPage() {
               </div>
               <div className="px-3 py-3 sm:px-4">
                 <p className="text-xs font-medium text-muted-foreground">
-                  Monitored projects
+                  Monitored repositories
                 </p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
                   {overview?.projectCount ?? 0}{" "}
-                  <span className="font-normal text-muted-foreground">projects</span>
+                  <span className="font-normal text-muted-foreground">repositories</span>
                 </p>
               </div>
             </div>
@@ -293,7 +293,7 @@ export default function DashboardPage() {
       <section aria-label="Summary metrics">
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 lg:grid-cols-6">
           <MetricTile
-            label="Total projects"
+            label="Total repositories"
             value={overview?.projectCount ?? projects.length}
             icon={FolderKanban}
           />
@@ -478,7 +478,7 @@ export default function DashboardPage() {
         <Card className="flex min-h-0 flex-col border-border/60 bg-card/80">
           <CardHeader className="flex flex-col gap-3 space-y-0 pb-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div className="min-w-0 space-y-1">
-              <CardTitle className="text-lg sm:text-xl">Recent projects</CardTitle>
+              <CardTitle className="text-lg sm:text-xl">Recent repositories</CardTitle>
               <CardDescription className="text-xs sm:text-sm">
                 Latest in your workspace
               </CardDescription>
@@ -493,7 +493,7 @@ export default function DashboardPage() {
           <CardContent className="min-h-0 flex-1 space-y-1">
             {(overview?.recentProjects?.length ?? 0) === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                No projects yet. Create a project to start scanning.
+                No repositories yet. Start a scan to add one.
               </p>
             ) : (
               overview?.recentProjects?.map((p) => (

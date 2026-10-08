@@ -93,23 +93,14 @@ export async function POST(
         undefined
       : originalScan.branch || undefined;
 
-  // For UPLOAD scans the new scan re-references the same source archive in
-  // MinIO, so it must survive the cleanup of the old scans below.
-  const preserveObjectKeys = new Set<string>();
-  if (
-    originalScan.sourceType === "UPLOAD" &&
-    originalScan.sourceRef.startsWith("scans/")
-  ) {
-    preserveObjectKeys.add(originalScan.sourceRef);
-  }
-
-  const { removeAllScansForProject } = await import("@/lib/remove-project-scans");
+  // Earlier scans stay as history; one still in progress is stopped.
+  const { cancelActiveScansForProject } = await import("@/lib/active-project-scans");
   try {
-    await removeAllScansForProject(projectId, { preserveObjectKeys });
+    await cancelActiveScansForProject(projectId);
   } catch (err) {
-    console.error("Failed to remove old scans during rescan:", err);
+    console.error("Failed to stop the active scan during rescan:", err);
     return NextResponse.json(
-      { error: "Failed to prepare project for rescan. Please try again." },
+      { error: "Failed to prepare the repository for rescan. Please try again." },
       { status: 500 },
     );
   }

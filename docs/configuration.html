@@ -145,7 +145,7 @@ OAuth scopes requested: read:user repo</pre>
         <tbody>
           <tr><td><code>AUDIT_LOG_RETENTION_DAYS</code></td><td>forever</td><td>Audit entries older than this (minimum 30) are archived to object storage and deleted. Organizations can override it in Settings → Audit log.</td></tr>
           <tr><td><code>UPLOAD_RETENTION_DAYS</code></td><td>forever</td><td>Uploaded source archives are deleted this many days after upload (minimum 1). Scan results stay; rescanning that project asks for the archive again. Archives used by a queued, running or paused scan are kept.</td></tr>
-          <tr><td><code>SCAN_HISTORY_RETENTION_DAYS</code></td><td>forever</td><td>Scan history (trend snapshots) and finished AI fix runs older than this (minimum 30) are deleted. Each project's latest scan per scan type is always kept.</td></tr>
+          <tr><td><code>SCAN_HISTORY_RETENTION_DAYS</code></td><td>forever</td><td>Earlier scans of each repository (with their findings), trend snapshots and finished AI fix runs older than this (minimum 30) are deleted. Each repository's latest scan, latest completed scan, and latest snapshot per scan type are always kept.</td></tr>
         </tbody>
       </table>
 

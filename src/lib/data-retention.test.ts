@@ -201,3 +201,56 @@ describe("runDataRetention", () => {
     ]);
   });
 });
+
+describe("purgeOldScans", () => {
+  it("deletes earlier scans past the window but keeps the latest, latest completed and active ones", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    type S = { id: string; projectId: string; status: string; createdAt: Date; completedAt: Date | null };
+    const scans: S[] = [
+      { id: "p1-old", projectId: "p1", status: "COMPLETED", createdAt: ago(200), completedAt: ago(200) },
+      { id: "p1-completed", projectId: "p1", status: "COMPLETED", createdAt: ago(150), completedAt: ago(150) },
+      { id: "p1-latest-failed", projectId: "p1", status: "FAILED", createdAt: ago(120), completedAt: null },
+      { id: "p2-stuck", projectId: "p2", status: "PAUSED", createdAt: ago(300), completedAt: null },
+      { id: "p2-new", projectId: "p2", status: "COMPLETED", createdAt: ago(5), completedAt: ago(5) },
+      { id: "p3-only", projectId: "p3", status: "COMPLETED", createdAt: ago(400), completedAt: ago(400) },
+    ];
+    const removed: string[] = [];
+    const org = { project: { organizationId: "org1" } };
+    vi.mocked(prisma.scan.findMany).mockImplementation((async (args: {
+      where: { status?: { notIn?: string[] } | string; createdAt?: { lt: Date }; projectId?: { in: string[] } };
+      distinct?: string[];
+    }) => {
+      const w = args.where;
+      if (w.createdAt) {
+        const notIn = (w.status as { notIn: string[] }).notIn;
+        return scans.filter((s) => s.createdAt < w.createdAt!.lt && !notIn.includes(s.status)).map((s) => ({ ...s, ...org }));
+      }
+      const pool = scans.filter((s) => w.projectId!.in.includes(s.projectId) && (w.status ? s.status === w.status : true));
+      const best = new Map<string, S>();
+      for (const s of pool) {
+        const cur = best.get(s.projectId);
+        const t = (x: S) => (w.status ? x.completedAt!.getTime() : x.createdAt.getTime());
+        if (!cur || t(s) > t(cur)) best.set(s.projectId, s);
+      }
+      return [...best.values()];
+    }) as never);
+    const p = prisma as unknown as Record<string, unknown>;
+    p.scanArtifact = {
+      findMany: vi.fn(async () => [{ objectKey: "artifacts/x.json" }]),
+      deleteMany: vi.fn(async () => ({ count: 1 })),
+    };
+    p.finding = { deleteMany: vi.fn(async () => ({ count: 3 })) };
+    (p.scan as Record<string, unknown>).deleteMany = vi.fn(async ({ where }: { where: { id: { in: string[] } } }) => {
+      removed.push(...where.id.in);
+      return { count: where.id.in.length };
+    });
+    p.$transaction = vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops));
+
+    const { purgeOldScans } = await import("./data-retention");
+    const r = await purgeOldScans(90, NOW);
+    expect(removed).toEqual(["p1-old"]);
+    expect(r.scans).toBe(1);
+    expect(r.byOrganization.get("org1")).toBe(1);
+    expect(deleted).toContain("artifacts/x.json");
+  });
+});

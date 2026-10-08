@@ -22,6 +22,7 @@ export const AUDIT_ACTIONS = [
   "scan.deleted",
   "scan.uploads_purged",
   "scan.history_purged",
+  "scan.old_scans_purged",
   "scan.purge_failed",
   "finding.status_changed",
   "finding.suggest_fix",

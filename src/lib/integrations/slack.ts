@@ -59,7 +59,7 @@ export async function notifySlackFinding(
 
   const text = [
     `${SEVERITY_EMOJI[input.severity]} *[${input.severity}] ${input.findingTitle}*`,
-    input.projectName ? `Project: *${input.projectName}*` : null,
+    input.projectName ? `Repository: *${input.projectName}*` : null,
     location ? `Location: \`${location}\`` : null,
     idBits || null,
     (input.description || "").slice(0, 800),

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { scanQueue, type ScanJobData } from "@/lib/queue";
-import { removeAllScansForProject } from "@/lib/remove-project-scans";
+import { cancelActiveScansForProject } from "@/lib/active-project-scans";
 import { createScanQueuedNotification } from "@/lib/scan-notifications";
 import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
 
@@ -26,7 +26,7 @@ export async function queueProjectScan(params: {
     throw new Error("Project has no repository URL");
   }
 
-  await removeAllScansForProject(params.projectId);
+  await cancelActiveScansForProject(params.projectId);
 
   const orgSettings = await prisma.orgSettings.findUnique({
     where: { organizationId: params.organizationId },

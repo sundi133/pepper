@@ -114,7 +114,7 @@ function buildTeamsPayload(data: WebhookScanPayload): unknown {
   const themeColor = scan.gateResult === "FAILED" ? "FF0000" : "36a64f";
 
   const facts = [
-    { name: "Project", value: scan.projectName },
+    { name: "Repository", value: scan.projectName },
     scan.branch ? { name: "Branch", value: scan.branch } : null,
     { name: "Critical", value: String(scan.criticalCount) },
     { name: "High", value: String(scan.highCount) },
@@ -196,7 +196,7 @@ function buildLinearPayload(data: WebhookScanPayload): unknown {
     : `[Security] Scan findings — ${scan.projectName}`;
 
   const body = [
-    `**Project:** ${scan.projectName}${scan.branch ? ` (${scan.branch})` : ""}`,
+    `**Repository:** ${scan.projectName}${scan.branch ? ` (${scan.branch})` : ""}`,
     `**Findings:** ${scan.criticalCount} critical, ${scan.highCount} high, ${scan.mediumCount} medium`,
     scan.url ? `**Scan URL:** ${scan.url}` : null,
     finding ? `\n**Finding details:**\n- Title: ${finding.title}\n- File: ${finding.filePath ?? "N/A"}${finding.startLine ? `:${finding.startLine}` : ""}\n- Rule: ${finding.ruleId ?? "N/A"}` : null,

@@ -110,7 +110,7 @@ export default function IdeIntegrationPage() {
           <div className="space-y-3">
             {projects.length === 0 ? (
               <div className="rounded bg-muted p-3 text-sm text-muted-foreground">
-                No projects yet. <Link href="/scans/new" className="text-primary hover:underline">Create a project</Link> first.
+                No repositories yet. <Link href="/scans/new" className="text-primary hover:underline">Start a scan</Link> first.
               </div>
             ) : apiKeys.length === 0 ? (
               <div className="rounded bg-muted p-3 text-sm text-muted-foreground">
@@ -119,7 +119,7 @@ export default function IdeIntegrationPage() {
             ) : (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Select Project</label>
+                  <label className="block text-sm font-medium mb-2">Select Repository</label>
                   <select
                     value={selectedProjectId}
                     onChange={(e) => setSelectedProjectId(e.target.value)}
@@ -337,7 +337,7 @@ const { findings } = await response.json();`}
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
-              Select a project and API key above, then click "Show Configuration" to get your setup details.
+              Select a repository and API key above, then click "Show Configuration" to get your setup details.
             </p>
           </CardContent>
         </Card>

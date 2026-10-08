@@ -27,20 +27,20 @@ export default function NewProjectPage() {
   const HTML_TAG_REGEX = /<[^>]*>/;
   const nameError =
     !name.trim() && (nameTouched || submitAttempted)
-      ? "Project name is required."
+      ? "Repository name is required."
       : HTML_TAG_REGEX.test(name)
-        ? "Project name must not contain HTML tags."
+        ? "Repository name must not contain HTML tags."
         : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitAttempted(true);
     if (!name.trim()) {
-      toast.error("Project name is required");
+      toast.error("Repository name is required");
       return;
     }
     if (HTML_TAG_REGEX.test(name)) {
-      toast.error("Project name must not contain HTML tags");
+      toast.error("Repository name must not contain HTML tags");
       return;
     }
 
@@ -52,14 +52,14 @@ export default function NewProjectPage() {
         body: JSON.stringify({ name, description }),
       });
 
-      if (!res.ok) throw new Error("Failed to create project");
+      if (!res.ok) throw new Error("Failed to create repository");
 
       const project = await res.json();
-      toast.success("Project created");
+      toast.success("Repository created");
       router.push(`/projects/${project.id}`);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to create project",
+        error instanceof Error ? error.message : "Failed to create repository",
       );
     } finally {
       setLoading(false);
@@ -71,15 +71,15 @@ export default function NewProjectPage() {
       <PageBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
-          { label: "Projects", href: "/projects" },
-          { label: "New project" },
+          { label: "Repositories", href: "/projects" },
+          { label: "New repository" },
         ]}
       />
-      <h1 className="text-2xl font-bold mb-6">Create New Project</h1>
+      <h1 className="text-2xl font-bold mb-6">Add Repository</h1>
 
       <Card>
         <CardHeader>
-          <CardTitle>Project Details</CardTitle>
+          <CardTitle>Repository Details</CardTitle>
           <CardDescription>
             Create a project to organize scans and manage project-level
             settings.
@@ -88,7 +88,7 @@ export default function NewProjectPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Project name *</Label>
+              <Label htmlFor="name">Repository name *</Label>
               <Input
                 id="name"
                 value={name}
@@ -111,13 +111,13 @@ export default function NewProjectPage() {
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Brief description of the project"
+                placeholder="Brief description of the repository"
               />
             </div>
 
             <div className="flex gap-2 pt-4">
               <Button type="submit" disabled={loading}>
-                {loading ? "Creating..." : "Create Project"}
+                {loading ? "Creating..." : "Add Repository"}
               </Button>
               <Button
                 type="button"

@@ -335,7 +335,7 @@ export function RepositoryInventory({
                               </DropdownMenuItem>
                               <DropdownMenuItem asChild>
                                 <Link href={`/projects/${repo.projectId}`}>
-                                  Open project
+                                  Open repository
                                 </Link>
                               </DropdownMenuItem>
                               {repo.scanId && (

@@ -231,7 +231,8 @@ model Scan {
   baseSha    String?
   sourceType SourceType @default(UPLOAD)
   sourceRef  String?
-  projectId  String     @unique
+  /// A repository keeps every scan as history (see lib/active-project-scans).
+  projectId  String
   triggeredBy String?
   jobId      String?
 
@@ -261,6 +262,8 @@ model Scan {
   artifacts ScanArtifact[]
   notifications Notification[]
   remediationRuns RemediationRun[]
+
+  @@index([projectId, createdAt])
 }
 
 /// One AI remediation session: a set of findings fixed sequentially in a

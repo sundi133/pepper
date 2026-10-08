@@ -45,8 +45,7 @@ export function findingFingerprint(f: FingerprintInput): string {
  * many previously-open findings are no longer detected.
  *
  * The comparison baseline is the repository's latest captured ScanSnapshot
- * (see lib/scan-delta): a rescan deletes the previous Scan and its findings
- * before the new scan exists, so they cannot be read from Finding. With no
+ * (see lib/scan-delta), which outlives the scans it was taken from. With no
  * baseline (first scan, or history recorded before finding capture) findings
  * keep isNew = null and both counts stay 0.
  */
@@ -74,8 +73,8 @@ export async function autoResolveFixedFindings(
     });
   }
 
-  // The baseline's finding rows are gone, so there is nothing to mark
-  // RESOLVED — the count tells the user what this scan no longer detects.
+  // The earlier scan's findings are left as they were (they are history);
+  // the count tells the user what this scan no longer detects.
   await prisma.scan.update({
     where: { id: scanId },
     data: {

@@ -258,7 +258,7 @@ export function NewSecurityScanForm({
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="nss-project" className="text-sm text-foreground">
-                Project
+                Repository
               </Label>
               <Select
                 value={projectId}
@@ -277,11 +277,11 @@ export function NewSecurityScanForm({
                 }}
               >
                 <SelectTrigger id="nss-project" className="h-9 bg-card" aria-invalid={showProjectError()}>
-                  <SelectValue placeholder="New project" />
+                  <SelectValue placeholder="New repository" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={CREATE_PROJECT_ON_SCAN_VALUE}>
-                    New project (auto)
+                    New repository (auto)
                   </SelectItem>
                   {projects.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
@@ -298,7 +298,7 @@ export function NewSecurityScanForm({
             {!isExistingProjectSelection(projectId) && (
               <div className="space-y-1.5">
                 <Label htmlFor="nss-new-project-name" className="text-sm text-foreground">
-                  Project name <span className="font-normal text-muted-foreground">(optional)</span>
+                  Repository name <span className="font-normal text-muted-foreground">(optional)</span>
                 </Label>
                 <Input
                   id="nss-new-project-name"

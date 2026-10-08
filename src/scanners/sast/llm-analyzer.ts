@@ -2,10 +2,11 @@ import {
   createLlmClient,
   analyzeWithLlm,
   parseLlmJsonResponse,
+  parseLlmJsonResponseDetailed,
 } from "@/lib/llm-gateway";
 import { Chunk, RawFinding, ScanContext } from "../types";
 import { chunkFile, wholeFileChunk } from "./chunker";
-import { verifyFindingEvidence } from "./evidence-verify";
+import { isAuthorizationOrLogicFinding, verifyFindingEvidence } from "./evidence-verify";
 import {
   getOwasp2024Category,
   getOwaspApiCategory,
@@ -721,7 +722,7 @@ function fileContextWindow(
     .slice(0, maxChars);
 }
 
-async function validateCandidatesPass2(
+export async function validateCandidatesPass2(
   client: ReturnType<typeof createLlmClient>,
   model: string,
   candidates: RawFinding[],
@@ -730,11 +731,15 @@ async function validateCandidatesPass2(
   chunkContentMap: Map<string, string> = new Map(),
   fileContentMap: Map<string, string> = new Map(),
 ): Promise<RawFinding[]> {
-  const BATCH = 12;
+  // Small batches keep the validator's answer well inside its output budget;
+  // reasoning models spend much of that budget before writing any JSON.
+  const BATCH = 4;
   const validated: RawFinding[] = [];
 
   for (let i = 0; i < candidates.length; i += BATCH) {
     const batch = candidates.slice(i, i + BATCH);
+    const confirmed = new Set<RawFinding>();
+    let answered = false;
     const payload = batch.map((c, idx) => {
       const chunkKey = `${c.filePath}:${c.startLine}-${c.endLine}`;
       const fileContent = c.filePath ? fileContentMap.get(c.filePath) : undefined;
@@ -766,9 +771,10 @@ async function validateCandidatesPass2(
         `${repoContextBlock}\n\nCANDIDATES TO VALIDATE:\n${JSON.stringify(payload, null, 2)}`,
         { maxTokens: maxResponseTokens },
       );
-      const parsed = parseLlmJsonResponse<{ findings: LlmFinding[] }>(raw, {
+      const { value: parsed, status } = parseLlmJsonResponseDetailed<{ findings: LlmFinding[] }>(raw, {
         findings: [],
       });
+      if (status === "ok") answered = true;
 
       for (const f of parsed.findings || []) {
         if (!f.title) continue; // Pass-2 SAST_PASS2_PROMPT already requires >= 0.80
@@ -820,12 +826,13 @@ async function validateCandidatesPass2(
         }
 
         if (!src) continue; // orphan finding from LLM — skip
+        confirmed.add(src);
 
         const base: RawFinding = applySeverityCalibration({
           scanner: "SAST_LLM",
           severity: parseSeverity(f.severity),
           title: f.title,
-          description: f.description,
+          description: f.description ?? src?.description ?? "",
           filePath: src?.filePath || f.filePath,
           startLine: f.startLine ?? src?.startLine,
           endLine: f.endLine ?? src?.endLine,
@@ -853,6 +860,31 @@ async function validateCandidatesPass2(
       }
     } catch (err) {
       logger.error({ err }, "SAST pass-2 validation batch failed");
+      answered = false; // whatever was not confirmed before the error was not judged
+    }
+
+    // A complete answer that leaves a candidate out rejects it. A failed or
+    // cut-off answer judged nothing: losing those candidates would make a
+    // provider hiccup look like "no vulnerabilities", so they are kept,
+    // marked as not confirmed. Authorization and business-logic candidates
+    // are never removed by this pass at all, only labelled: they are the
+    // findings Pepper exists to surface, and the validator is weakest at them.
+    for (const c of batch) {
+      if (confirmed.has(c)) continue;
+      const keep = !answered || isAuthorizationOrLogicFinding(c);
+      if (!keep) {
+        logger.info({ title: c.title, filePath: c.filePath, line: c.startLine }, "SAST pass-2 rejected candidate");
+        continue;
+      }
+      const why = answered
+        ? "The second validation pass did not confirm this authorization or business-logic finding"
+        : "Not confirmed by the second validation pass (its answer was incomplete)";
+      logger.warn({ title: c.title, filePath: c.filePath, answered }, "SAST pass-2 did not confirm this candidate; keeping it unconfirmed");
+      validated.push({
+        ...c,
+        description: `${why}; review before acting.\n\n${c.description || ""}`,
+        metadata: { ...(c.metadata || {}), passPhase: 2, validation: "unconfirmed" },
+      });
     }
   }
 
@@ -1067,6 +1099,17 @@ async function analyzeChunk(
           ?.toLowerCase()
           .includes("credential");
 
+        // A weak or default credential the application itself relies on (a
+        // JWT signing key of "random", seeded admin/admin accounts) is an
+        // authentication flaw, not a leaked secret: the secrets scanner skips
+        // such placeholder-looking values, so SAST keeps it.
+        const weakOrDefault = /\b(?:weak|guessable|predictable|default|trivial)\b|forg(?:e|ery)|auth(?:entication)?\s+bypass|tamper/i.test(
+          `${f.title} ${f.description ?? ""}`,
+        );
+        if ((isCwe798 || isCredentialByTitle || isCredentialByMeta) && weakOrDefault) {
+          f.cweId = /\bdefault\b/i.test(f.title) ? "CWE-1392" : "CWE-1391";
+          return true;
+        }
         if (isCwe798 || isCredentialByTitle || isCredentialByMeta) {
           logger.debug(
             {

@@ -555,6 +555,82 @@ export async function* streamChatWithLlm(
 
 // ─── JSON Response Parser ─────────────────────────────────────────────
 
+/**
+ * Every complete object of the response's "findings" array, from a response
+ * that was cut off (output budget exhausted, often by a reasoning model's
+ * hidden reasoning). Walks the text tracking strings and nesting, so a cut
+ * inside a finding loses only that finding, not the ones before it.
+ */
+export function recoverCompleteFindings(text: string): unknown[] | null {
+  const key = text.indexOf('"findings"');
+  if (key < 0) return null;
+  const open = text.indexOf("[", key);
+  if (open < 0) return null;
+  const items: unknown[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = open + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{" || ch === "[") {
+      if (depth === 0 && ch === "{") start = i;
+      depth++;
+    } else if (ch === "}" || ch === "]") {
+      if (depth === 0) break; // end of the findings array
+      depth--;
+      if (depth === 0 && ch === "}" && start >= 0) {
+        try {
+          items.push(JSON.parse(text.slice(start, i + 1)));
+        } catch {
+          /* skip a malformed item */
+        }
+        start = -1;
+      }
+    }
+  }
+  return items;
+}
+
+export type LlmJsonParse<T> = { value: T; status: "ok" | "recovered" | "failed" };
+
+/**
+ * Parse a model's JSON answer and say how complete it was: "recovered" means
+ * the answer was cut off and only its complete findings were kept; "failed"
+ * means nothing could be read and `fallback` was returned.
+ */
+export function parseLlmJsonResponseDetailed<T>(raw: string, fallback: T): LlmJsonParse<T> {
+  let cleaned = (raw || "").trim();
+  if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
+  else if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+  if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+  cleaned = cleaned.trim();
+  try {
+    return { value: JSON.parse(cleaned) as T, status: "ok" };
+  } catch (err) {
+    const items = recoverCompleteFindings(cleaned);
+    if (items && items.length > 0) {
+      logger.warn(
+        { recovered: items.length, rawLength: raw?.length },
+        "parseLlmJsonResponse: answer was cut off; kept the complete findings",
+      );
+      return { value: { findings: items } as T, status: "recovered" };
+    }
+    logger.warn(
+      { err, rawLength: raw?.length, rawPrefix: raw?.slice(0, 120) },
+      "parseLlmJsonResponse: failed to parse LLM JSON response — returning fallback",
+    );
+    return { value: fallback, status: "failed" };
+  }
+}
+
 export function parseLlmJsonResponse<T>(raw: string, fallback: T): T {
   let cleaned = (raw || "").trim();
   try {
@@ -569,7 +645,12 @@ export function parseLlmJsonResponse<T>(raw: string, fallback: T): T {
     }
     return JSON.parse(cleaned.trim()) as T;
   } catch (err) {
-    // Attempt resilient recovery for truncated responses (e.g. max_tokens cutoffs)
+    // Truncated response (e.g. max_tokens cutoff): keep every complete finding.
+    const items = recoverCompleteFindings(cleaned);
+    if (items && items.length > 0) {
+      logger.warn({ recovered: items.length, rawLength: raw?.length }, "parseLlmJsonResponse: answer was cut off; kept the complete findings");
+      return { findings: items } as T;
+    }
     if (cleaned.includes('"findings"')) {
       const lastObjEnd = cleaned.lastIndexOf("}");
       if (lastObjEnd !== -1) {

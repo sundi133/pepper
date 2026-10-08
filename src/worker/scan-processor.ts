@@ -133,6 +133,20 @@ export async function processScanJob(job: Job<ScanJobData>) {
   const workDir = path.join(os.tmpdir(), `pepper-${scanId}`);
   let incrementalChangedPaths: string[] | null = null;
 
+  // Stop and Cancel only update the database. Without this watcher the scan
+  // noticed only when a scanner happened to check, and the job kept its
+  // worker slot until every scanner wound down (minutes, or forever for a
+  // scanner that hangs), leaving new scans waiting in the queue. Aborting
+  // kills the external tools and lets runScanners return at once.
+  const stopWatcher = setInterval(() => {
+    prisma.scan
+      .findUnique({ where: { id: scanId }, select: { status: true } })
+      .then((s) => {
+        if (s?.status === "STOPPED" || s?.status === "CANCELLED") abortController.abort();
+      })
+      .catch(() => undefined);
+  }, STOP_WATCH_INTERVAL_MS);
+
   try {
     // 1. Download and extract source. A re-run of an interrupted attempt
     // (worker restarted mid-scan) finds the earlier checkout still here and
@@ -1201,6 +1215,7 @@ Schema:
     }
     throw error;
   } finally {
+    clearInterval(stopWatcher);
     // Cleanup
     try {
       fs.rmSync(workDir, { recursive: true, force: true });
@@ -1209,6 +1224,8 @@ Schema:
     }
   }
 }
+
+const STOP_WATCH_INTERVAL_MS = 5000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

@@ -181,7 +181,7 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
       })
     : Promise.resolve();
 
-  await Promise.allSettled(
+  const allScanners = Promise.allSettled(
     scanners.map(async (scanner) => {
       try {
         await ctx.waitIfPaused?.();
@@ -210,6 +210,22 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
       }
     }),
   );
+  // A stopped or cancelled scan does not wait for slow scanners: they are
+  // told to stop through the same signal (external tools are killed), and the
+  // job ends now so its worker slot is free for the next scan.
+  const aborted = new Promise<"aborted">((resolve) => {
+    if (ctx.signal?.aborted) return resolve("aborted");
+    ctx.signal?.addEventListener("abort", () => resolve("aborted"), { once: true });
+  });
+  if ((await Promise.race([allScanners, aborted])) === "aborted") {
+    return {
+      findings: deduplicator.allFindings(),
+      dependencies: [],
+      filesScanned: ctx.fileList.length,
+      depsScanned: 0,
+      suppressed,
+    };
+  }
 
   await ctx.waitIfPaused?.();
   const scaFiles = ctx.scaFileList ?? ctx.fileList;

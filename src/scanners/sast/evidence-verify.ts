@@ -1,7 +1,44 @@
 /** The minimal finding shape this gate needs; RawFinding satisfies it. */
 export interface EvidenceCandidate {
   startLine?: number;
+  title?: string;
+  cweId?: string | null;
   metadata?: unknown;
+}
+
+/**
+ * Weaknesses that are about a missing or wrong control rather than a call to
+ * a dangerous API: broken access control (IDOR/BOLA/BFLA, missing ownership
+ * or role checks), authentication and session flaws, and business-logic flaws
+ * (workflow bypass, race conditions, mass assignment, price/quantity abuse).
+ * The model describes these in words ("no ownership check before the
+ * lookup"), so the identifiers it cites need not appear in the file. They are
+ * a core part of what Pepper reports and are never dropped by this gate.
+ */
+const ABSENCE_CWES = new Set([
+  // Access control
+  "CWE-284", "CWE-285", "CWE-639", "CWE-862", "CWE-863", "CWE-266", "CWE-269",
+  "CWE-425", "CWE-566", "CWE-602", "CWE-472",
+  // Authentication and sessions
+  "CWE-287", "CWE-288", "CWE-290", "CWE-306", "CWE-307", "CWE-384", "CWE-613",
+  "CWE-620", "CWE-640", "CWE-352",
+  // Business logic
+  "CWE-840", "CWE-841", "CWE-837", "CWE-799", "CWE-770", "CWE-362", "CWE-367",
+  "CWE-915", "CWE-1284",
+]);
+
+const ABSENCE_TITLE =
+  /\b(?:idor|bola|bfla|insecure direct object|authori[sz]ation|access control|privilege|ownership|tenant|business[- ]logic|workflow|race condition|toctou|mass assignment|over-?posting|forced browsing|replay|double[- ]spend|price manipulation|negative (?:amount|quantity|price)|rate limit|brute[- ]force|missing (?:auth\w*|role|permission|ownership|check|validation|csrf))\b|auth(?:entication|orization)?\s+bypass/i;
+
+const ABSENCE_WEAKNESS = /idor|auth bypass|authori[sz]ation|access control|business logic|privilege/i;
+
+/** An authorization, authentication or business-logic finding (see ABSENCE_CWES). */
+export function isAuthorizationOrLogicFinding(finding: EvidenceCandidate): boolean {
+  const cwe = (finding.cweId || "").toUpperCase().replace(/^CWE[-\s]*/, "CWE-");
+  if (ABSENCE_CWES.has(cwe)) return true;
+  if (finding.title && ABSENCE_TITLE.test(finding.title)) return true;
+  const weakness = ((finding.metadata || {}) as Record<string, unknown>).weaknessClass;
+  return typeof weakness === "string" && ABSENCE_WEAKNESS.test(weakness);
 }
 
 /**
@@ -100,6 +137,12 @@ export function verifyFindingEvidence(
 
   if (anchors.length === 0) {
     return { ok: true, anchors, matched: [] };
+  }
+
+  // Authorization and business-logic findings describe a missing control,
+  // not a named sink: never dropped for their wording.
+  if (isAuthorizationOrLogicFinding(finding)) {
+    return { ok: true, anchors, matched: anchors.filter((a) => fileContent.includes(a)) };
   }
 
   const matched = anchors.filter((a) => fileContent.includes(a));

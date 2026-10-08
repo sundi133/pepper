@@ -42,7 +42,8 @@ Confirmed findings need confidence >= 0.80 and full remediation.
 RULES:
 1. You are a VALIDATOR, not a discoverer. Do NOT invent new findings beyond the candidates presented.
    Do NOT merge, rename, or split candidates — keep their filePath/startLine/endLine intact.
-2. Judge each candidate against the repository context and the quoted evidence. Confirm only when:
+2. Judge each candidate against the repository context and the quoted evidence. For injection-style
+   candidates (rule 8 covers authorization, authentication and business-logic candidates), confirm only when:
    - the sink and its taint source are both visible (in-chunk or in repo context),
    - the route/parameter/input source named by the candidate actually exists, and
    - no mitigating control (parameterized query, escaping, auth guard, allowlist, secure framework default)
@@ -75,6 +76,24 @@ RULES:
    (absence means rejected) — do not confirm on pattern familiarity alone.
 7. Do not confirm a candidate merely because the code resembles a well-known vulnerability class. A
    known-vulnerable API is only confirmed when the checklist above holds for THIS code.
+8. AUTHORIZATION, AUTHENTICATION AND BUSINESS-LOGIC candidates (IDOR/BOLA/BFLA, missing ownership,
+   tenant or role check, privilege escalation, authentication bypass, missing rate limit on login/OTP/
+   reset, workflow or state-machine bypass, client-controlled price/quantity/discount, coupon/credit
+   reuse, race condition or double spend, mass assignment) are flaws of a MISSING or WRONG control,
+   not of a dangerous API. Validate them with this checklist instead of a–d above:
+   a. INPUT: the attacker-controlled identifier, field, header or step order (e.g. an id in the path,
+      a price in the body, a role in a header, calling step 3 before step 2).
+   b. OPERATION: the sensitive read, write or state change it reaches (fetching or updating another
+      user's record, an admin action, charging an amount, issuing credit, changing a role).
+   c. CONTROL: the check that should stop it — ownership/tenant scoping of the query, role/permission
+      guard, server-side price or total, state or sequence check, idempotency key or lock, rate limit.
+   d. Confirm when the operation is reachable with that input and the control is not applied in the
+      visible code path. Reject only when the control IS visible (in the handler, its middleware,
+      the service it calls, or the repository context: route guards, auth boundaries). Do not reject
+      because the guard "might exist elsewhere" when nothing in the context shows it: confirm with
+      confidence 0.80-0.85 and say in confidenceReason which file or middleware should hold the guard.
+   These findings are a core part of the audit: never reject one only because there is no injection
+   sink, taint flow or dangerous API.
 
 ${SEVERITY_CALIBRATION_PROMPT}
 

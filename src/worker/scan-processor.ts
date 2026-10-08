@@ -742,7 +742,26 @@ Schema:
       },
     };
 
-    // 4. Run scanners (findings are inserted incrementally via onScannerComplete)
+    // 4. Before the AI passes: is the configured model actually accepting
+    // requests? A refused request (no credit, bad key, unknown model) would
+    // otherwise look like "the AI found nothing".
+    const aiEnabled = orgSettings.enableLlmSast || orgSettings.enableLlmSecrets;
+    if (aiEnabled && (orgSettings.llmApiKey?.trim() || orgSettings.llmProvider === "ollama")) {
+      const { checkLlmAvailable, aiUnavailableNote } = await import("@/lib/llm-preflight");
+      const preflight = await checkLlmAvailable({
+        provider: orgSettings.llmProvider,
+        baseUrl: orgSettings.llmBaseUrl,
+        apiKey: orgSettings.llmApiKey,
+        model: orgSettings.llmModel,
+      });
+      if (!preflight.ok) {
+        const note = aiUnavailableNote(orgSettings.llmProvider, orgSettings.llmModel, preflight.reason);
+        log.error({ status: preflight.status, reason: preflight.reason }, "AI provider refused requests; AI analysis will not run");
+        await prisma.scan.update({ where: { id: scanId }, data: { errorMessage: note } });
+      }
+    }
+
+    // 5. Run scanners (findings are inserted incrementally via onScannerComplete)
     const result = await runScanners(ctx);
     await assertScanActive();
     log.info(

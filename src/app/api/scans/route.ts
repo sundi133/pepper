@@ -207,8 +207,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const { removeAllScansForProject } = await import("@/lib/remove-project-scans");
-    await removeAllScansForProject(effectiveProjectId);
+    // Earlier scans stay as history; one still in progress is stopped.
+    const { cancelActiveScansForProject } = await import("@/lib/active-project-scans");
+    await cancelActiveScansForProject(effectiveProjectId);
 
     // Get org settings
     const orgSettings = await prisma.orgSettings.findUnique({

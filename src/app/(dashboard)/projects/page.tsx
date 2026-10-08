@@ -118,13 +118,13 @@ export default function ProjectsPage() {
         method: "DELETE",
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Failed to delete project");
-      toast.success("Project deleted");
+      if (!res.ok) throw new Error(data.error || "Failed to delete repository");
+      toast.success("Repository deleted");
       setDeleteTarget(null);
       refresh();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete project",
+        error instanceof Error ? error.message : "Failed to delete repository",
       );
     } finally {
       setDeletingId(null);
@@ -147,10 +147,10 @@ export default function ProjectsPage() {
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0 space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl dark:text-slate-50">
-            Projects
+            Repositories
           </h1>
           <p className="text-sm text-slate-500 sm:text-base dark:text-slate-400">
-            Manage and monitor your security scan projects
+            Security posture of each repository, from its latest scan
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
@@ -162,7 +162,7 @@ export default function ProjectsPage() {
           <Button variant="outline" className="w-full border-slate-300 sm:w-auto dark:border-slate-700" asChild>
             <Link href="/projects/new">
               <Plus className="mr-2 h-4 w-4" />
-              New project
+              New repository
             </Link>
           </Button>
         </div>
@@ -172,11 +172,11 @@ export default function ProjectsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-md">
           <Input
-            placeholder="Search projects…"
+            placeholder="Search repositories…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className="h-10 border-slate-300 bg-white pr-3 dark:border-slate-600 dark:bg-slate-950"
-            aria-label="Search projects"
+            aria-label="Search repositories"
           />
         </div>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
@@ -215,7 +215,7 @@ export default function ProjectsPage() {
       {isLoading ? (
         <div className="flex items-center justify-center gap-2 py-20 text-slate-500">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-          <span className="text-sm">Loading projects…</span>
+          <span className="text-sm">Loading repositories…</span>
         </div>
       ) : typedProjects.length === 0 ? (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
@@ -223,15 +223,15 @@ export default function ProjectsPage() {
             <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
               <FolderOpen className="h-7 w-7" />
             </div>
-            <h3 className="mt-4 text-base font-semibold text-slate-900 dark:text-slate-50">No projects</h3>
+            <h3 className="mt-4 text-base font-semibold text-slate-900 dark:text-slate-50">No repositories</h3>
             <p className="mt-1 mb-6 max-w-sm text-center text-sm text-slate-500 dark:text-slate-400">
               {searchInput || source !== "all"
-                ? "No projects match your filters. Try adjusting search or type."
-                : "Create your first project to start scanning code."}
+                ? "No repositories match your filters. Try adjusting search or type."
+                : "Start a scan to add your first repository."}
             </p>
             {!searchInput && source === "all" ? (
               <Button className="bg-indigo-600 text-white hover:bg-indigo-700" asChild>
-                <Link href="/projects/new">Create project</Link>
+                <Link href="/projects/new">Add repository</Link>
               </Button>
             ) : null}
           </div>
@@ -240,7 +240,7 @@ export default function ProjectsPage() {
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
           <div className="hidden border-b border-slate-100 bg-slate-50/80 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 md:flex md:items-center">
             <div className="w-11" />
-            <div className="flex-1 min-w-0">Project</div>
+            <div className="flex-1 min-w-0">Repository</div>
             <div className="w-[180px] shrink-0 text-center">Vulnerabilities</div>
             <div className="w-[60px] shrink-0 text-center">Grade</div>
             <div className="w-[110px] shrink-0">Last scan</div>
@@ -276,7 +276,7 @@ export default function ProjectsPage() {
       >
         <DialogContent showCloseButton={deletingId === null}>
           <DialogHeader>
-            <DialogTitle>Delete project?</DialogTitle>
+            <DialogTitle>Delete repository?</DialogTitle>
             <DialogDescription>
               {deleteTarget ? (
                 <>
@@ -304,7 +304,7 @@ export default function ProjectsPage() {
               disabled={deletingId !== null}
               onClick={confirmDeleteProject}
             >
-              {deletingId !== null ? "Deleting…" : "Delete project"}
+              {deletingId !== null ? "Deleting…" : "Delete repository"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -386,7 +386,7 @@ function ProjectCard({
       </div>
       <div className="relative z-10 flex shrink-0 items-center gap-1 pointer-events-auto">
         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600" asChild>
-          <Link href={`/projects/${project.id}`} aria-label="Open project">
+          <Link href={`/projects/${project.id}`} aria-label="Open repository">
             <ExternalLink className="h-4 w-4" />
           </Link>
         </Button>
@@ -396,7 +396,7 @@ function ProjectCard({
           className="h-8 w-8 text-slate-400 hover:text-red-600"
           disabled={deleting}
           onClick={onDelete}
-          aria-label="Delete project"
+          aria-label="Delete repository"
         >
           <Trash2 className="h-4 w-4" />
         </Button>

@@ -1,10 +1,10 @@
 /**
  * What changed in a scan compared with the repository's previous state.
  *
- * A project keeps only one Scan row — a rescan deletes the previous scan and
- * its findings before the new scan exists — so "the previous scan" can no
- * longer be read from Finding. The baseline is instead the latest
- * ScanSnapshot of the same repository whose findings were captured.
+ * The baseline is the latest ScanSnapshot of the same repository whose
+ * findings were captured. Snapshots outlive the scans they were taken from
+ * (scan history retention removes old scans first), so the comparison keeps
+ * working whichever earlier scans still exist.
  *
  * Classification uses the same matching as the Trends comparison
  * (lib/scan-compare), so the scan page, build gate, reports and Trends agree.

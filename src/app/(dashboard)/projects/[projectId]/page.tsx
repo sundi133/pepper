@@ -32,6 +32,7 @@ import {
 import { Settings, Trash2, TrendingDown } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useScans } from "@/hooks/use-scan-polling";
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -44,6 +45,8 @@ export default function ProjectDetailPage() {
   const [deletingScanId, setDeletingScanId] = useState<string | null>(null);
   const [projectDeleteOpen, setProjectDeleteOpen] = useState(false);
   const [scanToDelete, setScanToDelete] = useState<string | null>(null);
+  const [scanPage, setScanPage] = useState(1);
+  const { scans: history, pagination, refresh: refreshScans } = useScans(projectId, scanPage);
 
   function fetchProject() {
     fetch(`/api/projects/${projectId}`)
@@ -63,7 +66,7 @@ export default function ProjectDetailPage() {
         <PageBreadcrumb
           items={[
             { label: "Dashboard", href: "/dashboard" },
-            { label: "Projects", href: "/projects" },
+            { label: "Repositories", href: "/projects" },
             { label: "Loading…" },
           ]}
         />
@@ -77,17 +80,16 @@ export default function ProjectDetailPage() {
         <PageBreadcrumb
           items={[
             { label: "Dashboard", href: "/dashboard" },
-            { label: "Projects", href: "/projects" },
-            { label: "Project not found" },
+            { label: "Repositories", href: "/projects" },
+            { label: "Repository not found" },
           ]}
         />
-        <p className="text-destructive py-12 text-center">Project not found</p>
+        <p className="text-destructive py-12 text-center">Repository not found</p>
       </div>
     );
   }
 
-  const scans = (project.scans as Array<Record<string, unknown>>) || [];
-  const scan = scans[0] as Record<string, unknown> | undefined;
+  const scans = history as Array<Record<string, unknown>>;
 
   async function executeDeleteProject() {
     setDeleting(true);
@@ -96,13 +98,13 @@ export default function ProjectDetailPage() {
         method: "DELETE",
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Failed to delete project");
-      toast.success("Project deleted");
+      if (!res.ok) throw new Error(data.error || "Failed to delete repository");
+      toast.success("Repository deleted");
       setProjectDeleteOpen(false);
       router.push("/projects");
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete project",
+        error instanceof Error ? error.message : "Failed to delete repository",
       );
       setDeleting(false);
     }
@@ -119,6 +121,7 @@ export default function ProjectDetailPage() {
       toast.success("Scan deleted");
       setScanToDelete(null);
       fetchProject();
+      refreshScans();
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to delete scan",
@@ -134,7 +137,7 @@ export default function ProjectDetailPage() {
       <PageBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
-          { label: "Projects", href: "/projects" },
+          { label: "Repositories", href: "/projects" },
           { label: project.name as string },
         ]}
       />
@@ -201,20 +204,20 @@ export default function ProjectDetailPage() {
         </Card>
       )}
 
-      {/* Single project scan */}
+      {/* Every scan of this repository, newest first */}
       <Card>
         <CardHeader>
-          <CardTitle>Project scan</CardTitle>
+          <CardTitle>Scans</CardTitle>
           <CardDescription>
-            One scan per project. Start or replace it from{" "}
+            Every scan of this repository, newest first. Start a new one from{" "}
             <Link href="/scans/new" className="font-medium text-primary hover:underline">
               New Scan
             </Link>{" "}
-            in the sidebar (this page is view-only for scanning).
+            in the sidebar, or rescan from a scan&apos;s page.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {!scan ? (
+        <CardContent className="space-y-3">
+          {scans.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground py-8">
               No scan yet. Go to{" "}
               <Link
@@ -223,11 +226,14 @@ export default function ProjectDetailPage() {
               >
                 New Scan
               </Link>{" "}
-              in the sidebar, select this project, and start a scan (one per
-              project).
+              in the sidebar and select this repository.
             </p>
           ) : (
-            <div className="flex flex-col gap-4 rounded-lg border border-border/60 bg-muted/20 p-4 sm:flex-row sm:items-start sm:justify-between">
+            scans.map((scan) => (
+            <div
+              key={scan.id as string}
+              className="flex flex-col gap-4 rounded-lg border border-border/60 bg-muted/20 p-4 sm:flex-row sm:items-start sm:justify-between"
+            >
               <div className="min-w-0 flex-1 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
@@ -277,6 +283,27 @@ export default function ProjectDetailPage() {
                 <TooltipContent>Delete scan</TooltipContent>
               </Tooltip>
             </div>
+            ))
+          )}
+          {pagination && pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between pt-1 text-sm text-muted-foreground">
+              <span>
+                Page {pagination.page} of {pagination.totalPages} · {pagination.total} scans
+              </span>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" disabled={scanPage <= 1} onClick={() => setScanPage((p) => p - 1)}>
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={scanPage >= pagination.totalPages}
+                  onClick={() => setScanPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -289,9 +316,9 @@ export default function ProjectDetailPage() {
       >
         <DialogContent showCloseButton={!deleting}>
           <DialogHeader>
-            <DialogTitle>Delete project?</DialogTitle>
+            <DialogTitle>Delete repository?</DialogTitle>
             <DialogDescription>
-              Delete project{" "}
+              Delete repository{" "}
               <span className="font-medium text-foreground">
                 &quot;{project.name as string}&quot;
               </span>{" "}
@@ -313,7 +340,7 @@ export default function ProjectDetailPage() {
               disabled={deleting}
               onClick={executeDeleteProject}
             >
-              {deleting ? "Deleting…" : "Delete project"}
+              {deleting ? "Deleting…" : "Delete repository"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { RETIRED_NOTE } from "@/lib/retired-findings";
 import { prisma } from "./prisma";
 import type { RawFinding } from "@/scanners/types";
 
@@ -189,11 +190,13 @@ export async function buildFpExamplesForPrompt(
   organizationId: string,
   limit = 20,
 ): Promise<string> {
-  // Get recent FP findings with status notes from this org
-  const fpFindings = await prisma.finding.findMany({
+  // Recent FP findings with a reviewer's note from this org. Not the ones
+  // closed automatically for a retired detector: their note says nothing
+  // about why the code is safe.
+  const rows = await prisma.finding.findMany({
     where: {
       status: "FALSE_POSITIVE",
-      statusNote: { not: null },
+      statusNote: { not: null, notIn: [RETIRED_NOTE] },
       scan: { project: { organizationId } },
     },
     select: {
@@ -205,8 +208,19 @@ export async function buildFpExamplesForPrompt(
       statusNote: true,
     },
     orderBy: { statusUpdatedAt: "desc" },
-    take: limit,
+    take: limit * 4,
   });
+  // Repositories keep their scan history, so one triaged issue can appear in
+  // several scans: use it once.
+  const seen = new Set<string>();
+  const fpFindings = rows
+    .filter((f) => {
+      const key = [f.scanner, f.ruleId, f.filePath, f.title].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, limit);
 
   if (fpFindings.length === 0) return "";
 

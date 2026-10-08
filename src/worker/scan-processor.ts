@@ -134,7 +134,10 @@ export async function processScanJob(job: Job<ScanJobData>) {
   let incrementalChangedPaths: string[] | null = null;
 
   try {
-    // 1. Download and extract source
+    // 1. Download and extract source. A re-run of an interrupted attempt
+    // (worker restarted mid-scan) finds the earlier checkout still here and
+    // git refuses to clone into it, so start from an empty directory.
+    fs.rmSync(workDir, { recursive: true, force: true });
     fs.mkdirSync(workDir, { recursive: true });
     await assertScanActive();
 
@@ -629,6 +632,36 @@ Schema:
     const batchFindingCounts: Record<string, number> = {};
 
     // 3. Build scan context with incremental DB insert callbacks
+    async function reportProgress(msg: string) {
+      await assertScanActive();
+      log.info(msg);
+      void job.updateProgress({ message: msg }).catch(() => undefined);
+
+      // Parse LLM file progress and update scannerProgress JSON
+      // Format: "LLM SAST: 5/120 files scanned (3 findings)"
+      const fileProgressMatch = msg.match(
+        /LLM SAST: (\d+)\/(\d+) files scanned \((\d+) findings\)/,
+      );
+      if (fileProgressMatch) {
+        const [, filesCompleted, filesTotal, findingsCount] =
+          fileProgressMatch;
+        await prisma.$executeRaw`
+          UPDATE "Scan"
+          SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify(
+            {
+              SAST_LLM: {
+                status: "RUNNING",
+                findingsCount: parseInt(findingsCount),
+                filesCompleted: parseInt(filesCompleted),
+                filesTotal: parseInt(filesTotal),
+              },
+            },
+          )}::jsonb
+          WHERE id = ${scanId}
+        `;
+      }
+    }
+
     const ctx: ScanContext = {
       workDir,
       fileList,
@@ -638,34 +671,15 @@ Schema:
       orgSettings,
       signal: abortController.signal,
       waitIfPaused: assertScanActive,
-      onProgress: async (msg) => {
-        await assertScanActive();
-        log.info(msg);
-        job.updateProgress({ message: msg });
-
-        // Parse LLM file progress and update scannerProgress JSON
-        // Format: "LLM SAST: 5/120 files scanned (3 findings)"
-        const fileProgressMatch = msg.match(
-          /LLM SAST: (\d+)\/(\d+) files scanned \((\d+) findings\)/,
-        );
-        if (fileProgressMatch) {
-          const [, filesCompleted, filesTotal, findingsCount] =
-            fileProgressMatch;
-          await prisma.$executeRaw`
-            UPDATE "Scan"
-            SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify(
-              {
-                SAST_LLM: {
-                  status: "RUNNING",
-                  findingsCount: parseInt(findingsCount),
-                  filesCompleted: parseInt(filesCompleted),
-                  filesTotal: parseInt(filesTotal),
-                },
-              },
-            )}::jsonb
-            WHERE id = ${scanId}
-          `;
-        }
+      // Scanners call this without awaiting it, so it must never reject: an
+      // unhandled rejection takes down the whole worker and every scan on it.
+      // A cancelled or stopped scan aborts `signal` here; the next awaited
+      // check in the scan ends it.
+      onProgress: (msg) => {
+        void reportProgress(msg).catch((err) => {
+          if (err instanceof ScanCancelledError || err instanceof ScanStoppedError) return;
+          log.warn({ err }, "Could not record scan progress");
+        });
       },
       onScannerComplete: async (
         scannerName: string,

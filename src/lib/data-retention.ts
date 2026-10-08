@@ -6,10 +6,11 @@
  *   are deleted this many days after upload. Scan results are kept; a rescan
  *   of that project then asks for the archive to be uploaded again.
  * - SCAN_HISTORY_RETENTION_DAYS: scan history (trend snapshots and their
- *   finding copies) and finished AI remediation runs (analysis, diffs, event
- *   logs) older than this are deleted. Each project's latest snapshot per scan
- *   type is always kept, so "new since last scan" keeps working. The current
- *   scan and its findings are never touched.
+ *   finding copies), earlier scans of a repository with their findings, and
+ *   finished AI remediation runs (analysis, diffs, event logs) older than this
+ *   are deleted. Each project's latest snapshot per scan type is always kept,
+ *   so "new since last scan" keeps working, and so are its latest scan and
+ *   latest completed scan, and any scan still in progress.
  *
  * Both are off by default: nothing is deleted unless the variable is set.
  */
@@ -190,10 +191,70 @@ export async function purgeScanHistory(days: number, now = new Date()): Promise<
   return result;
 }
 
+export interface ScanPurgeResult {
+  retentionDays: number;
+  cutoff: Date;
+  scans: number;
+  byOrganization: Map<string, number>;
+}
+
+/**
+ * Delete a repository's earlier scans (findings and artifacts with them) that
+ * finished before the cutoff. Kept: each repository's latest scan, its latest
+ * completed scan (the one dashboards show), and anything still in progress.
+ * Their totals stay in the trend snapshots until those expire too.
+ */
+export async function purgeOldScans(days: number, now = new Date()): Promise<ScanPurgeResult> {
+  const cutoff = new Date(now.getTime() - days * DAY_MS);
+  const result: ScanPurgeResult = { retentionDays: days, cutoff, scans: 0, byOrganization: new Map() };
+
+  const old = await prisma.scan.findMany({
+    where: { status: { notIn: [...ACTIVE_SCAN_STATUSES] }, createdAt: { lt: cutoff } },
+    select: { id: true, projectId: true, project: { select: { organizationId: true } } },
+  });
+  if (old.length === 0) return result;
+
+  const projectIds = [...new Set(old.map((s) => s.projectId))];
+  const [latest, latestCompleted] = await Promise.all([
+    prisma.scan.findMany({
+      where: { projectId: { in: projectIds } },
+      orderBy: [{ projectId: "asc" }, { createdAt: "desc" }],
+      distinct: ["projectId"],
+      select: { id: true },
+    }),
+    prisma.scan.findMany({
+      where: { projectId: { in: projectIds }, status: "COMPLETED" },
+      orderBy: [{ projectId: "asc" }, { completedAt: "desc" }],
+      distinct: ["projectId"],
+      select: { id: true },
+    }),
+  ]);
+  const keep = new Set([...latest, ...latestCompleted].map((s) => s.id));
+  const expired = old.filter((s) => !keep.has(s.id));
+
+  for (let i = 0; i < expired.length; i += DELETE_BATCH) {
+    const ids = expired.slice(i, i + DELETE_BATCH).map((s) => s.id);
+    const artifacts = await prisma.scanArtifact.findMany({ where: { scanId: { in: ids } }, select: { objectKey: true } });
+    const [, , { count }] = await prisma.$transaction([
+      prisma.scanArtifact.deleteMany({ where: { scanId: { in: ids } } }),
+      prisma.finding.deleteMany({ where: { scanId: { in: ids } } }),
+      prisma.scan.deleteMany({ where: { id: { in: ids }, status: { notIn: [...ACTIVE_SCAN_STATUSES] } } }),
+    ]);
+    result.scans += count;
+    await Promise.allSettled(artifacts.map((a) => deleteObject(a.objectKey)));
+  }
+  for (const s of expired) {
+    const org = s.project.organizationId;
+    result.byOrganization.set(org, (result.byOrganization.get(org) ?? 0) + 1);
+  }
+  return result;
+}
+
 /** Apply both policies once and record what was deleted in each organization's audit log. */
 export async function runDataRetention(now = new Date()): Promise<{
   uploads: UploadPurgeResult | null;
   history: HistoryPurgeResult | null;
+  scans?: ScanPurgeResult | null;
 }> {
   const uploadDays = uploadRetentionDays();
   const historyDays = scanHistoryRetentionDays();
@@ -222,7 +283,18 @@ export async function runDataRetention(now = new Date()): Promise<{
   }
 
   let history: HistoryPurgeResult | null = null;
+  let scans: ScanPurgeResult | null = null;
   if (historyDays != null) {
+    scans = await purgeOldScans(historyDays, now);
+    for (const [organizationId, deleted] of scans.byOrganization) {
+      await writeAuditLog({
+        organizationId,
+        userId: null,
+        action: "scan.old_scans_purged",
+        resource: "scan",
+        details: { retentionDays: historyDays, olderThan: scans.cutoff.toISOString(), scans: deleted },
+      });
+    }
     history = await purgeScanHistory(historyDays, now);
     for (const [organizationId, counts] of history.byOrganization) {
       await writeAuditLog({
@@ -234,7 +306,7 @@ export async function runDataRetention(now = new Date()): Promise<{
       });
     }
   }
-  return { uploads, history };
+  return scans ? { uploads, history, scans } : { uploads, history };
 }
 
 async function acquireRunLock(): Promise<boolean> {
@@ -249,7 +321,8 @@ async function acquireRunLock(): Promise<boolean> {
 async function tick() {
   if (uploadRetentionDays() == null && scanHistoryRetentionDays() == null) return;
   if (!(await acquireRunLock())) return;
-  const { uploads, history } = await runDataRetention();
+  const { uploads, history, scans } = await runDataRetention();
+  if (scans && scans.scans > 0) logger.info({ scans: scans.scans }, "Old scan retention purge finished");
   if (uploads && (uploads.deleted > 0 || uploads.error)) {
     logger.info({ deleted: uploads.deleted, inUse: uploads.inUse, error: uploads.error }, "Upload retention purge finished");
   }

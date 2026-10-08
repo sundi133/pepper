@@ -61,7 +61,7 @@ export function Topbar() {
         />
         <Input
           type="search"
-          placeholder="Search projects, vulnerabilities…"
+          placeholder="Search repositories, vulnerabilities…"
           className="h-9 w-full border-border/80 bg-muted/50 pl-9 shadow-none transition-all duration-200 hover:border-primary/30 hover:bg-card lg:h-10 dark:bg-background/60"
           aria-label="Search"
         />

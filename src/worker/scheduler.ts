@@ -77,10 +77,10 @@ async function checkDueSchedules() {
         where: { organizationId: project.organizationId },
       });
 
-      const { removeAllScansForProject } = await import(
-        "@/lib/remove-project-scans"
+      const { cancelActiveScansForProject } = await import(
+        "@/lib/active-project-scans"
       );
-      await removeAllScansForProject(project.id);
+      await cancelActiveScansForProject(project.id);
 
       // Create scan record
       const scan = await prisma.scan.create({

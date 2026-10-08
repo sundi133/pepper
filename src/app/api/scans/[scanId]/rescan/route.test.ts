@@ -30,7 +30,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 const removeAll = vi.fn(async () => undefined);
-vi.mock("@/lib/remove-project-scans", () => ({ removeAllScansForProject: (...a: unknown[]) => removeAll(...(a as [])) }));
+vi.mock("@/lib/active-project-scans", () => ({ cancelActiveScansForProject: (...a: unknown[]) => removeAll(...(a as [])) }));
 vi.mock("@/lib/queue", () => ({ scanQueue: { add: vi.fn(async () => ({ id: "job1" })) } }));
 vi.mock("@/lib/org-settings-job", () => ({ buildOrgSettingsForJob: vi.fn(() => ({})) }));
 vi.mock("@/lib/audit-log", () => ({ writeAuditLog: vi.fn(async () => undefined), ipFromHeaders: vi.fn(() => null) }));
@@ -58,7 +58,8 @@ describe("rescan of an uploaded project", () => {
   it("rescans as before while the archive exists", async () => {
     const res = await call();
     expect(res.status).toBeLessThan(300);
-    expect(removeAll).toHaveBeenCalledWith("p1", { preserveObjectKeys: new Set(["scans/first/source.zip"]) });
+    // Earlier scans are kept; only one still in progress is stopped.
+    expect(removeAll).toHaveBeenCalledWith("p1");
     expect(scanCreate).toHaveBeenCalled();
   });
 

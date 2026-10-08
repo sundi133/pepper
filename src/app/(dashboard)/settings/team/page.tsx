@@ -55,7 +55,7 @@ const ORG_ROLES = [
   {
     value: "DEVELOPER",
     label: "Developer",
-    description: "Start and rescan projects; view findings but cannot stop scans or manage team",
+    description: "Start and rescan repositories; view findings but cannot stop scans or manage team",
   },
   {
     value: "VIEWER",

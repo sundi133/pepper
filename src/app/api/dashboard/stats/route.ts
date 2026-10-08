@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { latestCompletedScanIds } from "@/lib/latest-scans";
 
 export async function GET() {
   const auth = await requireAuth();
@@ -9,6 +10,10 @@ export async function GET() {
   const orgId = getDefaultOrgId(auth.session);
   if (!orgId)
     return NextResponse.json({ error: "No organization" }, { status: 403 });
+
+  // Totals come from each repository's latest completed scan: earlier scans
+  // are kept as history and would otherwise count the same issues again.
+  const currentScan = { scanId: { in: await latestCompletedScanIds(orgId) } };
 
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
@@ -29,9 +34,7 @@ export async function GET() {
     prisma.finding.groupBy({
       by: ["severity"],
       _count: true,
-      where: {
-        scan: { project: { organizationId: orgId } },
-      },
+      where: currentScan,
     }),
     prisma.project.count({ where: { organizationId: orgId } }),
     prisma.orgMember.count({ where: { organizationId: orgId } }),
@@ -40,19 +43,19 @@ export async function GET() {
     }),
     prisma.finding.count({
       where: {
-        scan: { project: { organizationId: orgId } },
+        ...currentScan,
         scanner: { in: ["SECRETS_PATTERN", "SECRETS_LLM"] },
       },
     }),
     prisma.finding.count({
       where: {
-        scan: { project: { organizationId: orgId } },
+        ...currentScan,
         scanner: { in: ["SCA", "MALICIOUS_PKG"] },
       },
     }),
     prisma.finding.count({
       where: {
-        scan: { project: { organizationId: orgId } },
+        ...currentScan,
         status: "RESOLVED",
         statusUpdatedAt: { gte: startOfMonth },
       },

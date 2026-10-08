@@ -22,7 +22,7 @@
         <section><h2>On this page</h2><ul>
           <li><a href="#dashboard">Dashboard</a></li>
           <li><a href="#new-scan">New scan</a></li>
-          <li><a href="#projects">Projects</a></li>
+          <li><a href="#projects">Repositories</a></li>
           <li><a href="#repositories">Repositories</a></li>
           <li><a href="#scan-detail">Scan detail</a></li>
           <li><a href="#findings">Findings</a></li>
@@ -77,13 +77,14 @@
         <code>svn</code> binary installed. See README for examples.
       </p>
 
-      <h2 id="projects">Projects</h2>
+      <h2 id="projects">Repositories</h2>
       <p><span class="badge">Route</span> <code>/projects</code>, <code>/projects/[id]</code></p>
       <ul>
-        <li>Each project holds scans, optional <code>repoUrl</code>, default branch, and GitHub metadata when imported.</li>
-        <li>Project cards show security grade and open finding counts.</li>
-        <li><strong>Project settings</strong> (<code>/projects/[id]/settings</code>) — edit name and description only.</li>
-        <li>Build gate summary appears on the project page when configured.</li>
+        <li>One entry per scanned repository or uploaded codebase, with its optional <code>repoUrl</code>, default branch, and GitHub metadata when imported. (The API calls these <em>projects</em>.)</li>
+        <li>The list shows each repository's security grade and finding counts from its latest completed scan.</li>
+        <li>A repository's page lists every scan of it, newest first. Rescanning adds a scan; earlier scans stay openable until deleted or removed by <code>SCAN_HISTORY_RETENTION_DAYS</code>.</li>
+        <li><strong>Repository settings</strong> (<code>/projects/[id]/settings</code>) — edit name and description only.</li>
+        <li>Build gate summary appears on the repository page when configured.</li>
       </ul>
 
       <h2 id="repositories">Repositories (GitHub)</h2>
@@ -113,7 +114,7 @@
       <ul>
         <li>Live status while <code>QUEUED</code>, <code>RUNNING</code>, or <code>PAUSED</code>.</li>
         <li><strong>Pause / Resume / Stop / Cancel</strong> for active scans.</li>
-        <li><strong>Rescan</strong> from the scans list to run again on the same project.</li>
+        <li><strong>Rescan</strong> from the scans list to run again on the same repository. The new scan is added to its history; a scan of it still in progress is cancelled.</li>
         <li>Findings grouped by scanner family (SAST, Secrets, SCA, IaC, Zero-Day).</li>
         <li>Filter by severity and scanner type.</li>
         <li>Export findings as CSV or HTML report.</li>

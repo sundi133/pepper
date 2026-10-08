@@ -63,7 +63,8 @@ function getScanSourceName(scan: Record<string, unknown>) {
 
 export default function ScansPage() {
   const { data: session } = useSession();
-  const { scans, isLoading, refresh } = useScans();
+  const [page, setPage] = useState(1);
+  const { scans, pagination, isLoading, refresh } = useScans(undefined, page);
   const router = useRouter();
   const [rescanningId, setRescanningId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -120,7 +121,6 @@ export default function ScansPage() {
       <PageBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
-          { label: "Projects", href: "/projects" },
           { label: "Scans" },
         ]}
       />
@@ -151,7 +151,7 @@ export default function ScansPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Source</TableHead>
-                  <TableHead>Project</TableHead>
+                  <TableHead>Repository</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Branch</TableHead>
                   <TableHead>Status</TableHead>
@@ -176,8 +176,9 @@ export default function ScansPage() {
                     </TableCell>
                     <TableCell>
                       <Link
-                        href={`/scans/${scan.id}`}
+                        href={`/projects/${scan.projectId}`}
                         className="font-medium hover:underline"
+                        title="All scans of this repository"
                       >
                         {(scan.project as { name: string })?.name || "Unknown"}
                       </Link>
@@ -262,6 +263,26 @@ export default function ScansPage() {
                 ))}
               </TableBody>
             </Table>
+          )}
+          {pagination && pagination.totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+              <span>
+                Page {pagination.page} of {pagination.totalPages} · {pagination.total} scans
+              </span>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= pagination.totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

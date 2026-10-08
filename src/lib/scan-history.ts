@@ -1,6 +1,6 @@
 /**
- * Repository scan history for trends. A project keeps only its latest Scan
- * row, so each completed scan's totals are copied into ScanSnapshot; the pure
+ * Repository scan history for trends. Each completed scan's totals are copied
+ * into ScanSnapshot, which outlives the scan itself; the pure
  * helpers below turn those snapshots into daily series and before/after-fix
  * comparisons.
  */

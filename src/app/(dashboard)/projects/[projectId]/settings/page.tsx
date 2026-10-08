@@ -33,13 +33,13 @@ export default function ProjectSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [crumbProjectName, setCrumbProjectName] = useState("Project");
+  const [crumbProjectName, setCrumbProjectName] = useState("Repository");
   const [nameTouched, setNameTouched] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const nameError =
     !name.trim() && (nameTouched || submitAttempted)
-      ? "Project name is required."
+      ? "Repository name is required."
       : null;
 
   useEffect(() => {
@@ -48,17 +48,17 @@ export default function ProjectSettingsPage() {
     async function loadProject() {
       try {
         const res = await fetch(`/api/projects/${projectId}`);
-        if (!res.ok) throw new Error("Failed to load project");
+        if (!res.ok) throw new Error("Failed to load repository");
 
         const project = (await res.json()) as ProjectSettings;
         if (!mounted) return;
 
         setName(project.name || "");
         setDescription(project.description || "");
-        setCrumbProjectName(project.name || "Project");
+        setCrumbProjectName(project.name || "Repository");
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Failed to load project",
+          error instanceof Error ? error.message : "Failed to load repository",
         );
       } finally {
         if (mounted) setLoading(false);
@@ -75,7 +75,7 @@ export default function ProjectSettingsPage() {
     e.preventDefault();
     setSubmitAttempted(true);
     if (!name.trim()) {
-      toast.error("Project name is required");
+      toast.error("Repository name is required");
       return;
     }
 
@@ -90,14 +90,14 @@ export default function ProjectSettingsPage() {
         }),
       });
 
-      if (!res.ok) throw new Error("Failed to update project");
+      if (!res.ok) throw new Error("Failed to update repository");
 
-      toast.success("Project updated");
+      toast.success("Repository updated");
       router.push(`/projects/${projectId}`);
       router.refresh();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to update project",
+        error instanceof Error ? error.message : "Failed to update repository",
       );
     } finally {
       setSaving(false);
@@ -110,7 +110,7 @@ export default function ProjectSettingsPage() {
         <PageBreadcrumb
           items={[
             { label: "Dashboard", href: "/dashboard" },
-            { label: "Projects", href: "/projects" },
+            { label: "Repositories", href: "/projects" },
             { label: crumbProjectName, href: `/projects/${projectId}` },
             { label: "Settings" },
           ]}
@@ -125,7 +125,7 @@ export default function ProjectSettingsPage() {
       <PageBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
-          { label: "Projects", href: "/projects" },
+          { label: "Repositories", href: "/projects" },
           { label: crumbProjectName, href: `/projects/${projectId}` },
           { label: "Settings" },
         ]}
@@ -138,9 +138,9 @@ export default function ProjectSettingsPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-2xl font-bold">Project Settings</h1>
+          <h1 className="text-2xl font-bold">Repository Settings</h1>
           <p className="text-muted-foreground">
-            Update the basic project details shown throughout Pepper.
+            Update the repository details shown throughout Pepper.
           </p>
         </div>
       </div>
@@ -148,12 +148,12 @@ export default function ProjectSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>General</CardTitle>
-          <CardDescription>Edit the project name and description.</CardDescription>
+          <CardDescription>Edit the repository name and description.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Project name *</Label>
+              <Label htmlFor="name">Repository name *</Label>
               <Input
                 id="name"
                 value={name}
@@ -176,7 +176,7 @@ export default function ProjectSettingsPage() {
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Brief description of the project"
+                placeholder="Brief description of the repository"
               />
             </div>
 

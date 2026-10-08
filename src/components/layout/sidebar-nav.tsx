@@ -44,7 +44,7 @@ export const navGroups: NavGroup[] = [
       // An action, not a section — the old label was just "Scan", which read as
       // a peer of Projects while actually opening a create form.
       { name: "New scan", href: "/scans/new", icon: PlusCircle },
-      { name: "Projects", href: "/projects", icon: FolderOpen },
+      { name: "Repositories", href: "/projects", icon: FolderOpen },
       // Previously unreachable: nothing in the UI linked to /scans, so the list
       // holding retry and delete could only be reached by typing the URL.
       { name: "Scans", href: "/scans", icon: ListChecks },

@@ -18,6 +18,13 @@ import { logger } from "@/lib/logger";
 import { logOutboundProxy } from "@/lib/outbound-proxy";
 import { prisma } from "@/lib/prisma";
 
+// A stray rejected promise must not crash the worker: Node exits on an
+// unhandled rejection by default, which kills every scan running on it, and
+// the queue only re-runs them after its stall timeout. Log it instead.
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "Unhandled promise rejection in the worker (kept running)");
+});
+
 async function main() {
   logger.info("Starting Pepper scan worker...");
   logOutboundProxy(

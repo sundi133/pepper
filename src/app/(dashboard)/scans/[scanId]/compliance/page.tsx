@@ -341,7 +341,7 @@ export default function ComplianceReportPage() {
     | undefined;
   const complianceBreadcrumbs = [
     { label: "Dashboard", href: "/dashboard" },
-    { label: "Projects", href: "/projects" },
+    { label: "Repositories", href: "/projects" },
     ...(project?.id && project?.name
       ? [{ label: project.name, href: `/projects/${project.id}` }]
       : []),

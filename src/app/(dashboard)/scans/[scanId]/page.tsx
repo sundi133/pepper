@@ -965,6 +965,23 @@ export default function ScanDetailPage() {
         </div>
       )}
 
+      {/* A completed scan whose AI analysis could not run (provider refused) */}
+      {scan.errorMessage && scan.status === "COMPLETED" && (
+        <div className="overflow-hidden rounded-xl border border-amber-300 bg-gradient-to-br from-amber-50 to-white shadow-sm dark:border-amber-900/50 dark:from-amber-950/20 dark:to-slate-950">
+          <div className="flex items-start gap-3 px-5 py-5 sm:px-6">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/40">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="space-y-2 min-w-0">
+              <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">Incomplete scan</span>
+              <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap break-words dark:text-slate-300">
+                {scan.errorMessage}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* AI Triage Chat — shown when scan is complete */}
       {scan.status === "COMPLETED" && <ScanTriageChat scanId={scanId} />}
     </div>

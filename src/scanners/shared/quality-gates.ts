@@ -5,6 +5,7 @@ import {
   SECRETS_MIN_CONFIDENCE_DEFAULT,
   ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
+import { isAuthorizationOrLogicFinding } from "../sast/evidence-verify";
 
 // SAST_PATTERN is rule-based SAST (OpenGrep, curated packs). Its findings pass
 // the gates below like any other scanner: LOW-confidence rules fall under the
@@ -53,15 +54,31 @@ function hasRemediation(f: RawFinding): boolean {
   return false;
 }
 
+/**
+ * An authorization or business-logic finding the second validation pass could
+ * not judge (its answer failed or was cut off). These are the findings Pepper
+ * exists to surface, so a validator outage must not remove them: they are
+ * held to the AI's first-pass floor instead of the confirmed-finding floor.
+ */
+function isUnjudgedLogicFinding(f: RawFinding): boolean {
+  return (
+    f.scanner === "SAST_LLM" &&
+    (f.metadata as Record<string, unknown> | undefined)?.validation === "unconfirmed" &&
+    (f.confidence ?? 0) >= 0.65 &&
+    isAuthorizationOrLogicFinding(f)
+  );
+}
+
 export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
   return findings.filter((f) => {
     if (f.severity === "INFO") return false;
     if (FAILURE_RULE_IDS.has(f.ruleId || "")) return false;
+    const unjudgedLogic = isUnjudgedLogicFinding(f);
 
     // SCA findings are database-confirmed from OSV (confidence=1.0) and are
     // not LLM-generated — skip the LLM confidence floor so triaged findings
     // whose confidence was adjusted by the AI triage are never silently dropped.
-    if (f.scanner !== "SCA") {
+    if (f.scanner !== "SCA" && !unjudgedLogic) {
       const floor = confidenceFloor(f.scanner);
       if ((f.confidence ?? 0) < floor) return false;
     }
@@ -79,7 +96,7 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
       // A rule's message is its guidance, so any CWE-tagged rule match counts
       // (the confidence floor above still applies).
       const ruleBased = f.scanner === "SAST_PATTERN";
-      if (!(exemptScanner && hasCwe && (isHighConfidence || ruleBased))) {
+      if (!(exemptScanner && hasCwe && (isHighConfidence || ruleBased || unjudgedLogic))) {
         return false;
       }
     }

@@ -36,7 +36,7 @@ import {
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { buildDeepRepoContext } from "../shared/repo-context";
+import { getRepoMap } from "../shared/ai-repo-map";
 import { reviewKnowledgeFor } from "../shared/review-knowledge";
 import { enrichFinding } from "../shared/finding-normalize";
 import {
@@ -431,8 +431,7 @@ export async function runLlmSastScanner(
     ? SYSTEM_PROMPT + policyPromptSection
     : SYSTEM_PROMPT;
 
-  const repoAnalysis = buildDeepRepoContext(ctx.workDir, ctx.fileList);
-  const repoContextBlock = repoAnalysis.summary;
+  const repoContextBlock = (await getRepoMap(ctx)).summary;
 
   logger.info(
     {

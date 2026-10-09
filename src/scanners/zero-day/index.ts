@@ -6,20 +6,19 @@ import {
   parseLlmJsonResponse,
 } from "@/lib/llm-gateway";
 import { RawFinding, ScanContext, ScannerPlugin } from "../types";
-import { buildDeepRepoContext } from "../shared/repo-context";
+import { getRepoMap } from "../shared/ai-repo-map";
 import { enrichFinding } from "../shared/finding-normalize";
 import { applySeverityCalibration } from "@/lib/severity-calibration";
 import { ZERO_DAY_SYSTEM_PROMPT } from "./prompts";
-import { selectZeroDayFiles } from "./file-prioritizer";
 import {
   FILE_EXTENSIONS,
   SKIP_DIRECTORIES,
   BINARY_EXTENSIONS,
-  LLM_MAX_FILE_SIZE_BYTES,
   LLM_MAX_RESPONSE_TOKENS,
   OLLAMA_MAX_RESPONSE_TOKENS,
   ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
   ZERO_DAY_LLM_FILES,
+  ZERO_DAY_MAX_FILES,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { llmExcludedPath } from "@/lib/llm-exclusions";
@@ -41,6 +40,27 @@ interface ZeroDayLlmFinding {
   recommendation?: string;
 }
 
+/**
+ * Files for zero-day analysis: the AI repo map's high-risk ranking first
+ * (restricted to the files this scan covers), then the remaining files.
+ */
+export function selectZeroDayFiles(
+  fileList: string[],
+  rankedRisk: string[],
+  maxTotal: number = ZERO_DAY_MAX_FILES,
+): string[] {
+  const inScope = new Set(fileList);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const f of [...rankedRisk.filter((p) => inScope.has(p)), ...fileList]) {
+    if (out.length >= maxTotal) break;
+    if (seen.has(f)) continue;
+    seen.add(f);
+    out.push(f);
+  }
+  return out;
+}
+
 export const zeroDayScanner: ScannerPlugin = {
   name: "ZERO_DAY",
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
@@ -58,8 +78,8 @@ export const zeroDayScanner: ScannerPlugin = {
       ? OLLAMA_MAX_RESPONSE_TOKENS
       : LLM_MAX_RESPONSE_TOKENS;
 
-    const repoContext = buildDeepRepoContext(ctx.workDir, ctx.fileList);
-    const targetFiles = selectZeroDayFiles(ctx.fileList);
+    const repoContext = await getRepoMap(ctx);
+    const targetFiles = selectZeroDayFiles(ctx.fileList, repoContext.highRiskFiles);
     if (targetFiles.length === 0) return [];
 
     const fileBundles: string[] = [];

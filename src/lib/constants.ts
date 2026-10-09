@@ -528,12 +528,6 @@ export const K8S_MIN_CONFIDENCE_DEFAULT = parseFloat(
   process.env.K8S_MIN_CONFIDENCE || "0.80",
 );
 
-/** Zero-day: max high-priority paths before adding broader files. */
-export const ZERO_DAY_PRIORITY_FILES = parseInt(
-  process.env.ZERO_DAY_PRIORITY_FILES || "96",
-  10,
-);
-
 /** Zero-day: total source files sent to the LLM (priority first, then others). */
 export const ZERO_DAY_MAX_FILES = parseInt(
   process.env.ZERO_DAY_MAX_FILES || "160",

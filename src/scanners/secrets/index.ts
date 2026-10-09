@@ -11,7 +11,7 @@ import { maskSecretValue, redactSensitiveText } from "../shared/evidence-redacti
 import { enrichFinding } from "../shared/finding-normalize";
 import { SECRETS_AI_PROMPT } from "../shared/prompts";
 import { applySeverityCalibration } from "@/lib/severity-calibration";
-import { buildDeepRepoContext } from "../shared/repo-context";
+import { getRepoMap } from "../shared/ai-repo-map";
 import { buildRepoContextSummary } from "@/lib/llm-repo-context";
 import { validateSecretCandidate, getEntropyLabel } from "./entropy-validator";
 import { classifySecrets } from "./llm-classifier";
@@ -228,7 +228,7 @@ export const secretsLlmScanner: ScannerPlugin = {
       model: ctx.orgSettings.llmModel,
     });
 
-    const repoContext = buildDeepRepoContext(ctx.workDir, ctx.fileList);
+    const repoContext = await getRepoMap(ctx);
     const pathSummary = buildRepoContextSummary(ctx.fileList);
     const chunks: Chunk[] = [];
 

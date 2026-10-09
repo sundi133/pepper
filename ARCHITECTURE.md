@@ -137,7 +137,7 @@ src/scanners/
 │   ├── index.ts                # LLM scanner for novel vulnerabilities
 │   ├── prompts.ts              # Specialized prompt: IDOR, business logic, race conditions,
 │   │                           # trust boundaries, auth flaws, parameter tampering, etc.
-│   └── file-prioritizer.ts     # Selects high-value files (auth, payment, API, admin)
+│                               # (file selection comes from the AI repo map)
 │
 └── diff-parser.ts              # Git diff parser (for incremental scans)
 ```

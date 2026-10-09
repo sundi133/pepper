@@ -16,6 +16,12 @@ export interface ScanContext {
   fileList: string[];
   /** When set (incremental PR scans), SCA / malicious-pkg use this instead of fileList. */
   scaFileList?: string[];
+  /**
+   * Every scannable file in the repository (noise excluded). Equals fileList
+   * on full scans; on PR scans it also holds unchanged files, so the AI repo
+   * map can see the guards and callers around the changed code.
+   */
+  repoFileList?: string[];
   scanType: string;
   orgSettings: {
     llmProvider: string;

@@ -395,9 +395,11 @@
           false positives.
         </li>
         <li>
-          <strong>Zero-day prioritiser</strong>
-          (<code>src/scanners/zero-day/file-prioritizer.ts</code>) — scores files by
-          likelihood of harbouring novel logic flaws, then deeply analyses the top set.
+          <strong>AI repository map</strong>
+          (<code>src/scanners/shared/ai-repo-map.ts</code>) — the model explores the
+          repository, reads its key files and maps routes, auth enforcement, tenancy,
+          trust boundaries and the highest-risk files. Every AI scanner gets the map,
+          and zero-day analysis starts from its risk ranking.
         </li>
         <li>
           <strong>Suggested fixes</strong>

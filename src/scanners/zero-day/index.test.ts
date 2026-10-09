@@ -259,3 +259,12 @@ describe("ZERO_DAY scanner", () => {
     }
   });
 });
+
+describe("selectZeroDayFiles", () => {
+  it("puts the AI map's high-risk files first, then the rest, within scope and cap", async () => {
+    const { selectZeroDayFiles } = await import("./index");
+    expect(
+      selectZeroDayFiles(["a.ts", "b.ts", "c.ts", "d.ts"], ["c.ts", "outside.ts", "a.ts"], 3),
+    ).toEqual(["c.ts", "a.ts", "b.ts"]);
+  });
+});

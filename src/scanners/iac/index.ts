@@ -8,7 +8,7 @@ import {
 import { RawFinding, ScanContext, ScannerPlugin } from "../types";
 import { groupIacStacks } from "./stacks";
 import { enrichFinding } from "../shared/finding-normalize";
-import { buildDeepRepoContext } from "../shared/repo-context";
+import { getRepoMap } from "../shared/ai-repo-map";
 import { UNTRUSTED_CONTENT_GUARD } from "../shared/prompts";
 import {
   applySeverityCalibration,
@@ -186,7 +186,7 @@ export const iacScanner: ScannerPlugin = {
     const stacks = groupIacStacks(filteredList);
     if (stacks.length === 0) return [];
 
-    const repoContext = buildDeepRepoContext(ctx.workDir, ctx.fileList);
+    const repoContext = await getRepoMap(ctx);
 
     // Count total lines in all IaC files
     let totalIacLoc = 0;

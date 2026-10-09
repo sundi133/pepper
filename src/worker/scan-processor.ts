@@ -401,6 +401,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
     const allFiles = enumerateFiles(workDir);
     let fileList = allFiles;
     let scaFileList: string[] | undefined;
+    let repoFileList: string[] = allFiles;
 
     if (scanType === "INCREMENTAL") {
       const { applyIncrementalFileFilter } = await import(
@@ -431,6 +432,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
     // code scanners. SCA keeps the unfiltered list so manifests are never lost.
     {
       const { filterScanNoise } = await import("@/lib/scan-noise-filter");
+      repoFileList = filterScanNoise(allFiles).kept;
       const noise = filterScanNoise(fileList);
       if (noise.dropped > 0) {
         scaFileList ??= fileList;
@@ -695,6 +697,7 @@ Schema:
       workDir,
       fileList,
       scaFileList,
+      repoFileList,
       scanType,
       scanId,
       orgSettings,
@@ -1250,6 +1253,8 @@ Schema:
     throw error;
   } finally {
     clearInterval(stopWatcher);
+    const { forgetRepoMap } = await import("@/scanners/shared/ai-repo-map");
+    forgetRepoMap({ scanId, workDir });
     // Cleanup
     try {
       fs.rmSync(workDir, { recursive: true, force: true });

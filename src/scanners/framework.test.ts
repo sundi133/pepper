@@ -39,8 +39,8 @@ describe("scanner framework", () => {
   });
 
   it("IAC_ONLY and ZERO_DAY_ONLY run dedicated scanners", () => {
-    // Rule-based checks (trivy config) always run; the LLM IaC scanner adds to them.
-    expect(getScanners("IAC_ONLY", llmOn).map((s) => s.name)).toEqual(["IAC_RULES", "IAC"]);
+    // AI-first: with LLM analysis on, rule-based trivy config checks are skipped.
+    expect(getScanners("IAC_ONLY", llmOn).map((s) => s.name)).toEqual(["IAC"]);
     expect(getScanners("ZERO_DAY_ONLY", llmOn).map((s) => s.name)).toEqual([
       "ZERO_DAY",
     ]);
@@ -48,8 +48,11 @@ describe("scanner framework", () => {
 
   it("INCREMENTAL runs SAST, SCA, secrets, zero-day, IaC, K8s and container (webhook PR scans)", () => {
     const names = getScanners("INCREMENTAL", llmOn).map((s) => s.name);
-    for (const n of ["SAST_PATTERN", "SAST_LLM", "SCA", "ZERO_DAY", "IAC_RULES", "IAC", "K8S", "CONTAINER"]) {
+    for (const n of ["SAST_LLM", "SECRETS_LLM", "SCA", "ZERO_DAY", "IAC", "K8S", "CONTAINER"]) {
       expect(names, n).toContain(n);
+    }
+    for (const n of ["SAST_PATTERN", "SECRETS_PATTERN", "IAC_RULES"]) {
+      expect(names, n).not.toContain(n);
     }
   });
 

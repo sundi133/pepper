@@ -48,7 +48,6 @@ import {
   parseSeverity,
 } from "@/lib/severity-calibration";
 import { SAST_EXCLUDED_EXTENSIONS } from "../shared/extension-filters";
-import { scanMissingHardeningHeaders } from "./hardening-headers";
 import { llmExcludedPath } from "@/lib/llm-exclusions";
 
 // Dependency manifest files excluded from SAST analysis (more aggressive filtering)
@@ -393,10 +392,6 @@ export async function runLlmSastScanner(
     return [];
   }
 
-  const controlFindings = scanMissingHardeningHeaders(ctx);
-  if (controlFindings.length > 0 && ctx.onBatchFindings) {
-    await ctx.onBatchFindings("SAST_LLM", controlFindings);
-  }
 
   const client = createLlmClient({
     provider: ctx.orgSettings.llmProvider,
@@ -694,7 +689,7 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
     ctx.onProgress?.(`LLM SAST: ${validated.length} findings across ${totalFiles} files`);
   }
 
-  return [...controlFindings, ...validated];
+  return validated;
 }
 
 /**

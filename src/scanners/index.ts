@@ -46,8 +46,13 @@ export function getScanners(
   const includeContainer = ["FULL", "CONTAINER_ONLY", "INCREMENTAL"].includes(scanType);
   const includeK8s = ["FULL", "K8S_ONLY", "INCREMENTAL"].includes(scanType);
 
-  if (includeSast) {
-    // Rule-based SAST (OpenGrep) is deterministic and offline: always run it.
+  // AI-first: when LLM analysis is enabled, pattern/rule scanners (OpenGrep,
+  // secrets regex, trivy config) are skipped so every code finding comes from
+  // the model. They run only as a fallback when the org has AI turned off.
+  const aiSast = orgSettings.enableLlmSast;
+  const aiSecrets = orgSettings.enableLlmSecrets;
+
+  if (includeSast && !aiSast) {
     scanners.push(sastPatternScanner);
   }
 
@@ -61,17 +66,10 @@ export function getScanners(
   }
 
   if (includeSecrets) {
-    // Always run pattern scanner for fast, high-confidence detections
-    scanners.push(secretsPatternScanner);
-    // Also run LLM scanner if enabled for deeper analysis
-    if (orgSettings.enableLlmSecrets) {
-      scanners.push(secretsLlmScanner);
-    }
+    scanners.push(aiSecrets ? secretsLlmScanner : secretsPatternScanner);
   }
 
-  if (includeIac || includeK8s) {
-    // Rule-based IaC / Kubernetes / Helm checks (trivy config): deterministic
-    // and offline, so they run whether or not LLM analysis is enabled.
+  if ((includeIac || includeK8s) && !aiSast) {
     scanners.push(iacRulesScanner);
   }
 

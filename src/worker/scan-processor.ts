@@ -427,6 +427,21 @@ export async function processScanJob(job: Job<ScanJobData>) {
       log.info({ fileCount: allFiles.length }, "Files enumerated");
     }
 
+    // Drop tests, fixtures, docs, API collections and generated code from the
+    // code scanners. SCA keeps the unfiltered list so manifests are never lost.
+    {
+      const { filterScanNoise } = await import("@/lib/scan-noise-filter");
+      const noise = filterScanNoise(fileList);
+      if (noise.dropped > 0) {
+        scaFileList ??= fileList;
+        fileList = noise.kept;
+        log.info(
+          { droppedNoiseFiles: noise.dropped, scannedFiles: fileList.length },
+          "Excluded test/fixture/doc/generated files from code scanners",
+        );
+      }
+    }
+
     // AI enrichment: generate contextual report content via LLM for unique finding types
     async function enrichFindingsWithAi(
       findings: RawFinding[],

@@ -23,6 +23,7 @@ import {
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { llmExcludedPath } from "@/lib/llm-exclusions";
+import { reviewKnowledgeFor } from "../shared/review-knowledge";
 
 interface ZeroDayLlmFinding {
   title: string;
@@ -89,7 +90,7 @@ export const zeroDayScanner: ScannerPlugin = {
       `Zero-Day: cross-file exploit-chain analysis on ${fileBundles.length} files...`,
     );
 
-    const userContent = `${repoContext.summary}\n\nHIGH-RISK FILES:\n${fileBundles.join("\n\n")}`;
+    const userContent = `${repoContext.summary}\n\n${reviewKnowledgeFor(targetFiles.slice(0, ZERO_DAY_LLM_FILES))}\nHIGH-RISK FILES:\n${fileBundles.join("\n\n")}`;
 
     try {
       const raw = await analyzeWithLlm(

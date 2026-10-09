@@ -37,6 +37,7 @@ import {
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { buildDeepRepoContext } from "../shared/repo-context";
+import { reviewKnowledgeFor } from "../shared/review-knowledge";
 import { enrichFinding } from "../shared/finding-normalize";
 import {
   SAST_PASS2_PROMPT,
@@ -238,16 +239,7 @@ Focus on exploitable instances of:
 - Supply-chain and CI/CD risk classes: unpinned actions/images, unsafe pull_request_target workflows, dependency install scripts, unsigned webhooks, build secret exposure, artifact poisoning
 - Cloud-native and identity risk classes: tenant isolation failures, service-account overpermission, missing audit trails for privileged M2M operations, insecure OAuth/OIDC scopes, webhook replay
 
-**LANGUAGE SOURCE→SINK REFERENCE (use the exact API named for the language in the file):**
-- JavaScript/TypeScript (Express/Nest/Koa/Next): sources req.body/query/params/headers/cookies, request.formData(), URL searchParams, WebSocket/SSE messages; sinks db.query/exec built by concatenation, child_process.exec/spawn with a shell, eval/Function/vm.runIn*, fs.readFile/writeFile with a path from input, res.redirect, res.render and raw ejs (<%- %>), innerHTML/outerHTML/dangerouslySetInnerHTML, new RegExp(userInput); guards: parameterised $1/? placeholders, ORM bindings, Prisma $queryRaw with a tagged template (NOT $queryRawUnsafe), helmet, csurf, express-validator/zod/joi, path.basename.
-- Python (Flask/Django/FastAPI): sources request.args/form/json/data/values/headers/cookies, path/query/body params; sinks cursor.execute with f-string/%/concat, os.system/os.popen, subprocess(..., shell=True), eval/exec, pickle.loads/marshal.loads/dill, yaml.load (not safe_load), open() with an input path, Jinja2 |safe/mark_safe, render_template_string, redirect(next); guards: parameterised %s, ORM, html.escape, path allowlists, @login_required/@permission_required, SafeLoader, FileResponse path checks.
-- Java/Spring: sources @RequestParam/@PathVariable/@RequestBody/getParameter/getHeader; sinks Statement.execute/executeQuery with concatenation, Runtime.exec/ProcessBuilder, ObjectInputStream, XMLDecoder, XPathExpression.evaluate, Files.read/write with an input path, reflection/Class.forName; guards: PreparedStatement, @PreAuthorize/@Secured, OWASP Encoder, allowlists, XML disallow-doctype.
-- PHP: sources $_GET/$_POST/$_REQUEST/$_COOKIE/$_FILES/$_SERVER; sinks mysqli_query/mysql_query concatenation, system/exec/shell_exec/passthru/proc_open, include/require with a variable path, unserialize, file_get_contents/fopen with an input path, echo of unescaped input; guards: PDO prepared statements, htmlspecialchars, basename/realpath allowlists, SafeLoader.
-- Ruby/Rails: sources params[], request.headers, cookies; sinks where("...#{params[:x]}"), find_by_sql/execute with interpolation, system/backticks/exec/spawn, eval, Marshal.load, YAML.load (not safe_load), send_file/open with an input path, raw/html_safe; guards: parameterised where(hash), strong parameters, sanitize, ERB autoescaping.
-- Go: sources r.URL.Query()/FormValue/PostFormValue/Header.Get, request bodies; sinks db.Query/Exec via fmt.Sprintf, exec.Command with input, text/template, os.Open with an input path, slice indexing by an untrusted length; guards: parameterised $1, html/template, filepath.Clean/Base allowlists.
-- C/C++: sources recv/read/argv/getenv/fread and FFI boundaries; sinks strcpy/strcat/sprintf/gets, memcpy with an attacker-influenced length, printf with an attacker format, system/popen, pointer+length from untrusted input; guards: snprintf bounds, fixed-size/constant-bounded loops, explicit length checks.
-- C#/.NET: sources Request.Query/Form/Headers/RouteData; sinks SqlCommand concatenation, Process.Start, BinaryFormatter/NetDataContractSerializer, Json.NET TypeNameHandling, Path.Combine followed by File IO; guards: SqlParameter, type allowlists, [Authorize], path sanitisation.
-- Rust: sources req/body/headers/query from Actix/Axum/Rocket/Tide; sinks Command::new with shell strings, unsafe memory blocks with untrusted length/pointer offsets, raw SQL via format!/concatenation; guards: parameterized queries (sqlx/diesel), serde strongly-typed deserialization (serde_json::from_str, parse_struct into a Rust struct is SAFE typed data parsing, NOT CWE-502).
+**LANGUAGE REFERENCE:** a REVIEW KNOWLEDGE block in the user message lists the sources, sinks, guards and logic pitfalls for the file's language. Use the exact APIs it names when they appear in the code.
 
 **HIGH-SIGNAL SIGNATURE DETECTION (these exact signatures MUST be flagged when they appear in code):**
 - Unrestricted file upload: @UseInterceptors(FileInterceptor('file')), @UploadedFile, multer({ storage }), busboy/formidable upload handlers WITHOUT a server-side extension/MIME allowlist, filename sanitization, or size limit → report CWE-434/CWE-22 (the decorator/interceptor itself is the sink even if the handler body is not in the chunk)
@@ -763,7 +755,7 @@ export async function validateCandidatesPass2(
         client,
         model,
         `${SYSTEM_PROMPT}\n\n${SAST_PASS2_PROMPT}`,
-        `${repoContextBlock}\n\nCANDIDATES TO VALIDATE:\n${JSON.stringify(payload, null, 2)}`,
+        `${repoContextBlock}\n\n${reviewKnowledgeFor(batch.map((c) => c.filePath))}\nCANDIDATES TO VALIDATE:\n${JSON.stringify(payload, null, 2)}`,
         { maxTokens: maxResponseTokens },
       );
       const { value: parsed, status } = parseLlmJsonResponseDetailed<{ findings: LlmFinding[] }>(raw, {
@@ -1015,7 +1007,7 @@ async function analyzeChunk(
   const scopeNote = chunk.wholeFile
     ? "This is the ENTIRE file with line numbers. Read every line before reporting."
     : "This is one chunk of a larger file; code outside it is not shown.";
-  const userContent = `${repoContextBlock}\n--- CURRENT FILE ${chunk.wholeFile ? "(WHOLE FILE)" : "CHUNK"} ---\nFile: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n${scopeNote}\n\n\`\`\`\n${chunk.content}\n\`\`\``;
+  const userContent = `${repoContextBlock}\n${reviewKnowledgeFor([chunk.filePath])}\n--- CURRENT FILE ${chunk.wholeFile ? "(WHOLE FILE)" : "CHUNK"} ---\nFile: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n${scopeNote}\n\n\`\`\`\n${chunk.content}\n\`\`\``;
 
   try {
     logger.info(

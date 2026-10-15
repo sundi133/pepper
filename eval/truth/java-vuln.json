@@ -1,0 +1,202 @@
+{
+  "app": "java-vuln",
+  "language": "java",
+  "expected": [
+    {
+      "id": "java-vuln-command-injection-ping",
+      "file": "src/main/java/com/datadoghq/workshops/samplevulnerablejavaapp/service/DomainTestService.java",
+      "lines": [
+        20,
+        26
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-78",
+        "CWE-77"
+      ],
+      "severity": "CRITICAL",
+      "note": "domainName is concatenated into \"sh -c ping -c 1 ...\"; validation regex is unanchored at the end and uses find(), so \"google.com;id\" passes and runs arbitrary commands (unauthenticated POST /test-domain)."
+    },
+    {
+      "id": "java-vuln-ssrf-test-website",
+      "file": "src/main/java/com/datadoghq/workshops/samplevulnerablejavaapp/service/WebsiteTestService.java",
+      "lines": [
+        21,
+        27
+      ],
+      "class": "ssrf",
+      "cwe": [
+        "CWE-918"
+      ],
+      "severity": "HIGH",
+      "note": "User-supplied URL fetched by RestTemplate with attacker-chosen header and body returned; full-read SSRF to internal hosts / cloud metadata (169.254.169.254, header enables e.g. GCP Metadata-Flavor)."
+    },
+    {
+      "id": "java-vuln-path-traversal-view-file",
+      "file": "src/main/java/com/datadoghq/workshops/samplevulnerablejavaapp/service/FileService.java",
+      "lines": [
+        14,
+        17
+      ],
+      "class": "path-traversal",
+      "cwe": [
+        "CWE-22",
+        "CWE-23"
+      ],
+      "severity": "HIGH",
+      "note": "startsWith(\"/tmp/files/\") check on the unnormalized path; \"/tmp/files/../../etc/passwd\" reads arbitrary files (unauthenticated POST /view-file)."
+    },
+    {
+      "id": "java-vuln-actuator-all-exposed",
+      "file": "src/main/resources/application.properties",
+      "lines": [
+        2,
+        2
+      ],
+      "class": "config",
+      "cwe": [
+        "CWE-200",
+        "CWE-497",
+        "CWE-215"
+      ],
+      "severity": "MEDIUM",
+      "note": "All actuator endpoints exposed over HTTP with no Spring Security; unauthenticated /actuator/heapdump (memory incl. secrets), threaddump, mappings, beans, loggers (writable)."
+    }
+  ],
+  "must_not_report": [
+    {
+      "id": "java-vuln-safe-log-domain",
+      "file": "src/main/java/com/datadoghq/workshops/samplevulnerablejavaapp/controller/MainController.java",
+      "lines": [
+        36,
+        36
+      ],
+      "reason": "Logback uses LogstashEncoder (logback.xml), which JSON-escapes the message; CR/LF cannot forge log entries, and logback has no lookup/JNDI evaluation."
+    },
+    {
+      "id": "java-vuln-safe-log-website",
+      "file": "src/main/java/com/datadoghq/workshops/samplevulnerablejavaapp/controller/MainController.java",
+      "lines": [
+        51,
+        51
+      ],
+      "reason": "Same as above; JSON log encoder neutralizes log injection."
+    },
+    {
+      "id": "java-vuln-safe-log-file",
+      "file": "src/main/java/com/datadoghq/workshops/samplevulnerablejavaapp/controller/MainController.java",
+      "lines": [
+        58,
+        58
+      ],
+      "reason": "Same as above; JSON log encoder neutralizes log injection."
+    },
+    {
+      "id": "java-vuln-safe-reflected-domain-message",
+      "file": "src/main/java/com/datadoghq/workshops/samplevulnerablejavaapp/service/DomainTestService.java",
+      "lines": [
+        21,
+        21
+      ],
+      "reason": "Input echoed in error body is not exploitable XSS; endpoint only consumes application/json (cross-site form cannot send it without CORS preflight) and the frontend renders responses via innerText."
+    },
+    {
+      "id": "java-vuln-safe-frontend-main-innertext",
+      "file": "src/main/resources/static/js/main.js",
+      "lines": [
+        9,
+        16
+      ],
+      "reason": "Server responses are written with innerText, not innerHTML; no DOM XSS."
+    },
+    {
+      "id": "java-vuln-safe-frontend-file-innertext",
+      "file": "src/main/resources/static/js/file.js",
+      "lines": [
+        9,
+        16
+      ],
+      "reason": "Server responses are written with innerText, not innerHTML; no DOM XSS."
+    },
+    {
+      "id": "java-vuln-safe-frontend-website-innertext",
+      "file": "src/main/resources/static/js/website.js",
+      "lines": [
+        9,
+        16
+      ],
+      "reason": "Server responses are written with innerText, not innerHTML; no DOM XSS."
+    },
+    {
+      "id": "java-vuln-safe-docker-agent-download",
+      "file": "Dockerfile",
+      "lines": [
+        15,
+        17
+      ],
+      "reason": "Remote dd-java-agent.jar is pinned to a version and verified with sha256sum -c before use."
+    }
+  ],
+  "debatable": [
+    {
+      "id": "java-vuln-no-authentication",
+      "file": "src/main/java/com/datadoghq/workshops/samplevulnerablejavaapp/controller/MainController.java",
+      "lines": [
+        20,
+        21
+      ],
+      "class": "hardening",
+      "note": "No authentication on any endpoint (no Spring Security); amplifies the injection/SSRF/traversal findings but is not a separate bug in a public tester tool."
+    },
+    {
+      "id": "java-vuln-error-message-leak-ping",
+      "file": "src/main/java/com/datadoghq/workshops/samplevulnerablejavaapp/service/DomainTestService.java",
+      "lines": [
+        32,
+        37
+      ],
+      "class": "hardening",
+      "note": "ping stderr and IOException messages returned to client (also MainController line 45)."
+    },
+    {
+      "id": "java-vuln-error-message-leak-file",
+      "file": "src/main/java/com/datadoghq/workshops/samplevulnerablejavaapp/service/FileService.java",
+      "lines": [
+        27,
+        28
+      ],
+      "class": "hardening",
+      "note": "IOException message returned to client (file existence oracle); moot given traversal."
+    },
+    {
+      "id": "java-vuln-process-not-destroyed-on-timeout",
+      "file": "src/main/java/com/datadoghq/workshops/samplevulnerablejavaapp/service/DomainTestService.java",
+      "lines": [
+        27,
+        28
+      ],
+      "class": "reliability",
+      "note": "On waitFor timeout the child process is not destroyed; ping -c 1 is short-lived so impact is low (moot given command injection)."
+    },
+    {
+      "id": "java-vuln-old-jquery",
+      "file": "src/main/resources/static/index.html",
+      "lines": [
+        50,
+        52
+      ],
+      "class": "hardening",
+      "note": "jQuery 1.12.4 (known CVEs; also file.html and website.html); only same-origin $.ajax used, not exploitable here."
+    },
+    {
+      "id": "java-vuln-docker-root-tools",
+      "file": "Dockerfile",
+      "lines": [
+        20,
+        23
+      ],
+      "class": "hardening",
+      "note": "Container runs as root (no USER) and installs curl/wget, easing post-exploitation."
+    }
+  ]
+}

@@ -1,0 +1,543 @@
+{
+  "app": "dvwa",
+  "language": "php",
+  "include": [
+    "vulnerabilities/sqli/source/low.php",
+    "vulnerabilities/sqli/source/impossible.php",
+    "vulnerabilities/sqli_blind/source/low.php",
+    "vulnerabilities/sqli_blind/source/impossible.php",
+    "vulnerabilities/exec/source/low.php",
+    "vulnerabilities/exec/source/impossible.php",
+    "vulnerabilities/fi/source/low.php",
+    "vulnerabilities/fi/source/impossible.php",
+    "vulnerabilities/upload/source/low.php",
+    "vulnerabilities/upload/source/impossible.php",
+    "vulnerabilities/xss_r/source/low.php",
+    "vulnerabilities/xss_r/source/impossible.php",
+    "vulnerabilities/xss_s/source/low.php",
+    "vulnerabilities/xss_s/source/impossible.php",
+    "vulnerabilities/csrf/source/low.php",
+    "vulnerabilities/csrf/source/impossible.php",
+    "vulnerabilities/brute/source/low.php",
+    "vulnerabilities/brute/source/impossible.php",
+    "vulnerabilities/open_redirect/source/low.php",
+    "vulnerabilities/open_redirect/source/impossible.php"
+  ],
+  "expected": [
+    {
+      "id": "dvwa-sqli-sqli-id",
+      "file": "vulnerabilities/sqli/source/low.php",
+      "lines": [
+        10,
+        34
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-89"
+      ],
+      "severity": "CRITICAL",
+      "note": "$_REQUEST['id'] concatenated into SELECT; same root cause in MySQL branch (L10-11) and SQLite branch (L31-34)."
+    },
+    {
+      "id": "dvwa-sqli_blind-sqli-id",
+      "file": "vulnerabilities/sqli_blind/source/low.php",
+      "lines": [
+        11,
+        34
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-89"
+      ],
+      "severity": "HIGH",
+      "note": "Boolean/time-based blind SQLi; $_GET['id'] concatenated into SELECT in MySQL (L11-13) and SQLite (L32-34) branches."
+    },
+    {
+      "id": "dvwa-exec-cmdi-ping",
+      "file": "vulnerabilities/exec/source/low.php",
+      "lines": [
+        10,
+        14
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-78",
+        "CWE-77"
+      ],
+      "severity": "CRITICAL",
+      "note": "$_REQUEST['ip'] appended to ping command passed to shell_exec with no validation."
+    },
+    {
+      "id": "dvwa-upload-unrestricted-upload",
+      "file": "vulnerabilities/upload/source/low.php",
+      "lines": [
+        5,
+        9
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-434"
+      ],
+      "severity": "CRITICAL",
+      "note": "Any file (incl. .php) saved under web-served hackable/uploads/ with its original name; no type/extension check."
+    },
+    {
+      "id": "dvwa-xss_r-reflected-name",
+      "file": "vulnerabilities/xss_r/source/low.php",
+      "lines": [
+        8,
+        8
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-79"
+      ],
+      "severity": "MEDIUM",
+      "note": "$_GET['name'] concatenated into HTML output without encoding."
+    },
+    {
+      "id": "dvwa-csrf-password-change-csrf",
+      "file": "vulnerabilities/csrf/source/low.php",
+      "lines": [
+        3,
+        17
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-352",
+        "CWE-620"
+      ],
+      "severity": "HIGH",
+      "note": "State-changing password update via GET with no anti-CSRF token and no current-password check."
+    },
+    {
+      "id": "dvwa-csrf-md5-password-hash",
+      "file": "vulnerabilities/csrf/source/low.php",
+      "lines": [
+        12,
+        12
+      ],
+      "class": "crypto",
+      "cwe": [
+        "CWE-916",
+        "CWE-328",
+        "CWE-759"
+      ],
+      "severity": "MEDIUM",
+      "note": "New password stored as unsalted MD5."
+    },
+    {
+      "id": "dvwa-csrf-impossible-md5-password-hash",
+      "file": "vulnerabilities/csrf/source/impossible.php",
+      "lines": [
+        15,
+        29
+      ],
+      "class": "crypto",
+      "cwe": [
+        "CWE-916",
+        "CWE-328",
+        "CWE-759"
+      ],
+      "severity": "MEDIUM",
+      "note": "Residual real issue in the hardened file - passwords still hashed/stored as unsalted MD5 (L15 verify, L29 store)."
+    },
+    {
+      "id": "dvwa-brute-no-rate-limit",
+      "file": "vulnerabilities/brute/source/low.php",
+      "lines": [
+        3,
+        15
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-307"
+      ],
+      "severity": "MEDIUM",
+      "note": "Login check has no lockout, throttling, delay or CSRF token; unlimited password guessing."
+    },
+    {
+      "id": "dvwa-brute-sqli-login",
+      "file": "vulnerabilities/brute/source/low.php",
+      "lines": [
+        5,
+        13
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-89"
+      ],
+      "severity": "CRITICAL",
+      "note": "$_GET['username'] concatenated unescaped into login query (L12); auth bypass via \"admin' -- \"."
+    },
+    {
+      "id": "dvwa-brute-md5-password-hash",
+      "file": "vulnerabilities/brute/source/low.php",
+      "lines": [
+        9,
+        9
+      ],
+      "class": "crypto",
+      "cwe": [
+        "CWE-916",
+        "CWE-328",
+        "CWE-759"
+      ],
+      "severity": "MEDIUM",
+      "note": "Password verified against unsalted MD5 hash."
+    },
+    {
+      "id": "dvwa-brute-impossible-md5-password-hash",
+      "file": "vulnerabilities/brute/source/impossible.php",
+      "lines": [
+        16,
+        16
+      ],
+      "class": "crypto",
+      "cwe": [
+        "CWE-916",
+        "CWE-328",
+        "CWE-759"
+      ],
+      "severity": "MEDIUM",
+      "note": "Residual real issue in the hardened file - password verified against unsalted MD5 hash."
+    },
+    {
+      "id": "dvwa-open_redirect-location-header",
+      "file": "vulnerabilities/open_redirect/source/low.php",
+      "lines": [
+        3,
+        4
+      ],
+      "class": "business-logic",
+      "cwe": [
+        "CWE-601"
+      ],
+      "severity": "MEDIUM",
+      "note": "$_GET['redirect'] used verbatim in Location header."
+    }
+  ],
+  "must_not_report": [
+    {
+      "id": "dvwa-sqli-safe-prepared-mysql",
+      "file": "vulnerabilities/sqli/source/impossible.php",
+      "lines": [
+        11,
+        18
+      ],
+      "reason": "is_numeric + intval, then PDO prepared statement with PARAM_INT bind."
+    },
+    {
+      "id": "dvwa-sqli-safe-prepared-sqlite",
+      "file": "vulnerabilities/sqli/source/impossible.php",
+      "lines": [
+        34,
+        36
+      ],
+      "reason": "SQLite3 prepared statement with SQLITE3_INTEGER bind of intval'd id."
+    },
+    {
+      "id": "dvwa-sqli-safe-id-output",
+      "file": "vulnerabilities/sqli/source/impossible.php",
+      "lines": [
+        28,
+        28
+      ],
+      "reason": "$id echoed is an intval() integer; not an XSS vector."
+    },
+    {
+      "id": "dvwa-sqli_blind-safe-prepared-mysql",
+      "file": "vulnerabilities/sqli_blind/source/impossible.php",
+      "lines": [
+        12,
+        19
+      ],
+      "reason": "is_numeric + intval, then PDO prepared statement with PARAM_INT bind."
+    },
+    {
+      "id": "dvwa-sqli_blind-safe-prepared-sqlite",
+      "file": "vulnerabilities/sqli_blind/source/impossible.php",
+      "lines": [
+        26,
+        28
+      ],
+      "reason": "SQLite3 prepared statement with SQLITE3_INTEGER bind."
+    },
+    {
+      "id": "dvwa-exec-safe-ip-validation",
+      "file": "vulnerabilities/exec/source/impossible.php",
+      "lines": [
+        12,
+        26
+      ],
+      "reason": "Input split into exactly 4 parts, each must be is_numeric; rebuilt IP passed to shell_exec cannot carry shell metacharacters."
+    },
+    {
+      "id": "dvwa-fi-safe-allowlist",
+      "file": "vulnerabilities/fi/source/impossible.php",
+      "lines": [
+        4,
+        18
+      ],
+      "reason": "page must exactly match a fixed allowlist of 4 filenames, else exit before include."
+    },
+    {
+      "id": "dvwa-upload-safe-validated-reencoded",
+      "file": "vulnerabilities/upload/source/impossible.php",
+      "lines": [
+        19,
+        43
+      ],
+      "reason": "Extension allowlist (jpg/jpeg/png), MIME + getimagesize check, image re-encoded via GD, random server-generated filename."
+    },
+    {
+      "id": "dvwa-upload-safe-output",
+      "file": "vulnerabilities/upload/source/impossible.php",
+      "lines": [
+        45,
+        45
+      ],
+      "reason": "Echoed filename is random hex + allowlisted extension; no user-controlled markup."
+    },
+    {
+      "id": "dvwa-xss_r-safe-htmlspecialchars",
+      "file": "vulnerabilities/xss_r/source/impossible.php",
+      "lines": [
+        9,
+        12
+      ],
+      "reason": "Input HTML-encoded with htmlspecialchars before output in element-body context."
+    },
+    {
+      "id": "dvwa-xss_s-safe-escaped-insert-low",
+      "file": "vulnerabilities/xss_s/source/low.php",
+      "lines": [
+        10,
+        17
+      ],
+      "reason": "Both values pass mysqli_real_escape_string and sit inside quoted literals; the INSERT is not SQL-injectable (the bug here is XSS only)."
+    },
+    {
+      "id": "dvwa-xss_s-safe-htmlspecialchars",
+      "file": "vulnerabilities/xss_s/source/impossible.php",
+      "lines": [
+        12,
+        19
+      ],
+      "reason": "message and name HTML-encoded before storage (and again at render for impossible level)."
+    },
+    {
+      "id": "dvwa-xss_s-safe-prepared-insert",
+      "file": "vulnerabilities/xss_s/source/impossible.php",
+      "lines": [
+        22,
+        25
+      ],
+      "reason": "PDO prepared INSERT with bound string params."
+    },
+    {
+      "id": "dvwa-csrf-safe-update-query-low",
+      "file": "vulnerabilities/csrf/source/low.php",
+      "lines": [
+        15,
+        17
+      ],
+      "reason": "Concatenated values are an MD5 hex digest and the session username (set from an escaped, DB-matched login); not SQL-injectable."
+    },
+    {
+      "id": "dvwa-csrf-safe-token-check",
+      "file": "vulnerabilities/csrf/source/impossible.php",
+      "lines": [
+        5,
+        5
+      ],
+      "reason": "checkToken enforces anti-CSRF token against session token."
+    },
+    {
+      "id": "dvwa-csrf-safe-current-password-check",
+      "file": "vulnerabilities/csrf/source/impossible.php",
+      "lines": [
+        18,
+        25
+      ],
+      "reason": "Current password re-verified via prepared statement before change."
+    },
+    {
+      "id": "dvwa-csrf-safe-prepared-update",
+      "file": "vulnerabilities/csrf/source/impossible.php",
+      "lines": [
+        32,
+        36
+      ],
+      "reason": "PDO prepared UPDATE with bound params."
+    },
+    {
+      "id": "dvwa-brute-safe-lockout",
+      "file": "vulnerabilities/brute/source/impossible.php",
+      "lines": [
+        19,
+        50
+      ],
+      "reason": "Account locked for 15 min after 3 failed logins; plus random 2-4s delay on failure (L82) and CSRF token (L5)."
+    },
+    {
+      "id": "dvwa-brute-safe-prepared-queries",
+      "file": "vulnerabilities/brute/source/impossible.php",
+      "lines": [
+        53,
+        57
+      ],
+      "reason": "Login query is a PDO prepared statement with bound user/password (other queries L24, L77, L88, L94 likewise)."
+    },
+    {
+      "id": "dvwa-brute-safe-welcome-output",
+      "file": "vulnerabilities/brute/source/impossible.php",
+      "lines": [
+        67,
+        68
+      ],
+      "reason": "Only reached after successful auth, so $user equals an existing username (escaped) and avatar comes from the DB; no attacker-controlled markup."
+    },
+    {
+      "id": "dvwa-open_redirect-safe-allowlist",
+      "file": "vulnerabilities/open_redirect/source/impossible.php",
+      "lines": [
+        5,
+        19
+      ],
+      "reason": "Numeric id mapped via switch to fixed targets; user input never reaches the Location header."
+    }
+  ],
+  "debatable": [
+    {
+      "id": "dvwa-sqli-xss-id-echo",
+      "file": "vulnerabilities/sqli/source/low.php",
+      "lines": [
+        20,
+        47
+      ],
+      "class": "injection",
+      "note": "Raw $id (and DB first/last) echoed unencoded at L20/L47; XSS reachable only when the SQLi payload also returns rows. Secondary to the SQLi."
+    },
+    {
+      "id": "dvwa-sqli-error-disclosure",
+      "file": "vulnerabilities/sqli/source/low.php",
+      "lines": [
+        11,
+        36
+      ],
+      "class": "data-exposure",
+      "note": "mysqli_error / exception messages echoed to the user (L11, L36); CWE-209."
+    },
+    {
+      "id": "dvwa-sqli-impossible-db-output-unencoded",
+      "file": "vulnerabilities/sqli/source/impossible.php",
+      "lines": [
+        28,
+        53
+      ],
+      "class": "hardening",
+      "note": "first_name/last_name from DB echoed without htmlspecialchars; not attacker-controlled within this module."
+    },
+    {
+      "id": "dvwa-upload-xss-filename-echo",
+      "file": "vulnerabilities/upload/source/low.php",
+      "lines": [
+        15,
+        15
+      ],
+      "class": "injection",
+      "note": "Uploaded filename (basename) echoed unencoded; markup in filename yields reflected XSS. Minor next to the upload RCE."
+    },
+    {
+      "id": "dvwa-xss_r-xss-protection-disabled",
+      "file": "vulnerabilities/xss_r/source/low.php",
+      "lines": [
+        3,
+        3
+      ],
+      "class": "hardening",
+      "note": "X-XSS-Protection set to 0; header is deprecated and 0 is the current recommendation, so mostly not an issue."
+    },
+    {
+      "id": "dvwa-xss_s-error-disclosure",
+      "file": "vulnerabilities/xss_s/source/low.php",
+      "lines": [
+        17,
+        17
+      ],
+      "class": "data-exposure",
+      "note": "mysqli_error echoed on failure; CWE-209."
+    },
+    {
+      "id": "dvwa-csrf-password-in-get",
+      "file": "vulnerabilities/csrf/source/low.php",
+      "lines": [
+        5,
+        6
+      ],
+      "class": "data-exposure",
+      "note": "New password sent in GET query string (logs/history); CWE-598."
+    },
+    {
+      "id": "dvwa-csrf-impossible-password-in-get",
+      "file": "vulnerabilities/csrf/source/impossible.php",
+      "lines": [
+        8,
+        10
+      ],
+      "class": "data-exposure",
+      "note": "Current and new passwords still sent via GET query string in the hardened version; CWE-598."
+    },
+    {
+      "id": "dvwa-brute-xss-username-echo",
+      "file": "vulnerabilities/brute/source/low.php",
+      "lines": [
+        21,
+        22
+      ],
+      "class": "injection",
+      "note": "Raw username echoed on success; exploitable only by chaining the login SQLi so the query still returns a row."
+    },
+    {
+      "id": "dvwa-brute-credentials-in-get",
+      "file": "vulnerabilities/brute/source/low.php",
+      "lines": [
+        5,
+        8
+      ],
+      "class": "data-exposure",
+      "note": "Username/password taken from GET query string; CWE-598. Also mysqli_error disclosure at L13 (CWE-209)."
+    },
+    {
+      "id": "dvwa-brute-impossible-lockout-dos",
+      "file": "vulnerabilities/brute/source/impossible.php",
+      "lines": [
+        30,
+        47
+      ],
+      "class": "hardening",
+      "note": "Anyone can lock any known account for 15 min with 3 bad guesses (CWE-645); deliberate design trade-off."
+    },
+    {
+      "id": "dvwa-fi-file-inclusion-page",
+      "file": "vulnerabilities/fi/source/low.php",
+      "lines": [
+        4,
+        4
+      ],
+      "class": "injection",
+      "note": "Unvalidated $_GET['page'] assigned to $file, which vulnerabilities/fi/index.php:36 passes to include() (LFI/RFI). Sink is outside the scanned subset. [review: sink outside scanned files, or intentional lab setting]"
+    },
+    {
+      "id": "dvwa-xss_s-stored-guestbook",
+      "file": "vulnerabilities/xss_s/source/low.php",
+      "lines": [
+        9,
+        16
+      ],
+      "class": "injection",
+      "note": "Message/name only SQL-escaped, stored raw, then rendered unencoded by dvwaGuestbook() (dvwa/includes/dvwaPage.inc.php:622-626, out of subset). [review: sink outside scanned files, or intentional lab setting]"
+    }
+  ]
+}

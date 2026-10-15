@@ -1,0 +1,472 @@
+{
+  "app": "govwa",
+  "language": "go",
+  "expected": [
+    {
+      "id": "govwa-session-forgeable-empty-key",
+      "file": "user/session/session.go",
+      "lines": [
+        19,
+        19
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-321",
+        "CWE-798",
+        "CWE-287"
+      ],
+      "severity": "CRITICAL",
+      "note": "Cookie store HMAC key comes from config, but config.json key is misspelled 'sessionkey:' so Sessionkey is empty (and the intended key G0Vw444 is hardcoded in the repo); anyone can sign a govwa cookie with govwa_session=true,id=N to log in as any user (verified with securecookie v1.1.1)."
+    },
+    {
+      "id": "govwa-sqli-unsafe-query",
+      "file": "vulnerability/sqli/function.go",
+      "lines": [
+        37,
+        41
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-89"
+      ],
+      "severity": "CRITICAL",
+      "note": "UnsafeQueryGetData builds SQL with fmt.Sprintf from uid; reached at level low from /sqli1 (Uid cookie) and /sqli2 (uid query param), allowing UNION/error-based SQLi."
+    },
+    {
+      "id": "govwa-sqli1-cookie-uid-idor",
+      "file": "vulnerability/sqli/sqli.go",
+      "lines": [
+        33,
+        54
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-639",
+        "CWE-565"
+      ],
+      "severity": "MEDIUM",
+      "note": "/sqli1 uses the client-set Uid cookie instead of the session id to load a profile, so changing the cookie reveals any user's name/city/phone (also at level high)."
+    },
+    {
+      "id": "govwa-sqli2-uid-param-idor",
+      "file": "vulnerability/sqli/sqli.go",
+      "lines": [
+        72,
+        84
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-639"
+      ],
+      "severity": "MEDIUM",
+      "note": "/sqli2 loads the profile for the uid query param with no ownership check; any logged-in user reads other users' PII at both levels."
+    },
+    {
+      "id": "govwa-xss2-uid-param-idor",
+      "file": "vulnerability/xss/xss.go",
+      "lines": [
+        74,
+        81
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-639"
+      ],
+      "severity": "MEDIUM",
+      "note": "/xss2 loads the profile for the uid query param with no ownership check; any logged-in user reads other users' PII."
+    },
+    {
+      "id": "govwa-xss1-reflected",
+      "file": "vulnerability/xss/xss.go",
+      "lines": [
+        52,
+        63
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-79",
+        "CWE-184"
+      ],
+      "severity": "HIGH",
+      "note": "At level low the term param is wrapped in template.HTML after only a bypassable script-tag regex, e.g. /xss1?term=<img src=x onerror=alert(1)> gives reflected XSS."
+    },
+    {
+      "id": "govwa-xss2-js-context",
+      "file": "vulnerability/xss/xss.go",
+      "lines": [
+        89,
+        100
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-79",
+        "CWE-83"
+      ],
+      "severity": "HIGH",
+      "note": "uid param is formatted unquoted into an inline script and marked template.HTML; HTMLEscapeString (level high) does not neutralize JS context, so uid=1;alert(document.cookie) executes at both levels."
+    },
+    {
+      "id": "govwa-idor1-cookie-uid-update",
+      "file": "vulnerability/idor/idor.go",
+      "lines": [
+        87,
+        106
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-639",
+        "CWE-565"
+      ],
+      "severity": "HIGH",
+      "note": "At level low the update target uid is only compared to the client-controlled Uid cookie; setting both to a victim id overwrites any user's profile."
+    },
+    {
+      "id": "govwa-idor2-md5-signature",
+      "file": "vulnerability/idor/idor.go",
+      "lines": [
+        135,
+        150
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-639",
+        "CWE-345",
+        "CWE-328"
+      ],
+      "severity": "HIGH",
+      "note": "Integrity signature is an unkeyed MD5 of uid, so an attacker computes md5(victim_id) and updates any user's profile at level low."
+    },
+    {
+      "id": "govwa-csa-static-otp",
+      "file": "vulnerability/csa/csa.go",
+      "lines": [
+        49,
+        56
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-798",
+        "CWE-603",
+        "CWE-307"
+      ],
+      "severity": "MEDIUM",
+      "note": "OTP is a single hardcoded unsalted MD5 (of 256612) shared by all users with no rate limit, and the verdict is only enforced client-side; trivially cracked, brute-forced or bypassed by tampering the response."
+    },
+    {
+      "id": "govwa-md5-password-hash",
+      "file": "user/user.go",
+      "lines": [
+        159,
+        163
+      ],
+      "class": "crypto",
+      "cwe": [
+        "CWE-916",
+        "CWE-328",
+        "CWE-759"
+      ],
+      "severity": "MEDIUM",
+      "note": "Passwords are stored and compared as unsalted MD5 (user.go:88, seeded in setup/function.go:19), so leaked hashes (e.g. via the SQLi) are instantly cracked."
+    },
+    {
+      "id": "govwa-setup-unauthenticated-reset",
+      "file": "setup/setup.go",
+      "lines": [
+        26,
+        27
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-306",
+        "CWE-862"
+      ],
+      "severity": "HIGH",
+      "note": "/setup and /setupaction have no AuthCheck; an unauthenticated POST act=cr drops and recreates the Users and Profile tables, wiping data and resetting accounts to default passwords."
+    },
+    {
+      "id": "govwa-default-credentials",
+      "file": "setup/function.go",
+      "lines": [
+        19,
+        19
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-1392",
+        "CWE-798"
+      ],
+      "severity": "MEDIUM",
+      "note": "Setup seeds fixed accounts admin/govwaadmin and user1/govwauser1 (documented in README and user.go comments), which anyone can log in with or restore via the unauthenticated reset."
+    },
+    {
+      "id": "govwa-db-connection-leak",
+      "file": "util/database/database.go",
+      "lines": [
+        19,
+        31
+      ],
+      "class": "reliability",
+      "cwe": [
+        "CWE-772",
+        "CWE-400",
+        "CWE-404"
+      ],
+      "severity": "MEDIUM",
+      "note": "Connect() opens two new sql.DB pools per call and never closes them, and it runs on almost every request including unauthenticated GET /login; repeated requests leak MySQL connections until max_connections is hit (DoS)."
+    }
+  ],
+  "must_not_report": [
+    {
+      "id": "govwa-safe-sqli-prepared-query",
+      "file": "vulnerability/sqli/function.go",
+      "lines": [
+        57,
+        80
+      ],
+      "reason": "SafeQueryGetData uses a constant query with a ? placeholder via Prepare/QueryRow; uid is bound, so there is no SQLi."
+    },
+    {
+      "id": "govwa-safe-idor-getdata-prepared",
+      "file": "vulnerability/idor/function.go",
+      "lines": [
+        32,
+        54
+      ],
+      "reason": "Constant SQL with a bound ? parameter; no injection."
+    },
+    {
+      "id": "govwa-safe-update-profile-prepared",
+      "file": "vulnerability/idor/function.go",
+      "lines": [
+        56,
+        80
+      ],
+      "reason": "UPDATE uses a constant statement with bound parameters; no injection (the authz issue is in the callers)."
+    },
+    {
+      "id": "govwa-safe-login-query-prepared",
+      "file": "user/user.go",
+      "lines": [
+        143,
+        154
+      ],
+      "reason": "Login query is a constant prepared statement with bound username and hash; not injectable."
+    },
+    {
+      "id": "govwa-safe-create-database-concat",
+      "file": "util/database/database.go",
+      "lines": [
+        24,
+        24
+      ],
+      "reason": "The string-concatenated CREATE DATABASE uses Dbname from the server-side config file, which no request can influence."
+    },
+    {
+      "id": "govwa-safe-setup-error-tohtml",
+      "file": "setup/setup.go",
+      "lines": [
+        50,
+        56
+      ],
+      "reason": "template.HTML wraps a fixed string plus a MySQL/driver error message; no request data reaches it, so there is no XSS."
+    },
+    {
+      "id": "govwa-safe-setup-loginurl-tohtml",
+      "file": "setup/setup.go",
+      "lines": [
+        69,
+        69
+      ],
+      "reason": "template.HTML of a link built from config.Fullurl (server config), not user input."
+    },
+    {
+      "id": "govwa-safe-login-message-template-html",
+      "file": "user/user.go",
+      "lines": [
+        70,
+        76
+      ],
+      "reason": "template.HTML is used only with constant message strings."
+    },
+    {
+      "id": "govwa-safe-unsaferender-unused",
+      "file": "util/template.go",
+      "lines": [
+        38,
+        42
+      ],
+      "reason": "UnSafeRender is never called and uses html/template (auto-escaping) anyway; the name is misleading."
+    },
+    {
+      "id": "govwa-safe-static-file-server",
+      "file": "app.go",
+      "lines": [
+        59,
+        59
+      ],
+      "reason": "ServeFiles with http.Dir cleans the path and blocks ../ traversal outside public/."
+    }
+  ],
+  "debatable": [
+    {
+      "id": "govwa-cors-wildcard-credentials",
+      "file": "util/template.go",
+      "lines": [
+        26,
+        28
+      ],
+      "class": "config",
+      "note": "ACAO * with Allow-Credentials true on JSON responses; browsers refuse credentialed reads with a wildcard origin, so it is a misconfiguration and not exploitable."
+    },
+    {
+      "id": "govwa-missing-csrf",
+      "file": "vulnerability/idor/idor.go",
+      "lines": [
+        28,
+        30
+      ],
+      "class": "hardening",
+      "note": "State-changing POSTs (/idor1action, /idor2action, /setlevel) have no CSRF token and the session cookie has no SameSite; exploitability depends on browser Lax defaults."
+    },
+    {
+      "id": "govwa-client-controlled-security-level",
+      "file": "util/cookie.go",
+      "lines": [
+        18,
+        27
+      ],
+      "class": "hardening",
+      "note": "Security mode (low/high) is read from a client-set Level cookie, so any user can downgrade the protections; this is the lab's difficulty switch by design."
+    },
+    {
+      "id": "govwa-cookies-no-flags",
+      "file": "util/cookie.go",
+      "lines": [
+        31,
+        39
+      ],
+      "class": "hardening",
+      "note": "Uid/Level cookies are set without HttpOnly, Secure or SameSite."
+    },
+    {
+      "id": "govwa-sqli1-error-disclosure",
+      "file": "vulnerability/sqli/sqli.go",
+      "lines": [
+        50,
+        52
+      ],
+      "class": "data-exposure",
+      "note": "Raw SQL error text is rendered to the user at level low (CWE-209), which helps error-based SQLi; the root cause is the SQLi."
+    },
+    {
+      "id": "govwa-panic-message-disclosure",
+      "file": "util/middleware/middleware.go",
+      "lines": [
+        57,
+        58
+      ],
+      "class": "data-exposure",
+      "note": "CapturePanic returns the internal panic or error message to the client."
+    },
+    {
+      "id": "govwa-getcookie-nil-deref",
+      "file": "util/cookie.go",
+      "lines": [
+        41,
+        44
+      ],
+      "class": "reliability",
+      "note": "GetCookie dereferences a nil cookie when the cookie is missing, which panics; the panic is recovered (CapturePanic/net/http), so the result is a 500 and not a crash."
+    },
+    {
+      "id": "govwa-sqlmap-ua-denylist",
+      "file": "util/middleware/middleware.go",
+      "lines": [
+        65,
+        73
+      ],
+      "class": "hardening",
+      "note": "User-Agent regex denylist for sqlmap is trivially bypassed; it is not a real control, but the vulnerability is the SQLi itself."
+    },
+    {
+      "id": "govwa-log-injection-useragent",
+      "file": "util/middleware/middleware.go",
+      "lines": [
+        23,
+        23
+      ],
+      "class": "hardening",
+      "note": "User-Agent is logged unsanitized (CWE-117 log forging)."
+    },
+    {
+      "id": "govwa-system-info-disclosure",
+      "file": "setting/setting.go",
+      "lines": [
+        37,
+        38
+      ],
+      "class": "data-exposure",
+      "note": "Settings page shows MySQL version and OS to any logged-in user."
+    },
+    {
+      "id": "govwa-committed-db-credentials",
+      "file": "config/config.json",
+      "lines": [
+        2,
+        3
+      ],
+      "class": "config",
+      "note": "DB credentials are committed in config.json (despite .gitignore), and docker-compose.yml:21-25 has the MySQL root password and exposes port 3307; these are local lab settings."
+    },
+    {
+      "id": "govwa-no-server-side-logout",
+      "file": "user/session/session.go",
+      "lines": [
+        61,
+        73
+      ],
+      "class": "authentication",
+      "note": "Stateless cookie store: logout only expires the browser cookie, and a stolen cookie stays valid server-side (securecookie maxAge 30 days)."
+    },
+    {
+      "id": "govwa-csa-session-id-inline-script",
+      "file": "vulnerability/csa/csa.go",
+      "lines": [
+        40,
+        42
+      ],
+      "class": "injection",
+      "note": "Session id is formatted into an inline script via template.HTML; the value is a server-set integer and could only be changed by forging one's own session (self-XSS)."
+    },
+    {
+      "id": "govwa-login-no-rate-limit",
+      "file": "user/user.go",
+      "lines": [
+        84,
+        90
+      ],
+      "class": "authentication",
+      "note": "Login has no lockout or rate limiting, so it is open to online brute force."
+    },
+    {
+      "id": "govwa-dockerfile-root",
+      "file": "Dockerfile",
+      "lines": [
+        31,
+        39
+      ],
+      "class": "hardening",
+      "note": "Final image has no USER directive, so it runs as root."
+    },
+    {
+      "id": "govwa-session-cookie-no-httponly",
+      "file": "user/session/session.go",
+      "lines": [
+        28,
+        32
+      ],
+      "class": "hardening",
+      "note": "Session cookie is set with HttpOnly false on purpose (and no Secure), so the XSS bugs can steal the govwa session cookie. [review: sink outside scanned files, or intentional lab setting]"
+    }
+  ]
+}

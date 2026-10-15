@@ -1,0 +1,914 @@
+{
+  "app": "dvws-node",
+  "language": "javascript",
+  "expected": [
+    {
+      "id": "dvws-sqli-passphrase-insert",
+      "file": "src/controllers/passphrase.js",
+      "lines": [
+        44,
+        45
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-89"
+      ],
+      "severity": "CRITICAL",
+      "note": "req.body.passphrase/reminder concatenated into raw INSERT run via sequelize.query."
+    },
+    {
+      "id": "dvws-sqli-passphrase-select",
+      "file": "src/controllers/passphrase.js",
+      "lines": [
+        58,
+        60
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-89"
+      ],
+      "severity": "CRITICAL",
+      "note": "req.params.username concatenated into raw SELECT on an unauthenticated route; dumps all passphrases."
+    },
+    {
+      "id": "dvws-nosqli-where-notesearch",
+      "file": "src/controllers/notes.js",
+      "lines": [
+        170,
+        175
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-943",
+        "CWE-94"
+      ],
+      "severity": "HIGH",
+      "note": "req.body.search interpolated into a MongoDB $where JS expression; breaks out of the public-only filter."
+    },
+    {
+      "id": "dvws-cmdi-sysinfo",
+      "file": "src/controllers/notes.js",
+      "lines": [
+        78,
+        79
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-78"
+      ],
+      "severity": "CRITICAL",
+      "note": "req.params.command passed to child_process.exec; any authenticated user gets OS command execution."
+    },
+    {
+      "id": "dvws-xpath-injection-release",
+      "file": "src/controllers/notes.js",
+      "lines": [
+        89,
+        91
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-643"
+      ],
+      "severity": "HIGH",
+      "note": "Unauthenticated :release param concatenated into XPath over config.xml, which holds DB credentials."
+    },
+    {
+      "id": "dvws-xxe-soap",
+      "file": "src/services/soap/user-service.js",
+      "lines": [
+        48,
+        53
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-611"
+      ],
+      "severity": "HIGH",
+      "note": "Unauthenticated SOAP body parsed by libxmljs2 with noent/dtdload; external entities are resolved and reflected in the response."
+    },
+    {
+      "id": "dvws-xxe-xmlbomb-notes-import",
+      "file": "src/controllers/notes.js",
+      "lines": [
+        227,
+        234
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-611",
+        "CWE-776"
+      ],
+      "severity": "HIGH",
+      "note": "Notes XML import parses with noent/dtdload/huge; entity expansion allows file reads into notes and billion-laughs DoS."
+    },
+    {
+      "id": "dvws-soap-response-xml-injection",
+      "file": "src/services/soap/user-service.js",
+      "lines": [
+        75,
+        86
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-91",
+        "CWE-79"
+      ],
+      "severity": "MEDIUM",
+      "note": "Parsed username is interpolated unescaped into the SOAP response XML, so extra elements (e.g. role) can be spoofed."
+    },
+    {
+      "id": "dvws-profile-export-xml-injection",
+      "file": "src/controllers/users.js",
+      "lines": [
+        212,
+        225
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-91",
+        "CWE-79"
+      ],
+      "severity": "MEDIUM",
+      "note": "Body username/bio are interpolated unescaped into the XML response (application/xml), so elements or markup can be injected."
+    },
+    {
+      "id": "dvws-ldap-filter-injection",
+      "file": "src/controllers/users.js",
+      "lines": [
+        344,
+        348
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-90"
+      ],
+      "severity": "MEDIUM",
+      "note": "User input concatenated into an LDAP filter; the simulated backend returns all users and an admin password for injected filters."
+    },
+    {
+      "id": "dvws-log-injection-login",
+      "file": "src/controllers/users.js",
+      "lines": [
+        114,
+        115
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-117",
+        "CWE-93"
+      ],
+      "severity": "LOW",
+      "note": "Raw username (and spoofable X-Forwarded-For) written to the login log without stripping newlines, so log entries can be forged."
+    },
+    {
+      "id": "dvws-xss-register-reflect",
+      "file": "src/controllers/users.js",
+      "lines": [
+        44,
+        45
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-79"
+      ],
+      "severity": "LOW",
+      "note": "Stored username reflected in a 409 text/plain response with no nosniff header; XSS only in MIME-sniffing browsers."
+    },
+    {
+      "id": "dvws-node-serialize-rce",
+      "file": "src/controllers/passphrase.js",
+      "lines": [
+        95,
+        96
+      ],
+      "class": "deserialization",
+      "cwe": [
+        "CWE-502",
+        "CWE-94"
+      ],
+      "severity": "CRITICAL",
+      "note": "Base64 body data passed to node-serialize unserialize, which evaluates embedded function expressions (RCE)."
+    },
+    {
+      "id": "dvws-ssrf-xmlrpc-checkuptime",
+      "file": "src/services/xml-rpc/server.js",
+      "lines": [
+        27,
+        29
+      ],
+      "class": "ssrf",
+      "cwe": [
+        "CWE-918"
+      ],
+      "severity": "HIGH",
+      "note": "Unauthenticated XML-RPC dvws.CheckUptime fetches any user-supplied URL with needle.get (blind SSRF to internal and metadata hosts)."
+    },
+    {
+      "id": "dvws-path-traversal-download",
+      "file": "src/controllers/files.js",
+      "lines": [
+        90,
+        91
+      ],
+      "class": "path-traversal",
+      "cwe": [
+        "CWE-22"
+      ],
+      "severity": "HIGH",
+      "note": "req.body.filename is joined and path.resolve'd without containment, then res.download serves any readable file."
+    },
+    {
+      "id": "dvws-graphql-arbitrary-file-write",
+      "file": "src/graphql/schema.js",
+      "lines": [
+        121,
+        122
+      ],
+      "class": "path-traversal",
+      "cwe": [
+        "CWE-22",
+        "CWE-73"
+      ],
+      "severity": "CRITICAL",
+      "note": "updateUserUploadFile writes attacker-controlled content to an attacker-controlled filePath with no normalization, so files can be written anywhere."
+    },
+    {
+      "id": "dvws-upload-filename-traversal",
+      "file": "src/controllers/files.js",
+      "lines": [
+        68,
+        78
+      ],
+      "class": "path-traversal",
+      "cwe": [
+        "CWE-22",
+        "CWE-434"
+      ],
+      "severity": "MEDIUM",
+      "note": "Uploaded file name (only checked for an .xml suffix) is concatenated into the destination path under the public web root; traversal sequences in the name escape the user directory."
+    },
+    {
+      "id": "dvws-prototype-pollution-upload-metadata",
+      "file": "src/controllers/files.js",
+      "lines": [
+        15,
+        25
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-1321"
+      ],
+      "severity": "HIGH",
+      "note": "Recursive merge of user JSON metadata (called at line 42) does not block __proto__/constructor keys, polluting Object.prototype process-wide."
+    },
+    {
+      "id": "dvws-mass-assignment-register-admin",
+      "file": "src/controllers/users.js",
+      "lines": [
+        51,
+        51
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-915",
+        "CWE-269"
+      ],
+      "severity": "CRITICAL",
+      "note": "Unauthenticated registration passes req.body directly to new User(), so admin=true can be set at signup."
+    },
+    {
+      "id": "dvws-profile-import-unauth-privesc",
+      "file": "src/controllers/users.js",
+      "lines": [
+        243,
+        255
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-862",
+        "CWE-915",
+        "CWE-269"
+      ],
+      "severity": "CRITICAL",
+      "note": "Unauthenticated XML profile import updates any username taken from the XML and accepts an admin flag, granting admin to any account."
+    },
+    {
+      "id": "dvws-idor-read-note",
+      "file": "src/controllers/notes.js",
+      "lines": [
+        129,
+        133
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-639"
+      ],
+      "severity": "HIGH",
+      "note": "Notes fetched by sequential numeric id with no ownership check, exposing other users' private notes."
+    },
+    {
+      "id": "dvws-idor-update-note",
+      "file": "src/controllers/notes.js",
+      "lines": [
+        139,
+        143
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-639",
+        "CWE-915"
+      ],
+      "severity": "HIGH",
+      "note": "Any user updates any note by name with raw req.body (no owner filter), including reassigning the user field."
+    },
+    {
+      "id": "dvws-idor-delete-note",
+      "file": "src/controllers/notes.js",
+      "lines": [
+        149,
+        153
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-639"
+      ],
+      "severity": "MEDIUM",
+      "note": "Any authenticated user can delete any note by name; no ownership check."
+    },
+    {
+      "id": "dvws-passphrase-get-no-auth",
+      "file": "src/routes/passphrase.js",
+      "lines": [
+        16,
+        17
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-306",
+        "CWE-639"
+      ],
+      "severity": "HIGH",
+      "note": "GET /v2/passphrase/:username has no auth or ownership check, so anyone can read any user's passphrases."
+    },
+    {
+      "id": "dvws-users-list-no-admin-check",
+      "file": "src/controllers/users.js",
+      "lines": [
+        183,
+        198
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-285",
+        "CWE-200"
+      ],
+      "severity": "HIGH",
+      "note": "GET /v2/users needs only a valid token (no admin check) and returns every user document including bcrypt hashes and admin flags."
+    },
+    {
+      "id": "dvws-sysinfo-no-admin-check",
+      "file": "src/routes/notes.js",
+      "lines": [
+        19,
+        20
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-285"
+      ],
+      "severity": "MEDIUM",
+      "note": "Admin-only sysinfo endpoint is guarded only by validateToken, so any user can reach it (compounds the command injection)."
+    },
+    {
+      "id": "dvws-admin-logs-no-admin-check",
+      "file": "src/routes/users.js",
+      "lines": [
+        26,
+        27
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-285"
+      ],
+      "severity": "MEDIUM",
+      "note": "/v2/admin/logs returns all login attempt logs (usernames, IPs) to any authenticated user."
+    },
+    {
+      "id": "dvws-guard-after-handler-ineffective",
+      "file": "src/routes/notes.js",
+      "lines": [
+        22,
+        35
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-285",
+        "CWE-696"
+      ],
+      "severity": "LOW",
+      "note": "express-jwt-permissions guard.check is placed after controllers that already respond, and reads req.identity which is never set, so permission checks never run."
+    },
+    {
+      "id": "dvws-graphql-userfindbyid-no-auth",
+      "file": "src/graphql/schema.js",
+      "lines": [
+        75,
+        77
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-862",
+        "CWE-200"
+      ],
+      "severity": "HIGH",
+      "note": "Unauthenticated userFindbyId returns any User including the password hash field exposed in the schema."
+    },
+    {
+      "id": "dvws-graphql-usersearch-no-auth",
+      "file": "src/graphql/schema.js",
+      "lines": [
+        78,
+        82
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-862",
+        "CWE-203"
+      ],
+      "severity": "LOW",
+      "note": "Unauthenticated userSearchByUsername confirms usernames and returns _id and admin flag (feeds userFindbyId)."
+    },
+    {
+      "id": "dvws-graphql-notefindbyid-no-auth",
+      "file": "src/graphql/schema.js",
+      "lines": [
+        83,
+        85
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-862",
+        "CWE-639"
+      ],
+      "severity": "HIGH",
+      "note": "Unauthenticated noteFindbyId returns any note by sequential id, including private notes."
+    },
+    {
+      "id": "dvws-graphql-readnote-idor",
+      "file": "src/graphql/schema.js",
+      "lines": [
+        87,
+        95
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-639"
+      ],
+      "severity": "MEDIUM",
+      "note": "readNote checks only that a token exists, then returns any user's notes by name with no ownership filter."
+    },
+    {
+      "id": "dvws-graphql-getpassphrase-no-auth",
+      "file": "src/graphql/schema.js",
+      "lines": [
+        96,
+        106
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-862"
+      ],
+      "severity": "MEDIUM",
+      "note": "Unauthenticated getPassphrase returns stored passphrases to anyone who guesses a reminder value."
+    },
+    {
+      "id": "dvws-jwt-weak-secret",
+      "file": ".env",
+      "lines": [
+        4,
+        4
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-521",
+        "CWE-798",
+        "CWE-1391"
+      ],
+      "severity": "CRITICAL",
+      "note": "JWT HS256 secret is the dictionary word 'access', committed in .env; tokens can be cracked offline and forged with admin permissions."
+    },
+    {
+      "id": "dvws-csrf-admin-create-user",
+      "file": "src/controllers/users.js",
+      "lines": [
+        297,
+        318
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-352"
+      ],
+      "severity": "HIGH",
+      "note": "Admin user-creation accepts a cookie-based token and parses JSON from text/plain bodies, so a cross-site simple request can create admin accounts."
+    },
+    {
+      "id": "dvws-user-enum-login",
+      "file": "src/controllers/users.js",
+      "lines": [
+        169,
+        173
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-204",
+        "CWE-203"
+      ],
+      "severity": "LOW",
+      "note": "Login returns 404 'User X not found' versus 401 for a wrong password, which enumerates valid usernames."
+    },
+    {
+      "id": "dvws-ratelimit-xff-bypass",
+      "file": "src/middleware/rate-limiter.js",
+      "lines": [
+        10,
+        10
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-307",
+        "CWE-348"
+      ],
+      "severity": "MEDIUM",
+      "note": "Login rate-limit key comes from the client-controlled X-Forwarded-For header, so rotating it bypasses the limit."
+    },
+    {
+      "id": "dvws-export-credential-bruteforce",
+      "file": "src/controllers/passphrase.js",
+      "lines": [
+        78,
+        88
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-307",
+        "CWE-204"
+      ],
+      "severity": "MEDIUM",
+      "note": "Export endpoint checks a password for any username in the body with no rate limit, acting as an unthrottled password oracle."
+    },
+    {
+      "id": "dvws-graphql-batching-bruteforce",
+      "file": "src/server.js",
+      "lines": [
+        70,
+        70
+      ],
+      "class": "business-logic",
+      "cwe": [
+        "CWE-307",
+        "CWE-770"
+      ],
+      "severity": "MEDIUM",
+      "note": "allowBatchedHttpRequests lets many guesses (getPassphrase/userLogin) run in one HTTP request, evading per-request throttling."
+    },
+    {
+      "id": "dvws-info-env-disclosure",
+      "file": "src/controllers/notes.js",
+      "lines": [
+        64,
+        74
+      ],
+      "class": "data-exposure",
+      "cwe": [
+        "CWE-200",
+        "CWE-526"
+      ],
+      "severity": "HIGH",
+      "note": "Unauthenticated /api/v1/info returns process.env (JWT secret, DB creds) and runtime config; only the /v2 path is blocked."
+    },
+    {
+      "id": "dvws-graphql-userlogin-hash-leak",
+      "file": "src/graphql/schema.js",
+      "lines": [
+        135,
+        140
+      ],
+      "class": "data-exposure",
+      "cwe": [
+        "CWE-200",
+        "CWE-522"
+      ],
+      "severity": "HIGH",
+      "note": "userLogin returns the stored bcrypt hash for any existing username before (and regardless of) password verification."
+    },
+    {
+      "id": "dvws-login-response-returns-user-doc",
+      "file": "src/controllers/users.js",
+      "lines": [
+        135,
+        150
+      ],
+      "class": "data-exposure",
+      "cwe": [
+        "CWE-200",
+        "CWE-522"
+      ],
+      "severity": "LOW",
+      "note": "Successful REST login returns the full user document, including the bcrypt hash, in the response body."
+    },
+    {
+      "id": "dvws-register-returns-hash",
+      "file": "src/controllers/users.js",
+      "lines": [
+        56,
+        57
+      ],
+      "class": "data-exposure",
+      "cwe": [
+        "CWE-200"
+      ],
+      "severity": "LOW",
+      "note": "Registration response echoes the stored bcrypt password hash."
+    },
+    {
+      "id": "dvws-graphql-introspection",
+      "file": "src/server.js",
+      "lines": [
+        67,
+        68
+      ],
+      "class": "data-exposure",
+      "cwe": [
+        "CWE-200"
+      ],
+      "severity": "LOW",
+      "note": "GraphQL introspection and playground are enabled in the running server, exposing the full schema including the password field and file-write mutation."
+    },
+    {
+      "id": "dvws-cors-reflect-origin-credentials",
+      "file": "src/server.js",
+      "lines": [
+        40,
+        46
+      ],
+      "class": "config",
+      "cwe": [
+        "CWE-942",
+        "CWE-346"
+      ],
+      "severity": "HIGH",
+      "note": "CORS reflects any Origin with credentials true, so attacker sites can read authenticated responses (cookie-auth endpoints)."
+    },
+    {
+      "id": "dvws-open-redirect-logout",
+      "file": "src/controllers/users.js",
+      "lines": [
+        97,
+        99
+      ],
+      "class": "config",
+      "cwe": [
+        "CWE-601"
+      ],
+      "severity": "MEDIUM",
+      "note": "Logout redirects to 'http://' + an unvalidated path parameter (open redirect)."
+    },
+    {
+      "id": "dvws-unrestricted-upload-public-dir",
+      "file": "src/controllers/files.js",
+      "lines": [
+        61,
+        75
+      ],
+      "class": "config",
+      "cwe": [
+        "CWE-434"
+      ],
+      "severity": "MEDIUM",
+      "note": "Uploads are stored under the express.static public/ root and validated only by an .xml suffix, so attacker-controlled content is served from the app origin."
+    }
+  ],
+  "must_not_report": [
+    {
+      "id": "dvws-safe-graphql-getpassphrase-sql",
+      "file": "src/graphql/schema.js",
+      "lines": [
+        101,
+        104
+      ],
+      "reason": "The reminder is escaped with sequelize.escape before concatenation, so this string-built SQL is not injectable (the issue there is missing auth, labelled separately)."
+    },
+    {
+      "id": "dvws-safe-display-all-where",
+      "file": "src/controllers/notes.js",
+      "lines": [
+        197,
+        200
+      ],
+      "reason": "The $where string is built only from the constant 'public'; there is no user input."
+    },
+    {
+      "id": "dvws-safe-list-notes-owner-filter",
+      "file": "src/controllers/notes.js",
+      "lines": [
+        53,
+        58
+      ],
+      "reason": "Lists notes filtered by the token's user; correctly scoped."
+    },
+    {
+      "id": "dvws-safe-create-note-owner",
+      "file": "src/controllers/notes.js",
+      "lines": [
+        114,
+        119
+      ],
+      "reason": "Only whitelisted fields are copied and the owner comes from the verified token; no mass assignment."
+    },
+    {
+      "id": "dvws-safe-graphql-createnote",
+      "file": "src/graphql/schema.js",
+      "lines": [
+        152,
+        156
+      ],
+      "reason": "Requires a token and sets the owner from context.user; fields are explicitly listed."
+    },
+    {
+      "id": "dvws-safe-admin-create-user-authz",
+      "file": "src/controllers/users.js",
+      "lines": [
+        308,
+        329
+      ],
+      "reason": "Admin status is re-checked against the DB and the new user is built from explicit fields; the authz check itself is sound (CSRF is labelled separately)."
+    },
+    {
+      "id": "dvws-safe-get-profile",
+      "file": "src/controllers/users.js",
+      "lines": [
+        276,
+        286
+      ],
+      "reason": "Profile is looked up by the verified token's user and returns only username/bio/admin; no IDOR or hash leak."
+    },
+    {
+      "id": "dvws-safe-file-list",
+      "file": "src/controllers/files.js",
+      "lines": [
+        98,
+        105
+      ],
+      "reason": "Directory listing is scoped to the token's own username directory; no user-supplied path."
+    },
+    {
+      "id": "dvws-safe-xpath-config-load",
+      "file": "src/controllers/notes.js",
+      "lines": [
+        14,
+        18
+      ],
+      "reason": "Loads a fixed bundled fixture at startup with xmldom; no user input reaches the parser."
+    },
+    {
+      "id": "dvws-safe-profile-import-xml2js",
+      "file": "src/controllers/users.js",
+      "lines": [
+        238,
+        239
+      ],
+      "reason": "xml2js (sax-based) does not resolve external entities, so this parse is not an XXE sink (the authz flaw is labelled separately)."
+    },
+    {
+      "id": "dvws-safe-xmlrpc-deserializer",
+      "file": "src/services/xml-rpc/server.js",
+      "lines": [
+        39,
+        46
+      ],
+      "reason": "xmlrpc's sax-based Deserializer does not expand DTD entities; not an XXE sink."
+    },
+    {
+      "id": "dvws-safe-bcrypt-hashing",
+      "file": "src/models/user.js",
+      "lines": [
+        41,
+        55
+      ],
+      "reason": "Passwords are hashed with bcrypt at cost 10 before save; this is not weak crypto."
+    }
+  ],
+  "debatable": [
+    {
+      "id": "dvws-debate-jwt-ignore-expiration",
+      "file": "src/middleware/auth.js",
+      "lines": [
+        12,
+        13
+      ],
+      "class": "hardening",
+      "note": "ignoreExpiration true makes tokens valid forever; increases the impact of stolen tokens but is not a standalone exploit."
+    },
+    {
+      "id": "dvws-debate-apollo-debug",
+      "file": "src/server.js",
+      "lines": [
+        69,
+        69
+      ],
+      "class": "hardening",
+      "note": "Apollo debug true includes stack traces in GraphQL errors."
+    },
+    {
+      "id": "dvws-debate-error-detail-leaks",
+      "file": "src/controllers/passphrase.js",
+      "lines": [
+        64,
+        66
+      ],
+      "class": "hardening",
+      "note": "Raw DB/library errors returned to clients in many handlers (also notes.js, users.js, soap err.toString()); aids exploitation."
+    },
+    {
+      "id": "dvws-debate-missing-auth-header-crash",
+      "file": "src/controllers/users.js",
+      "lines": [
+        276,
+        277
+      ],
+      "class": "reliability",
+      "note": "Handlers split req.headers.authorization without a null check (getProfile, checkadmin, notes) and throw; mostly 500s, not a crash."
+    },
+    {
+      "id": "dvws-debate-hardcoded-db-creds",
+      "file": ".env",
+      "lines": [
+        9,
+        10
+      ],
+      "class": "config",
+      "note": "MySQL root credentials committed in .env and fixtures/xml/config.xml; deployment default, exposed further via /v1/info and XPath."
+    },
+    {
+      "id": "dvws-debate-swagger-public",
+      "file": "src/server.js",
+      "lines": [
+        87,
+        92
+      ],
+      "class": "hardening",
+      "note": "Public OpenAPI spec and Swagger UI list hidden admin endpoints; discovery aid, not a vuln on its own."
+    },
+    {
+      "id": "dvws-debate-auth-cookie-flags",
+      "file": "src/controllers/users.js",
+      "lines": [
+        159,
+        161
+      ],
+      "class": "hardening",
+      "note": "auth_token cookie lacks Secure and SameSite; also set even on failed login (value 'undefined')."
+    },
+    {
+      "id": "dvws-debate-soap-username-enum",
+      "file": "src/services/soap/user-service.js",
+      "lines": [
+        66,
+        72
+      ],
+      "class": "authentication",
+      "note": "Docs call this enumeration, but unknown users also return role 'user', so only admin accounts are distinguishable."
+    },
+    {
+      "id": "dvws-debate-ratelimit-memory",
+      "file": "src/middleware/rate-limiter.js",
+      "lines": [
+        13,
+        28
+      ],
+      "class": "reliability",
+      "note": "Per-key map grows without eviction; with spoofed X-Forwarded-For keys memory grows unbounded."
+    },
+    {
+      "id": "dvws-debate-xmlrpc-method-disclosure",
+      "file": "src/services/xml-rpc/server.js",
+      "lines": [
+        18,
+        21
+      ],
+      "class": "hardening",
+      "note": "system.listMethods exposes callable methods; docs list it as XML-RPC enumeration."
+    },
+    {
+      "id": "dvws-safe-jwt-alg-none",
+      "file": "src/middleware/auth.js",
+      "lines": [
+        9,
+        16
+      ],
+      "class": "authentication",
+      "note": "algorithms list allows \"none\"; the library rejects it when a secret is set (algorithms includes 'none', but jsonwebtoken 9.0.3 rejects unsigned tokens whenever a secret is supplied ('jwt signature is required'), and JWT_SECRET is always set. Same applies to the duplicated options in server.js, users.js, notes.js, files.js, passphrase.js.)"
+    }
+  ]
+}

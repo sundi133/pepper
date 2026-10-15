@@ -1,0 +1,382 @@
+{
+  "app": "vampi",
+  "language": "python",
+  "expected": [
+    {
+      "id": "vampi-sqli-get-user",
+      "file": "models/user_model.py",
+      "lines": [
+        72,
+        73
+      ],
+      "class": "injection",
+      "cwe": [
+        "CWE-89"
+      ],
+      "severity": "CRITICAL",
+      "note": "Path param username is f-string-interpolated into raw SQL via text(); unauthenticated GET /users/v1/{username} allows UNION extraction (e.g. plaintext passwords)."
+    },
+    {
+      "id": "vampi-jwt-weak-secret",
+      "file": "config.py",
+      "lines": [
+        13,
+        13
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-798",
+        "CWE-321",
+        "CWE-1391"
+      ],
+      "severity": "CRITICAL",
+      "note": "Hardcoded, guessable SECRET_KEY 'random' signs HS256 JWTs; attacker forges a token with sub=admin and impersonates any user."
+    },
+    {
+      "id": "vampi-debug-endpoint-exposes-passwords",
+      "file": "api_views/users.py",
+      "lines": [
+        24,
+        26
+      ],
+      "class": "data-exposure",
+      "cwe": [
+        "CWE-200",
+        "CWE-359",
+        "CWE-215"
+      ],
+      "severity": "CRITICAL",
+      "note": "Unauthenticated GET /users/v1/_debug returns json_debug() for all users (plaintext passwords + admin flag); active even when vuln=0.",
+      "alt": [
+        {
+          "file": "models/user_model.py",
+          "lines": [
+            55,
+            62
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vampi-password-change-idor",
+      "file": "api_views/users.py",
+      "lines": [
+        186,
+        190
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-639",
+        "CWE-620",
+        "CWE-285"
+      ],
+      "severity": "HIGH",
+      "note": "PUT /users/v1/{username}/password updates the user named in the path, not the token subject; any logged-in user resets admin's password (account takeover)."
+    },
+    {
+      "id": "vampi-register-mass-assignment-admin",
+      "file": "api_views/users.py",
+      "lines": [
+        60,
+        66
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-915",
+        "CWE-269"
+      ],
+      "severity": "HIGH",
+      "note": "Client-supplied 'admin' field in registration body is honored; self-registered user becomes admin (can then delete users)."
+    },
+    {
+      "id": "vampi-book-bola",
+      "file": "api_views/books.py",
+      "lines": [
+        50,
+        58
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-639",
+        "CWE-284"
+      ],
+      "severity": "HIGH",
+      "note": "GET /books/v1/{book_title} looks up by title only (no owner filter) and returns secret_content; any user reads other users' book secrets (titles listed publicly)."
+    },
+    {
+      "id": "vampi-login-user-password-enumeration",
+      "file": "api_views/users.py",
+      "lines": [
+        101,
+        106
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-204",
+        "CWE-203"
+      ],
+      "severity": "MEDIUM",
+      "note": "Login returns distinct messages for unknown username vs wrong password, enabling username enumeration and targeted password guessing."
+    },
+    {
+      "id": "vampi-email-regex-redos",
+      "file": "api_views/users.py",
+      "lines": [
+        143,
+        146
+      ],
+      "class": "reliability",
+      "cwe": [
+        "CWE-1333",
+        "CWE-400"
+      ],
+      "severity": "MEDIUM",
+      "note": "Email regex has nested quantifier ([-.\\w]*[0-9a-zA-Z])*; ~30-char crafted email (e.g. 'a'*30+'!') causes exponential backtracking, blocking the worker."
+    },
+    {
+      "id": "vampi-unauth-createdb-reset",
+      "file": "api_views/main.py",
+      "lines": [
+        6,
+        9
+      ],
+      "class": "authorization",
+      "cwe": [
+        "CWE-306",
+        "CWE-862"
+      ],
+      "severity": "HIGH",
+      "note": "Unauthenticated GET /createdb drops all tables and reseeds known users (admin/pass1); anyone can wipe data and restore default admin credentials."
+    },
+    {
+      "id": "vampi-plaintext-password-storage",
+      "file": "models/user_model.py",
+      "lines": [
+        15,
+        25
+      ],
+      "class": "crypto",
+      "cwe": [
+        "CWE-256",
+        "CWE-916",
+        "CWE-522"
+      ],
+      "severity": "MEDIUM",
+      "note": "Passwords stored and compared in plaintext (no hashing); any DB read (SQLi, debug endpoint) yields reusable credentials.",
+      "alt": [
+        {
+          "file": "api_views/users.py",
+          "lines": [
+            88,
+            98
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vampi-default-admin-credentials",
+      "file": "models/user_model.py",
+      "lines": [
+        98,
+        101
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-1392",
+        "CWE-798",
+        "CWE-521"
+      ],
+      "severity": "MEDIUM",
+      "note": "Seeded admin account with weak hardcoded password 'pass1' (also documented in spec); attacker logs in as admin after /createdb."
+    },
+    {
+      "id": "vampi-login-no-rate-limit",
+      "file": "api_views/users.py",
+      "lines": [
+        85,
+        93
+      ],
+      "class": "authentication",
+      "cwe": [
+        "CWE-307"
+      ],
+      "severity": "MEDIUM",
+      "note": "Login has no attempt limiting/lockout; combined with enumeration and weak passwords enables brute force."
+    }
+  ],
+  "must_not_report": [
+    {
+      "id": "vampi-safe-get-user-orm",
+      "file": "models/user_model.py",
+      "lines": [
+        79,
+        80
+      ],
+      "reason": "Non-vuln branch uses SQLAlchemy filter_by (parameterized); no injection."
+    },
+    {
+      "id": "vampi-safe-jwt-decode-algorithms",
+      "file": "models/user_model.py",
+      "lines": [
+        48,
+        48
+      ],
+      "reason": "jwt.decode pins algorithms=[\"HS256\"] and verifies exp; no alg=none/alg-confusion (weakness is only the key, reported separately at config.py)."
+    },
+    {
+      "id": "vampi-safe-book-owner-scoped",
+      "file": "api_views/books.py",
+      "lines": [
+        61,
+        63
+      ],
+      "reason": "Non-vuln branch filters book by token user and title; ownership enforced."
+    },
+    {
+      "id": "vampi-safe-add-book-owner",
+      "file": "api_views/books.py",
+      "lines": [
+        27,
+        35
+      ],
+      "reason": "Book owner is taken from token subject, not request body; no owner mass assignment."
+    },
+    {
+      "id": "vampi-safe-password-update-self",
+      "file": "api_views/users.py",
+      "lines": [
+        193,
+        196
+      ],
+      "reason": "Non-vuln branch updates the password of the token subject only, ignoring the path username."
+    },
+    {
+      "id": "vampi-safe-update-email-self",
+      "file": "api_views/users.py",
+      "lines": [
+        138,
+        142
+      ],
+      "reason": "update_email always modifies the token subject's record (path username ignored) in both modes; not an IDOR."
+    },
+    {
+      "id": "vampi-safe-delete-user-admin-check",
+      "file": "api_views/users.py",
+      "lines": [
+        211,
+        213
+      ],
+      "reason": "Delete requires the token subject's DB admin flag; function-level authorization is enforced (privilege comes only via the separately reported mass assignment)."
+    },
+    {
+      "id": "vampi-safe-login-generic-error",
+      "file": "api_views/users.py",
+      "lines": [
+        107,
+        110
+      ],
+      "reason": "Non-vuln branch returns a single generic error for bad username or password; no enumeration."
+    },
+    {
+      "id": "vampi-safe-register-ignores-admin",
+      "file": "api_views/users.py",
+      "lines": [
+        67,
+        69
+      ],
+      "reason": "Non-vuln branch builds User without the admin field (defaults False); no mass assignment."
+    }
+  ],
+  "debatable": [
+    {
+      "id": "vampi-flask-debug-true",
+      "file": "app.py",
+      "lines": [
+        17,
+        17
+      ],
+      "class": "hardening",
+      "note": "Flask/Werkzeug debug=True bound to 0.0.0.0; interactive debugger is PIN-protected, risk depends on deployment."
+    },
+    {
+      "id": "vampi-secure-regex-quadratic",
+      "file": "api_views/users.py",
+      "lines": [
+        162,
+        163
+      ],
+      "class": "reliability",
+      "note": "Non-vuln email regex [a-z0-9]+[\\._]?[a-z0-9]+ backtracks quadratically (~0.4s at 20k chars, minutes at ~1MB body); authenticated, needs large input."
+    },
+    {
+      "id": "vampi-public-user-list",
+      "file": "api_views/users.py",
+      "lines": [
+        19,
+        21
+      ],
+      "class": "hardening",
+      "note": "Unauthenticated listing of all usernames and emails; README describes it as intended \"minimal information\"."
+    },
+    {
+      "id": "vampi-public-book-list",
+      "file": "api_views/books.py",
+      "lines": [
+        12,
+        14
+      ],
+      "class": "hardening",
+      "note": "Unauthenticated listing of all book titles and owners (aids BOLA); no pagination (README \"lack of resources\")."
+    },
+    {
+      "id": "vampi-json-built-by-string-concat",
+      "file": "api_views/users.py",
+      "lines": [
+        12,
+        16
+      ],
+      "class": "hardening",
+      "note": "Error JSON built by string concatenation (also user_model.py lines 28 and 76 for user records); stored email from register is unvalidated so response JSON can be malformed/injected, but served as application/json, no XSS."
+    },
+    {
+      "id": "vampi-password-change-no-current-password",
+      "file": "api_views/users.py",
+      "lines": [
+        179,
+        185
+      ],
+      "class": "hardening",
+      "note": "Password change does not require the current password and existing tokens are not invalidated (both modes)."
+    },
+    {
+      "id": "vampi-no-password-policy",
+      "file": "api_views/json_schemas.py",
+      "lines": [
+        1,
+        9
+      ],
+      "class": "hardening",
+      "note": "Registration schema imposes no password strength or email format constraints."
+    },
+    {
+      "id": "vampi-docker-root",
+      "file": "Dockerfile",
+      "lines": [
+        16,
+        17
+      ],
+      "class": "hardening",
+      "note": "Container runs as root (no USER directive)."
+    },
+    {
+      "id": "vampi-ci-unpinned-actions",
+      "file": ".github/workflows/docker-image.yml",
+      "lines": [
+        16,
+        28
+      ],
+      "class": "hardening",
+      "note": "Third-party actions referenced by mutable tags (v2/v3) rather than commit SHAs; push-only trigger, no untrusted input."
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "_comment": "Pinned evaluation corpus. 'vulnerable' apps have labelled ground truth in eval/truth/<name>.json; 'clean' apps are ordinary codebases used to count false positives (their findings are reviewed and labelled over time).",
+  "apps": [
+    { "name": "vampi", "repo": "https://github.com/erev0s/VAmPI", "commit": "f16052dce83f05847133ec98f01c5193a41de7d8", "language": "python", "kind": "vulnerable" },
+    { "name": "dvws-node", "repo": "https://github.com/snoopysecurity/dvws-node", "commit": "eb6e2886f2206b88bf709fe1fa311adc3ae3c34f", "language": "javascript", "kind": "vulnerable" },
+    { "name": "govwa", "repo": "https://github.com/0c34/govwa", "commit": "4058f79f31eeb4a36d8f1e64bba1f0c899646e6f", "language": "go", "kind": "vulnerable" },
+    { "name": "dvwa", "repo": "https://github.com/digininja/DVWA", "commit": "068d974487a297c155c48722f9fcf7180a83adc4", "language": "php", "kind": "vulnerable" },
+    { "name": "java-vuln", "repo": "https://github.com/DataDog/vulnerable-java-application", "commit": "e5c6c7a5b7edaaddf5c2856d491023edffd59877", "language": "java", "kind": "vulnerable" },
+    { "name": "rw-node", "repo": "https://github.com/gothinkster/node-express-realworld-example-app", "commit": "30b68e1e881462b2f4164ea09ab4c4f5699c7b0b", "language": "typescript", "kind": "clean" },
+    { "name": "rw-go", "repo": "https://github.com/gothinkster/golang-gin-realworld-example-app", "commit": "626c372d259472148d93303f74aa9b9a1cdcef24", "language": "go", "kind": "clean" },
+    { "name": "rw-spring", "repo": "https://github.com/gothinkster/spring-boot-realworld-example-app", "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a", "language": "java", "kind": "clean" }
+  ]
+}

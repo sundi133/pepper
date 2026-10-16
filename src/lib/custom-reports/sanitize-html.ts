@@ -9,7 +9,7 @@
  * The Markdown renderer already escapes everything; this is a second,
  * independent layer applied to the final body.
  */
-import { escapeHtml } from "@/lib/reports/report-html";
+import { escapeHtml } from "@/lib/html-escape";
 import { safeLinkHref } from "./markdown";
 
 const ALLOWED_TAGS = new Set([

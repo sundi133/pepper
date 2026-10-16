@@ -5,7 +5,7 @@
  * rules — and nothing that can execute or fetch: raw HTML is never passed
  * through, images become their alt text, and only http(s) links survive.
  */
-import { escapeHtml } from "@/lib/reports/report-html";
+import { escapeHtml } from "@/lib/html-escape";
 
 export type MdInline = string;
 

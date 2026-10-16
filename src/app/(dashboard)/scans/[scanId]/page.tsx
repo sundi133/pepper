@@ -64,6 +64,7 @@ import {
   Globe,
   FileSpreadsheet,
   ArrowUpRight,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -73,6 +74,7 @@ import { nextFindingSelection } from "@/lib/create-scan-validation";
 import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
 import { ScanTriageChat } from "@/components/scans/scan-triage-chat";
 import { computeScanProgress } from "@/lib/scan-progress";
+import { CustomReportDialog } from "@/components/scans/custom-report-dialog";
 
 type Finding = {
   id: string;
@@ -117,6 +119,7 @@ export default function ScanDetailPage() {
   // Section ids (SAST, SECRETS, …) the user wants in the PDF export. An empty
   // array means "all sections" (the existing behavior).
   const [exportSections, setExportSections] = useState<string[]>([]);
+  const [customReportOpen, setCustomReportOpen] = useState(false);
 
   const orgRole = session?.user?.memberships?.[0]?.role;
   const canRescan = orgRole && ["ADMIN", "SECURITY", "DEVELOPER"].includes(orgRole);
@@ -521,6 +524,8 @@ export default function ScanDetailPage() {
                   scanId={scanId}
                   canOpenCompliance={scan.status === "COMPLETED"}
                   onOpenCompliance={() => router.push(`/scans/${scanId}/compliance`)}
+                  canOpenCustom={scan.status === "COMPLETED" || scan.status === "STOPPED"}
+                  onOpenCustom={() => setCustomReportOpen(true)}
                 />
                 <Button
                   variant="ghost"
@@ -985,6 +990,15 @@ export default function ScanDetailPage() {
 
       {/* AI Triage Chat — shown when scan is complete */}
       {scan.status === "COMPLETED" && <ScanTriageChat scanId={scanId} />}
+
+      <CustomReportDialog
+        open={customReportOpen}
+        onOpenChange={setCustomReportOpen}
+        scanId={scanId}
+        canGenerate={!!canRescan}
+        canDeleteAny={!!canManageScan}
+        userId={session?.user?.id}
+      />
     </div>
   );
 }
@@ -1184,10 +1198,14 @@ function ReportsMenu({
   scanId,
   canOpenCompliance,
   onOpenCompliance,
+  canOpenCustom,
+  onOpenCustom,
 }: {
   scanId: string;
   canOpenCompliance: boolean;
   onOpenCompliance: () => void;
+  canOpenCustom: boolean;
+  onOpenCustom: () => void;
 }) {
   const downloadable: ReportOption[] = [
     {
@@ -1266,6 +1284,28 @@ function ReportsMenu({
               </p>
             </div>
             <ArrowUpRight className="mt-0.5 size-4 text-slate-400 transition-transform group-data-[highlighted]:-translate-y-0.5 group-data-[highlighted]:translate-x-0.5 group-data-[highlighted]:text-emerald-600" />
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!canOpenCustom}
+            onSelect={onOpenCustom}
+            className="group items-start gap-3 rounded-lg p-3 data-[highlighted]:bg-violet-50/70 dark:data-[highlighted]:bg-violet-950/30"
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-inset ring-violet-100 dark:bg-violet-950/40 dark:text-violet-400 dark:ring-violet-900">
+              <Sparkles className="size-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  Custom report…
+                </span>
+                <span className={AUDIENCE_TAG}>Your template</span>
+              </div>
+              <p className="mt-0.5 text-xs leading-snug text-slate-500 dark:text-slate-400">
+                {canOpenCustom
+                  ? "AI fills one of your organization's report templates with this scan's data."
+                  : "Available once the scan has finished."}
+              </p>
+            </div>
           </DropdownMenuItem>
         </div>
       </DropdownMenuContent>

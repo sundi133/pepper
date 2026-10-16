@@ -28,6 +28,7 @@ model Organization {
   suppressionRules SuppressionRule[]
   notifications    Notification[]
   integrations     IntegrationConfig[]
+  reportTemplates  ReportTemplate[]
 }
 
 /// Org-scoped GitHub OAuth (repository import & private clone). Token stored encrypted.
@@ -262,8 +263,84 @@ model Scan {
   artifacts ScanArtifact[]
   notifications Notification[]
   remediationRuns RemediationRun[]
+  customReports CustomReport[]
 
   @@index([projectId, createdAt])
+}
+
+/// An organization's custom report layout. The body's headings, sections,
+/// tables and wording show the AI what to produce; {{placeholders}} are filled
+/// deterministically before the AI step (see lib/custom-reports/template).
+model ReportTemplate {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?  @db.Text
+  /// Format the body was supplied in: markdown | html | text (a DOCX upload
+  /// is converted to markdown on import).
+  format         String   @default("markdown")
+  body           String   @db.Text
+  /// Audience, tone and emphasis the AI should follow.
+  instructions   String?  @db.Text
+  /// Name of the uploaded file the body came from, if any.
+  sourceFileName String?
+  createdBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reports      CustomReport[]
+
+  @@unique([organizationId, name])
+}
+
+/// One AI-generated report: a template filled with a scan's data by the
+/// report agent in the worker (lib/custom-reports/agent).
+model CustomReport {
+  id                String             @id @default(cuid())
+  organizationId    String
+  scanId            String
+  /// Null once the template is deleted; templateName keeps the label.
+  templateId        String?
+  templateName      String
+  /// Template body + instructions as they were when the report was requested,
+  /// so editing the template mid-run does not change it.
+  templateSnapshot  Json
+  extraInstructions String?            @db.Text
+  createdBy         String?
+  status            CustomReportStatus @default(QUEUED)
+  /// 0–100, with a human-readable stage for the UI.
+  progress          Int                @default(0)
+  stage             String?
+  /// [{ at, message }] — what the agent did, newest last.
+  steps             Json?
+  provider          String?
+  model             String?
+  llmCalls          Int                @default(0)
+  /// Report title (the template's H1 with placeholders filled, or its name).
+  title             String?
+  markdown          String?            @db.Text
+  html              String?            @db.Text
+  /// Grounding check result: cited / removed / corrected finding references.
+  grounding         Json?
+  errorMessage      String?            @db.Text
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  scan     Scan            @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  template ReportTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([scanId, createdAt])
+  @@index([organizationId, createdAt])
+}
+
+enum CustomReportStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
 }
 
 /// One AI remediation session: a set of findings fixed sequentially in a

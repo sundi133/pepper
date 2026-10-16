@@ -31,6 +31,13 @@ export const AUDIT_ACTIONS = [
   "remediation.started",
   "remediation.cancelled",
   "remediation.pr_opened",
+  "report.custom_requested",
+  "report.custom_completed",
+  "report.custom_failed",
+  "report.custom_deleted",
+  "report_template.created",
+  "report_template.updated",
+  "report_template.deleted",
   "buildgate.updated",
   "policy.created",
   "policy.updated",
@@ -67,6 +74,8 @@ export const AUDIT_RESOURCES = [
   "suppression",
   "audit",
   "organization",
+  "report",
+  "report_template",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

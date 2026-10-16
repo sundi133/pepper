@@ -56,6 +56,33 @@ export function getRemediationQueue(): Queue<RemediationJobData> {
   return _remediationQueue;
 }
 
+export const REPORT_QUEUE_NAME = "pepper-reports";
+
+export interface ReportJobData {
+  reportId: string;
+}
+
+let _reportQueue: Queue<ReportJobData> | undefined;
+
+/** AI custom reports: minutes of LLM work per report, separate from scans. */
+export function getReportQueue(): Queue<ReportJobData> {
+  if (!_reportQueue) {
+    _reportQueue = new Queue<ReportJobData>(REPORT_QUEUE_NAME, {
+      connection: redisConnection,
+      defaultJobOptions: {
+        // A retry would bill the whole report again; the user can regenerate.
+        attempts: 1,
+        removeOnComplete: { count: 500 },
+        removeOnFail: { count: 500 },
+      },
+    });
+    _reportQueue.on("error", (err) => {
+      console.error("[report-queue] error:", err.message);
+    });
+  }
+  return _reportQueue;
+}
+
 export interface ScanJobData {
   scanId: string;
   projectId: string;

@@ -138,6 +138,27 @@ OAuth scopes requested: read:user repo</pre>
         </tbody>
       </table>
 
+      <h2 id="compiled-code">Compiled-code scanning</h2>
+      <p>Compiled artifacts in a scan — JAR / WAR / EAR / <code>.class</code> (Vineflower), Android APK / AAB / DEX (jadx) and .NET DLL / EXE (ILSpy) — are decompiled in the worker and the decompiled source is reviewed by AI SAST, rule-based SAST (OpenGrep) and the secrets scanners. A single <code>.jar</code>, <code>.war</code>, <code>.ear</code>, <code>.apk</code>, <code>.aab</code>, <code>.dll</code> or <code>.exe</code> can also be uploaded as the scan source. Findings show as <code>app.apk!/com/example/Login.java:42</code>; their line numbers refer to the decompiled source. Native (non-.NET) DLL/EXE cannot be decompiled and are listed as skipped. Artifacts in dependency folders (<code>WEB-INF/lib</code>, <code>lib/</code>, <code>libs/</code>, <code>node_modules</code>, <code>packages/</code>, <code>.m2</code>, <code>.gradle</code>, <code>vendor</code>), well-known library assemblies and library packages inside an artifact (<code>android/</code>, <code>androidx/</code>, <code>kotlin/</code>, <code>com/google/</code>, <code>org/apache/</code> …) are skipped: dependency vulnerabilities are SCA's job. Build output (<code>target/</code>, <code>build/</code>, <code>bin/</code> …) is skipped when the scan already contains that language's source.</p>
+      <table>
+        <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>ENABLE_COMPILED_SCAN</code></td><td>true</td><td>Decompile and scan compiled artifacts. <code>false</code> turns it off.</td></tr>
+          <tr><td><code>COMPILED_SCAN_MAX_ARTIFACT_MB</code></td><td>200</td><td>Larger artifacts are skipped (archives may also unpack to at most 10× this).</td></tr>
+          <tr><td><code>COMPILED_SCAN_MAX_ARTIFACTS</code></td><td>25</td><td>Artifacts decompiled per scan, including nested ones (a WAR inside an EAR).</td></tr>
+          <tr><td><code>COMPILED_SCAN_MAX_FILES</code></td><td>5000</td><td>Decompiled files added to a scan. Source files are kept before resources. Also bounds AI SAST cost on large apps.</td></tr>
+          <tr><td><code>COMPILED_SCAN_MAX_OUTPUT_MB</code></td><td>200</td><td>Decompiled bytes added to a scan.</td></tr>
+          <tr><td><code>COMPILED_SCAN_TIMEOUT_SECONDS</code></td><td>600</td><td>Per artifact; the decompiler is killed after this (partial output is kept).</td></tr>
+          <tr><td><code>COMPILED_SCAN_TOTAL_TIMEOUT_SECONDS</code></td><td>1800</td><td>The whole decompile step of a scan.</td></tr>
+          <tr><td><code>COMPILED_SCAN_SKIP_THIRD_PARTY</code></td><td>true</td><td><code>false</code> also decompiles dependency folders, library assemblies and library packages.</td></tr>
+          <tr><td><code>COMPILED_SCAN_EXCLUDE_PACKAGES</code></td><td>(none)</td><td>More packages / namespaces to skip, comma-separated (<code>com.acme.generated,Acme.Vendor</code>).</td></tr>
+          <tr><td><code>COMPILED_SCAN_INCLUDE_PACKAGES</code></td><td>(none)</td><td>Packages never skipped, even under a library prefix (<code>org.apache.myproject</code>).</td></tr>
+          <tr><td><code>COMPILED_SCAN_THREADS</code></td><td>2</td><td>Decompiler threads per artifact.</td></tr>
+          <tr><td><code>COMPILED_SCAN_JAVA_OPTS</code></td><td>-XX:MaxRAMPercentage=50</td><td>JVM options for jadx and Vineflower.</td></tr>
+          <tr><td><code>JADX_BIN</code>, <code>VINEFLOWER_BIN</code>, <code>ILSPYCMD_BIN</code></td><td>on PATH</td><td>Decompiler overrides (the worker image ships all three).</td></tr>
+        </tbody>
+      </table>
+
       <h2 id="retention">Data retention</h2>
       <p>Nothing is deleted by default. Retention runs in the worker at most once every 6 hours and records what it deleted in each organization's audit log.</p>
       <table>

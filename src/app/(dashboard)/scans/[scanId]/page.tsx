@@ -72,6 +72,7 @@ import { useRouter } from "next/navigation";
 import { nextFindingSelection } from "@/lib/create-scan-validation";
 import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
 import { ScanTriageChat } from "@/components/scans/scan-triage-chat";
+import { CompiledCodeSummary } from "@/components/scans/compiled-code-summary";
 
 type Finding = {
   id: string;
@@ -944,6 +945,9 @@ export default function ScanDetailPage() {
         </div>
         </div>
       )}
+
+      {/* What the compiled-code scan decompiled and skipped */}
+      {!isActive && <CompiledCodeSummary scannerProgress={scan.scannerProgress} />}
 
       {/* Error / stop details */}
       {scan.errorMessage &&

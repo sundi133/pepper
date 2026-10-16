@@ -25,6 +25,14 @@ import { attachLicenses } from "./sca/license-findings";
 import { ENABLE_DEPS_DEV } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 
+/** Scanners that also review source decompiled from compiled artifacts. */
+export const COMPILED_CODE_SCANNERS = new Set([
+  "SAST_PATTERN",
+  "SAST_LLM",
+  "SECRETS_PATTERN",
+  "SECRETS_LLM",
+]);
+
 export function getScanners(
   scanType: string,
   orgSettings: {
@@ -173,6 +181,14 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
       : undefined,
   };
 
+  // Decompiled source from compiled artifacts is reviewed by the source
+  // scanners only; SCA, IaC, container and zero-day keep the original list.
+  const decompiled = ctx.decompiledFileList ?? [];
+  const sourceCtx: ScanContext =
+    decompiled.length > 0 ? { ...wrappedCtx, fileList: [...ctx.fileList, ...decompiled] } : wrappedCtx;
+  const ctxFor = (scanner: ScannerPlugin) =>
+    COMPILED_CODE_SCANNERS.has(scanner.name) ? sourceCtx : wrappedCtx;
+
   const hasLlmSast = scanners.some((s) => s.name === "SAST_LLM");
   let resolveLlmSastDone: () => void = () => {};
   const llmSastDonePromise = hasLlmSast
@@ -185,7 +201,7 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
     scanners.map(async (scanner) => {
       try {
         await ctx.waitIfPaused?.();
-        const rawFindings = await scanner.scan(wrappedCtx);
+        const rawFindings = await scanner.scan(ctxFor(scanner));
         await ctx.waitIfPaused?.();
 
         // Give first priority to AI: if this is a pattern/regex scanner,
@@ -252,6 +268,7 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
   const filesScanned = new Set([
     ...ctx.fileList,
     ...(ctx.scaFileList ?? []),
+    ...decompiled,
   ]).size;
 
   return {

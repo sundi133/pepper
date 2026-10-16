@@ -124,6 +124,13 @@ describe("retention settings", () => {
     expect(isUploadSourceKey("scans/abc/other.zip")).toBe(false);
     expect(isUploadSourceKey("scans/abc/def/source.zip")).toBe(false);
   });
+
+  it("recognises uploaded compiled artifacts", () => {
+    expect(isUploadSourceKey("scans/abc/compiled/app-release.apk")).toBe(true);
+    expect(isUploadSourceKey("scans/abc/compiled/App.dll")).toBe(true);
+    expect(isUploadSourceKey("scans/abc/compiled/notes.txt")).toBe(false);
+    expect(isUploadSourceKey("scans/abc/compiled/x/app.jar")).toBe(false);
+  });
 });
 
 describe("upload retention", () => {

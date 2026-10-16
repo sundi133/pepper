@@ -40,7 +40,7 @@ export function projectNameFromGitUrl(url: string): string {
 export function projectNameFromUploadFilename(fileName: string): string {
   const base = fileName
     .replace(/.*[/\\]/, "")
-    .replace(/\.(zip|tar\.gz|tgz|tar)$/i, "")
+    .replace(/\.(zip|tar\.gz|tgz|tar|jar|war|ear|apk|aab|dll|exe)$/i, "")
     .trim();
   return (base || FALLBACK).slice(0, 100);
 }

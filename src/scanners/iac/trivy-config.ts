@@ -275,6 +275,9 @@ export function buildTrivyConfigArgs(opts: { policy: IacPolicy; scanners: string
     "**/.git",
     "--skip-dirs",
     "**/.terraform",
+    // Source decompiled from compiled artifacts (lib/compiled-scan) holds no IaC.
+    "--skip-dirs",
+    "**/__decompiled__*",
     "--timeout",
     `${Number(process.env.IAC_TRIVY_TIMEOUT_SECONDS || 600)}s`,
     opts.target,

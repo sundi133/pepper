@@ -16,6 +16,12 @@ import {
   projectNameFromUploadFilename,
 } from "@/lib/project-name-from-source";
 import { API_CREATE_SCAN_TYPES } from "@/lib/scan-types";
+import {
+  ARTIFACT_MIME_TYPES,
+  UPLOADABLE_ARTIFACT_EXTENSIONS,
+  compiledUploadObjectKey,
+  isCompiledArtifactUpload,
+} from "@/lib/compiled-scan/upload";
 
 /** Strip HTML tags and trim whitespace to prevent stored XSS. */
 function sanitizeText(value: string): string {
@@ -105,26 +111,32 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        // Validate file extension
+        // Validate file extension: a source archive, or a single compiled
+        // artifact (decompiled by the worker's compiled-code scan).
         const fileName = file.name.toLowerCase();
-        const hasAllowedExt = ALLOWED_EXTENSIONS.some((ext) =>
-          fileName.endsWith(ext),
-        );
+        const isArtifact = isCompiledArtifactUpload(fileName);
+        const hasAllowedExt =
+          isArtifact ||
+          ALLOWED_EXTENSIONS.some((ext) => fileName.endsWith(ext));
         if (!hasAllowedExt) {
           return NextResponse.json(
             {
-              error: `Invalid file type. Allowed extensions: ${ALLOWED_EXTENSIONS.join(", ")}`,
+              error: `Invalid file type. Allowed extensions: ${[...ALLOWED_EXTENSIONS, ...UPLOADABLE_ARTIFACT_EXTENSIONS].join(", ")}`,
             },
             { status: 400 },
           );
         }
 
         // Validate MIME type
-        if (file.type && !ALLOWED_MIME_TYPES.has(file.type)) {
+        if (
+          file.type &&
+          !(isArtifact ? ARTIFACT_MIME_TYPES : ALLOWED_MIME_TYPES).has(file.type)
+        ) {
           return NextResponse.json(
             {
-              error:
-                "Invalid file MIME type. Only archive files (zip, tar, tar.gz) are accepted",
+              error: isArtifact
+                ? "Invalid file MIME type for a compiled artifact"
+                : "Invalid file MIME type. Only archive files (zip, tar, tar.gz) are accepted",
             },
             { status: 400 },
           );
@@ -239,7 +251,11 @@ export async function POST(req: NextRequest) {
 
     // Upload source file to MinIO if provided
     let sourceRef = "";
-    if (fileBuffer) {
+    if (fileBuffer && originalFileName && isCompiledArtifactUpload(originalFileName)) {
+      await ensureBucket();
+      sourceRef = compiledUploadObjectKey(scan.id, originalFileName);
+      await uploadObject(sourceRef, fileBuffer, "application/octet-stream");
+    } else if (fileBuffer) {
       await ensureBucket();
       const ext =
         originalFileName?.match(/\.(zip|tar\.gz|tgz|tar)$/i)?.[0] || ".zip";

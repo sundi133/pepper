@@ -50,6 +50,14 @@ import {
   ENABLE_EXPLOIT_VALIDATION,
   EXPLOIT_VALIDATION_MIN_SEVERITY,
 } from "@/lib/constants";
+import {
+  DecompiledPathMap,
+  compiledScanConfig,
+  describeOutcome,
+  runCompiledScan,
+} from "@/lib/compiled-scan";
+import { decompiledOriginOf } from "@/lib/compiled-scan/finding-origin";
+import { uploadedArtifactName } from "@/lib/compiled-scan/upload";
 
 // prisma is imported from @/lib/prisma
 
@@ -155,7 +163,13 @@ export async function processScanJob(job: Job<ScanJobData>) {
     fs.mkdirSync(workDir, { recursive: true });
     await assertScanActive();
 
-    if (sourceType === "UPLOAD") {
+    const uploadedArtifact = sourceType === "UPLOAD" ? uploadedArtifactName(sourceRef) : null;
+    if (uploadedArtifact) {
+      // A single compiled artifact (app.apk, service.war, App.dll) is the
+      // scan source: kept as is for the compiled-code scan to decompile.
+      const data = await downloadObject(sourceRef);
+      fs.writeFileSync(path.join(workDir, uploadedArtifact), data);
+    } else if (sourceType === "UPLOAD") {
       const data = await downloadObject(sourceRef);
       const archiveExt =
         sourceRef.match(/\.(zip|tar\.gz|tgz|tar)$/i)?.[0] || ".zip";
@@ -427,6 +441,11 @@ export async function processScanJob(job: Job<ScanJobData>) {
       log.info({ fileCount: allFiles.length }, "Files enumerated");
     }
 
+    // Filled by the compiled-code scan (step 2b): decompiled source for the
+    // source scanners, and the map that shows their findings as `app.apk!/…`.
+    let decompiledFiles: string[] = [];
+    let decompiledPaths = new DecompiledPathMap();
+
     // AI enrichment: generate contextual report content via LLM for unique finding types
     async function enrichFindingsWithAi(
       findings: RawFinding[],
@@ -514,9 +533,15 @@ Schema:
     }
 
     // Helper: insert findings into DB and increment severity counts
-    async function insertFindings(findings: RawFinding[]) {
-      if (findings.length === 0) return;
+    async function insertFindings(rawFindings: RawFinding[]) {
+      if (rawFindings.length === 0) return;
       await assertScanActive();
+
+      // Findings in decompiled code are stored against their artifact.
+      const findings =
+        decompiledPaths.size > 0
+          ? rawFindings.map((f) => decompiledPaths.mapFinding(f))
+          : rawFindings;
 
       // AI enrichment: generate contextual report content for unique finding types
       await enrichFindingsWithAi(findings);
@@ -676,10 +701,69 @@ Schema:
       }
     }
 
+    // 2b. Compiled-code scan: decompile JAR/WAR/EAR/class, APK/AAB/DEX and
+    // .NET assemblies so the source scanners review them too. Never fails
+    // the scan: a problem here only means compiled code goes unscanned.
+    const compiledConfig = compiledScanConfig();
+    if (compiledConfig.enabled && COMPILED_SCAN_TYPES.has(scanType)) {
+      let decompileStarted = false;
+      try {
+        const outcome = await runCompiledScan({
+          workDir,
+          fileList,
+          scanType,
+          config: compiledConfig,
+          signal: abortController.signal,
+          log,
+          onProgress: (msg) => {
+            void reportProgress(msg).catch(() => undefined);
+          },
+          onStart: () => {
+            decompileStarted = true;
+            return setDecompileProgress(scanId, { status: "RUNNING", findingsCount: 0 });
+          },
+        });
+        decompiledFiles = outcome.files;
+        decompiledPaths = outcome.pathMap;
+        const s = outcome.summary;
+        if (decompileStarted || s.skipped.length > 0) {
+          log.info(
+            { decompiled: s.decompiled, files: s.filesAdded, skipped: s.skippedByReason, failed: s.failed },
+            describeOutcome(s),
+          );
+          // The scan's record of what was decompiled and what was skipped (and why).
+          await setDecompileProgress(scanId, { status: "DONE", findingsCount: 0, ...s });
+        }
+      } catch (err) {
+        if (abortController.signal.aborted) throw err;
+        log.warn({ err }, "Compiled-code scan failed; continuing with source only");
+      }
+      await assertScanActive();
+    } else if (uploadedArtifact) {
+      // The upload is nothing but a compiled artifact, and nothing will look inside it.
+      log.warn({ artifact: uploadedArtifact }, "Compiled-code scanning is off; the uploaded artifact is not decompiled");
+      await setDecompileProgress(scanId, {
+        status: "DONE",
+        findingsCount: 0,
+        decompiled: 0,
+        filesAdded: 0,
+        skipped: [
+          {
+            path: uploadedArtifact,
+            reason: "disabled",
+            detail: compiledConfig.enabled
+              ? `${scanType} scans do not include compiled code`
+              : "compiled-code scanning is turned off (ENABLE_COMPILED_SCAN=false)",
+          },
+        ],
+      });
+    }
+
     const ctx: ScanContext = {
       workDir,
       fileList,
       scaFileList,
+      decompiledFileList: decompiledFiles,
       scanType,
       scanId,
       orgSettings,
@@ -744,7 +828,8 @@ Schema:
               where: {
                 scanId,
                 scanner: superseded.scanner,
-                filePath: superseded.filePath,
+                // Stored under its artifact path when it is in decompiled code.
+                filePath: decompiledPaths.mapFinding(superseded).filePath,
                 startLine: superseded.startLine,
               },
             });
@@ -1246,6 +1331,18 @@ Schema:
 
 const STOP_WATCH_INTERVAL_MS = 5000;
 
+/** Scan types whose scanners (SAST, secrets) review decompiled compiled code. */
+const COMPILED_SCAN_TYPES = new Set(["FULL", "SAST_ONLY", "SECRETS_ONLY", "INCREMENTAL"]);
+
+/** The DECOMPILE entry of Scan.scannerProgress (progress badge, then the decompile summary). */
+async function setDecompileProgress(scanId: string, entry: Record<string, unknown>): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE "Scan"
+    SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ DECOMPILE: entry })}::jsonb
+    WHERE id = ${scanId}
+  `;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -1390,7 +1487,13 @@ async function runExploitValidation(
     );
 
     const outcome = await validateExploitability(
-      candidates.map((c) => ({ ...c, scanner: String(c.scanner), severity: String(c.severity) })),
+      candidates.map((c) => ({
+        ...c,
+        // Code context for a finding in decompiled code is read from the decompiled file.
+        filePath: decompiledOriginOf(c.metadata)?.decompiledPath ?? c.filePath,
+        scanner: String(c.scanner),
+        severity: String(c.severity),
+      })),
       {
         provider: orgSettings.llmProvider,
         baseUrl: orgSettings.llmBaseUrl,

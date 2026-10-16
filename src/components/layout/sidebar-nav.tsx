@@ -20,6 +20,7 @@ import {
   History,
   FileSignature,
   ShieldOff,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -58,6 +59,7 @@ export const navGroups: NavGroup[] = [
       { name: "Build Gates", href: "/settings/build-gates", icon: ShieldCheck },
       { name: "Suppressions", href: "/settings/suppressions", icon: ShieldOff },
       { name: "Code Signing", href: "/settings/signing", icon: FileSignature },
+      { name: "Report Templates", href: "/settings/report-templates", icon: FileText },
     ],
   },
   {

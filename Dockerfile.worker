@@ -32,6 +32,8 @@ COPY tsconfig.json ./
 COPY src ./src
 COPY scripts ./scripts
 COPY rules ./rules
+# Compliance catalogs: custom reports map findings to frameworks in the worker.
+COPY compliance ./compliance
 
 FROM base AS worker
 ENV NODE_ENV=production

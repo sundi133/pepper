@@ -1,7 +1,66 @@
+# ILSpy's command-line decompiler (ilspycmd) for .NET assemblies, used by the
+# compiled-code scan. ilspycmd ships as a framework-dependent .NET tool (pure
+# IL), so it runs on the musl build of the .NET runtime: this stage takes the
+# runtime from Microsoft's Alpine image (pinned by digest) and the tool from
+# its NuGet package (checksum-verified); the worker copies both, no SDK.
+FROM mcr.microsoft.com/dotnet/runtime:10.0.12-alpine3.24@sha256:c13f5945240d31ae6cdc99e2c7d48c355d3e78bc98ef1415e9482ce193eef32e AS dotnet-tools
+ARG ILSPYCMD_VERSION=11.1.0.9782
+ARG ILSPYCMD_SHA256=74c07facaf1850c78a779fc509031f756e1c0de24b1a536f3363d7ef81ce001f
+RUN set -eux; \
+    wget -q -O /tmp/ilspycmd.nupkg "https://api.nuget.org/v3-flatcontainer/ilspycmd/${ILSPYCMD_VERSION}/ilspycmd.${ILSPYCMD_VERSION}.nupkg"; \
+    echo "${ILSPYCMD_SHA256}  /tmp/ilspycmd.nupkg" | sha256sum -c -; \
+    mkdir -p /tmp/ilspy /opt/ilspycmd; \
+    unzip -q /tmp/ilspycmd.nupkg -d /tmp/ilspy; \
+    cp -r /tmp/ilspy/tools/net10.0/any/. /opt/ilspycmd/; \
+    rm -f /opt/ilspycmd/*.xml /opt/ilspycmd/*.pdb; \
+    # Tracing provider needs liblttng-ust, which the worker does not ship.
+    rm -f /usr/share/dotnet/shared/Microsoft.NETCore.App/*/libcoreclrtraceptprovider.so; \
+    rm -rf /tmp/ilspy /tmp/ilspycmd.nupkg
+
 FROM node:22-alpine AS base
 WORKDIR /app
 
 RUN apk add --no-cache libc6-compat git unzip
+
+# ─── Compiled-code scan: decompilers (see src/lib/compiled-scan/) ──────────
+# Java runtime for jadx and Vineflower (Alpine's OpenJDK, GPLv2 + Classpath
+# Exception). Alpine keeps only the current build of each package, so it is
+# pinned to the 21 LTS line rather than an exact build.
+RUN apk add --no-cache "openjdk21-jre-headless~21"
+
+# jadx (Apache-2.0): Android APK / AAB / DEX → Java.
+ARG JADX_VERSION=1.5.6
+ARG JADX_SHA256=545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974
+RUN set -eux; \
+    wget -q -O /tmp/jadx.zip "https://github.com/skylot/jadx/releases/download/v${JADX_VERSION}/jadx-${JADX_VERSION}.zip"; \
+    echo "${JADX_SHA256}  /tmp/jadx.zip" | sha256sum -c -; \
+    mkdir -p /opt/jadx; \
+    unzip -q /tmp/jadx.zip -d /opt/jadx; \
+    rm -f /tmp/jadx.zip /opt/jadx/bin/*.bat /opt/jadx/bin/jadx-gui; \
+    ln -s /opt/jadx/bin/jadx /usr/local/bin/jadx
+
+# Vineflower (Apache-2.0): JAR / WAR / EAR / .class → Java. Decompiles JVM
+# bytecode directly (jadx converts it to dex first), so records, lambdas,
+# try-with-resources and generics come out as the source wrote them.
+ARG VINEFLOWER_VERSION=1.12.0
+ARG VINEFLOWER_SHA256=1dfcfe974395734fa467ce620661c7623d05ba83670de0529b1fbd63ff548b9d
+RUN set -eux; \
+    mkdir -p /opt/vineflower; \
+    wget -q -O /opt/vineflower/vineflower.jar "https://github.com/Vineflower/vineflower/releases/download/${VINEFLOWER_VERSION}/vineflower-${VINEFLOWER_VERSION}.jar"; \
+    echo "${VINEFLOWER_SHA256}  /opt/vineflower/vineflower.jar" | sha256sum -c -; \
+    printf '#!/bin/sh\nexec java ${JAVA_OPTS:-} -jar /opt/vineflower/vineflower.jar "$@"\n' > /usr/local/bin/vineflower; \
+    chmod +x /usr/local/bin/vineflower
+
+# ILSpy (MIT) on the .NET 10 runtime (MIT), from the dotnet-tools stage.
+# Invariant globalization: decompiling needs no ICU, which saves ~35 MB.
+COPY --from=dotnet-tools /usr/share/dotnet /usr/share/dotnet
+COPY --from=dotnet-tools /opt/ilspycmd /opt/ilspycmd
+RUN set -eux; \
+    printf '#!/bin/sh\nexport DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1\nexec /usr/share/dotnet/dotnet /opt/ilspycmd/ilspycmd.dll "$@"\n' > /usr/local/bin/ilspycmd; \
+    chmod +x /usr/local/bin/ilspycmd; \
+    java -version; \
+    jadx --version; \
+    ilspycmd --version
 
 # OpenGrep powers rule-based SAST (SAST_PATTERN) with the packs in rules/.
 # Pinned release, checksum-verified per architecture.
@@ -54,5 +113,9 @@ COPY --from=aquasec/trivy:0.72.0 /usr/local/bin/trivy /usr/local/bin/trivy
 # the DB update and scans against the bundled database.
 ENV TRIVY_CACHE_DIR=/var/cache/trivy
 RUN mkdir -p /var/cache/trivy
+
+# Licenses of the bundled third-party tools (OpenGrep, Trivy, jadx,
+# Vineflower, ILSpy, .NET runtime, OpenJDK).
+COPY NOTICE /usr/share/doc/pepper/NOTICE
 
 CMD ["npx", "tsx", "src/worker/index.ts"]

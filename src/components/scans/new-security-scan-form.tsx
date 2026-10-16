@@ -27,6 +27,7 @@ import type { ScanProject } from "./types";
 import { cn } from "@/lib/utils";
 import type { ScanJobData } from "@/lib/queue";
 import { MANUAL_SCAN_TYPE_OPTIONS } from "@/lib/scan-types";
+import { UPLOADABLE_ARTIFACT_EXTENSIONS } from "@/lib/compiled-scan/upload";
 
 type SourceTab = "repository" | "upload" | "svn";
 
@@ -455,12 +456,12 @@ export function NewSecurityScanForm({
             {tab === "upload" && (
               <div className="space-y-1.5">
                 <Label htmlFor="nss-archive" className="text-sm text-foreground">
-                  Archive *
+                  Archive or compiled artifact *
                 </Label>
                 <Input
                   id="nss-archive"
                   type="file"
-                  accept=".zip,.tar,.tar.gz,.tgz"
+                  accept={[".zip", ".tar", ".tar.gz", ".tgz", ...UPLOADABLE_ARTIFACT_EXTENSIONS].join(",")}
                   className="h-9 cursor-pointer bg-card pt-1.5 file:mr-2 file:text-sm"
                   aria-invalid={showSourceError()}
                   onBlur={() => {
@@ -484,7 +485,7 @@ export function NewSecurityScanForm({
                       setFile(null);
                       return;
                     }
-                    const ALLOWED_EXTS = [".zip", ".tar", ".tar.gz", ".tgz"];
+                    const ALLOWED_EXTS = [".zip", ".tar", ".tar.gz", ".tgz", ...UPLOADABLE_ARTIFACT_EXTENSIONS];
                     if (
                       selected &&
                       !ALLOWED_EXTS.some((ext) =>
@@ -507,6 +508,10 @@ export function NewSecurityScanForm({
                     {(file.size / 1024 / 1024).toFixed(1)} MB selected
                   </p>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  Source as .zip / .tar.gz, or a single .jar, .war, .ear, .apk, .aab, .dll or .exe:
+                  compiled code is decompiled and scanned.
+                </p>
               </div>
             )}
 

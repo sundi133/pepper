@@ -49,7 +49,13 @@ import {
   Siren,
   Braces,
   MousePointerClick,
+  Binary,
 } from "lucide-react";
+import {
+  decompiledOriginOf,
+  decompilerLabel,
+  isDecompiledFinding,
+} from "@/lib/compiled-scan/finding-origin";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -230,6 +236,8 @@ function githubCodeUrl(
   finding: Finding,
 ): string | null {
   if (!source || !finding.filePath) return null;
+  // Decompiled code from a compiled artifact has no file in the repository.
+  if (isDecompiledFinding(finding)) return null;
   const repoUrl = resolveGithubRepoUrlForOpenPr({
     projectRepoUrl: source.repoUrl,
     scanSourceType: source.sourceType,
@@ -2465,6 +2473,7 @@ function FindingLocationRow({
 }) {
   const loc = formatFindingLocation(finding);
   const gh = githubCodeUrl(sourceContext, finding);
+  const compiled = decompiledOriginOf(finding.metadata);
   if (!loc && !gh) return null;
   return (
     <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -2472,6 +2481,26 @@ function FindingLocationRow({
         <code className="max-w-full break-all rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
           {loc}
         </code>
+      ) : null}
+      {compiled ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="outline"
+                className="gap-1 border-violet-300 bg-violet-50 text-xs text-violet-800 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300"
+              >
+                <Binary className="h-3 w-3 shrink-0" aria-hidden />
+                Found in compiled code
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-xs">
+              Decompiled from {compiled.artifact}
+              {compiled.decompiler ? ` with ${decompilerLabel(compiled.decompiler)}` : ""}. Line
+              numbers refer to the decompiled source, not the original.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       ) : null}
       {gh ? (
         <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs" asChild>

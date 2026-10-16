@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { scanQueue, ScanJobData } from "@/lib/queue";
 import { uploadObject, ensureBucket } from "@/lib/minio";
+import { compiledUploadObjectKey, isCompiledArtifactUpload } from "@/lib/compiled-scan/upload";
 import { withGitCredentials } from "@/lib/git-repo-url";
 import { parseGithubRepo } from "@/lib/github-source-link";
 import { getOrgGithubAccessToken } from "@/lib/github-connection";
@@ -179,7 +180,12 @@ export async function queueNewScan(params: {
 
   // Upload source file to MinIO if provided
   let sourceRef = "";
-  if (fileBuffer) {
+  if (fileBuffer && originalFileName && isCompiledArtifactUpload(originalFileName)) {
+    // A single compiled artifact: the worker's compiled-code scan decompiles it.
+    await ensureBucket();
+    sourceRef = compiledUploadObjectKey(scan.id, originalFileName);
+    await uploadObject(sourceRef, fileBuffer, "application/octet-stream");
+  } else if (fileBuffer) {
     await ensureBucket();
     const ext =
       originalFileName?.match(/\.(zip|tar\.gz|tgz|tar)$/i)?.[0] || ".zip";

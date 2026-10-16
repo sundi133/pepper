@@ -2,6 +2,7 @@ import {
   parseGithubRepo,
   resolveGithubRepoUrlForOpenPr,
 } from "@/lib/github-source-link";
+import { DECOMPILED_PATH_SEPARATOR } from "@/lib/compiled-scan/finding-origin";
 
 /** Shown in the browser before calling the open-PR API. */
 export const OPEN_FIX_PR_CONFIRM_MESSAGE =
@@ -46,6 +47,9 @@ export function fixPrUnavailableReason(
   if (!ctx?.scanId?.trim()) return "Missing scan context.";
   if (!filePath?.trim()) {
     return "This finding has no file path; open the detail view after the scanner reports a location.";
+  }
+  if (filePath.includes(DECOMPILED_PATH_SEPARATOR)) {
+    return "Found in decompiled code from a compiled artifact; there is no source file in the repository to change.";
   }
   if (!resolveGithubRepoForFixPr(ctx)) {
     return "No GitHub repository for this scan. Set the project repository URL to a github.com clone link, or run the scan from a GitHub clone / webhook.";

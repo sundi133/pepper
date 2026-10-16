@@ -8,6 +8,12 @@ import { scanListWhere } from "@/lib/scan-queries";
 
 const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100 MB
 
+import {
+  ARTIFACT_MIME_TYPES,
+  UPLOADABLE_ARTIFACT_EXTENSIONS,
+  isCompiledArtifactUpload,
+} from "@/lib/compiled-scan/upload";
+
 const ALLOWED_EXTENSIONS = [".zip", ".tar.gz", ".tgz", ".tar"] as const;
 const ALLOWED_MIME_TYPES = new Set([
   "application/zip",
@@ -54,26 +60,32 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        // Validate file extension
+        // Validate file extension: a source archive, or a single compiled
+        // artifact (decompiled by the worker's compiled-code scan).
         const fileName = file.name.toLowerCase();
-        const hasAllowedExt = ALLOWED_EXTENSIONS.some((ext) =>
-          fileName.endsWith(ext),
-        );
+        const isArtifact = isCompiledArtifactUpload(fileName);
+        const hasAllowedExt =
+          isArtifact ||
+          ALLOWED_EXTENSIONS.some((ext) => fileName.endsWith(ext));
         if (!hasAllowedExt) {
           return NextResponse.json(
             {
-              error: `Invalid file type. Allowed extensions: ${ALLOWED_EXTENSIONS.join(", ")}`,
+              error: `Invalid file type. Allowed extensions: ${[...ALLOWED_EXTENSIONS, ...UPLOADABLE_ARTIFACT_EXTENSIONS].join(", ")}`,
             },
             { status: 400 },
           );
         }
 
         // Validate MIME type
-        if (file.type && !ALLOWED_MIME_TYPES.has(file.type)) {
+        if (
+          file.type &&
+          !(isArtifact ? ARTIFACT_MIME_TYPES : ALLOWED_MIME_TYPES).has(file.type)
+        ) {
           return NextResponse.json(
             {
-              error:
-                "Invalid file MIME type. Only archive files (zip, tar, tar.gz) are accepted",
+              error: isArtifact
+                ? "Invalid file MIME type for a compiled artifact"
+                : "Invalid file MIME type. Only archive files (zip, tar, tar.gz) are accepted",
             },
             { status: 400 },
           );

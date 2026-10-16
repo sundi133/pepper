@@ -5,7 +5,9 @@
  *
  * Two kinds of path look like that but are production code:
  * - inside a compiled artifact (`app.jar!/com/example/Login.java`) the path is
- *   a Java/.NET package name, not a folder someone named "example";
+ *   a Java/.NET package name, not a folder someone named "example". Scanners
+ *   and quality gates see it before it is renamed, under the decompile folder
+ *   (`__decompiled__/1-app_jar/com/example/Login.java`, see compiled-scan);
  * - Maven/Gradle production sources (`src/main/java/com/example/…`), where
  *   `com.example` is a very common real package name.
  */
@@ -15,7 +17,7 @@ const TEST_LIKE =
 export function isTestLikePath(filePath: string | null | undefined): boolean {
   if (!filePath) return false;
   const p = filePath.replace(/\\/g, "/");
-  if (p.includes("!/")) return false;
+  if (p.includes("!/") || /(?:^|\/)__decompiled__\//.test(p)) return false;
   if (/(?:^|\/)src\/main\//.test(p)) return false;
   return TEST_LIKE.test(p);
 }

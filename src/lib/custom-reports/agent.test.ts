@@ -34,7 +34,7 @@ vi.mock("./sources", () => ({
 const audit = vi.fn();
 vi.mock("@/lib/audit-log", () => ({ writeAuditLog: (...a: unknown[]) => audit(...a) }));
 
-import { generateCustomReport, runCustomReport, sanitizeToolCalls, type LlmCall } from "./agent";
+import { generateCustomReport, parseSectionReply, runCustomReport, sanitizeToolCalls, type LlmCall } from "./agent";
 
 const TEMPLATE = {
   name: "Monthly status",
@@ -123,6 +123,27 @@ describe("generateCustomReport (agent pipeline)", () => {
     await expect(
       generateCustomReport({ data: sampleData(), sources: stubSources(), template: TEMPLATE, extraInstructions: null, llm, now: new Date() }),
     ).rejects.toThrow(/no usable content/);
+  });
+
+  it("accepts a section written as plain Markdown or JSON inside prose (Claude without a JSON format)", async () => {
+    const llm = scriptedLlm({
+      Summary: ["Critical: 1\n\n- **Scan:** risk is high [F1]."],
+      "Top risks": ['Here is the section:\n{"markdown":"- SQL injection [F1]"}'],
+    });
+    const out = await generateCustomReport({ data: sampleData(), sources: stubSources(), template: TEMPLATE, extraInstructions: null, llm, now: new Date() });
+    expect(out.grounding.emptySections).toBe(0);
+    expect(out.markdown).toContain("- **Scan:** risk is high [F1].");
+    expect(out.markdown).toContain("- SQL injection [F1]");
+    expect(out.markdown).not.toContain("Here is the section");
+  });
+
+  it("parses section replies", () => {
+    expect(parseSectionReply('{"markdown":"x"}')).toEqual({ markdown: "x" });
+    expect(parseSectionReply('```json\n{"toolCalls":[]}\n```')).toEqual({ toolCalls: [] });
+    expect(parseSectionReply("```markdown\n### Top\n- a\n```")).toEqual({ markdown: "### Top\n- a" });
+    expect(parseSectionReply("{}")).toEqual({});
+    expect(parseSectionReply("")).toEqual({});
+    expect(parseSectionReply('{"markdown": "cut off')).toEqual({});
   });
 
   it("only accepts known tools, bounded per round", () => {

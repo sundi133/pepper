@@ -24,6 +24,7 @@ describe("isTestLikePath", () => {
   it("treats package paths inside compiled artifacts and Maven/Gradle main sources as production code", () => {
     for (const p of [
       "search-app.jar!/com/example/Search.java",
+      "__decompiled__/1-search-app_jar/com/example/Search.java",
       "app.ear!/web.war!/WEB-INF/classes/com/example/demo/Login.java",
       "mobile/app-release.apk!/com/example/mobile/LoginActivity.java",
       "src/main/java/com/example/demo/UserController.java",
@@ -55,6 +56,8 @@ describe("quality gates on compiled-code paths", () => {
 
   it("keeps it inside a compiled artifact and under src/main", () => {
     expect(applyQualityGates([f("search-app.jar!/com/example/Search.java")])).toHaveLength(1);
+    // Gates run before the decompile folder is renamed to the artifact path.
+    expect(applyQualityGates([f("__decompiled__/1-search-app_jar/com/example/Search.java")])).toHaveLength(1);
     expect(applyQualityGates([f("src/main/java/com/example/Search.java")])).toHaveLength(1);
   });
 

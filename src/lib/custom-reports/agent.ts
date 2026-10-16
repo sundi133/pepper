@@ -116,6 +116,32 @@ export function formatToolResults(
   return parts.join("\n\n");
 }
 
+/**
+ * A section answer: {"markdown"} or {"toolCalls"}. Some models (Claude without
+ * a JSON response format) write the section as plain Markdown or wrap the JSON
+ * in prose; both are accepted rather than discarding a usable section.
+ */
+export function parseSectionReply(raw: string): { markdown?: unknown; toolCalls?: unknown } {
+  const parsed = parseLlmJsonResponseDetailed<unknown>(raw, null);
+  if (parsed.status === "ok" && parsed.value && typeof parsed.value === "object" && !Array.isArray(parsed.value)) {
+    return parsed.value as { markdown?: unknown; toolCalls?: unknown };
+  }
+  const text = (raw || "").trim();
+  const start = text.search(/\{\s*"(?:markdown|toolCalls)"\s*:/);
+  const end = text.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try {
+      const v = JSON.parse(text.slice(start, end + 1));
+      if (v && typeof v === "object" && !Array.isArray(v)) return v;
+    } catch {
+      // fall through to plain Markdown
+    }
+  }
+  if (!text || /^[{[]/.test(text)) return {};
+  const unfenced = text.replace(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i, "$1");
+  return { markdown: unfenced };
+}
+
 /** Remove a leading heading that just repeats the section heading. */
 function stripRepeatedHeading(md: string, heading: string): string {
   const m = md.match(/^\s*#{1,6}\s+(.+?)\s*#*\s*\n/);
@@ -234,7 +260,7 @@ export async function generateCustomReport(input: GenerateInput): Promise<Genera
           .join("\n\n"),
         WRITE_MAX_TOKENS,
       );
-      const parsed = parseLlmJsonResponseDetailed<{ markdown?: unknown; toolCalls?: unknown }>(raw, {}).value;
+      const parsed = parseSectionReply(raw);
       const more = canRequestData ? sanitizeToolCalls(parsed.toolCalls) : [];
       if (more.length > 0 && typeof parsed.markdown !== "string") {
         await progress(-1, "", `"${section.heading || "Introduction"}": fetching ${more.map((m) => m.tool).join(", ")}`);

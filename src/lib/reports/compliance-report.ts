@@ -25,6 +25,9 @@ type BucketEntry = {
   findingCount: number;
   criticalHighCount: number;
   reason?: string;
+  /** DISA STIG severity category and STIG ID. */
+  category?: string;
+  stigId?: string;
 };
 
 export type ComplianceFrameworkReport = {
@@ -87,6 +90,11 @@ function location(f: { filePath?: string | null; startLine?: number | null }): s
   return f.startLine ? `${f.filePath}:${f.startLine}` : f.filePath;
 }
 
+/** "CAT I · APSC-DV-002540" for STIG requirements, else "". */
+function stigLabel(e: BucketEntry): string {
+  return [e.category, e.stigId].filter(Boolean).join(" · ");
+}
+
 function modeLabel(input: ComplianceExportInput): string {
   if (input.mode === "fast") return "Fast (deterministic crosswalk)";
   return input.model ? `Agentic · ${input.model}` : "Agentic";
@@ -110,7 +118,7 @@ function renderFrameworkHtml(r: ComplianceFrameworkReport): string {
         <tbody>${gaps
           .map(
             (g) => `<tr>
-              <td><strong>${escapeHtml(g.controlId)}</strong></td>
+              <td><strong>${escapeHtml(g.controlId)}</strong>${stigLabel(g) ? `<div class="muted">${escapeHtml(stigLabel(g))}</div>` : ""}</td>
               <td>${escapeHtml(g.title)}</td>
               <td>${escapeHtml(g.theme || "")}</td>
               <td class="num">${g.findingCount}</td>
@@ -150,7 +158,7 @@ function renderFrameworkHtml(r: ComplianceFrameworkReport): string {
     ? `<ul class="tight">${notCovered
         .map(
           (c) =>
-            `<li><strong>${escapeHtml(c.controlId)}</strong> ${escapeHtml(c.title)}${c.reason ? ` <span class="muted">— ${escapeHtml(c.reason)}</span>` : ""}</li>`,
+            `<li><strong>${escapeHtml(c.controlId)}</strong>${stigLabel(c) ? ` <span class="muted">${escapeHtml(stigLabel(c))}</span>` : ""} ${escapeHtml(c.title)}${c.reason ? ` <span class="muted">— ${escapeHtml(c.reason)}</span>` : ""}</li>`,
         )
         .join("")}</ul>`
     : "";
@@ -397,7 +405,7 @@ export function buildCompliancePdf(input: ComplianceExportInput): Promise<Buffer
             ["CONTROL", "TITLE", "THEME", "FINDINGS", "CRIT/HIGH"],
             [70, w - 70 - 110 - 55 - 60, 110, 55, 60],
             gaps.map((g) => ({
-              cells: [g.controlId, g.title, g.theme || "", String(g.findingCount), String(g.criticalHighCount)],
+              cells: [stigLabel(g) ? `${g.controlId}\n${stigLabel(g)}` : g.controlId, g.title, g.theme || "", String(g.findingCount), String(g.criticalHighCount)],
               colors: [undefined, undefined, C.secondary, undefined, g.criticalHighCount > 0 ? C.critical : undefined],
             })),
           );
@@ -444,7 +452,10 @@ export function buildCompliancePdf(input: ComplianceExportInput): Promise<Buffer
           table(
             ["CONTROL", "TITLE"],
             [70, w - 70],
-            notCovered.map((c) => ({ cells: [c.controlId, c.title], colors: [C.secondary, C.secondary] })),
+            notCovered.map((c) => ({
+              cells: [stigLabel(c) ? `${c.controlId}\n${stigLabel(c)}` : c.controlId, c.title],
+              colors: [C.secondary, C.secondary],
+            })),
           );
         }
       }

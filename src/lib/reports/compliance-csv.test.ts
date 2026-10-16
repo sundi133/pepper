@@ -42,9 +42,39 @@ const input: ComplianceExportInput = {
 describe("compliance CSV", () => {
   it("writes one row per control, with levels and status", () => {
     const lines = buildComplianceCsv(input, [framework], "controls").trimEnd().split("\r\n");
-    expect(lines[0]).toBe("framework,version,controlId,control,section,levels,coverage,status,findings,criticalHigh,findingIds");
-    expect(lines[1]).toBe("OWASP ASVS,4.0.3,V5.3.4,Parameterised queries,V5 Validation,L1 L2 L3,assessable,Gap found,1,1,f1");
-    expect(lines[2]).toBe("OWASP ASVS,4.0.3,V1.1.1,Secure SDLC,V1 Architecture,L2 L3,not-assessable,Not covered by code scanning,0,0,");
+    expect(lines[0]).toBe("framework,version,controlId,control,section,levels,coverage,status,findings,criticalHigh,findingIds,category,stigId");
+    expect(lines[1]).toBe("OWASP ASVS,4.0.3,V5.3.4,Parameterised queries,V5 Validation,L1 L2 L3,assessable,Gap found,1,1,f1,,");
+    expect(lines[2]).toBe("OWASP ASVS,4.0.3,V1.1.1,Secure SDLC,V1 Architecture,L2 L3,not-assessable,Not covered by code scanning,0,0,,,");
+  });
+
+  it("adds the STIG category and STIG ID for STIG requirements", () => {
+    const stig = {
+      name: "DISA ASD STIG",
+      fileName: "x",
+      controlCatalog: "",
+      controls: [
+        { controlId: "V-222607", title: "SQLi", theme: "SI System and Information Integrity", category: "CAT I", stig: { stigId: "APSC-DV-002540" } },
+      ],
+    } as unknown as ComplianceFramework;
+    const stigInput: ComplianceExportInput = {
+      ...input,
+      reports: [
+        {
+          framework: "DISA ASD STIG",
+          version: "V6R5",
+          totalControls: 1,
+          impactedControls: 1,
+          buckets: {
+            gapsFound: [{ controlId: "V-222607", title: "SQLi", coverage: "assessable", findingCount: 1, criticalHighCount: 1 }],
+            noIssuesDetected: [],
+            notCovered: [],
+          },
+          findings: [],
+        },
+      ],
+    };
+    const lines = buildComplianceCsv(stigInput, [stig], "controls").trimEnd().split("\r\n");
+    expect(lines[1]).toBe("DISA ASD STIG,V6R5,V-222607,SQLi,SI System and Information Integrity,,assessable,Gap found,1,1,,CAT I,APSC-DV-002540");
   });
 
   it("writes finding mappings with formula-safe cells", () => {

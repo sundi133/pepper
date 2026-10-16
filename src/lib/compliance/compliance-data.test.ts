@@ -80,6 +80,16 @@ describe("compliance framework data integrity", () => {
         }
       });
 
+      it("STIG categories are CAT I-III and agree with the published severity", () => {
+        const catFor = { high: "CAT I", medium: "CAT II", low: "CAT III" } as const;
+        for (const c of fw.controls) {
+          if (c.category !== undefined) {
+            expect(Object.values(catFor), `${fw.name} ${c.controlId}: invalid category "${c.category}"`).toContain(c.category);
+          }
+          if (c.stig) expect(c.category, `${fw.name} ${c.controlId}`).toBe(catFor[c.stig.severity]);
+        }
+      });
+
       it("appliesTo scanners are valid Scanner enum values", () => {
         for (const c of fw.controls) {
           for (const s of c.appliesTo?.scanners || []) {

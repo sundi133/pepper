@@ -1,7 +1,8 @@
 /**
  * Compliance results as CSV: one row per control (the audit matrix) or one
  * row per finding-to-control mapping. Built from the cached per-framework
- * reports plus the framework catalogs (for ASVS levels and CIS sections).
+ * reports plus the framework catalogs (for ASVS levels, CIS sections and STIG
+ * categories / STIG IDs).
  */
 import type { ComplianceFramework } from "@/lib/compliance/pdf-parser";
 import type { ComplianceExportInput, ComplianceFrameworkReport } from "./compliance-report";
@@ -33,6 +34,8 @@ function controlMeta(catalog: Catalog, framework: string, controlId: string) {
     theme: c?.theme ?? "",
     levels: c?.levels?.length ? c.levels.map((l) => `L${l}`).join(" ") : "",
     manual: c?.assessment === "manual",
+    category: c?.category ?? "",
+    stigId: c?.stig?.stigId ?? "",
   };
 }
 
@@ -63,6 +66,8 @@ function controlRows(r: ComplianceFrameworkReport, catalog: Catalog): string[] {
       e.findingCount,
       e.criticalHighCount,
       (mapped.get(e.controlId) ?? []).join(" "),
+      meta.category,
+      meta.stigId,
     ]);
   });
 }
@@ -104,6 +109,8 @@ export const CONTROL_COLUMNS = [
   "findings",
   "criticalHigh",
   "findingIds",
+  "category",
+  "stigId",
 ];
 
 export const FINDING_COLUMNS = [

@@ -7,7 +7,7 @@
  * - runFrameworkMapping: pick the engine (agentic / deterministic / llm) for a
  *   framework and return its report, forwarding progress via onProgress.
  */
-import { ComplianceFramework } from "./pdf-parser";
+import type { ComplianceControl, ComplianceFramework, StigCategory } from "./pdf-parser";
 import {
   mapFindingsToControls,
   FindingComplianceResult,
@@ -81,6 +81,19 @@ export function toFindingsForMapping(findings: FindingRow[]): FindingForMapping[
   });
 }
 
+/** STIG ids and CAT for a control, only when the catalog carries them. */
+function stigFields(control: ComplianceControl | undefined) {
+  return {
+    ...(control?.category ? { category: control.category } : {}),
+    ...(control?.stig ? { stigId: control.stig.stigId } : {}),
+  };
+}
+
+const CATEGORY_RANK: Record<StigCategory, number> = { "CAT I": 0, "CAT II": 1, "CAT III": 2 };
+/** CAT I before CAT II before CAT III; frameworks without categories keep their order. */
+const byCategory = (a: { category?: StigCategory }, b: { category?: StigCategory }) =>
+  (a.category ? CATEGORY_RANK[a.category] : 0) - (b.category ? CATEGORY_RANK[b.category] : 0);
+
 export function buildFrameworkReport(
   framework: ComplianceFramework,
   findings: FindingRow[],
@@ -88,6 +101,7 @@ export function buildFrameworkReport(
   source: MappingSource,
 ) {
   const findingsById = new Map(findings.map((f) => [f.id, f]));
+  const controlsById = new Map(framework.controls.map((c) => [c.controlId, c]));
 
   type ControlAgg = {
     controlId: string;
@@ -97,6 +111,8 @@ export function buildFrameworkReport(
     criticalHighCount: number;
     directCount: number;
     findings: string[];
+    category?: StigCategory;
+    stigId?: string;
   };
   const controlCounts = new Map<string, ControlAgg>();
 
@@ -113,6 +129,7 @@ export function buildFrameworkReport(
           criticalHighCount: 0,
           directCount: 0,
           findings: [],
+          ...stigFields(controlsById.get(control.controlId)),
         } satisfies ControlAgg);
       existing.findingCount++;
       if (finding?.severity === "CRITICAL" || finding?.severity === "HIGH") {
@@ -126,6 +143,7 @@ export function buildFrameworkReport(
 
   const controlSummary = Array.from(controlCounts.values()).sort(
     (a, b) =>
+      byCategory(a, b) ||
       b.directCount - a.directCount ||
       b.criticalHighCount - a.criticalHighCount ||
       b.findingCount - a.findingCount,
@@ -148,6 +166,7 @@ export function buildFrameworkReport(
       findingCount,
       criticalHighCount,
       ...(control.levels?.length ? { levels: control.levels } : {}),
+      ...stigFields(control),
     };
     if (findingCount > 0) {
       gapsFound.push(entry);
@@ -166,7 +185,9 @@ export function buildFrameworkReport(
 
   gapsFound.sort(
     (a, b) =>
-      b.criticalHighCount - a.criticalHighCount || b.findingCount - a.findingCount,
+      byCategory(a, b) ||
+      b.criticalHighCount - a.criticalHighCount ||
+      b.findingCount - a.findingCount,
   );
 
   const statusCounts = {

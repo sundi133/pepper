@@ -193,4 +193,33 @@ describe("compliance renderers", () => {
     const pdf = await buildCompliancePdf(input);
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
   });
+
+  it("labels STIG requirements with their category and STIG ID", async () => {
+    const stig: ComplianceExportInput = {
+      ...input,
+      reports: [
+        {
+          framework: "DISA ASD STIG",
+          version: "V6R5",
+          mappingSource: "crosswalk",
+          totalControls: 2,
+          impactedControls: 1,
+          buckets: {
+            gapsFound: [
+              { controlId: "V-222607", title: "The application must not be vulnerable to SQL Injection.", findingCount: 1, criticalHighCount: 1, category: "CAT I", stigId: "APSC-DV-002540" },
+            ],
+            noIssuesDetected: [],
+            notCovered: [
+              { controlId: "V-222648", title: "An application code review must be performed on the application.", findingCount: 0, criticalHighCount: 0, category: "CAT II", stigId: "APSC-DV-003170" },
+            ],
+          },
+          findings: [],
+        },
+      ],
+    };
+    const html = buildComplianceHtml(stig);
+    expect(html).toContain("CAT I · APSC-DV-002540");
+    expect(html).toContain("CAT II · APSC-DV-003170");
+    expect((await buildCompliancePdf(stig)).subarray(0, 5).toString()).toBe("%PDF-");
+  });
 });

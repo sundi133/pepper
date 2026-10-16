@@ -72,6 +72,7 @@ import { useRouter } from "next/navigation";
 import { nextFindingSelection } from "@/lib/create-scan-validation";
 import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
 import { ScanTriageChat } from "@/components/scans/scan-triage-chat";
+import { computeScanProgress } from "@/lib/scan-progress";
 
 type Finding = {
   id: string;
@@ -986,44 +987,6 @@ export default function ScanDetailPage() {
       {scan.status === "COMPLETED" && <ScanTriageChat scanId={scanId} />}
     </div>
   );
-}
-
-function computeScanProgress(
-  scannerProgress:
-    | Record<
-        string,
-        { status: string; filesCompleted?: number; filesTotal?: number }
-      >
-    | null
-    | undefined,
-  status: string,
-): number {
-  if (status === "QUEUED") return 5;
-  if (!scannerProgress || Object.keys(scannerProgress).length === 0) return 10;
-
-  const entries = Object.values(scannerProgress);
-  const done = entries.filter((s) => s.status === "DONE").length;
-  const total = Math.max(entries.length + 1, 3);
-
-  // If any scanner has file-level progress, use it for finer granularity
-  let fileProgress = 0;
-  let hasFileProgress = false;
-  for (const s of entries) {
-    if (s.status === "DONE") {
-      fileProgress += 1;
-    } else if (s.filesTotal && s.filesTotal > 0) {
-      hasFileProgress = true;
-      fileProgress += (s.filesCompleted || 0) / s.filesTotal;
-    }
-  }
-
-  if (hasFileProgress) {
-    // Weighted: file-level progress across all known scanners
-    return Math.min(95, Math.round(10 + (fileProgress / total) * 85));
-  }
-
-  // Fallback: count done scanners
-  return Math.min(95, Math.round(10 + (done / total) * 85));
 }
 
 function formatDuration(seconds: number): string {

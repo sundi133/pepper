@@ -119,8 +119,8 @@ export default function ApiKeysPage() {
       <div>
         <h1 className="text-2xl font-bold">API keys</h1>
         <p className="text-muted-foreground">
-          Used by CI/CD pipelines, pre-commit hooks, IDE plugins, and the
-          public REST API.
+          Used by CI/CD pipelines, pre-commit hooks, IDE assistants (MCP), and
+          the public REST API.
         </p>
       </div>
 

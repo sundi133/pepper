@@ -48,7 +48,7 @@
             <li><a href="#audit">Audit log</a></li>
             <li><a href="#trends">Trends</a></li>
             <li><a href="#precommit">Pre-commit</a></li>
-            <li><a href="#ide">IDE</a></li>
+            <li><a href="#ide">IDE (MCP)</a></li>
             <li><a href="#cicd-templates">CI/CD templates</a></li>
             <li><a href="#webhooks">Webhooks</a></li>
           </ul>
@@ -61,7 +61,7 @@
       <p class="lead">
         Pepper exposes a JSON REST API rooted at <code>/api</code>. Endpoints accept
         two authentication mechanisms: session cookies for the web UI, and bearer
-        API keys for everything else (CI, IDE plugins, pre-commit, webhooks).
+        API keys for everything else (CI, IDE assistants via MCP, pre-commit, webhooks).
       </p>
 
       <h2 id="auth">Authentication</h2>
@@ -269,12 +269,75 @@ POST /api/precommit/scan                 # API-key auth
   "failOn": ["CRITICAL","HIGH"] }
 # → { "findings": [ … ], "summary": {…}, "block": true|false }</code></pre>
 
-      <h2 id="ide">IDE plugin endpoint</h2>
+      <h2 id="ide">IDE assistants (MCP server)</h2>
+      <p>
+        Pepper is a <a href="https://modelcontextprotocol.io">Model Context Protocol</a>
+        (MCP) server, so the AI assistant in an IDE can read and triage Pepper findings
+        in the editor. Any assistant that supports remote MCP servers over Streamable
+        HTTP with a custom header can connect &mdash; for example GitHub Copilot in VS Code,
+        Visual Studio, JetBrains IDEs (IntelliJ IDEA, Android Studio, &hellip;) and Eclipse,
+        JetBrains AI Assistant, Cursor, Claude Code and Continue. Other Eclipse-based
+        IDEs such as e&sup2; studio, and editors such as NetBeans, can use it through an
+        MCP-capable assistant plugin where one is available for them.
+        <em>Settings &rarr; Integrations &rarr; IDE</em> has ready-to-copy configuration for each
+        assistant, filled in with this instance's URL.
+      </p>
+      <pre><code>URL        https://&lt;your-pepper-host&gt;/api/mcp
+Transport  Streamable HTTP (stateless, JSON responses; POST only)
+Auth       Authorization: Bearer ppr_xxx      # a Pepper API key</code></pre>
+      <p>For example, in VS Code (<code>.vscode/mcp.json</code>; VS Code prompts for the key and stores it securely):</p>
+      <pre><code>{
+  "servers": {
+    "pepper": {
+      "type": "http",
+      "url": "https://&lt;your-pepper-host&gt;/api/mcp",
+      "headers": { "Authorization": "Bearer ${input:pepper-api-key}" }
+    }
+  },
+  "inputs": [
+    { "type": "promptString", "id": "pepper-api-key", "description": "Pepper API key", "password": true }
+  ]
+}</code></pre>
+      <p>Configuration file names and menus differ between assistants and versions; where they do, follow your assistant's MCP settings with the URL and header above. Claude Code:</p>
+      <pre><code>claude mcp add --transport http pepper https://&lt;your-pepper-host&gt;/api/mcp \
+  --header "Authorization: Bearer ppr_xxx"</code></pre>
+      <table>
+        <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>findings_for_file</code></td><td>Findings in one file from the repository's latest completed scan (repository by id, name or URL; repo-relative or absolute path)</td></tr>
+          <tr><td><code>list_repositories</code></td><td>Repositories with latest scan status and severity counts; optional name search</td></tr>
+          <tr><td><code>list_scans</code></td><td>Scans newest first; filter by repository, status or search; paged</td></tr>
+          <tr><td><code>get_scan</code></td><td>Status, progress, severity counts, build-gate result, failure reason and the <em>Incomplete scan</em> note</td></tr>
+          <tr><td><code>list_findings</code></td><td>A scan's findings; filter by severity, scanner, status, file path; false positives hidden by default</td></tr>
+          <tr><td><code>get_finding</code></td><td>Description, location, snippet, CWE / CVE / OWASP, impact, reproduction steps, remediation</td></tr>
+          <tr><td><code>start_scan</code></td><td>Queue a scan of a repository (id, name or URL) or a new Git URL; scan type and branch (Developer)</td></tr>
+          <tr><td><code>rescan</code></td><td>Repeat an earlier scan (Developer)</td></tr>
+          <tr><td><code>update_finding_status</code></td><td>Set OPEN / IN_PROGRESS / RESOLVED with a note; severity totals are recounted (Developer)</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        Tools act as the API key's principal (see <a href="#auth">Authentication</a>): the
+        key's organization only, at most the <code>DEVELOPER</code> role. Marking a finding
+        <code>FALSE_POSITIVE</code> or <code>ACCEPTED_RISK</code> requires the Security role,
+        so it is refused over MCP; do it in the web UI. Secrets are returned masked and
+        credentials are removed from repository URLs. Starting scans and status changes
+        are written to the audit log with <code>"via": "mcp"</code>. The server runs inside
+        the Pepper API and contacts no external service.
+      </div>
+      <p>Check connectivity from a terminal:</p>
+      <pre><code>curl -s https://&lt;your-pepper-host&gt;/api/mcp \
+  -H "Authorization: Bearer ppr_xxx" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'</code></pre>
+
+      <h3>Findings REST endpoint</h3>
+      <p>For scripts and custom editor plugins:</p>
       <pre><code>GET /api/ide/findings?projectId=&lt;id&gt;&amp;filePath=src/foo.ts&amp;minSeverity=HIGH
 Authorization: Bearer ppr_xxx
-# → { "project": {…}, "scan": {…},
-#     "findings": [ { "id": …, "severity": "HIGH", "title": …,
-#                      "filePath": "src/foo.ts", "startLine": 42, … } ] }</code></pre>
+# &rarr; { "project": {&hellip;}, "scan": {&hellip;},
+#     "findings": [ { "id": &hellip;, "severity": "HIGH", "title": &hellip;,
+#                      "filePath": "src/foo.ts", "startLine": 42, &hellip; } ] }</code></pre>
 
       <h2 id="cicd-templates">CI/CD templates</h2>
       <pre><code>GET /api/cicd-templates/github     # GitHub Actions workflow

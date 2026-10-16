@@ -108,6 +108,35 @@ export const FILE_EXTENSIONS: Record<string, string> = {
   ".razor": "template",
   ".jinja": "template",
   ".jinja2": "template",
+  // Java Server Pages and tag files
+  ".jsp": "jsp",
+  ".jspx": "jsp",
+  ".jspf": "jsp",
+  ".tag": "jsp",
+  ".tagx": "jsp",
+  // ASP.NET Web Forms (pages, controls, handlers, services) and classic ASP
+  ".aspx": "aspnet",
+  ".ascx": "aspnet",
+  ".asax": "aspnet",
+  ".master": "aspnet",
+  ".ashx": "aspnet",
+  ".asmx": "aspnet",
+  ".asp": "classic-asp",
+  // Dart / Flutter
+  ".dart": "dart",
+  // SAP ABAP (abapGit exports name files *.prog.abap, *.clas.abap, …)
+  ".abap": "abap",
+  // Oracle PL/SQL package specs and bodies, procedures, functions, triggers,
+  // type specs and bodies. Wrapped (.plb) code is obfuscated and not read.
+  ".pks": "plsql",
+  ".pkb": "plsql",
+  ".pls": "plsql",
+  ".pck": "plsql",
+  ".prc": "plsql",
+  ".fnc": "plsql",
+  ".trg": "plsql",
+  ".tps": "plsql",
+  ".tpb": "plsql",
 };
 
 export const SKIP_DIRECTORIES = new Set([

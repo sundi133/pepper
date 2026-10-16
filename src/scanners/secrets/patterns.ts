@@ -304,6 +304,9 @@ const SECRET_SCAN_EXTENSIONS = new Set([
   ".cs", ".vb", ".config",
   // Other languages
   ".py", ".go", ".rb", ".php", ".rs", ".sh", ".ps1", ".psm1",
+  // Server pages, Dart, ABAP and PL/SQL hold connection strings and DB links too
+  ".jsp", ".jspx", ".jspf", ".aspx", ".ascx", ".asax", ".asp", ".dart", ".abap",
+  ".pks", ".pkb", ".pls", ".pck", ".prc", ".fnc", ".trg",
   // Config
   ".yml", ".yaml", ".json", ".toml", ".ini", ".cfg", ".conf", ".properties", ".env", ".tf", ".tfvars",
   // Key material

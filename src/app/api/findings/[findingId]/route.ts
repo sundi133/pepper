@@ -7,18 +7,14 @@ import {
   findingHasStoredReport,
 } from "@/lib/finding-report";
 import { z } from "zod";
-import { generateSuppressionRule } from "@/lib/suppression-rules";
-import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
-import { recountScanSeverities } from "@/lib/scan-severity-counts";
+import { ipFromHeaders } from "@/lib/audit-log";
+import {
+  FINDING_STATUSES,
+  applyFindingStatusChange,
+} from "@/lib/finding-status-update";
 
 const updateStatusSchema = z.object({
-  status: z.enum([
-    "OPEN",
-    "IN_PROGRESS",
-    "FALSE_POSITIVE",
-    "ACCEPTED_RISK",
-    "RESOLVED",
-  ]),
+  status: z.enum(FINDING_STATUSES),
   statusNote: z.string().optional(),
 });
 
@@ -45,83 +41,19 @@ export async function PATCH(
       if (denied) return denied;
     }
 
-    const existing = await prisma.finding.findFirst({
-      where: {
-        id: findingId,
-        scan: { project: { organizationId: orgId } },
-      },
-      select: { id: true, status: true },
+    const updated = await applyFindingStatusChange({
+      orgId,
+      userId: auth.session.user.id,
+      findingId,
+      status: data.status,
+      statusNote: data.statusNote,
+      ipAddress: ipFromHeaders(req.headers),
     });
-    if (!existing) {
+    if (!updated) {
       return NextResponse.json({ error: "Finding not found" }, { status: 404 });
     }
 
-    const finding = await prisma.finding.update({
-      where: { id: findingId },
-      data: {
-        status: data.status,
-        statusNote: data.statusNote || null,
-        statusUpdatedBy: auth.session.user.id,
-        statusUpdatedAt: new Date(),
-      },
-    });
-
-    await writeAuditLog({
-      organizationId: orgId,
-      userId: auth.session.user.id,
-      action: "finding.status_changed",
-      resource: "finding",
-      resourceId: finding.id,
-      details: {
-        from: existing.status,
-        to: data.status,
-        note: data.statusNote || null,
-        title: finding.title,
-        severity: finding.severity,
-        scanId: finding.scanId,
-      },
-      ipAddress: ipFromHeaders(req.headers),
-    });
-
-    // Keep the scan's severity totals in step with the new status.
-    if (data.status) await recountScanSeverities(finding.scanId).catch(() => undefined);
-
-    // Auto-create suppression rule when marking as false positive
-    if (data.status === "FALSE_POSITIVE") {
-      try {
-        const scanProject = await prisma.finding.findFirst({
-          where: { id: findingId },
-          select: { scan: { select: { project: { select: { id: true, organizationId: true } } } } },
-        });
-        await generateSuppressionRule({
-          organizationId: orgId,
-          projectId: scanProject?.scan.project?.id,
-          finding: {
-            id: finding.id,
-            ruleId: finding.ruleId,
-            cweId: finding.cweId,
-            scanner: finding.scanner,
-            filePath: finding.filePath,
-            title: finding.title,
-            snippet: finding.snippet,
-          },
-          reason: data.statusNote || "Marked as false positive",
-          userId: auth.session.user.id,
-          source: "user",
-        });
-      } catch {
-        // Non-blocking — suppression rule creation failure shouldn't block status update
-      }
-    }
-
-    const enrichedFinding = enrichFindingWithReport(finding);
-    if (!findingHasStoredReport(finding)) {
-      await prisma.finding.update({
-        where: { id: finding.id },
-        data: { metadata: enrichedFinding.metadata as object },
-      });
-    }
-    return NextResponse.json(enrichedFinding);
+    return NextResponse.json(updated.finding);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

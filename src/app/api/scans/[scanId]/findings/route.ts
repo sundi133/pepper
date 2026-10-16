@@ -5,6 +5,7 @@ import {
   enrichFindingWithReport,
   findingHasStoredReport,
 } from "@/lib/finding-report";
+import { scanFindingsWhere } from "@/lib/scan-queries";
 
 export async function GET(
   req: NextRequest,
@@ -43,20 +44,15 @@ export async function GET(
   );
   const sort = searchParams.get("sort") || "severity";
 
-  const where: Record<string, unknown> = { scanId };
-  if (severity) where.severity = { in: severity };
-  if (scanner) where.scanner = { in: scanner };
-  if (filePath) where.filePath = { contains: filePath };
-  if (status) where.status = { in: status };
-  else if (!includeFalsePositives) where.status = { not: "FALSE_POSITIVE" };
-  if (isNewParam === "true") where.isNew = true;
-  else if (isNewParam === "false") where.isNew = false;
-
-  // Exclude INFO severity findings from UI (INFO is internal categorization only)
-  // Valid UI severities: CRITICAL, HIGH, MEDIUM, LOW
-  if (!severity) {
-    where.severity = { notIn: ["INFO"] };
-  }
+  const where = scanFindingsWhere({
+    scanId,
+    severity,
+    scanner,
+    filePath,
+    status,
+    includeFalsePositives,
+    isNew: isNewParam === "true" ? true : isNewParam === "false" ? false : null,
+  });
 
   // Everything except the scanner filter, for the per-scanner totals.
   const countsWhere = { ...where };

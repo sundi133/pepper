@@ -357,11 +357,14 @@
               CWE fields. Use for ArcSight, QRadar, Splunk, Sentinel.</td>
           </tr>
           <tr>
-            <td><strong>IDE plugins</strong></td>
-            <td>Authenticated REST surface at
-              <code>GET /api/ide/findings?projectId=…&amp;filePath=…&amp;minSeverity=HIGH</code>.
-              Returns the latest completed scan plus findings touching the requested
-              file. Auth: <code>Authorization: Bearer ppr_…</code>.</td>
+            <td><strong>IDE</strong></td>
+            <td>MCP server at <code>/api/mcp</code> (Streamable HTTP, API-key auth) for
+              MCP-capable assistants such as GitHub Copilot (VS Code, Visual Studio, JetBrains
+              IDEs incl. Android Studio, Eclipse), JetBrains AI Assistant, Cursor and Claude
+              Code: findings for the open file, finding details and remediation, starting
+              scans and triage. Setup snippets under Settings → Integrations → IDE; see the
+              <a href="api.html#ide">API reference</a>. Scripts can also call
+              <code>GET /api/ide/findings?projectId=…&amp;filePath=…&amp;minSeverity=HIGH</code>.</td>
           </tr>
           <tr>
             <td><strong>GitHub</strong></td>

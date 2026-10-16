@@ -13,6 +13,7 @@ const API_ROOT = join(process.cwd(), "src/app/api");
 const PUBLIC_WRITES: Record<string, string> = {
   "auth/register POST": "self-service sign-up (rate limited, captcha)",
   "auth/saml/acs POST": "SAML assertion consumer — signed IdP response",
+  "mcp POST": "API-key authenticated MCP endpoint; each state-changing tool checks the key's role (requireMcpRole)",
   "precommit/scan POST": "API-key authenticated (verifyApiKey)",
   "webhooks/azure-devops POST": "shared-secret Basic auth",
   "webhooks/bitbucket POST": "HMAC signature",

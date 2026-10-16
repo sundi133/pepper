@@ -56,7 +56,24 @@ export interface ComplianceControl {
 
   /** Benchmarks: "manual" = the benchmark marks this control as a manual check. */
   assessment?: "manual";
+
+  /** DISA STIG severity category: CAT I (high), CAT II (medium), CAT III (low). */
+  category?: StigCategory;
+
+  /** DISA STIG identifiers and references, as published in the XCCDF. */
+  stig?: {
+    stigId: string; // APSC-DV-002540
+    ruleId: string; // SV-222607r961158_rule
+    severity: "high" | "medium" | "low";
+    srg: string;
+    cci: string[];
+    /** NIST SP 800-53 Rev 5 controls the CCIs map to (DISA CCI list). */
+    nist: string[];
+    legacyIds: string[];
+  };
 }
+
+export type StigCategory = "CAT I" | "CAT II" | "CAT III";
 
 export interface ComplianceFramework {
   name: string;

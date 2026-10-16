@@ -7,6 +7,8 @@
  *     4.0/docs_en/OWASP Application Security Verification Standard 4.0.3-en.flat.json
  *   CIS mappings (MIT)                aquasecurity/trivy-checks
  *     pkg/compliance/{k8s-cis-1.23,eks-cis-1.4,aws-cis-1.4}.yaml
+ *   DISA ASD STIG (US Gov work)       dl.dod.cyber.mil U_ASD_<VxRy>_STIG.zip (XCCDF)
+ *     plus U_CCI_List.zip for CCI → NIST SP 800-53 Rev 5 references
  *
  * Usage:
  *   scripts/compliance/fetch-sources.sh <dir>        # or download by hand
@@ -17,6 +19,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
+import { XMLParser } from "fast-xml-parser";
+import { ASD_STIG_CWE_MAP } from "./asd-stig-mapping.mjs";
 
 const [srcDir, trivySha = "main"] = process.argv.slice(2);
 if (!srcDir) {
@@ -228,7 +232,134 @@ function buildCis({ file, kind, name, version, out, codePrefixes, partial, suppl
   });
 }
 
+// ─── DISA Application Security and Development STIG ────────────────────────
+
+const NIST_FAMILIES = {
+  AC: "Access Control",
+  AT: "Awareness and Training",
+  AU: "Audit and Accountability",
+  CA: "Assessment, Authorization, and Monitoring",
+  CM: "Configuration Management",
+  CP: "Contingency Planning",
+  IA: "Identification and Authentication",
+  IR: "Incident Response",
+  MA: "Maintenance",
+  MP: "Media Protection",
+  PE: "Physical and Environmental Protection",
+  PL: "Planning",
+  PM: "Program Management",
+  PS: "Personnel Security",
+  PT: "PII Processing and Transparency",
+  RA: "Risk Assessment",
+  SA: "System and Services Acquisition",
+  SC: "System and Communications Protection",
+  SI: "System and Information Integrity",
+  SR: "Supply Chain Risk Management",
+};
+const STIG_CATEGORY = { high: "CAT I", medium: "CAT II", low: "CAT III" };
+const asList = (v) => (v === undefined ? [] : Array.isArray(v) ? v : [v]);
+/** XML character references → text (`&amp;` last so `&amp;lt;` stays `&lt;`). */
+const decodeXml = (s) =>
+  s
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+// The XCCDF escapes its embedded markup, so it holds more character
+// references than fast-xml-parser's entity-expansion cap; decode them here.
+const xmlParser = () =>
+  new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: "@_",
+    parseTagValue: false,
+    parseAttributeValue: false,
+    processEntities: false,
+    tagValueProcessor: (_, v) => decodeXml(v),
+    attributeValueProcessor: (_, v) => decodeXml(v),
+  });
+
+/** CCI id → NIST SP 800-53 Rev 5 (and Rev 4) control references, from DISA's CCI list. */
+function loadCci() {
+  const xml = fs.readFileSync(path.join(srcDir, "U_CCI_List.xml"), "utf8").replace(/^﻿/, "");
+  const list = xmlParser().parse(xml).cci_list;
+  const rev5 = new Map();
+  const rev4 = new Map();
+  for (const item of asList(list.cci_items.cci_item)) {
+    const refs = asList(item.references?.reference);
+    const indexes = (title) => refs.filter((r) => r["@_title"] === title).map((r) => r["@_index"].trim());
+    rev5.set(item["@_id"], indexes("NIST SP 800-53 Revision 5"));
+    rev4.set(item["@_id"], indexes("NIST SP 800-53 Revision 4"));
+  }
+  return { version: String(list.metadata.version), rev5, rev4 };
+}
+
+/**
+ * The ASD STIG, one control per requirement (XCCDF Group), keyed by Vuln ID.
+ * Ids, severities, titles and CCIs come straight from the XCCDF; the CWE
+ * crosswalk is Pepper's reviewed table in asd-stig-mapping.mjs.
+ */
+function buildAsdStig() {
+  const bench = xmlParser().parse(fs.readFileSync(path.join(srcDir, "asd-stig-xccdf.xml"), "utf8")).Benchmark;
+  const releaseInfo = asList(bench["plain-text"]).find((p) => p["@_id"] === "release-info")["#text"];
+  const [, release, benchmarkDate] = releaseInfo.match(/Release:\s*(\d+)\s+Benchmark Date:\s*(.+)$/);
+  const version = `V${bench.version}R${release}`;
+  const url = `https://dl.dod.cyber.mil/wp-content/uploads/stigs/zip/U_ASD_${version}_STIG.zip`;
+  const cci = loadCci();
+  const unused = new Set(Object.keys(ASD_STIG_CWE_MAP));
+
+  const controls = asList(bench.Group).map((g) => {
+    const vulnId = g["@_id"];
+    const rule = g.Rule;
+    const stigId = rule.version;
+    const idents = asList(rule.ident);
+    const ccis = idents.filter((i) => i["@_system"] === "http://cyber.mil/cci").map((i) => i["#text"]);
+    const legacyIds = idents.filter((i) => i["@_system"] === "http://cyber.mil/legacy").map((i) => i["#text"]);
+    const nist = [...new Set(ccis.flatMap((c) => cci.rev5.get(c) ?? []))];
+    // A few CCIs were withdrawn from Rev 5; their Rev 4 control still names the family.
+    const family = (nist[0] ?? ccis.flatMap((c) => cci.rev4.get(c) ?? [])[0])?.slice(0, 2);
+    const discussion = rule.description.match(/<VulnDiscussion>([\s\S]*?)<\/VulnDiscussion>/)?.[1] ?? "";
+    const mapping = ASD_STIG_CWE_MAP[vulnId];
+    if (mapping && mapping.stigId !== stigId) {
+      throw new Error(`asd-stig-mapping: ${vulnId} is ${stigId} in ${version}, mapping says ${mapping.stigId}`);
+    }
+    unused.delete(vulnId);
+    const cweMapping = (mapping?.cwe ?? []).map((n) => `CWE-${n}`);
+    return {
+      controlId: vulnId,
+      chunkId: `ASD-STIG-${version}-${vulnId}`,
+      type: "STIG_Requirement",
+      theme: family && NIST_FAMILIES[family] ? `${family} ${NIST_FAMILIES[family]}` : "Unassigned",
+      title: rule.title.replace(/\s+/g, " ").trim(),
+      summary: discussion.replace(/\s+/g, " ").trim(),
+      category: STIG_CATEGORY[rule["@_severity"]],
+      stig: { stigId, ruleId: rule["@_id"], severity: rule["@_severity"], srg: g.title, cci: ccis, nist, legacyIds },
+      coverage: mapping ? mapping.coverage : "not-assessable",
+      cweMapping,
+      implementationChecklist: [],
+      evidenceExamples: cweMapping.length ? [`Pepper findings with ${cweMapping.join(", ")}`] : [],
+    };
+  });
+  if (unused.size) throw new Error(`asd-stig-mapping: not in ${version}: ${[...unused].join(", ")}`);
+  if (controls.some((c) => !c.category)) throw new Error("ASD STIG: rule with unknown severity");
+
+  const mapped = controls.filter((c) => c.cweMapping.length).length;
+  write("DISA_ASD_STIG.json", {
+    name: "DISA ASD STIG",
+    version,
+    revision: version,
+    fileName: "DISA_ASD_STIG.json",
+    source: `DISA Application Security and Development STIG, Version ${bench.version} Release ${release} (benchmark date ${benchmarkDate.trim()}), ${url}. CCI → NIST SP 800-53 Rev 5 references from the DISA CCI List ${cci.version}, https://dl.dod.cyber.mil/wp-content/uploads/stigs/zip/U_CCI_List.zip`,
+    license: "U.S. Government work published by DISA on public.cyber.mil. Vuln IDs, Rule IDs, STIG IDs, severities, titles, CCIs and discussion text are unchanged except whitespace.",
+    mapping: `Pepper's reviewed CWE crosswalk (scripts/compliance/asd-stig-mapping.mjs) for the ${mapped} requirements a code weakness can evidence. The other ${controls.length - mapped} are process, documentation, deployment or runtime-configuration requirements and are listed as not assessable by static analysis. Severity: CAT I = high, CAT II = medium, CAT III = low. Theme is the NIST SP 800-53 family of the requirement's first CCI (Rev 5, else Rev 4); stig.nist lists the Rev 5 controls.`,
+    controls,
+  });
+}
+
 buildAsvs();
+buildAsdStig();
 buildCis({ file: "k8s-cis-1.23.yaml", kind: "k8s", name: "CIS Kubernetes Benchmark", version: "1.23", out: "CIS_Kubernetes_Benchmark.json", codePrefixes: ["KSV"] });
 buildCis({ file: "eks-cis-1.4.yaml", kind: "eks", name: "CIS Amazon EKS Benchmark", version: "1.4", out: "CIS_EKS_Benchmark.json", codePrefixes: ["KSV", "AWS"], partial: true });
 buildCis({ file: "aws-cis-1.4.yaml", kind: "aws", name: "CIS AWS Foundations Benchmark", version: "1.4", out: "CIS_AWS_Foundations_Benchmark.json", codePrefixes: ["AWS"], partial: true, supplement: AWS_IAC_SUPPLEMENT });

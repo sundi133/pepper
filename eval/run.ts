@@ -16,7 +16,7 @@ import type { RawFinding } from "@/scanners/types";
 import { scoreApp, type AppScore, type EvalFinding, type Truth } from "./score";
 import { logger } from "@/lib/logger";
 
-interface CorpusApp { name: string; repo: string; commit: string; language: string; kind: "vulnerable" | "clean" }
+interface CorpusApp { name: string; repo?: string; commit?: string; path?: string; language: string; kind: "vulnerable" | "clean" | "fixture" }
 
 interface SummaryRow {
   app: string;
@@ -52,6 +52,9 @@ function enumerate(dir: string, prefix = ""): string[] {
 }
 
 function checkout(app: CorpusApp): string {
+  // Local fixtures (eval/fixtures/…) are used in place.
+  if (app.path) return path.resolve(ROOT, app.path);
+  if (!app.repo || !app.commit) throw new Error(`corpus entry ${app.name} needs repo and commit, or path`);
   const dir = path.join(CACHE, app.name);
   if (!fs.existsSync(path.join(dir, ".git"))) {
     fs.mkdirSync(dir, { recursive: true });
@@ -88,6 +91,7 @@ const LEDGER: Array<[string, RegExp]> = [
   ["kept unconfirmed", /keeping it unconfirmed/],
   ["dropped: low confidence", /Filtered (near-threshold|low-confidence)/],
   ["dropped: CWE-798 to secrets", /Filtering CWE-798/],
+  ["zero-day: findings dropped (no file / low confidence)", /Zero-day: dropped findings/],
 ];
 
 async function scanOnce(app: CorpusApp, dir: string, truth: Truth, logFile: string): Promise<EvalFinding[]> {
@@ -106,6 +110,7 @@ async function scanOnce(app: CorpusApp, dir: string, truth: Truth, logFile: stri
       const msg = typeof a[0] === "string" ? a[0] : typeof a[1] === "string" ? a[1] : "";
       const obj = typeof a[0] === "object" && a[0] ? (a[0] as Record<string, unknown>) : {};
       log.write(`${l} ${msg} ${JSON.stringify({ title: obj.title, status: obj.status, reason: obj.reason })}\n`);
+      if (obj.logicLedger) log.write(`logic-ledger ${JSON.stringify(obj.logicLedger)}\n`);
       if (l !== "debug") original[l].apply(logger, a);
     };
   }
@@ -134,7 +139,19 @@ async function scanOnce(app: CorpusApp, dir: string, truth: Truth, logFile: stri
 
 function ledger(logFile: string): Record<string, number> {
   const text = fs.readFileSync(logFile, "utf8");
-  return Object.fromEntries(LEDGER.map(([k, re]) => [k, text.split("\n").filter((l) => re.test(l)).length]));
+  const out: Record<string, number> = Object.fromEntries(LEDGER.map(([k, re]) => [k, text.split("\n").filter((l) => re.test(l)).length]));
+  // Counters of the logic passes (docs/LOGIC_FLAW_DETECTION_SPEC.md §6.3).
+  for (const line of text.split("\n")) {
+    if (!line.startsWith("logic-ledger ")) continue;
+    try {
+      for (const [k, v] of Object.entries(JSON.parse(line.slice(13)) as Record<string, number>)) {
+        if (typeof v === "number") out[`logic: ${k}`] = (out[`logic: ${k}`] ?? 0) + v;
+      }
+    } catch {
+      // ignore a malformed line
+    }
+  }
+  return out;
 }
 
 const pct = (x: number | null) => (x === null ? "–" : `${Math.round(x * 100)}%`);

@@ -14,7 +14,7 @@ contains everything:
 
 ## 1. Requirements
 
-- **Server:** Linux x86-64 (amd64). Recommended 4 vCPU, 16 GB RAM, 100 GB disk (minimum 2 vCPU / 8 GB).
+- **Server:** Linux on x86-64 (amd64) or ARM64 (aarch64, e.g. AWS Graviton); the images are published for both. Recommended 4 vCPU, 16 GB RAM, 100 GB disk (minimum 2 vCPU / 8 GB).
 - **Docker Engine 24+** with the **Compose plugin** (`docker compose version` must work).
 - **Inbound:** one port for the web UI (default `3000`, usually behind your HTTPS reverse proxy).
 - **Outbound** (direct or through your proxy):
@@ -58,15 +58,19 @@ The first start applies the database schema, which takes 1–3 minutes. When
 
 ## 3. Air-gapped install (no registry access)
 
-**On a machine with internet access**, download the images into one archive:
+**On a machine with internet access**, download the images into one archive.
+Set `P` to the server's architecture (`uname -m` on the server: `x86_64` →
+`linux/amd64`, `aarch64` → `linux/arm64`); without it Docker downloads the
+images for the machine you are on, which may not match the server.
 
 ```bash
 V=sha-a0c538e     # the Pepper version you were given
-docker pull docker.io/sundi133/pepper-api:$V
-docker pull docker.io/sundi133/pepper-worker:$V
-docker pull postgres:16-alpine
-docker pull redis:7-alpine
-docker pull docker.io/chainguard/minio:latest
+P=linux/amd64     # or linux/arm64
+docker pull --platform $P docker.io/sundi133/pepper-api:$V
+docker pull --platform $P docker.io/sundi133/pepper-worker:$V
+docker pull --platform $P postgres:16-alpine
+docker pull --platform $P redis:7-alpine
+docker pull --platform $P docker.io/chainguard/minio:latest
 docker save -o pepper-images-$V.tar \
   docker.io/sundi133/pepper-api:$V docker.io/sundi133/pepper-worker:$V \
   postgres:16-alpine redis:7-alpine docker.io/chainguard/minio:latest

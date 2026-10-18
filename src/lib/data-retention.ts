@@ -19,6 +19,7 @@ import { logger } from "@/lib/logger";
 import { redis } from "@/lib/redis";
 import { minioClient, BUCKET, deleteObject } from "@/lib/minio";
 import { writeAuditLog } from "@/lib/audit-log";
+import { COMPILED_UPLOAD_KEY } from "@/lib/compiled-scan/upload";
 
 /** Shortest windows accepted, so a typo can't wipe data that's still in use. */
 export const MIN_UPLOAD_RETENTION_DAYS = 1;
@@ -37,8 +38,9 @@ const FINISHED_REMEDIATION_STATUSES = ["COMPLETED", "PARTIAL", "FAILED", "CANCEL
 /** Object keys of uploaded source archives (see POST /api/scans). */
 const UPLOAD_SOURCE_KEY = /^scans\/[^/]+\/source\.(?:zip|tar\.gz|tgz|tar)$/i;
 
+/** Uploaded source archives, and single uploaded compiled artifacts (scans/<id>/compiled/app.apk). */
 export function isUploadSourceKey(key: string): boolean {
-  return UPLOAD_SOURCE_KEY.test(key);
+  return UPLOAD_SOURCE_KEY.test(key) || COMPILED_UPLOAD_KEY.test(key);
 }
 
 function daysFromEnv(raw: string | undefined, min: number): number | null {

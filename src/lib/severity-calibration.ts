@@ -1,4 +1,5 @@
 import type { RawFinding } from "@/scanners/types";
+import { isTestLikePath } from "@/lib/test-paths";
 
 export type SeverityLevel = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
 
@@ -99,8 +100,6 @@ const WEAKNESS_BASELINE: Record<string, SeverityLevel> = {
   "mass assignment": "HIGH",
 };
 
-const TEST_PATH =
-  /(?:^|\/)(?:test|tests|spec|specs|__tests__|fixtures?|mocks?|examples?|demo|sample)(?:\/|$)|\.(?:test|spec)\.[jt]sx?$/i;
 
 export const SEVERITY_CALIBRATION_PROMPT = `
 **SEVERITY CALIBRATION (MANDATORY — must match vulnerability class)**
@@ -273,7 +272,7 @@ export function calibrateSeverity(
 
   let severity: SeverityLevel = baseline;
   const confidence = input.confidence ?? 0.8;
-  const testPath = Boolean(input.filePath && TEST_PATH.test(input.filePath));
+  const testPath = isTestLikePath(input.filePath);
   const contextLimited = isContextLimited(meta);
 
   if (/misconfig|header|verbose|rate limit|info disclosure/i.test(weaknessClass)) {

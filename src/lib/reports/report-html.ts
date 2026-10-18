@@ -4,14 +4,9 @@
 
 export const REPORT_HTML_CSP = "default-src 'none'; style-src 'unsafe-inline'";
 
-export function escapeHtml(value: unknown): string {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+// Kept in its own module so client code can use it without pulling in pdfkit.
+import { escapeHtml } from "@/lib/html-escape";
+export { escapeHtml };
 
 export function formatReportDate(date: Date): string {
   return new Intl.DateTimeFormat("en", {

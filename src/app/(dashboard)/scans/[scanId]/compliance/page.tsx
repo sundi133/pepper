@@ -100,6 +100,9 @@ interface ControlSummary {
   findingCount: number;
   criticalHighCount: number;
   directCount: number;
+  /** DISA STIG severity category and STIG ID. */
+  category?: string;
+  stigId?: string;
 }
 
 interface CoverageBucketEntry {
@@ -112,26 +115,64 @@ interface CoverageBucketEntry {
   reason?: string;
   /** ASVS verification levels the requirement belongs to. */
   levels?: number[];
+  /** DISA STIG severity category and STIG ID. */
+  category?: string;
+  stigId?: string;
 }
 
-/** Per-level bucket counts for frameworks with levels (ASVS L1–L3). */
-function levelBreakdown(buckets: NonNullable<FrameworkReport["buckets"]>) {
+const CATEGORY_COLORS: Record<string, string> = {
+  "CAT I": "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-400 border-red-200",
+  "CAT II":
+    "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-400 border-orange-200",
+  "CAT III":
+    "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-400 border-yellow-200",
+};
+
+/** STIG ID and CAT badge shown under a STIG requirement's Vuln ID. */
+function StigTag({ category, stigId }: { category?: string; stigId?: string }) {
+  if (!category && !stigId) return null;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1 font-normal">
+      {category && (
+        <Badge variant="outline" className={`text-[10px] ${CATEGORY_COLORS[category] || ""}`}>
+          {category}
+        </Badge>
+      )}
+      {stigId && <span className="text-[10px] text-muted-foreground">{stigId}</span>}
+    </span>
+  );
+}
+
+/**
+ * Per-tier bucket counts: ASVS levels (L1–L3) or STIG categories (CAT I–III).
+ * Null when the framework has neither.
+ */
+function tierBreakdown(buckets: NonNullable<FrameworkReport["buckets"]>) {
   const all = [
     ...buckets.gapsFound.map((e) => ({ e, b: "gaps" as const })),
     ...buckets.noIssuesDetected.map((e) => ({ e, b: "clear" as const })),
     ...buckets.notCovered.map((e) => ({ e, b: "notCovered" as const })),
   ];
-  if (!all.some(({ e }) => e.levels?.length)) return null;
-  return [1, 2, 3].map((level) => {
-    const at = all.filter(({ e }) => e.levels?.includes(level));
-    return {
-      level,
-      total: at.length,
-      gaps: at.filter((x) => x.b === "gaps").length,
-      clear: at.filter((x) => x.b === "clear").length,
-      notCovered: at.filter((x) => x.b === "notCovered").length,
-    };
-  });
+  const tiers: { label: string; has: (e: CoverageBucketEntry) => boolean }[] =
+    all.some(({ e }) => e.levels?.length)
+      ? [1, 2, 3].map((level) => ({ label: `L${level}`, has: (e) => !!e.levels?.includes(level) }))
+      : all.some(({ e }) => e.category)
+        ? ["CAT I", "CAT II", "CAT III"].map((cat) => ({ label: cat, has: (e) => e.category === cat }))
+        : [];
+  if (tiers.length === 0) return null;
+  return {
+    heading: tiers[0].label.startsWith("CAT") ? "Category" : "Level",
+    rows: tiers.map(({ label, has }) => {
+      const at = all.filter(({ e }) => has(e));
+      return {
+        label,
+        total: at.length,
+        gaps: at.filter((x) => x.b === "gaps").length,
+        clear: at.filter((x) => x.b === "clear").length,
+        notCovered: at.filter((x) => x.b === "notCovered").length,
+      };
+    }),
+  };
 }
 
 interface FrameworkReport {
@@ -830,14 +871,14 @@ export default function ComplianceReportPage() {
                   </div>
                 </div>
                 {(() => {
-                  const levels = levelBreakdown(report.buckets);
-                  if (!levels) return null;
+                  const tiers = tierBreakdown(report.buckets);
+                  if (!tiers) return null;
                   return (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-left text-xs text-muted-foreground">
-                            <th className="py-1 pr-4 font-medium">Level</th>
+                            <th className="py-1 pr-4 font-medium">{tiers.heading}</th>
                             <th className="py-1 pr-4 font-medium">Requirements</th>
                             <th className="py-1 pr-4 font-medium">Gaps found</th>
                             <th className="py-1 pr-4 font-medium">No issues detected</th>
@@ -845,9 +886,9 @@ export default function ComplianceReportPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {levels.map((l) => (
-                            <tr key={l.level} className="border-t">
-                              <td className="py-1.5 pr-4 font-medium">L{l.level}</td>
+                          {tiers.rows.map((l) => (
+                            <tr key={l.label} className="border-t">
+                              <td className="py-1.5 pr-4 font-medium">{l.label}</td>
                               <td className="py-1.5 pr-4">{l.total}</td>
                               <td className="py-1.5 pr-4 text-destructive">{l.gaps}</td>
                               <td className="py-1.5 pr-4 text-green-600">{l.clear}</td>
@@ -871,6 +912,11 @@ export default function ComplianceReportPage() {
                           <span className="font-medium text-foreground">
                             {c.controlId}
                           </span>{" "}
+                          {(c.category || c.stigId) && (
+                            <>
+                              <StigTag category={c.category} stigId={c.stigId} />{" "}
+                            </>
+                          )}
                           {c.title}
                           {c.reason ? ` — ${c.reason}` : ""}
                         </li>
@@ -910,6 +956,11 @@ export default function ComplianceReportPage() {
                     <TableRow key={control.controlId}>
                       <TableCell className="font-mono font-bold">
                         {control.controlId}
+                        {(control.category || control.stigId) && (
+                          <div className="mt-0.5">
+                            <StigTag category={control.category} stigId={control.stigId} />
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="max-w-[min(20rem,40vw)] align-top text-sm leading-snug break-words">
                         {control.title}

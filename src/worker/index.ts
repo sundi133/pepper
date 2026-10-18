@@ -2,14 +2,17 @@ import "dotenv/config";
 import { Worker } from "bullmq";
 import {
   REMEDIATION_QUEUE_NAME,
+  REPORT_QUEUE_NAME,
   SCAN_QUEUE_NAME,
   ScanJobData,
   type RemediationJobData,
+  type ReportJobData,
 } from "@/lib/queue";
 import { redisConnection } from "@/lib/redis";
 import { ensureBucket } from "@/lib/minio";
 import { processScanJob } from "./scan-processor";
 import { runRemediation } from "@/lib/remediation/agent";
+import { runCustomReport } from "@/lib/custom-reports/agent";
 import { startScheduler } from "./scheduler";
 import { startAuditRetention } from "@/lib/audit-retention";
 import { startDataRetention } from "@/lib/data-retention";
@@ -122,6 +125,43 @@ async function main() {
     logger.error({ error: error.message }, "Remediation worker error");
   });
 
+  // AI custom reports: plan → fetch → write → ground, minutes of LLM work each.
+  const reportWorker = new Worker<ReportJobData>(
+    REPORT_QUEUE_NAME,
+    async (job) => runCustomReport(job.data.reportId),
+    {
+      connection: redisConnection,
+      concurrency: parseInt(process.env.REPORT_CONCURRENCY || "2"),
+      lockDuration: 300_000,
+      lockRenewTime: 150_000,
+      stalledInterval: 300_000,
+    },
+  );
+
+  reportWorker.on("failed", async (job, error) => {
+    logger.error(
+      { jobId: job?.id, reportId: job?.data.reportId, error: error.message },
+      "Custom report job failed",
+    );
+    if (job?.data.reportId) {
+      await prisma.customReport
+        .updateMany({
+          where: { id: job.data.reportId, status: { in: ["QUEUED", "RUNNING"] } },
+          data: {
+            status: "FAILED",
+            stage: "Failed",
+            completedAt: new Date(),
+            errorMessage: error.message.slice(0, 2000),
+          },
+        })
+        .catch(() => undefined);
+    }
+  });
+
+  reportWorker.on("error", (error) => {
+    logger.error({ error: error.message }, "Report worker error");
+  });
+
   // Graceful shutdown
   const schedulerInterval = startScheduler();
   const auditRetentionInterval = startAuditRetention();
@@ -132,7 +172,7 @@ async function main() {
     clearInterval(schedulerInterval);
     clearInterval(auditRetentionInterval);
     clearInterval(dataRetentionInterval);
-    await Promise.all([worker.close(), remediationWorker.close()]);
+    await Promise.all([worker.close(), remediationWorker.close(), reportWorker.close()]);
     process.exit(0);
   };
 

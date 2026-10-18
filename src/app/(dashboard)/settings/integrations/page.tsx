@@ -905,7 +905,7 @@ export default function IntegrationsPage() {
               <Link href="/settings/integrations/precommit">Pre-commit hook</Link>
             </Button>
             <Button variant="outline" asChild>
-              <Link href="/settings/integrations/ide">IDE plugins</Link>
+              <Link href="/settings/integrations/ide">IDE (MCP)</Link>
             </Button>
           </div>
         </CardContent>

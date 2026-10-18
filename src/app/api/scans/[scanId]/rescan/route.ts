@@ -1,27 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
-import { scanQueue, ScanJobData } from "@/lib/queue";
-import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
 import { parseRescanBody } from "@/lib/scan-types";
-import { execFileSync } from "child_process";
-import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
-import { objectExists } from "@/lib/minio";
-import { uploadExpiredMessage } from "@/lib/data-retention";
-
-function resolveGitDefaultBranch(repoUrl: string) {
-  try {
-    const output = execFileSync("git", ["ls-remote", "--symref", repoUrl, "HEAD"], {
-      encoding: "utf8",
-      timeout: 30000,
-      windowsHide: process.platform === "win32",
-    });
-    const match = output.match(/^ref:\s+refs\/heads\/(.+)\s+HEAD/m);
-    return match?.[1];
-  } catch {
-    return undefined;
-  }
-}
+import { ipFromHeaders } from "@/lib/audit-log";
+import { rescanScan } from "@/lib/scan-rescan";
 
 export async function POST(
   req: NextRequest,
@@ -47,149 +28,19 @@ export async function POST(
 
   const { scanId } = await params;
 
-  const originalScan = await prisma.scan.findFirst({
-    where: { id: scanId, project: { organizationId: orgId } },
-    include: {
-      project: {
-        include: {
-          buildGate: true,
-        },
-      },
-    },
-  });
-
-  if (!originalScan) {
-    return NextResponse.json({ error: "Scan not found" }, { status: 404 });
-  }
-
-  if (!originalScan.sourceRef) {
-    return NextResponse.json(
-      { error: "Original scan source is not available for rescan" },
-      { status: 409 },
-    );
-  }
-
-  // A retention policy may have deleted the uploaded archive. Check before the
-  // old results are removed below, so they aren't lost to a scan that can't run.
-  if (
-    originalScan.sourceType === "UPLOAD" &&
-    originalScan.sourceRef.startsWith("scans/") &&
-    (await objectExists(originalScan.sourceRef)) === false
-  ) {
-    return NextResponse.json({ error: uploadExpiredMessage() }, { status: 410 });
-  }
-
-  const projectId = originalScan.projectId;
-  const orgSettings = await prisma.orgSettings.findUnique({
-    where: { organizationId: orgId },
-  });
-  const sourceType =
-    originalScan.sourceType === "WEBHOOK" ? "GIT_CLONE" : originalScan.sourceType;
-  const scanType = requestedScanType ?? originalScan.scanType;
-  const branch =
-    sourceType === "GIT_CLONE"
-      ? resolveGitDefaultBranch(originalScan.sourceRef) ||
-        originalScan.branch ||
-        undefined
-      : originalScan.branch || undefined;
-
-  // Earlier scans stay as history; one still in progress is stopped.
-  const { cancelActiveScansForProject } = await import("@/lib/active-project-scans");
-  try {
-    await cancelActiveScansForProject(projectId);
-  } catch (err) {
-    console.error("Failed to stop the active scan during rescan:", err);
-    return NextResponse.json(
-      { error: "Failed to prepare the repository for rescan. Please try again." },
-      { status: 500 },
-    );
-  }
-
-  const scan = await prisma.scan.create({
-    data: {
-      projectId: originalScan.projectId,
-      scanType,
-      branch,
-      baseSha: originalScan.baseSha,
-      sourceType,
-      sourceRef: originalScan.sourceRef,
-      triggeredBy: auth.session.user.id,
-      status: "QUEUED",
-    },
-  });
-
-  const isGitClone = sourceType === "GIT_CLONE";
-  const useOrgGithubToken =
-    isGitClone && originalScan.project.connectedViaGithub;
-  const useOrgBitbucketToken =
-    isGitClone && originalScan.project.connectedViaBitbucket;
-  const useOrgAzureDevOpsToken =
-    isGitClone && originalScan.project.connectedViaAzure;
-
-  const jobData: ScanJobData = {
-    scanId: scan.id,
-    projectId: scan.projectId,
-    sourceType: sourceType as ScanJobData["sourceType"],
-    sourceRef: originalScan.sourceRef,
-    scanType: scanType as ScanJobData["scanType"],
-    baseSha: originalScan.baseSha || undefined,
-    commitSha: originalScan.commitSha || undefined,
-    prNumber: originalScan.prNumber ?? undefined,
-    repoUrl: sourceType === "GIT_CLONE" ? originalScan.sourceRef : undefined,
-    repoUrlDisplay:
-      sourceType === "GIT_CLONE" ? originalScan.sourceRef : undefined,
-    useOrgGithubToken,
-    useOrgBitbucketToken,
-    useOrgAzureDevOpsToken,
-    svnUrl: sourceType === "SVN_CHECKOUT" ? originalScan.sourceRef : undefined,
-    branch,
-    orgSettings: buildOrgSettingsForJob(orgSettings, orgId),
-    buildGate: originalScan.project.buildGate
-      ? {
-          maxCritical: originalScan.project.buildGate.maxCritical,
-          maxHigh: originalScan.project.buildGate.maxHigh,
-          maxMedium: originalScan.project.buildGate.maxMedium,
-          maxLow: originalScan.project.buildGate.maxLow,
-          failOnNew: originalScan.project.buildGate.failOnNew,
-        }
-      : undefined,
-  };
-
-  const job = await scanQueue.add("scan", jobData, {
-    jobId: scan.id,
-  });
-
-  await prisma.scan.update({
-    where: { id: scan.id },
-    data: { jobId: job.id },
-  });
-
-  try {
-    const { createScanQueuedNotification } = await import(
-      "@/lib/scan-notifications"
-    );
-    await createScanQueuedNotification({
-      userId: auth.session.user.id,
-      organizationId: orgId,
-      scanId: scan.id,
-      projectName: originalScan.project.name,
-    });
-  } catch (e) {
-    console.error("Failed to record notification:", e);
-  }
-
-  await writeAuditLog({
-    organizationId: orgId,
+  const result = await rescanScan({
+    orgId,
     userId: auth.session.user.id,
-    action: "scan.rescanned",
-    resource: "scan",
-    resourceId: scan.id,
-    details: { previousScanId: scanId, projectName: originalScan.project.name, scanType, branch: branch ?? null },
+    scanId,
+    scanType: requestedScanType,
     ipAddress: ipFromHeaders(req.headers),
   });
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
+  }
 
   return NextResponse.json(
-    { scanId: scan.id, status: "QUEUED" },
+    { scanId: result.scanId, status: "QUEUED" },
     { status: 201 },
   );
 }

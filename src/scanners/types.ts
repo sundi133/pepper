@@ -16,6 +16,12 @@ export interface ScanContext {
   fileList: string[];
   /** When set (incremental PR scans), SCA / malicious-pkg use this instead of fileList. */
   scaFileList?: string[];
+  /**
+   * Source decompiled from compiled artifacts (lib/compiled-scan). Only the
+   * source scanners (SAST and secrets) see these, added to their fileList;
+   * dependency, IaC and container scanners keep the original list.
+   */
+  decompiledFileList?: string[];
   scanType: string;
   orgSettings: {
     llmProvider: string;

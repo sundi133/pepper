@@ -1,28 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
-import { scanQueue, ScanJobData } from "@/lib/queue";
-import { uploadObject, ensureBucket } from "@/lib/minio";
 import { z } from "zod";
-import { withGitCredentials } from "@/lib/git-repo-url";
-import { parseGithubRepo } from "@/lib/github-source-link";
-import { getOrgGithubAccessToken } from "@/lib/github-connection";
-import { createProjectWithBuildGate } from "@/lib/create-project-with-build-gate";
-import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
-import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
-import {
-  projectNameFromGitUrl,
-  projectNameFromSvnUrl,
-  projectNameFromUploadFilename,
-} from "@/lib/project-name-from-source";
-import { API_CREATE_SCAN_TYPES } from "@/lib/scan-types";
-
-/** Strip HTML tags and trim whitespace to prevent stored XSS. */
-function sanitizeText(value: string): string {
-  return value.replace(/<[^>]*>/g, "").trim();
-}
+import { ipFromHeaders } from "@/lib/audit-log";
+import { createScanSchema, queueNewScan } from "@/lib/scan-create";
+import { scanListWhere } from "@/lib/scan-queries";
 
 const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100 MB
+
+import {
+  ARTIFACT_MIME_TYPES,
+  UPLOADABLE_ARTIFACT_EXTENSIONS,
+  isCompiledArtifactUpload,
+} from "@/lib/compiled-scan/upload";
 
 const ALLOWED_EXTENSIONS = [".zip", ".tar.gz", ".tgz", ".tar"] as const;
 const ALLOWED_MIME_TYPES = new Set([
@@ -33,41 +23,6 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/x-gzip",
   "application/x-compressed-tar",
 ]);
-
-const createScanSchema = z
-  .object({
-    projectId: z.string().optional(),
-    /** When `projectId` is omitted, overrides inferred name from URL or file. */
-    newProjectName: z.string().max(100).transform(sanitizeText).optional(),
-    /**
-     * CI: reuse the org's project with this exact name (created on first use)
-     * so repeated pipeline runs build one project's history instead of a new
-     * project per run. Ignored when `projectId` is given.
-     */
-    projectName: z.string().max(100).transform(sanitizeText).optional(),
-    scanType: z.enum(API_CREATE_SCAN_TYPES).default("FULL"),
-    branch: z.string().optional(),
-    commitSha: z.string().optional(),
-    baseSha: z.string().optional(),
-    prNumber: z.number().int().positive().optional(),
-    repoUrl: z.string().optional(),
-    /** Used only for clone; never stored on Scan.sourceRef. */
-    repoToken: z.string().optional(),
-    svnUrl: z.string().url("Invalid SVN URL").optional(),
-    svnRevision: z
-      .string()
-      .regex(
-        /^(\d+|HEAD|\{[\d\-T:]+\})$/i,
-        "Revision must be a number, HEAD, or {date}",
-      )
-      .optional(),
-    svnUsername: z.string().optional(),
-    svnPassword: z.string().optional(),
-  })
-  .refine((data) => !(data.repoUrl && data.svnUrl), {
-    message: "Cannot specify both repoUrl and svnUrl",
-    path: ["svnUrl"],
-  });
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
@@ -105,26 +60,32 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        // Validate file extension
+        // Validate file extension: a source archive, or a single compiled
+        // artifact (decompiled by the worker's compiled-code scan).
         const fileName = file.name.toLowerCase();
-        const hasAllowedExt = ALLOWED_EXTENSIONS.some((ext) =>
-          fileName.endsWith(ext),
-        );
+        const isArtifact = isCompiledArtifactUpload(fileName);
+        const hasAllowedExt =
+          isArtifact ||
+          ALLOWED_EXTENSIONS.some((ext) => fileName.endsWith(ext));
         if (!hasAllowedExt) {
           return NextResponse.json(
             {
-              error: `Invalid file type. Allowed extensions: ${ALLOWED_EXTENSIONS.join(", ")}`,
+              error: `Invalid file type. Allowed extensions: ${[...ALLOWED_EXTENSIONS, ...UPLOADABLE_ARTIFACT_EXTENSIONS].join(", ")}`,
             },
             { status: 400 },
           );
         }
 
         // Validate MIME type
-        if (file.type && !ALLOWED_MIME_TYPES.has(file.type)) {
+        if (
+          file.type &&
+          !(isArtifact ? ARTIFACT_MIME_TYPES : ALLOWED_MIME_TYPES).has(file.type)
+        ) {
           return NextResponse.json(
             {
-              error:
-                "Invalid file MIME type. Only archive files (zip, tar, tar.gz) are accepted",
+              error: isArtifact
+                ? "Invalid file MIME type for a compiled artifact"
+                : "Invalid file MIME type. Only archive files (zip, tar, tar.gz) are accepted",
             },
             { status: 400 },
           );
@@ -139,222 +100,20 @@ export async function POST(req: NextRequest) {
       scanParams = createScanSchema.parse(body);
     }
 
-    if (!fileBuffer && !scanParams.repoUrl && !scanParams.svnUrl) {
-      return NextResponse.json(
-        { error: "Provide a repository URL, SVN URL, or upload a source archive" },
-        { status: 400 },
-      );
-    }
-
-    const requestedProjectId = scanParams.projectId?.trim();
-    let effectiveProjectId = requestedProjectId;
-
-    const reuseName = scanParams.projectName?.trim();
-    if (!effectiveProjectId && reuseName) {
-      const existing = await prisma.project.findFirst({
-        where: { organizationId: orgId, name: reuseName },
-        orderBy: { createdAt: "asc" },
-        select: { id: true },
-      });
-      if (existing) effectiveProjectId = existing.id;
-    }
-
-    if (!effectiveProjectId) {
-      const nameOverride = scanParams.newProjectName?.trim() || reuseName;
-      let name: string;
-      let repoUrl: string | null = null;
-      let defaultBranch = scanParams.branch?.trim() || "main";
-
-      if (fileBuffer) {
-        name =
-          nameOverride ||
-          projectNameFromUploadFilename(originalFileName || "source.zip");
-        defaultBranch = "main";
-      } else if (scanParams.repoUrl?.trim()) {
-        const u = scanParams.repoUrl.trim();
-        name = nameOverride || projectNameFromGitUrl(u);
-        repoUrl = u;
-      } else if (scanParams.svnUrl?.trim()) {
-        const u = scanParams.svnUrl.trim();
-        name = nameOverride || projectNameFromSvnUrl(u);
-        defaultBranch = "main";
-      } else {
-        return NextResponse.json(
-          {
-            error:
-              "Select an existing project or provide a repository URL, SVN URL, or upload",
-          },
-          { status: 400 },
-        );
-      }
-
-      const created = await createProjectWithBuildGate({
-        organizationId: orgId,
-        name,
-        repoUrl,
-        defaultBranch,
-      });
-      effectiveProjectId = created.id;
-    }
-
-    // Verify project exists in the caller's organization.
-    const project = await prisma.project.findFirst({
-      where: { id: effectiveProjectId, organizationId: orgId },
-      include: { organization: true, buildGate: true },
-    });
-
-    if (!project) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
-    }
-
-    // Earlier scans stay as history; one still in progress is stopped.
-    const { cancelActiveScansForProject } = await import("@/lib/active-project-scans");
-    await cancelActiveScansForProject(effectiveProjectId);
-
-    // Get org settings
-    const orgSettings = await prisma.orgSettings.findUnique({
-      where: { organizationId: project.organizationId },
-    });
-
-    // Create scan record
-    const scan = await prisma.scan.create({
-      data: {
-        projectId: effectiveProjectId,
-        scanType: scanParams.scanType,
-        branch: scanParams.branch,
-        commitSha: scanParams.commitSha,
-        baseSha: scanParams.baseSha,
-        prNumber: scanParams.prNumber,
-        sourceType: fileBuffer
-          ? "UPLOAD"
-          : scanParams.repoUrl
-            ? "GIT_CLONE"
-            : scanParams.svnUrl
-              ? "SVN_CHECKOUT"
-              : "UPLOAD",
-        triggeredBy: auth.session.user.id,
-        status: "QUEUED",
-      },
-    });
-
-    // Upload source file to MinIO if provided
-    let sourceRef = "";
-    if (fileBuffer) {
-      await ensureBucket();
-      const ext =
-        originalFileName?.match(/\.(zip|tar\.gz|tgz|tar)$/i)?.[0] || ".zip";
-      sourceRef = `scans/${scan.id}/source${ext}`;
-      const mimeType = ext === ".zip" ? "application/zip" : "application/x-tar";
-      await uploadObject(sourceRef, fileBuffer, mimeType);
-    } else if (scanParams.repoUrl) {
-      sourceRef = scanParams.repoUrl;
-    } else if (scanParams.svnUrl) {
-      sourceRef = scanParams.svnUrl;
-    }
-
-    // Update scan with sourceRef
-    await prisma.scan.update({
-      where: { id: scan.id },
-      data: { sourceRef },
-    });
-
-    const orgGhToken = await getOrgGithubAccessToken(orgId);
-    const useOAuthClone = Boolean(
-      scanParams.repoUrl?.trim() &&
-        parseGithubRepo(scanParams.repoUrl) &&
-        orgGhToken &&
-        !scanParams.repoToken?.trim(),
-    );
-
-    // Enqueue job
-    const cloneRepoUrl =
-      scanParams.repoUrl && scanParams.repoToken?.trim()
-        ? withGitCredentials(scanParams.repoUrl, scanParams.repoToken)
-        : scanParams.repoUrl;
-
-    const jobData: ScanJobData = {
-      scanId: scan.id,
-      projectId: effectiveProjectId,
-      sourceType: fileBuffer
-        ? "UPLOAD"
-        : scanParams.repoUrl
-          ? "GIT_CLONE"
-          : scanParams.svnUrl
-            ? "SVN_CHECKOUT"
-            : "UPLOAD",
-      sourceRef,
-      scanType: scanParams.scanType,
-      baseSha: scanParams.baseSha,
-      commitSha: scanParams.commitSha,
-      prNumber: scanParams.prNumber,
-      repoUrl: cloneRepoUrl,
-      repoUrlDisplay: scanParams.repoUrl,
-      svnUrl: scanParams.svnUrl,
-      svnRevision: scanParams.svnRevision,
-      svnUsername: scanParams.svnUsername,
-      svnPassword: scanParams.svnPassword,
-      branch: scanParams.branch,
-      useOrgGithubToken: useOAuthClone,
-      orgSettings: buildOrgSettingsForJob(orgSettings, project.organizationId),
-      buildGate: project.buildGate
-        ? {
-            maxCritical: project.buildGate.maxCritical,
-            maxHigh: project.buildGate.maxHigh,
-            maxMedium: project.buildGate.maxMedium,
-            maxLow: project.buildGate.maxLow,
-            failOnNew: project.buildGate.failOnNew,
-          }
-        : undefined,
-    };
-
-    let job;
-    try {
-      job = await scanQueue.add("scan", jobData, {
-        jobId: scan.id,
-      });
-    } catch (queueErr) {
-      console.error("Failed to enqueue scan job:", queueErr);
-      await prisma.scan.update({
-        where: { id: scan.id },
-        data: { status: "FAILED" },
-      });
-      return NextResponse.json(
-        { error: "Failed to enqueue scan — queue unavailable" },
-        { status: 503 },
-      );
-    }
-
-    await prisma.scan.update({
-      where: { id: scan.id },
-      data: { jobId: job.id },
-    });
-
-    try {
-      const { createScanQueuedNotification } = await import(
-        "@/lib/scan-notifications"
-      );
-      await createScanQueuedNotification({
-        userId: auth.session.user.id,
-        organizationId: orgId,
-        scanId: scan.id,
-        projectName: project.name,
-      });
-    } catch (e) {
-      console.error("Failed to record notification:", e);
-    }
-
-    await writeAuditLog({
-      organizationId: orgId,
+    const result = await queueNewScan({
+      orgId,
       userId: auth.session.user.id,
-      action: "scan.queued",
-      resource: "scan",
-      resourceId: scan.id,
-      details: { scanType: scanParams.scanType, sourceType: jobData.sourceType },
+      scanParams,
+      fileBuffer,
+      originalFileName,
       ipAddress: ipFromHeaders(req.headers),
     });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
 
     return NextResponse.json(
-      { scanId: scan.id, projectId: effectiveProjectId, status: "QUEUED" },
+      { scanId: result.scanId, projectId: result.projectId, status: "QUEUED" },
       { status: 201 },
     );
   } catch (error) {
@@ -388,21 +147,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
 
-  const where: Record<string, unknown> = {
-    project: { organizationId: orgId },
-  };
-  if (projectId) where.projectId = projectId;
-  if (status) where.status = status;
   // Search: repository name, source (repo URL or upload name), branch, or scan id.
-  if (q) {
-    const contains = { contains: q, mode: "insensitive" as const };
-    where.OR = [
-      { project: { name: contains } },
-      { sourceRef: contains },
-      { branch: contains },
-      { id: q },
-    ];
-  }
+  const where = scanListWhere({ orgId, projectId, status, q });
 
   const [scans, total] = await Promise.all([
     prisma.scan.findMany({

@@ -3,7 +3,7 @@
 **Status:** Draft · **Owner:** Security Platform · **Scope:** SAST/SCA/IaC/Container findings → framework control mappings and per-scan compliance reports
 
 Frameworks in scope (all of them):
-CWE & CWE Top 25 · OWASP Top 10 · OWASP ASVS · OWASP API Security Top 10 · NIST SSDF · PCI DSS 4.0.1 · ISO/IEC 27001:2022 · SOC 2 · NIST 800-53 · HIPAA · GDPR
+CWE & CWE Top 25 · OWASP Top 10 · OWASP ASVS · OWASP API Security Top 10 · NIST SSDF · PCI DSS 4.0.1 · ISO/IEC 27001:2022 · SOC 2 · NIST 800-53 · DISA ASD STIG · HIPAA · GDPR
 
 ---
 
@@ -138,11 +138,12 @@ The join mechanism differs — some are pure CWE crosswalks, some are scanner/ac
 | **ISO/IEC 27001** | 2022 | Scanner/category-level + some CWE | A.8.28 (secure coding), A.8.29 (security testing), A.8.25/8.26, A.8.8 (SCA vulns) | `ISO27001.pdf` |
 | **SOC 2** | TSC 2017 | Scanner/category-level | CC7.1 (vuln detection), CC8.1 (change mgmt), CC6.x (access-control findings) | `SOC2.json` |
 | **NIST 800-53** | Rev 5 | CWE→control + activity | SI-10 (input validation→injection CWEs), SC-13 (crypto CWEs), RA-5 (scanning), SA-11 (dev testing), SI-2 (flaw remediation) | 800-53 catalog |
+| **DISA ASD STIG** | V6R5 | Reviewed CWE→requirement table (`scripts/compliance/asd-stig-mapping.mjs`); CCI→800-53 Rev 5 refs kept per requirement | V-222607 SQLi, V-222602 XSS, V-222604 command injection, V-222642 embedded credentials, V-222612 overflows, … (44 of 286); the rest `not-assessable` | DISA XCCDF + CCI list |
 | **HIPAA Security Rule** | 45 CFR 164 | Category-level, mostly `partial`/`not-assessable` | §164.312(e) transmission→TLS/crypto, §164.312(a) access→authz, §164.308(a)(1) risk analysis | Mark administrative safeguards `not-assessable` |
 | **GDPR** | 2016/679 | Category-level, mostly `partial` | Art 32(1)(a) encryption→crypto, 32(1)(b) integrity→injection/access, Art 25 by-design | Rest `not-assessable` — evidence indirect |
 
 **Two families:**
-- **CWE crosswalks** (build lookup tables): CWE Top 25, OWASP Top 10, OWASP API, OWASP ASVS, PCI DSS (6.2.4), NIST 800-53 (input/crypto controls).
+- **CWE crosswalks** (build lookup tables): CWE Top 25, OWASP Top 10, OWASP API, OWASP ASVS, PCI DSS (6.2.4), NIST 800-53 (input/crypto controls), DISA ASD STIG.
 - **Activity/scanner-level** (honest coverage classing matters most, much is out of SAST reach): NIST SSDF, ISO 27001, SOC 2, HIPAA, GDPR.
 
 ---
@@ -220,6 +221,7 @@ coverage-classed (`assessable` / `partial` / `not-assessable`):
 | GDPR (security-scoped) | 12 | 1 | 5 | 6 | deterministic |
 | OWASP API Top 10 (2023) | 10 | 5 | 3 | 2 | deterministic |
 | OWASP Top 10 (2021) | 10 | 8 | 2 | 0 | deterministic |
+| DISA ASD STIG V6R5 (CAT I 34 / II 230 / III 22) | 286 | 18 | 26 | 242 | deterministic |
 
 800-53 and GDPR carry an in-file `scopeNote` documenting that they are mapped at
 the SAST-relevant-control level, not the full ~1000-control baseline / 99 articles.

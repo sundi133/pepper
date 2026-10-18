@@ -14,8 +14,20 @@ export async function getSession() {
   return getServerSession(authOptions);
 }
 
+/** The caller behind a bearer API key: the key's creator, acting in the key's organization. */
+export interface ApiKeyPrincipal {
+  apiKeyId: string;
+  userId: string;
+  organizationId: string;
+  /** The creator's current role, capped for API keys (see effectiveApiKeyRole). */
+  role: Role;
+  organizationName?: string;
+  organizationSlug?: string;
+}
+
 /**
- * Resolve an API key into a session-shaped principal.
+ * Resolve an `Authorization` header value carrying an API key into the
+ * principal it acts as, or null when the key is missing, unknown or expired.
  *
  * Actions are attributed to the user who created the key, so `triggeredBy`,
  * notifications and the audit log continue to name a real person rather than an
@@ -25,14 +37,9 @@ export async function getSession() {
  * a credential must not outlive the access of the person who issued it, which
  * is what would otherwise happen when someone leaves the team.
  */
-async function sessionFromApiKey(): Promise<Session | null> {
-  let authorization: string | null = null;
-  try {
-    authorization = (await headers()).get("authorization");
-  } catch {
-    // No request context (e.g. called outside a route handler).
-    return null;
-  }
+export async function resolveApiKeyPrincipal(
+  authorization: string | null | undefined,
+): Promise<ApiKeyPrincipal | null> {
   if (!authorization) return null;
 
   const verified = await verifyApiKey(authorization);
@@ -53,18 +60,40 @@ async function sessionFromApiKey(): Promise<Session | null> {
   });
   if (!membership) return null;
 
-  // Never grant more than the creator currently has, nor more than the cap.
-  const effectiveRole = effectiveApiKeyRole(membership.role);
+  return {
+    apiKeyId: verified.apiKeyId,
+    userId: membership.userId,
+    organizationId: verified.organizationId,
+    // Never grant more than the creator currently has, nor more than the cap.
+    role: effectiveApiKeyRole(membership.role),
+    organizationName: verified.organization?.name,
+    organizationSlug: verified.organization?.slug,
+  };
+}
+
+/** Resolve the request's bearer API key into a session-shaped principal. */
+async function sessionFromApiKey(): Promise<Session | null> {
+  let authorization: string | null = null;
+  try {
+    authorization = (await headers()).get("authorization");
+  } catch {
+    // No request context (e.g. called outside a route handler).
+    return null;
+  }
+  if (!authorization) return null;
+
+  const principal = await resolveApiKeyPrincipal(authorization);
+  if (!principal) return null;
 
   return {
     user: {
-      id: membership.userId,
+      id: principal.userId,
       memberships: [
         {
-          organizationId: verified.organizationId,
-          role: effectiveRole,
-          organizationName: verified.organization?.name,
-          organizationSlug: verified.organization?.slug,
+          organizationId: principal.organizationId,
+          role: principal.role,
+          organizationName: principal.organizationName,
+          organizationSlug: principal.organizationSlug,
         },
       ],
     },

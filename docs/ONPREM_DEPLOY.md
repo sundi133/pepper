@@ -218,6 +218,53 @@ PR scan, independent of the LLM. Findings appear as **SAST (Pattern)**.
 - Disable: `ENABLE_OPENGREP_SAST=false`.
 - See `rules/opengrep/README.md` for which rule sets are bundled and why.
 
+## Compiled-code scanning
+
+Besides source, the worker scans compiled code: it decompiles artifacts it
+finds in the checkout (or a single uploaded `.jar`, `.war`, `.ear`, `.apk`,
+`.aab`, `.dll` or `.exe`) and runs AI SAST, OpenGrep and the secrets scanners
+on the result. Everything runs offline inside the worker.
+
+| Artifacts | Decompiler (in the worker image) | License |
+|---|---|---|
+| JAR, WAR, EAR, `.class` | Vineflower 1.12.0 | Apache-2.0 |
+| APK, AAB, DEX | jadx 1.5.6 | Apache-2.0 |
+| .NET DLL / EXE | ILSpy `ilspycmd` 11.1.0.9782 on the .NET 10 runtime | MIT (both) |
+| (runs jadx and Vineflower) | OpenJDK 21 JRE, Alpine `openjdk21-jre-headless` | GPLv2 + Classpath Exception |
+
+All are redistributable in a commercial product; they run as separate
+processes and are not linked into Pepper. Versions and SHA-256 checksums are
+pinned in `Dockerfile.worker`; notices are in `NOTICE` (in the image at
+`/usr/share/doc/pepper/NOTICE`). The tools add about 375 MB to the worker
+image (JRE ~190 MB, .NET runtime ~80 MB, jadx ~75 MB, ILSpy ~10 MB).
+
+ilspycmd is a framework-dependent .NET tool (pure IL), so it runs on the musl
+(Alpine) build of the .NET runtime: a build stage takes the runtime from
+Microsoft's `dotnet/runtime:10.0.12-alpine3.24` image (pinned by digest) and
+ilspycmd from its NuGet package (checksum-verified); no SDK is shipped, and it
+runs with invariant globalization so ICU is not needed.
+
+- **Findings** in decompiled code read `artifact!/file:line`, e.g.
+  `app.apk!/com/example/Login.java:42` or `app.ear!/web.war!/WEB-INF/classes/…`,
+  carry `metadata.decompiledFrom`, and are marked "Found in compiled code" in
+  the finding detail. Their line numbers refer to the decompiled source.
+- **Skipped, with a note on the scan page:** native (non-.NET) DLL/EXE, which
+  cannot be decompiled to source; artifacts in dependency folders
+  (`WEB-INF/lib`, `lib/`, `libs/`, `node_modules`, `packages/`, `.m2`, `.gradle`,
+  `vendor`); well-known library assemblies (`System.*`, `Microsoft.*`,
+  `Newtonsoft.Json` …); build output (`target/`, `build/`, `bin/` …) when the
+  scan already contains that language's source; anything over the limits.
+  Library packages inside an artifact (`android/`, `androidx/`, `kotlin/`,
+  `com/google/`, `org/apache/` …) are not scanned — SCA covers dependencies.
+- **Limits and settings:** `ENABLE_COMPILED_SCAN`, `COMPILED_SCAN_MAX_ARTIFACT_MB`,
+  `COMPILED_SCAN_MAX_ARTIFACTS`, `COMPILED_SCAN_MAX_FILES`, `COMPILED_SCAN_MAX_OUTPUT_MB`,
+  `COMPILED_SCAN_TIMEOUT_SECONDS`, `COMPILED_SCAN_TOTAL_TIMEOUT_SECONDS`,
+  `COMPILED_SCAN_SKIP_THIRD_PARTY`, `COMPILED_SCAN_EXCLUDE_PACKAGES`,
+  `COMPILED_SCAN_INCLUDE_PACKAGES` — see `dist/.env.example` and
+  `docs/configuration.html`. Stop / Cancel kill a running decompiler; the
+  decompiled source is deleted with the scan's work directory.
+- **Disable:** `ENABLE_COMPILED_SCAN=false`.
+
 ## Common gotchas
 
 - **TLS is your reverse proxy, not the container.** The app only speaks HTTP on 3000.

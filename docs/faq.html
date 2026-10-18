@@ -357,11 +357,14 @@
               CWE fields. Use for ArcSight, QRadar, Splunk, Sentinel.</td>
           </tr>
           <tr>
-            <td><strong>IDE plugins</strong></td>
-            <td>Authenticated REST surface at
-              <code>GET /api/ide/findings?projectId=…&amp;filePath=…&amp;minSeverity=HIGH</code>.
-              Returns the latest completed scan plus findings touching the requested
-              file. Auth: <code>Authorization: Bearer ppr_…</code>.</td>
+            <td><strong>IDE</strong></td>
+            <td>MCP server at <code>/api/mcp</code> (Streamable HTTP, API-key auth) for
+              MCP-capable assistants such as GitHub Copilot (VS Code, Visual Studio, JetBrains
+              IDEs incl. Android Studio, Eclipse), JetBrains AI Assistant, Cursor and Claude
+              Code: findings for the open file, finding details and remediation, starting
+              scans and triage. Setup snippets under Settings → Integrations → IDE; see the
+              <a href="api.html#ide">API reference</a>. Scripts can also call
+              <code>GET /api/ide/findings?projectId=…&amp;filePath=…&amp;minSeverity=HIGH</code>.</td>
           </tr>
           <tr>
             <td><strong>GitHub</strong></td>
@@ -420,14 +423,19 @@
       <h2 id="compliance">10 · Compliance mapping</h2>
       <p>
         Findings are mapped to OWASP Top 10, OWASP ASVS, OWASP API Top 10, CWE Top 25,
-        PCI DSS, NIST SP 800-53, NIST SSDF, ISO 27001, SOC 2, HIPAA, GDPR and CIS
-        benchmarks. Generate a per-scan compliance report from the scan detail page or
+        PCI DSS, NIST SP 800-53, NIST SSDF, DISA ASD STIG, ISO 27001, SOC 2, HIPAA,
+        GDPR and CIS benchmarks. Generate a per-scan compliance report from the scan detail page or
         <code>/scans/&lt;id&gt;/compliance</code>.
       </p>
       <ul>
         <li><strong>OWASP ASVS 4.0.3</strong> is mapped per requirement (278
           requirements, e.g. V5.3.4) using OWASP's official CWE mapping, with a
           breakdown by level (L1 / L2 / L3).</li>
+        <li><strong>DISA ASD STIG V6R5</strong> lists all 286 requirements with
+          their Vuln ID, STIG ID and category (CAT I / II / III). The 44 that a code
+          weakness can evidence (SQL injection, XSS, command injection, embedded
+          credentials, …) are mapped by CWE; process and deployment requirements
+          are listed as not assessable from code.</li>
         <li><strong>CIS Kubernetes 1.23, CIS Amazon EKS 1.4, CIS AWS Foundations
           1.4 and CIS Docker 1.6</strong> are mapped by the exact check that raised
           the finding (e.g. <code>KSV-0017</code> → 5.2.x). Controls that need a

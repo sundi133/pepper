@@ -6,6 +6,7 @@ import {
   ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
 } from "@/lib/constants";
 import { isAuthorizationOrLogicFinding } from "../sast/evidence-verify";
+import { isTestLikePath } from "@/lib/test-paths";
 
 // SAST_PATTERN is rule-based SAST (OpenGrep, curated packs). Its findings pass
 // the gates below like any other scanner: LOW-confidence rules fall under the
@@ -23,8 +24,6 @@ const FAILURE_RULE_IDS = new Set([
 const PLACEHOLDER_TEXT =
   /(?:example|sample|dummy|fake|mock|placeholder|changeme|change-me|your[_-]?(?:key|secret|token|password)|<[^>]+>|\$\{|process\.env|os\.environ|getenv|localhost|127\.0\.0\.1|xxx+|test[_-]?key)/i;
 
-const TEST_PATH =
-  /(?:^|\/)(?:test|tests|spec|specs|__tests__|fixtures?|mocks?|examples?|demo|sample)(?:\/|$)|\.(?:test|spec)\.[jt]sx?$/i;
 
 function confidenceFloor(scanner: ScannerType): number {
   switch (scanner) {
@@ -140,7 +139,7 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
     }
 
     if (
-      TEST_PATH.test(f.filePath || "") &&
+      isTestLikePath(f.filePath) &&
       ["SAST_LLM", "SECRETS_LLM", "ZERO_DAY"].includes(f.scanner) &&
       (f.confidence ?? 0) < 0.9
     ) {
@@ -149,7 +148,7 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
 
     // Rule matches in test / fixture / example code are almost always
     // deliberate or unreachable.
-    if (f.scanner === "SAST_PATTERN" && TEST_PATH.test(f.filePath || "")) {
+    if (f.scanner === "SAST_PATTERN" && isTestLikePath(f.filePath)) {
       return false;
     }
 

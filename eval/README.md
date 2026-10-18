@@ -17,6 +17,10 @@ The scan runs in the worker image (`EVAL_IMAGE`, default `sundi133/pepper-worker
 with this checkout's `src/` mounted over it, so it measures your working tree.
 Each run costs model credit.
 
+The logic-flaw passes are off by default; to measure them, add
+`LOGIC_ENDPOINT_MAP=true`, `LOGIC_PATTERN_PACK=true` and `LOGIC_MAP_IN_PROMPT=true`
+to the `LLM_ENV` file (their counters appear as `logic: …` rows in the pipeline table).
+
 Output in `eval/results/<label>/`: `report.md` (recall and precision per app,
 recall per class, the pipeline counters, missed issues), `summary.json`, and
 per app and run the scored findings (`<app>-runN.json`) and the scan log.
@@ -43,7 +47,10 @@ and every unlabelled or safe-code finding to review.
 ## Corpus and labels
 
 - `corpus.json`: apps pinned to a commit. `vulnerable` apps are deliberately
-  insecure; `clean` apps are ordinary codebases for false-positive pressure.
+  insecure; `clean` apps are ordinary codebases for false-positive pressure;
+  `fixture` apps are local synthetic code (`path`, relative to `eval/`), such as
+  `fixtures/logic-lab`: every logic-flaw rule and pattern of
+  `docs/LOGIC_FLAW_DETECTION_SPEC.md` once vulnerable and once as a safe twin.
 - `truth/<app>.json`: `expected` (real issues, with file, line range, class,
   accepted CWEs), `must_not_report` (safe code that looks risky), `debatable`
   (hardening; neither credited nor penalized), and optionally `include` (scan

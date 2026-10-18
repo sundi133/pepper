@@ -578,6 +578,29 @@ export const ZERO_DAY_LLM_FILES = parseInt(
   10,
 );
 
+// ─── Logic-flaw passes of the zero-day scanner ───────────────────────────────
+// See docs/LOGIC_FLAW_DETECTION_SPEC.md. The map pass reads the code into a
+// verified endpoint map; the rules compare entry points and the confirmation
+// pass judges each gap. The pattern pack asks about incident classes
+// (fail-open, duplicate events, shared cache, jobs, races, money).
+// Off by default until the evaluation gates in the spec (§6.4) are met.
+const flag = (v: string | undefined, dflt: boolean) => (v === undefined || v === "" ? dflt : v.toLowerCase() === "true");
+
+/** Endpoint authorization map, rules R1–R5 and their confirmation. */
+export const LOGIC_ENDPOINT_MAP = flag(process.env.LOGIC_ENDPOINT_MAP, false);
+/** Incident-pattern pack P1–P6. */
+export const LOGIC_PATTERN_PACK = flag(process.env.LOGIC_PATTERN_PACK, false);
+/** Give the main zero-day pass the verified endpoint table instead of the regex route sample. */
+export const LOGIC_MAP_IN_PROMPT = flag(process.env.LOGIC_MAP_IN_PROMPT, false);
+/** Source files the map pass reads per scan. */
+export const LOGIC_MAP_MAX_FILES = parseInt(process.env.LOGIC_MAP_MAX_FILES || "150", 10);
+/** Rule candidates confirmed per scan. */
+export const LOGIC_MAX_CANDIDATES = parseInt(process.env.LOGIC_MAX_CANDIDATES || "40", 10);
+/** Pattern regions reviewed per scan. */
+export const LOGIC_MAX_REGIONS = parseInt(process.env.LOGIC_MAX_REGIONS || "40", 10);
+/** Concurrent AI requests of the logic passes. */
+export const LOGIC_CONCURRENCY = parseInt(process.env.LOGIC_CONCURRENCY || "3", 10);
+
 // ─── SAML SSO (single global IdP, on-prem) ───────────────────────────────────
 // Opt-in enterprise single sign-on. Off by default so existing email/password
 // and GitHub login are unchanged. When enabled, users authenticate against one

@@ -23,6 +23,16 @@ import {
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { llmExcludedPath } from "@/lib/llm-exclusions";
+import {
+  LOGIC_CONCURRENCY,
+  LOGIC_ENDPOINT_MAP,
+  LOGIC_MAP_IN_PROMPT,
+  LOGIC_MAP_MAX_FILES,
+  LOGIC_MAX_CANDIDATES,
+  LOGIC_MAX_REGIONS,
+  LOGIC_PATTERN_PACK,
+} from "@/lib/constants";
+import { buildLogicMap, endpointTable, runLogicChecks, type LogicOptions } from "./logic";
 
 interface ZeroDayLlmFinding {
   title: string;
@@ -57,6 +67,74 @@ export const zeroDayScanner: ScannerPlugin = {
       ? OLLAMA_MAX_RESPONSE_TOKENS
       : LLM_MAX_RESPONSE_TOKENS;
 
+    // Logic passes (docs/LOGIC_FLAW_DETECTION_SPEC.md): build the verified
+    // endpoint map first, so the main pass can use it, then run the checks
+    // alongside the main pass.
+    const logicOptions: LogicOptions = {
+      workDir: ctx.workDir,
+      fileList: ctx.fileList,
+      client,
+      model: ctx.orgSettings.llmModel,
+      maxResponseTokens,
+      endpointMap: LOGIC_ENDPOINT_MAP,
+      patternPack: LOGIC_PATTERN_PACK,
+      maxMapFiles: LOGIC_MAP_MAX_FILES,
+      maxCandidates: LOGIC_MAX_CANDIDATES,
+      maxRegions: LOGIC_MAX_REGIONS,
+      concurrency: LOGIC_CONCURRENCY,
+      minConfidence: ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
+      signal: ctx.signal,
+      onProgress: ctx.onProgress,
+    };
+    const wantsMap = LOGIC_ENDPOINT_MAP || LOGIC_PATTERN_PACK || LOGIC_MAP_IN_PROMPT;
+    const mapState = wantsMap ? await buildLogicMap(logicOptions) : null;
+    const checks =
+      mapState && (LOGIC_ENDPOINT_MAP || LOGIC_PATTERN_PACK)
+        ? runLogicChecks(logicOptions, mapState)
+        : Promise.resolve(null);
+    const table = LOGIC_MAP_IN_PROMPT && mapState ? endpointTable(mapState.map) : "";
+
+    const [main, logic] = await Promise.all([mainPass(ctx, client, maxResponseTokens, table), checks]);
+    const logicFindings = (logic?.findings ?? []).filter((f) => !coveredByMainPass(f, main));
+    if (logicFindings.length > 0 && ctx.onBatchFindings) {
+      await ctx.onBatchFindings("ZERO_DAY", logicFindings);
+    }
+    if (logicFindings.length > 0) {
+      ctx.onProgress?.(`Logic review: ${logicFindings.length} confirmed authorization or logic finding(s)`);
+    }
+    return [...main, ...logicFindings];
+  },
+};
+
+const AUTHZ_LIKE = /\b(?:CWE-(?:284|285|287|306|639|862|863|269|266|425|915|1220))\b|unauth|authori[sz]|access control|idor|bola|privilege|ownership|admin|role/i;
+
+/**
+ * A logic finding the main pass already reported: for a rule finding, an
+ * authorization-like main finding inside the same handler; for a pattern
+ * finding, a main finding on nearly the same line with the same CWE. The main
+ * pass wrote it first, so its version is kept.
+ */
+export function coveredByMainPass(f: RawFinding, main: RawFinding[]): boolean {
+  const meta = (f.metadata || {}) as Record<string, unknown>;
+  const range = typeof meta.handlerRange === "string" ? /^(.*):(\d+)-(\d+)$/.exec(meta.handlerRange) : null;
+  return main.some((m) => {
+    if (m.filePath !== f.filePath || m.startLine == null || f.startLine == null) return false;
+    if (range) {
+      const inside = m.filePath === range[1] && m.startLine >= Number(range[2]) - 2 && m.startLine <= Number(range[3]) + 2;
+      return inside && AUTHZ_LIKE.test(`${m.cweId ?? ""} ${m.title}`);
+    }
+    return Math.abs(m.startLine - f.startLine) <= 3 && !!m.cweId && m.cweId === f.cweId;
+  });
+}
+
+/** The original cross-file pass over the highest-priority files, in one request. */
+async function mainPass(
+  ctx: ScanContext,
+  client: ReturnType<typeof createLlmClient>,
+  maxResponseTokens: number,
+  endpointTableText: string,
+): Promise<RawFinding[]> {
+  {
     const repoContext = buildDeepRepoContext(ctx.workDir, ctx.fileList);
     const targetFiles = selectZeroDayFiles(ctx.fileList);
     if (targetFiles.length === 0) return [];
@@ -89,7 +167,11 @@ export const zeroDayScanner: ScannerPlugin = {
       `Zero-Day: cross-file exploit-chain analysis on ${fileBundles.length} files...`,
     );
 
-    const userContent = `${repoContext.summary}\n\nHIGH-RISK FILES:\n${fileBundles.join("\n\n")}`;
+    // The verified endpoint table replaces the regex route sample when there is one.
+    const context = endpointTableText
+      ? `${repoContext.summary.replace(/\nROUTE MAP \(sample\):\n(?: {2}.*\n)*/, "\n")}\n${endpointTableText}\n`
+      : repoContext.summary;
+    const userContent = `${context}\n\nHIGH-RISK FILES:\n${fileBundles.join("\n\n")}`;
 
     try {
       const raw = await analyzeWithLlm(
@@ -187,8 +269,8 @@ export const zeroDayScanner: ScannerPlugin = {
       logger.error({ err }, "Zero-day cross-file analysis failed");
       return [];
     }
-  },
-};
+  }
+}
 
 /**
  * The sent file a finding refers to. Models write the path from the `###`

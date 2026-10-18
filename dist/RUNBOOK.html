@@ -187,7 +187,7 @@
   <section class="plain">
     <h2>Before you start</h2>
     <ul>
-      <li><strong>VM:</strong> Linux x86-64 (amd64). 4 vCPU and 16 GB RAM recommended (minimum 2 vCPU / 8 GB), 100 GB disk for Docker data.</li>
+      <li><strong>VM:</strong> Linux on x86-64 (amd64) or ARM64 (aarch64); the images are published for both. 4 vCPU and 16 GB RAM recommended (minimum 2 vCPU / 8 GB), 100 GB disk for Docker data.</li>
       <li><strong>Docker Engine 24 or newer</strong> with the <strong>Compose v2 plugin</strong>.</li>
       <li><strong>Outbound access from the VM</strong>, directly or through your proxy:
         <ul>
@@ -206,7 +206,7 @@
     <div class="num">1</div>
     <div class="body">
       <h2>Check the VM</h2>
-      <div class="cmd"><pre>uname -m                                          # must print x86_64
+      <div class="cmd"><pre>uname -m                                          # x86_64 or aarch64
 docker version --format '{{.Server.Version}}'     # 24 or newer
 docker compose version                            # Docker Compose version v2.x
 df -h /var/lib/docker                             # at least 40 GB free
@@ -266,11 +266,12 @@ docker compose ps</pre></div>
       <details>
         <summary>The VM can't reach Docker Hub (offline route)</summary>
         <div>
-          <p>On any machine with internet access and Docker, download the images into one file:</p>
+          <p>On any machine with internet access and Docker, download the images into one file. Set <code>P</code> to the VM's architecture: <code>linux/amd64</code> when <code>uname -m</code> prints <code>x86_64</code>, <code>linux/arm64</code> when it prints <code>aarch64</code>.</p>
           <div class="cmd"><pre>V=__PEPPER_VERSION__
+P=linux/amd64
 for i in docker.io/sundi133/pepper-api:$V docker.io/sundi133/pepper-worker:$V \
          postgres:16-alpine redis:7-alpine docker.io/chainguard/minio:latest; do
-  docker pull --platform linux/amd64 "$i"
+  docker pull --platform "$P" "$i"
 done
 docker save -o pepper-images-$V.tar docker.io/sundi133/pepper-api:$V \
   docker.io/sundi133/pepper-worker:$V postgres:16-alpine redis:7-alpine docker.io/chainguard/minio:latest

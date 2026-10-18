@@ -51,12 +51,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Each image is built natively for amd64 and arm64 (Graviton, Ampere, Apple
+  # Silicon) on a runner of that architecture, pushed by digest only, then the
+  # `merge` job publishes one multi-arch tag over both.
   build:
-    name: Build ${{ matrix.name }} image
-    runs-on: ubuntu-latest
+    name: Build ${{ matrix.name }} image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
+        name: [worker, api]
+        arch: [amd64, arm64]
         include:
           - name: worker
             dockerfile: Dockerfile.worker
@@ -64,9 +69,77 @@ jobs:
           - name: api
             dockerfile: Dockerfile.api
             image: pepper-api
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Image labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }}
+
+      - name: Build & push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./${{ matrix.dockerfile }}
+          platforms: linux/${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.name }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}-${{ matrix.arch }}
+
+      - name: Record digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.name }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # One tag (latest, sha-…, 1.5.0, 1.5) covering both architectures. Runs only
+  # when both builds of an image succeeded, so a tag is never amd64-only.
+  merge:
+    name: Publish ${{ matrix.name }} tags (amd64 + arm64)
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: worker
+            image: pepper-worker
+          - name: api
+            image: pepper-api
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.name }}-*
+          merge-multiple: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -88,23 +161,37 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
-      - name: Build & push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./${{ matrix.dockerfile }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+      - name: Create multi-arch tags
+        working-directory: /tmp/digests
+        env:
+          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }}
+        run: |
+          n=$(find . -type f | wc -l)
+          test "$n" -eq 2 || { echo "::error::expected 2 digests (amd64, arm64), got $n"; exit 1; }
+          # Unquoted on purpose: one -t per tag, one argument per digest.
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "$IMAGE@sha256:%s " *)
+
+      - name: Check both architectures are published
+        env:
+          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }}
+          TAG: ${{ steps.meta.outputs.version }}
+        run: |
+          docker buildx imagetools inspect "$IMAGE:$TAG"
+          for arch in amd64 arm64; do
+            docker buildx imagetools inspect --raw "$IMAGE:$TAG" \
+              | jq -e --arg a "$arch" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $a)' > /dev/null \
+              || { echo "::error::$IMAGE:$TAG has no linux/$arch image"; exit 1; }
+          done
 
   # Version tags (v1.1.0) also publish the customer install bundle: the same
   # files scripts/package-install-bundle.sh produces, pinned to this version's
   # images, attached to a GitHub Release with checksums.
   release:
     name: Publish customer release
-    needs: build
+    needs: merge
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -118,13 +205,17 @@ jobs:
         # v1.1.0 → 1.1.0, the image tag docker/metadata-action publishes.
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Check both images are published
+      - name: Check both images are published for amd64 and arm64
         env:
           V: ${{ steps.v.outputs.version }}
         run: |
           for img in pepper-api pepper-worker; do
-            docker manifest inspect "docker.io/sundi133/$img:$V" > /dev/null \
+            m=$(docker manifest inspect "docker.io/sundi133/$img:$V") \
               || { echo "::error::docker.io/sundi133/$img:$V is not on Docker Hub"; exit 1; }
+            for arch in amd64 arm64; do
+              jq -e --arg a "$arch" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $a)' <<< "$m" > /dev/null \
+                || { echo "::error::docker.io/sundi133/$img:$V has no linux/$arch image"; exit 1; }
+            done
           done
 
       - name: Package install bundle
@@ -142,7 +233,7 @@ jobs:
             echo
             echo "Send the customer \`pepper-install-$V.tar.gz\` (Linux) or \`.zip\` (same files). Unpack it on the VM and follow \`RUNBOOK.html\` (step by step, with the full \`.env\` reference) or \`INSTALL.md\`."
             echo
-            echo "Images (linux/amd64, public on Docker Hub):"
+            echo "Images (linux/amd64 and linux/arm64, public on Docker Hub):"
             echo "- \`docker.io/sundi133/pepper-api:$V\`"
             echo "- \`docker.io/sundi133/pepper-worker:$V\`"
             echo

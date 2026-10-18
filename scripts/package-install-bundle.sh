@@ -7,7 +7,8 @@
 # docker-compose.yml, .env.example (version prefilled), setup.sh, INSTALL.md and
 # RUNBOOK.html (the step-by-step runbook for the customer's team).
 # Optionally set IMAGES=1 to also write the offline image archive
-# (release/pepper-images-<version>.tar, ~3 GB) for air-gapped customers.
+# (release/pepper-images-<version>.tar, ~3 GB) for air-gapped customers, and
+# PLATFORM=linux/arm64 when the customer's VM is ARM64 (default linux/amd64).
 set -eu
 VERSION="${1:?usage: package-install-bundle.sh <image-tag>}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -16,6 +17,7 @@ NAME="pepper-install-$VERSION"
 STAGE="$OUT/$NAME"
 API="docker.io/sundi133/pepper-api:$VERSION"
 WORKER="docker.io/sundi133/pepper-worker:$VERSION"
+PLATFORM="${PLATFORM:-linux/amd64}"
 
 rm -rf "$STAGE" && mkdir -p "$STAGE/certs"
 cp "$ROOT/dist/docker-compose.yml" "$ROOT/dist/INSTALL.md" "$ROOT/dist/setup.sh" "$STAGE/"
@@ -32,8 +34,8 @@ if command -v zip >/dev/null 2>&1; then (cd "$OUT" && rm -f "$NAME.zip" && zip -
 echo "Bundle: $OUT/$NAME.tar.gz"
 
 if [ "${IMAGES:-0}" = "1" ]; then
-  for img in "$API" "$WORKER"; do docker pull --platform linux/amd64 "$img"; done
-  for img in postgres:16-alpine redis:7-alpine docker.io/chainguard/minio:latest; do docker pull --platform linux/amd64 "$img"; done
+  for img in "$API" "$WORKER"; do docker pull --platform "$PLATFORM" "$img"; done
+  for img in postgres:16-alpine redis:7-alpine docker.io/chainguard/minio:latest; do docker pull --platform "$PLATFORM" "$img"; done
   docker save -o "$OUT/pepper-images-$VERSION.tar" "$API" "$WORKER" postgres:16-alpine redis:7-alpine docker.io/chainguard/minio:latest
   (cd "$OUT" && sha256sum "pepper-images-$VERSION.tar" > "pepper-images-$VERSION.tar.sha256" 2>/dev/null || shasum -a 256 "pepper-images-$VERSION.tar" > "pepper-images-$VERSION.tar.sha256")
   echo "Images: $OUT/pepper-images-$VERSION.tar"

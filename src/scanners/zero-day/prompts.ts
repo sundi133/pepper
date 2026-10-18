@@ -219,6 +219,7 @@ For each finding respond with:
       "severity": "CRITICAL|HIGH|MEDIUM|LOW",
       "category": "IDOR|Business Logic|Race Condition|Trust Boundary|State Management|Auth Logic|Multi-tenant|Dynamic Attack|Crypto|Resource Exhaustion|Parameter Tampering|Deserialization|Memory Safety",
       "description": "Plain-language: what is wrong, why pattern-based SAST misses it, and business impact. Do NOT paste large source blocks, fenced code, or a 'Code evidence' section — the UI shows file path and line range separately.",
+      "filePath": "the file that contains the flaw, exactly as written in its ### header",
       "startLine": <exact line number>,
       "endLine": <exact line number>,
       "cweId": "CWE-XXX",

@@ -105,16 +105,31 @@ export const zeroDayScanner: ScannerPlugin = {
         { findings: [] },
       );
 
-      const sentFilePaths = new Set(targetFiles.slice(0, ZERO_DAY_LLM_FILES));
-      const findings = (parsed.findings || [])
-        .filter(
-          (f) =>
-            f.title &&
-            f.severity &&
-            f.filePath &&
-            sentFilePaths.has(f.filePath) &&
-            (f.confidence ?? 0) >= ZERO_DAY_MIN_CONFIDENCE_DEFAULT,
-        )
+      const sentFilePaths = targetFiles.slice(0, ZERO_DAY_LLM_FILES);
+      const dropped = { incomplete: 0, unknownFile: 0, lowConfidence: 0 };
+      const candidates = (parsed.findings || []).flatMap((f) => {
+        if (!f.title || !f.severity) {
+          dropped.incomplete++;
+          return [];
+        }
+        const filePath = resolveSentFile(f.filePath, sentFilePaths);
+        if (!filePath) {
+          dropped.unknownFile++;
+          return [];
+        }
+        if ((f.confidence ?? 0) < ZERO_DAY_MIN_CONFIDENCE_DEFAULT) {
+          dropped.lowConfidence++;
+          return [];
+        }
+        return [{ ...f, filePath }];
+      });
+      if (dropped.incomplete + dropped.unknownFile + dropped.lowConfidence > 0) {
+        logger.info(
+          { returned: parsed.findings?.length ?? 0, kept: candidates.length, ...dropped },
+          "Zero-day: dropped findings without a title, a file that was sent, or enough confidence",
+        );
+      }
+      const findings = candidates
         .map((f) => {
           let snippet: string | undefined;
           try {
@@ -174,6 +189,25 @@ export const zeroDayScanner: ScannerPlugin = {
     }
   },
 };
+
+/**
+ * The sent file a finding refers to. Models write the path from the `###`
+ * header, sometimes with `./`, a leading folder, or only its tail, so an exact
+ * match falls back to a unique suffix match. Unknown or ambiguous paths are
+ * rejected: a finding must point at code the model actually saw.
+ */
+export function resolveSentFile(raw: unknown, sent: string[]): string | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  const norm = (p: string) => p.trim().replace(/\\/g, "/").replace(/^(?:\.\/|\/)+/, "");
+  const want = norm(raw);
+  const exact = sent.find((s) => norm(s) === want);
+  if (exact) return exact;
+  const matches = sent.filter((s) => {
+    const have = norm(s);
+    return have.endsWith(`/${want}`) || want.endsWith(`/${have}`);
+  });
+  return matches.length === 1 ? matches[0] : undefined;
+}
 
 function normalizeSeverity(s: string): RawFinding["severity"] {
   const upper = s.toUpperCase();

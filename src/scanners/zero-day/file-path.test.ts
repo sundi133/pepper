@@ -82,3 +82,17 @@ describe("ZERO_DAY keeps findings that point at a sent file", () => {
     expect(ZERO_DAY_SYSTEM_PROMPT).toMatch(/"filePath":/);
   });
 });
+
+describe("coveredByMainPass", () => {
+  it("drops a rule finding when the main pass reported an authorization flaw in the same handler", async () => {
+    const { coveredByMainPass } = await import("./index");
+    const logic = { scanner: "ZERO_DAY", severity: "HIGH", title: "[Zero-Day] debug lacks authentication", filePath: "api/users.py", startLine: 25, cweId: "CWE-306", metadata: { handlerRange: "api/users.py:23-28" } } as never;
+    const mainAuthz = { scanner: "ZERO_DAY", severity: "HIGH", title: "[Zero-Day] Unauthenticated debug endpoint exposes passwords", filePath: "api/users.py", startLine: 24, cweId: "CWE-200" } as never;
+    const mainOther = { scanner: "ZERO_DAY", severity: "HIGH", title: "[Zero-Day] SQL injection in debug", filePath: "api/users.py", startLine: 24, cweId: "CWE-89" } as never;
+    expect(coveredByMainPass(logic, [mainAuthz])).toBe(true);
+    expect(coveredByMainPass(logic, [mainOther])).toBe(false);
+    const pattern = { scanner: "ZERO_DAY", severity: "HIGH", title: "x", filePath: "a.js", startLine: 10, cweId: "CWE-362", metadata: {} } as never;
+    expect(coveredByMainPass(pattern, [{ ...(pattern as object), startLine: 12 } as never])).toBe(true);
+    expect(coveredByMainPass(pattern, [{ ...(pattern as object), startLine: 30 } as never])).toBe(false);
+  });
+});

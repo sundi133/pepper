@@ -24,7 +24,8 @@ export interface GithubRepoRef {
   name?: string;
 }
 
-async function oauthToken(organizationId: string): Promise<string | null> {
+/** The organization's personal (OAuth) GitHub token, regardless of policy. */
+export async function getOrgGithubOAuthToken(organizationId: string): Promise<string | null> {
   const row = await prisma.orgGithubConnection.findUnique({ where: { organizationId }, select: { accessTokenEnc: true } });
   if (!row?.accessTokenEnc) return null;
   try {
@@ -32,6 +33,17 @@ async function oauthToken(organizationId: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** Whether personal GitHub connections may be used (OrgSettings.allowPersonalGithub, default true). */
+export async function isPersonalGithubAllowed(organizationId: string): Promise<boolean> {
+  const s = await prisma.orgSettings.findUnique({ where: { organizationId }, select: { allowPersonalGithub: true } });
+  return s?.allowPersonalGithub ?? true;
+}
+
+async function oauthToken(organizationId: string): Promise<string | null> {
+  if (!(await isPersonalGithubAllowed(organizationId))) return null;
+  return getOrgGithubOAuthToken(organizationId);
 }
 
 /** A token for the installation; a removed or suspended installation is recorded as such. */

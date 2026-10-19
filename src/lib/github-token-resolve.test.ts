@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
   orgGithubAppInstallation: { findMany: vi.fn(), deleteMany: vi.fn(async (_a: unknown) => ({ count: 1 })), updateMany: vi.fn(async (_a: unknown) => ({ count: 1 })) },
   orgGithubConnection: { findUnique: vi.fn() },
+  orgSettings: { findUnique: vi.fn(async () => null as { allowPersonalGithub: boolean } | null) },
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
 vi.mock("@/lib/token-encryption", () => ({ decryptSecret: (s: string) => s.replace(/^enc:/, "") }));
@@ -70,5 +71,14 @@ describe("resolveGithubToken", () => {
   it("returns nothing when neither is available", async () => {
     db.orgGithubConnection.findUnique.mockResolvedValue(null);
     expect(await resolveGithubToken("o1", { owner: "other" })).toBeNull();
+  });
+
+  it("ignores the personal connection when the organization allows only the App", async () => {
+    db.orgSettings.findUnique.mockResolvedValue({ allowPersonalGithub: false });
+    expect(await resolveGithubToken("o1", { owner: "acme" })).toMatchObject({ source: "app" });
+    expect(await resolveGithubToken("o1", { owner: "someone-else" })).toBeNull();
+    db.orgGithubAppInstallation.findMany.mockResolvedValue([inst("Acme", 1)]);
+    expect(await resolveGithubToken("o1", null)).toMatchObject({ source: "app" });
+    db.orgSettings.findUnique.mockResolvedValue(null);
   });
 });

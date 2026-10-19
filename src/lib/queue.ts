@@ -120,6 +120,17 @@ export interface ScanJobData {
   /** Resolve org Bitbucket app password at worker runtime (never sent from browser). */
   useOrgBitbucketToken?: boolean;
   useOrgAzureDevOpsToken?: boolean;
+  /**
+   * A token pasted for this clone, encrypted (token-encryption). The worker
+   * decrypts it at clone time; job data never holds a usable credential.
+   */
+  repoTokenEnc?: string;
+  /** SVN password, encrypted like repoTokenEnc (svnPassword is no longer set). */
+  svnPasswordEnc?: string;
+  /** Fetch and check out this ref after cloning (fork PRs: refs/pull/<n>/head). */
+  fetchRef?: string;
+  /** Glob patterns of files to leave out of the scan (.pepper.yaml paths.exclude). */
+  pathExcludes?: string[];
   orgSettings: {
     llmProvider: string;
     llmBaseUrl: string;

@@ -50,6 +50,8 @@ export async function queueAzureDevOpsWebhookScan(params: {
     projectId: params.project.id,
     commitSha,
     scanType: params.scanType,
+    prNumber: params.prNumber,
+    branch: params.branch,
   });
   if (slot.status === "ALREADY_QUEUED") {
     return { scanId: slot.scanId, status: "ALREADY_QUEUED" };

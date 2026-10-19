@@ -182,7 +182,11 @@ export async function postScanPrSummary(scanId: string): Promise<void> {
     return;
   }
 
-  const token = await getOrgGithubAccessToken(organizationId, { owner: githubOwner, name: githubRepoName });
+  const { resolveGithubToken } = await import("./github-token-resolve");
+  const resolved = await resolveGithubToken(organizationId, { owner: githubOwner, name: githubRepoName });
+  const token = resolved?.token;
+  // "@pepper fix" works where the App delivers comment events.
+  const viaApp = resolved?.source === "app";
   if (!token) {
     log.info(
       { scanId, organizationId },
@@ -193,6 +197,18 @@ export async function postScanPrSummary(scanId: string): Promise<void> {
 
   const status: "COMPLETED" | "FAILED" =
     scan.status === "COMPLETED" ? "COMPLETED" : "FAILED";
+
+  // The repository's .pepper.yaml on the PR's base branch decides which
+  // comments are posted (docs/PR_REVIEW_BOT_SPEC.md §5); defaults when absent.
+  const { getPullRequest, loadRepoConfig } = await import("./pr-review/github");
+  const { DEFAULT_REPO_CONFIG } = await import("./pr-review/config");
+  let cfg = DEFAULT_REPO_CONFIG;
+  try {
+    const pr = await getPullRequest(token, githubOwner, githubRepoName, scan.prNumber);
+    if (pr) cfg = (await loadRepoConfig(token, githubOwner, githubRepoName, pr.base.ref)).config;
+  } catch {
+    // defaults
+  }
 
   const topFindings =
     status === "COMPLETED"
@@ -217,7 +233,7 @@ export async function postScanPrSummary(scanId: string): Promise<void> {
   );
 
   const marker = buildPrMarker(projectId);
-  const body = renderPrSummary(
+  const body = !cfg.comments.summary ? null : renderPrSummary(
     {
       scanId: scan.id,
       projectName: scan.project.name,
@@ -239,14 +255,9 @@ export async function postScanPrSummary(scanId: string): Promise<void> {
     marker,
   );
 
-  const result = await upsertIssueComment(
-    token,
-    githubOwner,
-    githubRepoName,
-    scan.prNumber,
-    marker,
-    body,
-  );
+  const result = body
+    ? await upsertIssueComment(token, githubOwner, githubRepoName, scan.prNumber, marker, body)
+    : { ok: true as const, commentId: undefined, skipped: true };
 
   if (!result.ok) {
     log.warn(
@@ -268,7 +279,9 @@ export async function postScanPrSummary(scanId: string): Promise<void> {
 
   const reviewUrl = buildReviewUrl(scan.id);
 
-  if (status === "COMPLETED" && scan.commitSha && topFindings.length > 0) {
+  const minRank = SEVERITY_RANK[cfg.comments.inline_min_severity] ?? 99;
+  const inlineFindings = topFindings.filter((f) => (SEVERITY_RANK[f.severity] ?? 99) <= minRank);
+  if (cfg.comments.inline && status === "COMPLETED" && scan.commitSha && inlineFindings.length > 0) {
     try {
       const inline = await postInlineReview({
         token,
@@ -276,8 +289,10 @@ export async function postScanPrSummary(scanId: string): Promise<void> {
         repo: githubRepoName,
         prNumber: scan.prNumber,
         headSha: scan.commitSha,
-        findings: topFindings,
+        findings: inlineFindings,
         reviewUrl,
+        maxComments: cfg.comments.max_inline,
+        fixHint: viaApp,
       });
       log.info(
         {

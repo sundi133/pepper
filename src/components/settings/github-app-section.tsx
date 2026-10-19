@@ -6,6 +6,7 @@ import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 
 interface Installation {
   id: string;
@@ -24,6 +25,9 @@ interface Installation {
 export function GithubAppSection({ onLoaded }: { onLoaded?: (configured: boolean, installations: number) => void }) {
   const [state, setState] = useState<{ configured: boolean; installations: Installation[] } | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  /** Organization policy: personal (OAuth) GitHub connections allowed. */
+  const [allowPersonal, setAllowPersonal] = useState<boolean | null>(null);
+  const [savingPolicy, setSavingPolicy] = useState(false);
   // The latest callback, without making `load` (and the effect) change each render.
   const onLoadedRef = useRef(onLoaded);
   useEffect(() => {
@@ -37,6 +41,10 @@ export function GithubAppSection({ onLoaded }: { onLoaded?: (configured: boolean
       const data = (await res.json()) as { configured: boolean; installations: Installation[] };
       setState(data);
       onLoadedRef.current?.(data.configured, data.installations.length);
+      if (data.configured) {
+        const policy = await fetch("/api/integrations/github");
+        if (policy.ok) setAllowPersonal(((await policy.json()) as { allowPersonalGithub?: boolean }).allowPersonalGithub ?? true);
+      }
     } catch {
       // the OAuth section still works
     }
@@ -62,6 +70,28 @@ export function GithubAppSection({ onLoaded }: { onLoaded?: (configured: boolean
       toast.error(e instanceof Error ? e.message : "Failed to unlink");
     } finally {
       setRemoving(null);
+    }
+  }
+
+  async function setPolicy(allow: boolean) {
+    if (!allow && !state?.installations.length) {
+      toast.error("Install the GitHub App first: with personal connections off, Pepper reaches GitHub only through the App.");
+      return;
+    }
+    setSavingPolicy(true);
+    try {
+      const res = await fetch("/api/integrations/github", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ allowPersonalGithub: allow }),
+      });
+      if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error || "Failed to save");
+      setAllowPersonal(allow);
+      toast.success(allow ? "Personal GitHub connections allowed" : "GitHub App only: personal connections are off");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSavingPolicy(false);
     }
   }
 
@@ -110,6 +140,17 @@ export function GithubAppSection({ onLoaded }: { onLoaded?: (configured: boolean
             </li>
           ))}
         </ul>
+      )}
+      {allowPersonal !== null && (
+        <label className="flex items-start gap-3 rounded border bg-background px-3 py-2 text-sm">
+          <Switch checked={allowPersonal} disabled={savingPolicy} onCheckedChange={(v) => void setPolicy(v)} />
+          <span>
+            <span className="font-medium">Allow personal GitHub connections</span>
+            <span className="block text-muted-foreground">
+              Off: Pepper uses only the GitHub App; &quot;Connect GitHub&quot; and pasted tokens for App-covered repositories are refused.
+            </span>
+          </span>
+        </label>
       )}
       <Button asChild>
         <Link href="/api/integrations/github/app/install" prefetch={false}>

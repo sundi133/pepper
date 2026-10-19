@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { githubAppConfig, listInstallationRepositories } from "@/lib/github-app";
 import { listGithubRepositoriesForUser, type GithubRepoListItem } from "@/lib/github-repos";
 import { getOrgGithubAccessTokenOrThrow, GithubTokenInvalidError } from "@/lib/github-connection";
-import { installationToken } from "@/lib/github-token-resolve";
+import { installationToken, isPersonalGithubAllowed } from "@/lib/github-token-resolve";
 
 export type AccessibleGithubRepo = GithubRepoListItem & { via: "app" | "oauth" };
 
@@ -18,7 +18,9 @@ export async function listOrgGithubRepositories(organizationId: string, connecte
   const installations = cfg
     ? await prisma.orgGithubAppInstallation.findMany({ where: { organizationId, suspendedAt: null }, select: { id: true, installationId: true } })
     : [];
-  const hasOauth = (await prisma.orgGithubConnection.count({ where: { organizationId } })) > 0;
+  const hasOauth =
+    (await prisma.orgGithubConnection.count({ where: { organizationId } })) > 0 &&
+    (await isPersonalGithubAllowed(organizationId));
 
   if (hasOauth) {
     try {

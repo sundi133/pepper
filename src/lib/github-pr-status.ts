@@ -113,3 +113,25 @@ function describeCounts(prefix: string, c: SeverityCountsLite): string {
   if (c.low) parts.push(`${c.low} low`);
   return parts.length ? `${prefix} — ${parts.join(", ")}` : prefix;
 }
+
+/**
+ * A status saying why Pepper didn't review this commit (docs/PR_REVIEW_BOT_SPEC.md §3):
+ * `success` for deliberate skips (draft, bot, paused, settings), so a required
+ * check doesn't wait forever; `pending` for fork PRs nobody has reviewed yet,
+ * so a required check keeps blocking until a collaborator asks for a review.
+ */
+export async function postSkippedCommitStatus(input: {
+  token: string;
+  owner: string;
+  repo: string;
+  sha: string;
+  description: string;
+  state?: "success" | "pending";
+}): Promise<void> {
+  const r = await githubPost<{ message?: string }>(
+    input.token,
+    `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/statuses/${encodeURIComponent(input.sha)}`,
+    { state: input.state ?? "success", context: STATUS_CONTEXT, description: input.description.slice(0, 140) },
+  );
+  if (!r.ok) log.warn({ owner: input.owner, repo: input.repo, status: r.status }, "Failed to post skipped commit status");
+}

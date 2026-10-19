@@ -22,6 +22,7 @@ import {
 } from "@/lib/azure-devops-api";
 import {
   bitbucketPost,
+  withBitbucketAuth,
   parseBitbucketErrorBody,
   type BitbucketAuth,
 } from "@/lib/bitbucket-api";
@@ -189,6 +190,10 @@ export function credentialsMismatch(repoUrl: string, creds: ProviderCredentials)
     }
     return `${host} is not the connected GitLab (${creds.auth.hostUrl}). Connect that GitLab under Settings → Integrations, or correct the project's repository URL.`;
   }
+  if (creds.provider === "bitbucket" && creds.auth.token) {
+    if (withBitbucketAuth(repoUrl, creds.auth)) return null;
+    return `Bitbucket tokens are only sent to https://bitbucket.org; ${repoUrl} is elsewhere. Correct the project's repository URL.`;
+  }
   if (creds.provider !== "azure_devops") return null;
   let repo: URL;
   try {
@@ -246,6 +251,8 @@ export function authenticatedRepoUrl(
     // credentialsMismatch() has checked the host; never embed the token for another one.
     return withGitLabCredentials(repoUrl, creds.auth) ?? repoUrl;
   }
+  // Access/API tokens only go to bitbucket.org; app passwords as before.
+  if (creds.auth.token) return withBitbucketAuth(repoUrl, creds.auth) ?? repoUrl;
   return withBitbucketCredentials(repoUrl, creds.auth.username, creds.auth.appPassword);
 }
 

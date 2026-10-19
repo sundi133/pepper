@@ -21,8 +21,13 @@ export interface AzureDevOpsAuth {
    * collection name (on-prem Azure DevOps Server).
    */
   organization: string;
-  /** The Personal Access Token. */
+  /** The Personal Access Token ("" for a service principal connection). */
   pat: string;
+  /**
+   * An Entra ID access token (service principal connections). When set it is
+   * sent as `Authorization: Bearer …` instead of the PAT.
+   */
+  bearer?: string;
   /**
    * On-prem Azure DevOps Server base — the host and any virtual directory up to
    * (but not including) the collection, e.g. `https://tfs.company.com` or
@@ -54,6 +59,11 @@ export function azureApiBase(auth: AzureDevOpsAuth): string {
 
 function basicAuthHeader(pat: string): string {
   return `Basic ${Buffer.from(`:${pat}`, "utf8").toString("base64")}`;
+}
+
+/** `Bearer` for a service principal's token, else `Basic` with the PAT. */
+export function azureAuthHeader(auth: AzureDevOpsAuth): string {
+  return auth.bearer ? `Bearer ${auth.bearer}` : basicAuthHeader(auth.pat);
 }
 
 function buildUrl(
@@ -97,7 +107,7 @@ export async function azureGet<T>(
   const res = await fetch(buildUrl(auth, path, apiVersion), {
     headers: {
       Accept: "application/json",
-      Authorization: basicAuthHeader(auth.pat),
+      Authorization: azureAuthHeader(auth),
     },
   });
   return readJson<T>(res);
@@ -113,7 +123,7 @@ export async function azureGetText(
   const res = await fetch(buildUrl(auth, path, apiVersion), {
     headers: {
       Accept: "text/plain, application/json",
-      Authorization: basicAuthHeader(auth.pat),
+      Authorization: azureAuthHeader(auth),
     },
   });
   const text = await res.text();
@@ -131,7 +141,7 @@ export async function azurePost<T>(
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      Authorization: basicAuthHeader(auth.pat),
+      Authorization: azureAuthHeader(auth),
     },
     body: JSON.stringify(body),
   });
@@ -149,7 +159,7 @@ export async function azurePatch<T>(
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      Authorization: basicAuthHeader(auth.pat),
+      Authorization: azureAuthHeader(auth),
     },
     body: JSON.stringify(body),
   });
@@ -167,7 +177,7 @@ export async function azurePut<T>(
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      Authorization: basicAuthHeader(auth.pat),
+      Authorization: azureAuthHeader(auth),
     },
     body: JSON.stringify(body),
   });
@@ -197,7 +207,7 @@ export async function azureJsonPatch<T>(
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json-patch+json",
-      Authorization: basicAuthHeader(auth.pat),
+      Authorization: azureAuthHeader(auth),
     },
     body: JSON.stringify(ops),
   });

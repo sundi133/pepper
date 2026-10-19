@@ -4,8 +4,8 @@ import { logger } from "./logger";
 
 const log = logger.child({ module: "azure-devops-pr-status" });
 
-const STATUS_CONTEXT_NAME = "security";
-const STATUS_CONTEXT_GENRE = "pepper";
+export const STATUS_CONTEXT_NAME = "security";
+export const STATUS_CONTEXT_GENRE = "pepper";
 
 type GateResult = "PENDING" | "PASSED" | "FAILED";
 type ScanStatus = "COMPLETED" | "FAILED";

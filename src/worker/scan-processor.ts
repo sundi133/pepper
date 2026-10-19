@@ -184,6 +184,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
       );
       let repoUrl = job.data.repoUrl || sourceRef;
       const repoLog = job.data.repoUrlDisplay || repoUrl;
+      /** Extra environment for git (a bearer token as an HTTP header). */
+      let gitEnv: Record<string, string> | undefined;
       if (job.data.repoTokenEnc) {
         // A token pasted for this scan, kept encrypted in the job until now.
         const { decryptSecret } = await import("@/lib/token-encryption");
@@ -234,7 +236,11 @@ export async function processScanJob(job: Job<ScanJobData>) {
         const adoAuth = await getOrgAzureDevOpsAuth(
           job.data.orgSettings.orgId,
         );
-        if (adoAuth) {
+        if (adoAuth?.bearer) {
+          // Service principal: the token goes in an HTTP header, not the URL.
+          const { bearerGitEnv } = await import("@/lib/azure-devops-entra");
+          gitEnv = bearerGitEnv(adoAuth.bearer);
+        } else if (adoAuth) {
           repoUrl = withAzureDevOpsCredentials(repoLog, adoAuth.pat);
         }
       }
@@ -247,6 +253,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
         execFileSync("git", cloneArgs, {
           timeout: 120000,
           windowsHide: process.platform === "win32",
+            ...(gitEnv ? { env: { ...process.env, ...gitEnv } } : {}),
         });
       } catch (error) {
         const message =
@@ -268,6 +275,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
             {
               timeout: 120000,
               windowsHide: process.platform === "win32",
+            ...(gitEnv ? { env: { ...process.env, ...gitEnv } } : {}),
             },
           );
         } catch (retryError) {
@@ -275,17 +283,20 @@ export async function processScanJob(job: Job<ScanJobData>) {
         }
       }
 
-      // Fork PRs: their head branch isn't in this repository; fetch the PR ref.
+      // Fork PRs: their head branch isn't in this repository; fetch the PR ref
+      // (GitHub refs/pull/<n>/head, Azure DevOps refs/pull/<id>/merge).
       const fetchRef = job.data.fetchRef?.trim();
-      if (fetchRef && /^refs\/pull\/\d+\/head$/.test(fetchRef)) {
+      if (fetchRef && /^refs\/pull\/\d+\/(?:head|merge)$/.test(fetchRef)) {
         try {
           execFileSync("git", ["-C", repoDir, "fetch", "--depth", "1", "origin", fetchRef], {
             timeout: 120000,
             windowsHide: process.platform === "win32",
+            ...(gitEnv ? { env: { ...process.env, ...gitEnv } } : {}),
           });
           execFileSync("git", ["-C", repoDir, "checkout", "--detach", "FETCH_HEAD"], {
             timeout: 60000,
             windowsHide: process.platform === "win32",
+            ...(gitEnv ? { env: { ...process.env, ...gitEnv } } : {}),
           });
         } catch (error) {
           throw sanitizeGitCloneError(error, repoUrl, repoLog);
@@ -304,6 +315,7 @@ export async function processScanJob(job: Job<ScanJobData>) {
           projectId,
           useOrgGithubToken: job.data.useOrgGithubToken,
           orgId: job.data.orgSettings.orgId,
+          gitEnv,
         });
         incrementalChangedPaths = diffResult.paths;
         if (diffResult.paths !== null) {

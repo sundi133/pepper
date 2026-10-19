@@ -9,7 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts", "eval/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "eval/**/*.test.ts", "ide/pepper-lsp/src/**/*.test.ts"],
     setupFiles: ["./vitest.setup.ts"],
   },
 });

@@ -1,0 +1,23 @@
+{
+  "name": "@pepper/lsp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pepper language server: Pepper SAST findings as diagnostics in any LSP-capable IDE.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "main": "dist/server.js",
+  "bin": { "pepper-lsp": "dist/server.js" },
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "esbuild src/server.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/server.js --banner:js='#!/usr/bin/env node'",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "vscode-languageserver": "10.1.2",
+    "vscode-languageserver-textdocument": "1.0.15"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3"
+  }
+}

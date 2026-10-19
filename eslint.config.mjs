@@ -9,6 +9,11 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // OpenGrep rule fixtures are deliberately vulnerable sample code.
     "rules/**",
+    // IDE packages: their own dependencies and build output.
+    "ide/**/node_modules/**",
+    "ide/**/dist/**",
+    // Eval fixtures are deliberately vulnerable sample code.
+    "eval/fixtures/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",

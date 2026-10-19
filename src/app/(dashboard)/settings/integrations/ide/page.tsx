@@ -219,6 +219,46 @@ export default function IdeIntegrationPage() {
         </p>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Editor extension</CardTitle>
+          <CardDescription>
+            Findings as squiggles and Problems-panel entries on the lines they are about, details on
+            hover, rescans from the editor and an instant secrets check when you save. No AI assistant
+            needed.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <div>
+            <p className="font-medium">VS Code, Cursor, Windsurf</p>
+            <ol className="ml-5 mt-1 list-decimal space-y-1 text-muted-foreground">
+              <li>
+                Install <code className="rounded bg-muted px-1">pepper-sast-&lt;version&gt;.vsix</code> from
+                the Pepper release (Extensions → ⋯ → Install from VSIX…).
+              </li>
+              <li>
+                Run <strong>Pepper: Sign in</strong> and enter{" "}
+                <code className="rounded bg-muted px-1">{baseUrl}</code> and an API key.
+              </li>
+              <li>
+                Open a repository that Pepper has scanned: it is matched by its git remote.
+              </li>
+            </ol>
+          </div>
+          <div>
+            <p className="font-medium">JetBrains IDEs and Eclipse</p>
+            <p className="mt-1 text-muted-foreground">
+              The same language server works with the <strong>LSP4IJ</strong> plugin (IntelliJ IDEA,
+              PyCharm, WebStorm, GoLand, Rider, also Community editions) and with{" "}
+              <strong>LSP4E</strong> in Eclipse. Download{" "}
+              <code className="rounded bg-muted px-1">pepper-lsp-&lt;version&gt;.js</code> from the release
+              and start it with <code className="rounded bg-muted px-1">node pepper-lsp.js --stdio</code>{" "}
+              (Node 18 or newer). The setup is described in <code className="rounded bg-muted px-1">ide/README.md</code>.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="border-primary/20 bg-primary/5">
         <CardHeader>
           <CardTitle className="text-lg">1. Choose an API key</CardTitle>
@@ -479,9 +519,11 @@ export default function IdeIntegrationPage() {
           <div>
             <label className="font-medium text-muted-foreground">Parameters</label>
             <ul className="mt-1 space-y-2 text-xs">
-              <li><code className="rounded bg-muted px-1">projectId</code> - Required (repository id)</li>
+              <li><code className="rounded bg-muted px-1">repositoryId</code> - Required (repository id; <code className="rounded bg-muted px-1">projectId</code> also works)</li>
+              <li><code className="rounded bg-muted px-1">branch</code> - Optional (that branch&apos;s latest scan, else the repository&apos;s latest)</li>
               <li><code className="rounded bg-muted px-1">filePath</code> - Optional (filter to file)</li>
               <li><code className="rounded bg-muted px-1">minSeverity</code> - Optional (INFO, LOW, MEDIUM, HIGH, CRITICAL)</li>
+              <li><code className="rounded bg-muted px-1">includeTriaged</code> - Optional (<code className="rounded bg-muted px-1">true</code> also returns resolved and accepted-risk findings)</li>
             </ul>
           </div>
 

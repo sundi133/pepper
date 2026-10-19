@@ -71,3 +71,44 @@ export async function gitlabPut<T>(
 }
 
 export { DEFAULT_GITLAB_HOST };
+
+/** Whether `repoUrl` is on the connection's GitLab host (same scheme, host and port). */
+export function isOnGitLabHost(repoUrl: string, auth: Pick<GitLabAuth, "hostUrl">): boolean {
+  try {
+    return new URL(repoUrl).origin === new URL(auth.hostUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Clone/push URL with the connection's token (`oauth2:<token>@`, accepted for
+ * personal, group and project access tokens), or null when the repository is
+ * on another host, so the token is never sent elsewhere. Never persist or log it.
+ */
+export function withGitLabCredentials(repoUrl: string, auth: GitLabAuth): string | null {
+  const token = auth.accessToken.trim();
+  if (!token || !isOnGitLabHost(repoUrl, auth)) return null;
+  const u = new URL(repoUrl);
+  if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+  u.username = "oauth2";
+  u.password = encodeURIComponent(token);
+  return u.toString();
+}
+
+/** `group/sub/project` from a GitLab repository URL (without `.git`), or null. */
+export function gitlabProjectPath(repoUrl: string, auth?: Pick<GitLabAuth, "hostUrl">): string | null {
+  try {
+    const u = new URL(repoUrl);
+    let path = decodeURIComponent(u.pathname);
+    // Self-managed GitLab under a relative URL root (https://host/gitlab/…).
+    if (auth) {
+      const root = new URL(auth.hostUrl).pathname.replace(/\/+$/, "");
+      if (root && path.startsWith(`${root}/`)) path = path.slice(root.length);
+    }
+    path = path.replace(/^\/+|\/+$/g, "").replace(/\.git$/i, "");
+    return /^[\w.-]+(?:\/[\w.-]+)+$/.test(path) && !path.split("/").includes("..") ? path : null;
+  } catch {
+    return null;
+  }
+}

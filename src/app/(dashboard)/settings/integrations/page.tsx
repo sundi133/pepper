@@ -937,7 +937,7 @@ export default function IntegrationsPage() {
             <CardTitle>GitLab</CardTitle>
             <Badge variant="outline">Webhook</Badge>
           </div>
-          <CardDescription>Automatically scan merge requests</CardDescription>
+          <CardDescription>Review merge requests, scan the default branch, and answer @pepper commands</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -954,9 +954,15 @@ export default function IntegrationsPage() {
             </div>
           </div>
           <div className="text-sm text-muted-foreground space-y-1">
-            <p>1. Go to your GitLab project Settings &gt; Webhooks</p>
-            <p>2. Add webhook with the URL above</p>
-            <p>3. Select &quot;Merge request events&quot;</p>
+            <p>
+              1. In the <strong>group&apos;s</strong> Settings &gt; Webhooks (one hook for every project; GitLab
+              Premium), or each project&apos;s Settings &gt; Webhooks
+            </p>
+            <p>2. Add a webhook with the URL above</p>
+            <p>
+              3. Select <strong>Push events</strong>, <strong>Merge request events</strong> and{" "}
+              <strong>Comments</strong> (for <code>@pepper</code> commands)
+            </p>
             <p>
               4. Set the secret token to the same value as <strong>GitLab webhook secret token</strong>{" "}
               in the Webhook secrets card above

@@ -119,6 +119,10 @@ export async function rescanScan(params: {
     isGitClone && originalScan.project.connectedViaBitbucket;
   const useOrgAzureDevOpsToken =
     isGitClone && originalScan.project.connectedViaAzure;
+  // The worker uses it only when the repository is on the connection's host.
+  const useOrgGitLabToken =
+    isGitClone &&
+    (originalScan.project.connectedViaGitlab || originalScan.project.gitlabProjectId != null);
 
   const jobData: ScanJobData = {
     scanId: scan.id,
@@ -135,6 +139,7 @@ export async function rescanScan(params: {
     useOrgGithubToken,
     useOrgBitbucketToken,
     useOrgAzureDevOpsToken,
+    useOrgGitLabToken,
     svnUrl: sourceType === "SVN_CHECKOUT" ? originalScan.sourceRef : undefined,
     branch,
     orgSettings: buildOrgSettingsForJob(orgSettings, orgId),

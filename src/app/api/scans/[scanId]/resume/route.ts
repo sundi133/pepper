@@ -75,6 +75,7 @@ export async function POST(
       useOrgGithubToken: scan.project.connectedViaGithub,
       useOrgBitbucketToken: scan.project.connectedViaBitbucket,
       useOrgAzureDevOpsToken: scan.project.connectedViaAzure,
+      useOrgGitLabToken: scan.project.connectedViaGitlab || scan.project.gitlabProjectId != null,
       orgSettings: buildOrgSettingsForJob(orgSettings, orgId),
       buildGate: scan.project.buildGate
         ? {

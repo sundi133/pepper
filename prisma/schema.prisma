@@ -137,6 +137,13 @@ model OrgGitLabConnection {
   gitlabUserId    Int?
   gitlabUsername  String?
   accessTokenEnc  String   @db.Text
+  /// "personal" or "bot" (group/project access token or service account); display only.
+  tokenKind       String?
+  tokenScopes     String?
+  tokenExpiresAt  DateTime?
+  /// Post `pepper/security` commit statuses on merge requests. Off for connections
+  /// made before statuses existed: a failed status blocks merges under "Pipelines must succeed".
+  commitStatuses  Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -254,6 +261,8 @@ model Project {
   /// Set when a GitLab MR webhook triggers a scan. Used to post MR notes.
   gitlabProjectId     Int?
   gitlabNamespace     String?    // e.g. "myorg/myrepo"
+  /// Created from a GitLab webhook (docs/PR_REVIEW_PROVIDERS_SPEC.md §2.4).
+  connectedViaGitlab  Boolean @default(false)
 
 
   organization Organization @relation(fields: [organizationId], references: [id])

@@ -1,6 +1,6 @@
 # Pull-request reviews on Azure DevOps, GitLab and Bitbucket
 
-Status: Azure DevOps implemented (step 1). GitLab (step 2) and Bitbucket (step 3) to follow.
+Status: Azure DevOps implemented (step 1), GitLab implemented (step 2). Bitbucket (step 3) to follow.
 Owner: Pepper integrations.
 
 The GitHub experience (`docs/PR_REVIEW_BOT_SPEC.md`) is that Pepper acts as a workload
@@ -164,13 +164,142 @@ These all use the same status context (`pepper/security`).
 
 ## Step 2: GitLab
 
-To follow. Outline:
+### 2.1 Today
 
-- **Identity:** a group or project access token (a bot user), or a service account.
-- **Webhooks:** group-level webhooks onboard every project in the group.
-- **Events:** merge request events (`open`, `update` with `oldrev`, `reopen`, drafts), note
-  events for `@pepper` commands, `.pepper.yaml` from the target branch, and commit
-  statuses.
+- **Credential:** one access token per Pepper organization (`PRIVATE-TOKEN`), on gitlab.com
+  or self-managed. It is checked with `GET /user`. Any token that answers works, but the UI
+  only describes personal tokens.
+- **Webhook:** `POST /api/webhooks/gitlab`, `X-Gitlab-Token` against per-organization secrets
+  or `GITLAB_WEBHOOK_SECRET`. It handles only `merge_request` `open` and `update`.
+  - It matches the project by a **substring** of `path_with_namespace` in `repoUrl` (so
+    `acme/api` also matches `acme/api-legacy`).
+  - It cancels **every** active scan of the project.
+  - It queues an incremental scan **without credentials**, so private repositories can't be
+    cloned.
+  - It rescans on every `update` (labels, title, assignee).
+- **Not supported:** push to the default branch, reopen, notes, drafts, forks,
+  `.pepper.yaml`, commit statuses, repository import and AI remediation.
+- **After the scan:** a summary note and inline discussions on the merge request.
+
+### 2.2 Workload identity: group or project access tokens
+
+GitLab's workload identity is a **group or project access token** (a bot user that belongs
+to the group, with a role and an expiry), or a service account's token (GitLab Premium).
+They use the same API as a personal token, so the connection doesn't change shape:
+
+- **At connect time** Pepper also calls `GET /personal_access_tokens/self` for the token's
+  name, scopes and expiry. It shows "Connected as <bot> (group access token, expires …)"
+  and warns when it is a **personal** token, or expires within 30 days.
+- **Scopes needed:** `api` (comments, statuses, merge requests) and `read_repository`
+  (clone); `write_repository` for AI fix branches. Role: Developer.
+- **Storage:** `OrgGitLabConnection` gains `tokenKind`, `tokenScopes` and `tokenExpiresAt`
+  (display only), and `commitStatuses` (§2.5). The migration is additive.
+
+### 2.3 Authenticated clone
+
+Webhook and import jobs carry `useOrgGitLabToken`. The worker embeds `oauth2:<token>` in the
+clone URL **only when the repository is on the connection's host**, so the token is never
+sent elsewhere. It is used for the clone, fork fetch and incremental diff; the URL, with its
+credential, never leaves the worker (same as Bitbucket and Azure DevOps PATs).
+
+### 2.4 Zero-setup onboarding
+
+A **group webhook** (Premium; on Free, one project hook each) covers every project in the
+group. An event authenticated with an **organization's** secret for an unknown project
+creates it:
+
+- the GitLab project id and path come from the payload;
+- the clone URL is built from the **connection's host** and the path
+  (`{host}/{path_with_namespace}.git`), never taken from `git_http_url`;
+- it gets `gitlabProjectId`, `gitlabNamespace` and `connectedViaGitlab` (new column).
+
+Projects are matched by `gitlabProjectId` first (exact), then by an **exact** path match on
+the stored URL. There is no more substring matching.
+
+### 2.5 When a merge request is reviewed
+
+| GitHub | GitLab (`merge_request`) |
+|---|---|
+| `opened` | `open` |
+| `reopened` | `reopen` |
+| `synchronize` | `update` **with `oldrev`** (new commits); other updates are ignored |
+| `ready_for_review` | `update` with `changes.draft` going from true to false (reviewed when drafts are skipped) |
+| draft | `object_attributes.draft` (or `work_in_progress`) |
+| bot author | the author's username matches the bot pattern, including GitLab's `project_<id>_bot…` and `group_<id>_bot…` |
+| fork | `source_project_id ≠ target_project_id`; reviewed by fetching `refs/merge-requests/<iid>/head` from the target project |
+| collaborator | the user's access level on the project is Developer (30) or higher (`GET /projects/:id/members/all/:user_id`) |
+
+- **`push` to the default branch** now scans it, as on the other hosts.
+- **Concurrency:** scans use the scoped slot (per merge request, or per branch for pushes).
+- **Base:** the merge request's `diff_refs.base_sha`, read through the API, is the diff base.
+- **`.pepper.yaml`** is read from the **target branch**
+  (`GET /projects/:id/repository/files/.pepper.yaml/raw?ref=…`).
+- **Commit status** (new): `pending` ("Pepper: review queued") when a scan is queued, then
+  `success` or `failed` when it completes, as name `pepper/security`, on the merge request's
+  head commit. Deliberate skips post `success` with the reason; forks from outside
+  contributors post `pending`.
+  - **Opt-in per connection** (`commitStatuses`). A failed external status fails the
+    commit's pipeline, which blocks the merge under "Pipelines must succeed". Existing
+    connections keep today's behaviour (off). The connect form defaults it on for new
+    connections, and a switch on the GitLab card changes it (`PATCH
+    /api/integrations/gitlab/connect`).
+
+### 2.6 `@pepper` commands (note events)
+
+- **Event:** `object_kind: note` with `noteable_type: MergeRequest`. "Comments" must be
+  enabled on the webhook.
+- **Who may run them:** Developer access or higher. Pepper's own notes (markers) and bots are
+  ignored.
+- **Replies** go in the same discussion; the command note gets an 👀 award emoji.
+- **Commands:** `review`, `full review`, `pause`, `resume`, `help`, and `fix` in a Pepper
+  inline discussion.
+
+### 2.7 AI remediation on GitLab
+
+`gitlab` becomes a remediation provider:
+
+- **Which repositories:** the repository's host equals the connection's host, or the
+  project is GitLab-connected.
+- **Credentials:** the connection token as `oauth2:<token>` for clone and push. They are
+  used only when the repository is on the connection's host.
+- **The merge request:** `POST /projects/:path/merge_requests` (with
+  `remove_source_branch`).
+
+So "Fix with AI" in Pepper and `@pepper fix` both work for GitLab repositories.
+
+### 2.8 Compatibility
+
+- **Existing connections, secrets, notes and inline discussions:** unchanged.
+- **Project matching:** an exact match on the GitLab project id or the path. A project that
+  used to match only by substring (a different repository with a longer name) no longer
+  matches. That substring match was a bug.
+- **New behaviour on existing webhooks:**
+  - fewer scans (`update` without new commits is ignored);
+  - push events scan the default branch (GitLab enables "Push events" by default on a new
+    hook, so existing hooks will start sending them);
+  - private repositories now clone;
+  - scans of different merge requests no longer cancel each other;
+  - fork merge requests from members below Developer wait for `@pepper review` (they used to
+    scan the target's default branch by mistake).
+- **Commit statuses:** off for existing connections (§2.5), so no merge is newly blocked.
+- **Without a GitLab connection:** merge requests are still scanned, as today, with the
+  default configuration and no statuses.
+- **Migration:** additive (`connectedViaGitlab`, the token metadata columns).
+
+### 2.9 Testing
+
+- **Unit:**
+  - token kind and expiry detection;
+  - the clone credential only on the connection's host;
+  - event mapping (open, update with and without `oldrev`, draft to ready, reopen, fork,
+    push);
+  - collaborator access levels;
+  - note commands;
+  - the raw-file config read;
+  - commit status calls;
+  - onboarding (URL from the connection host, exact matching);
+  - the GitLab remediation provider (the resolve, credential, host and MR calls).
+- **Regression:** the existing GitLab and remediation tests pass, and the full suite.
 
 ## Step 3: Bitbucket
 

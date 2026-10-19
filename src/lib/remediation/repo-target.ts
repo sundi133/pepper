@@ -215,6 +215,8 @@ export function authenticatedRepoUrl(
     return withGitCredentials(repoUrl, creds.token);
   }
   if (creds.provider === "azure_devops") {
+    // A service principal's token travels as a header (repoGitEnv), not in the URL.
+    if (creds.auth.bearer) return repoUrl;
     return withAzureDevOpsCredentials(repoUrl, creds.auth.pat);
   }
   return withBitbucketCredentials(repoUrl, creds.auth.username, creds.auth.appPassword);
@@ -322,4 +324,16 @@ export async function openProviderPullRequest(
     };
   }
   return { ok: true, url: href, number: r.data.id ?? null };
+}
+
+/** Extra git environment for these credentials (an Azure DevOps bearer header), else none. */
+export function repoGitEnv(creds: ProviderCredentials): Record<string, string> | undefined {
+  if (creds.provider === "azure_devops" && creds.auth.bearer) {
+    return {
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "http.extraHeader",
+      GIT_CONFIG_VALUE_0: `Authorization: Bearer ${creds.auth.bearer}`,
+    };
+  }
+  return undefined;
 }

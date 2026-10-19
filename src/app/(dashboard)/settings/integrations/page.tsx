@@ -56,15 +56,22 @@ export default function IntegrationsPage() {
     connected: boolean;
     azureOrganization: string | null;
     azureUser: string | null;
+    authType: string | null;
   } | null>(null);
   const [azureFormOpen, setAzureFormOpen] = useState(false);
   const [azureSubmitting, setAzureSubmitting] = useState(false);
   const [azureDisconnecting, setAzureDisconnecting] = useState(false);
-  const [azureForm, setAzureForm] = useState({
+  const EMPTY_AZURE_FORM = {
     azureOrganization: "",
     pat: "",
     azureServerUrl: "",
-  });
+    /** "pat" or "service_principal" (Entra ID, Azure DevOps Services only). */
+    authType: "pat" as "pat" | "service_principal",
+    tenantId: "",
+    clientId: "",
+    clientSecret: "",
+  };
+  const [azureForm, setAzureForm] = useState(EMPTY_AZURE_FORM);
 
   async function refreshAzure() {
     try {
@@ -74,11 +81,13 @@ export default function IntegrationsPage() {
         connected?: boolean;
         azureOrganization?: string | null;
         azureUser?: string | null;
+        authType?: string | null;
       };
       setAzureConn({
         connected: Boolean(data.connected),
         azureOrganization: data.azureOrganization ?? null,
         azureUser: data.azureUser ?? null,
+        authType: data.authType ?? null,
       });
     } catch {
       /* ignore */
@@ -90,8 +99,13 @@ export default function IntegrationsPage() {
     const azureOrganization = azureForm.azureOrganization.trim();
     const pat = azureForm.pat.trim();
     const azureServerUrl = azureForm.azureServerUrl.trim();
-    if (!azureOrganization || !pat) {
+    const sp = azureForm.authType === "service_principal";
+    if (!azureOrganization || (!sp && !pat)) {
       toast.error("Organization and PAT are required");
+      return;
+    }
+    if (sp && (!azureForm.tenantId.trim() || !azureForm.clientId.trim() || !azureForm.clientSecret)) {
+      toast.error("Tenant ID, client ID and client secret are required");
       return;
     }
     setAzureSubmitting(true);
@@ -99,11 +113,21 @@ export default function IntegrationsPage() {
       const res = await fetch("/api/integrations/azure-devops/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          azureOrganization,
-          pat,
-          ...(azureServerUrl ? { azureServerUrl } : {}),
-        }),
+        body: JSON.stringify(
+          sp
+            ? {
+                authType: "service_principal",
+                azureOrganization,
+                tenantId: azureForm.tenantId.trim(),
+                clientId: azureForm.clientId.trim(),
+                clientSecret: azureForm.clientSecret,
+              }
+            : {
+                azureOrganization,
+                pat,
+                ...(azureServerUrl ? { azureServerUrl } : {}),
+              },
+        ),
       });
       // A proxy or crash can return an empty / non-JSON body.
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -111,7 +135,7 @@ export default function IntegrationsPage() {
         throw new Error(data.error || `Failed to connect Azure DevOps (HTTP ${res.status})`);
       }
       toast.success("Azure DevOps connected");
-      setAzureForm({ azureOrganization: "", pat: "", azureServerUrl: "" });
+      setAzureForm(EMPTY_AZURE_FORM);
       setAzureFormOpen(false);
       await refreshAzure();
     } catch (err) {
@@ -142,6 +166,7 @@ export default function IntegrationsPage() {
         connected: false,
         azureOrganization: null,
         azureUser: null,
+        authType: null,
       });
     } catch (err) {
       toast.error(
@@ -652,7 +677,7 @@ export default function IntegrationsPage() {
           <div className="flex items-center gap-2">
             <GitBranch className="h-5 w-5" />
             <CardTitle>Azure DevOps Services</CardTitle>
-            <Badge variant="outline">PAT</Badge>
+            <Badge variant="outline">{azureConn?.authType === "service_principal" ? "Service principal" : "PAT or service principal"}</Badge>
           </div>
           <CardDescription>
             Import repos, clone with a PAT on the worker, and post PR review
@@ -665,6 +690,7 @@ export default function IntegrationsPage() {
               <p className="text-sm">
                 Connected as{" "}
                 <strong>{azureConn.azureUser ?? "Azure DevOps user"}</strong>
+                {azureConn.authType === "service_principal" ? " (service principal)" : ""}
                 {azureConn.azureOrganization ? (
                   <>
                     {" "}
@@ -713,6 +739,44 @@ export default function IntegrationsPage() {
                 </p>
               </div>
               <div className="space-y-1">
+                <Label htmlFor="azure-auth-type">Authentication</Label>
+                <select
+                  id="azure-auth-type"
+                  value={azureForm.authType}
+                  onChange={(e) => setAzureForm((f) => ({ ...f, authType: e.target.value as "pat" | "service_principal" }))}
+                  className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="pat">Personal access token (Services or Server)</option>
+                  <option value="service_principal">Service principal, Entra ID (Services, recommended)</option>
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  A service principal is a workload identity: it keeps working when people leave.
+                  On Azure DevOps Server, use a PAT of a dedicated service account.
+                </p>
+              </div>
+              {azureForm.authType === "service_principal" ? (
+                <>
+                  <div className="space-y-1">
+                    <Label htmlFor="azure-tenant">Tenant ID</Label>
+                    <Input id="azure-tenant" value={azureForm.tenantId} onChange={(e) => setAzureForm((f) => ({ ...f, tenantId: e.target.value }))} placeholder="00000000-0000-0000-0000-000000000000 or contoso.onmicrosoft.com" autoComplete="off" required />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="azure-client">Client (application) ID</Label>
+                    <Input id="azure-client" value={azureForm.clientId} onChange={(e) => setAzureForm((f) => ({ ...f, clientId: e.target.value }))} placeholder="00000000-0000-0000-0000-000000000000" autoComplete="off" required />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="azure-secret">Client secret</Label>
+                    <Input id="azure-secret" type="password" value={azureForm.clientSecret} onChange={(e) => setAzureForm((f) => ({ ...f, clientSecret: e.target.value }))} autoComplete="new-password" required />
+                    <p className="text-xs text-muted-foreground">
+                      Register an app in Entra ID, create a client secret, then add the app to your Azure DevOps
+                      organization (Organization settings → Users, Basic access) with Contribute and
+                      &quot;Contribute to pull requests&quot; on the repositories to scan.
+                    </p>
+                  </div>
+                </>
+              ) : (
+              <>
+              <div className="space-y-1">
                 <Label htmlFor="azure-server-url">
                   Server URL{" "}
                   <span className="text-muted-foreground">
@@ -757,6 +821,8 @@ export default function IntegrationsPage() {
                   <code>Project and Team (read)</code>.
                 </p>
               </div>
+              </>
+              )}
               <div className="flex gap-2">
                 <Button type="submit" disabled={azureSubmitting}>
                   {azureSubmitting ? "Connecting…" : "Connect"}
@@ -766,11 +832,7 @@ export default function IntegrationsPage() {
                   variant="ghost"
                   onClick={() => {
                     setAzureFormOpen(false);
-                    setAzureForm({
-                      azureOrganization: "",
-                      pat: "",
-                      azureServerUrl: "",
-                    });
+                    setAzureForm(EMPTY_AZURE_FORM);
                   }}
                   disabled={azureSubmitting}
                 >
@@ -836,9 +898,11 @@ export default function IntegrationsPage() {
             </p>
             <p>
               2. Create subscriptions for{" "}
-              <strong>Code pushed</strong>, <strong>Pull request created</strong>,
-              and <strong>Pull request updated</strong> (one subscription per
-              event type if your UI requires it)
+              <strong>Code pushed</strong>, <strong>Pull request created</strong>,{" "}
+              <strong>Pull request updated</strong> and{" "}
+              <strong>Pull request commented on</strong> (for <code>@pepper</code> commands), one
+              subscription per event type if your UI requires it. Leave the repository filter empty
+              so one project-level hook covers every repository.
             </p>
             <p>3. <strong>Action URL</strong>: paste the URL above</p>
             <p>
@@ -848,12 +912,13 @@ export default function IntegrationsPage() {
               secrets card
             </p>
             <p>
-              5. Import the repo on{" "}
+              5. Repositories are added to Pepper on their first pull request or push (or import them
+              on{" "}
               <Link href="/scans/new" className="text-primary hover:underline">
                 Repositories
               </Link>{" "}
-              (Azure DevOps tab) so Pepper stores <code>azureRepoId</code> for
-              webhook matching
+              to scan them right away). Configure reviews with <code>.pepper.yaml</code> on the
+              target branch.
             </p>
             <p>
               6. Connect Azure DevOps above for private clone and PR feedback.

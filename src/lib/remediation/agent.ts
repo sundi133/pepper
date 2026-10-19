@@ -46,6 +46,7 @@ import {
 import {
   PROVIDER_LABELS,
   authenticatedRepoUrl,
+  repoGitEnv,
   credentialsMismatch,
   loadProviderCredentials,
   missingCredentialsMessage,
@@ -293,6 +294,7 @@ export async function runRemediation(runId: string): Promise<void> {
       displayUrl: target.repoUrl,
       preferredBranch: target.baseBranch,
       runId,
+      gitEnv: repoGitEnv(creds),
     });
     if (target.baseBranch && ws.baseBranch !== target.baseBranch) {
       await log(

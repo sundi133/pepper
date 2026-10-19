@@ -138,12 +138,16 @@ export function boardsAuth(
   config: AzureBoardsConfig,
   orgConnection: AzureDevOpsAuth | null,
 ): AzureDevOpsAuth | null {
-  const pat = config.pat?.trim() || orgConnection?.pat;
-  if (!pat || !config.organization?.trim()) return null;
+  const ownPat = config.pat?.trim();
+  // Reusing a service principal connection: its token works for Boards too.
+  const bearer = !ownPat ? orgConnection?.bearer : undefined;
+  const pat = ownPat || orgConnection?.pat;
+  if ((!pat && !bearer) || !config.organization?.trim()) return null;
   const serverUrl = config.serverUrl?.trim() || inferredServerUrl(config, orgConnection);
   return {
     organization: config.organization.trim(),
-    pat,
+    pat: pat ?? "",
+    ...(bearer ? { bearer } : {}),
     ...(serverUrl ? { serverUrl } : {}),
   };
 }

@@ -92,7 +92,10 @@ export function resolveGitPrChangedPaths(
   repoDir: string,
   baseSha: string,
   commitSha: string,
+  /** Extra git environment (an Azure DevOps bearer token header). */
+  gitEnv?: Record<string, string>,
 ): string[] | null {
+  const env = gitEnv ? { env: { ...process.env, ...gitEnv } } : {};
   const base = baseSha.trim();
   const head = commitSha.trim();
   if (!base || !head) return null;
@@ -102,6 +105,7 @@ export function resolveGitPrChangedPaths(
       cwd: repoDir,
       timeout: 120_000,
       stdio: ["ignore", "pipe", "pipe"],
+      ...env,
     });
   } catch {
     try {
@@ -109,6 +113,7 @@ export function resolveGitPrChangedPaths(
         cwd: repoDir,
         timeout: 120_000,
         stdio: ["ignore", "pipe", "pipe"],
+        ...env,
       });
     } catch {
       return null;
@@ -193,6 +198,7 @@ export type ResolveIncrementalPathsInput = {
     repo: string;
     prNumber: number;
   };
+  gitEnv?: Record<string, string>;
 };
 
 export type ResolveIncrementalPathsResult = {
@@ -211,6 +217,7 @@ export async function resolveIncrementalChangedPaths(
       input.repoDir,
       input.baseSha,
       input.commitSha,
+      input.gitEnv,
     );
     if (gitPaths !== null) {
       return { paths: gitPaths, method: "git-diff" };
@@ -239,6 +246,7 @@ export async function resolveIncrementalPathsForScanJob(params: {
   projectId: string;
   useOrgGithubToken?: boolean;
   orgId?: string;
+  gitEnv?: Record<string, string>;
 }): Promise<ResolveIncrementalPathsResult> {
   const github =
     params.prNumber != null &&
@@ -252,6 +260,7 @@ export async function resolveIncrementalPathsForScanJob(params: {
     baseSha: params.baseSha,
     commitSha: params.commitSha,
     github: github ?? undefined,
+    gitEnv: params.gitEnv,
   });
 }
 

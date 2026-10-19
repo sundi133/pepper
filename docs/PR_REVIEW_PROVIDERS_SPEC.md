@@ -1,6 +1,6 @@
 # Pull-request reviews on Azure DevOps, GitLab and Bitbucket
 
-Status: Azure DevOps implemented (step 1), GitLab implemented (step 2). Bitbucket (step 3) to follow.
+Status: Azure DevOps (step 1), GitLab (step 2) and Bitbucket (step 3) implemented.
 Owner: Pepper integrations.
 
 The GitHub experience (`docs/PR_REVIEW_BOT_SPEC.md`) is that Pepper acts as a workload
@@ -303,10 +303,134 @@ So "Fix with AI" in Pepper and `@pepper fix` both work for GitLab repositories.
 
 ## Step 3: Bitbucket
 
-To follow. Outline:
+### 3.1 Today
 
-- **Identity:** workspace or repository access tokens instead of app passwords, which
-  Atlassian is retiring.
-- **Webhooks:** workspace-level webhooks.
-- **Events:** `pullrequest:created` / `updated`, comment events for commands,
-  `.pepper.yaml` from the destination branch, and build statuses.
+- **Credential:** a username and an **app password**. Atlassian disabled app passwords in
+  brownouts from June 9, 2026 and **removed them on July 28, 2026**. So every Bitbucket
+  connection in Pepper fails today: git answers 410, and the API 401.
+- **Webhook:** `POST /api/webhooks/bitbucket`, HMAC (`X-Hub-Signature`) against
+  per-organization secrets. It handles `repo:push` to the default branch, and
+  `pullrequest:created` / `updated` as incremental scans.
+  - It matches the project by its repository UUID **or** a substring of `full_name` in
+    `repoUrl` (`acme/api` also matches `acme/api-legacy`).
+  - It clones with the connection only for imported projects (`connectedViaBitbucket`), so
+    a repository added by URL can't be cloned if it is private.
+  - Every `updated` rescans (title, description, reviewers).
+  - A fork's branch isn't in the repository, so its PRs scan the default branch by mistake.
+- **After the scan:** a summary comment, inline comments and a build status.
+- **Not supported:** `.pepper.yaml`, drafts, commands, onboarding, a pending status.
+
+### 3.2 Workload identity: access tokens
+
+**Repository, project and workspace access tokens** belong to the repository, project or
+workspace, not to a person. Workspace tokens need Bitbucket Premium. An Atlassian **API
+token** (a person's) is also accepted, as the direct replacement for an app password.
+Both authenticate the same way:
+
+| | REST API | git over HTTPS |
+|---|---|---|
+| access token | `Authorization: Bearer <token>` | `x-token-auth:<token>@bitbucket.org` |
+| API token | `Authorization: Bearer <token>` | `x-bitbucket-api-token-auth:<token>@bitbucket.org` |
+| app password (legacy) | Basic `username:app password` | `username:app password@` |
+
+- **Connect form:**
+  - token type (access token, the default, or API token);
+  - the token;
+  - workspace.
+- **Verification:** `GET /repositories/{workspace}?pagelen=1` must answer. `GET /user`
+  gives a display name when the token may read it.
+- **Storage:** `OrgBitbucketConnection` gains `authType` (`app_password`, the default for
+  existing rows; `access_token`; `api_token`) and `tokenEnc`. `appPasswordEnc` becomes
+  nullable. The migration is additive.
+- **Permissions:**
+  - Repositories: Read and Write (Write for AI fix branches);
+  - Pull requests: Read and Write;
+  - optionally Admin, so Pepper can check a fork author's or commenter's permission (§3.4).
+- **Credentials only go to bitbucket.org.** The worker and remediation embed them only for
+  that host.
+- **Existing app-password connections:** the card says app passwords stopped working on
+  July 28, 2026 and asks to reconnect with a token.
+
+### 3.3 Zero-setup onboarding
+
+One **workspace webhook** (Workspace settings → Webhooks) covers every repository. An event
+authenticated with an **organization's** secret for an unknown repository creates it:
+
+- the clone URL is `https://bitbucket.org/{full_name}.git`;
+- it gets `bitbucketWorkspace`, `bitbucketRepoSlug`, `bitbucketRepoUuid` and
+  `connectedViaBitbucket`.
+
+Projects are matched by repository **UUID first**, then by an **exact** `full_name` match on
+the stored URL. Webhook scans always ask for the connection's credentials. They are used only
+on bitbucket.org, so repositories added by URL clone too.
+
+### 3.4 When a pull request is reviewed
+
+| GitHub | Bitbucket |
+|---|---|
+| `opened` | `pullrequest:created` |
+| `synchronize` | `pullrequest:updated` with a source commit not reviewed yet (edits to the title, description or reviewers are ignored) |
+| `ready_for_review` | `updated` when a draft is published: its commit wasn't reviewed if drafts are skipped, so the row above covers it |
+| draft | `pullrequest.draft` |
+| fork | source repository ≠ destination repository |
+| collaborator | the user's permission on the repository is Write or Admin (`GET /repositories/{ws}/{slug}/permissions-config/users/{uuid}`, which needs Admin on the token) |
+
+- **Forks:** Bitbucket has no pull-request refs in the destination repository. A fork's PR is
+  reviewed by cloning **the fork** (`https://bitbucket.org/{source full_name}.git`, with
+  the connection, which therefore needs read access to it) at the PR's source branch. With
+  the default `forks: collaborators`, that needs a verified Write permission; otherwise the
+  PR waits for `@pepper review`.
+- **Base:** the destination commit, as today.
+- **`.pepper.yaml`** is read from the destination branch
+  (`GET /repositories/{ws}/{slug}/src/{branch}/.pepper.yaml`).
+- **Concurrency:** the scoped slot (already per PR).
+- **Build status:** `INPROGRESS` ("Pepper: review queued", key `pepper-security`) when a scan
+  is queued, then `SUCCESSFUL` or `FAILED` on completion (today). Deliberate skips post
+  `SUCCESSFUL` with the reason; forks waiting for a collaborator post `INPROGRESS`. Bitbucket
+  needs a link, so statuses are skipped when `NEXTAUTH_URL` is unset (today too).
+
+### 3.5 `@pepper` commands (comment events)
+
+- **Event:** `pullrequest:comment_created`. "Comment created" must be enabled on the webhook.
+- **Who may run them:**
+  - a verified Write or Admin permission;
+  - when the token can't check permissions, anyone who can comment on a **private**
+    repository (commenting already needs access to it), but no one on a public one.
+  - Pepper's own comments (markers) are ignored.
+- **Replies:** in the same thread (`parent.id`). Bitbucket has no reactions API, so there's
+  no 👀 acknowledgement.
+- **Commands:** `review`, `full review`, `pause`, `resume`, `help`, and `fix` in reply to a
+  Pepper inline comment. The fix reads the parent comment's finding marker.
+
+### 3.6 AI remediation
+
+Bitbucket is already a provider. It now uses the token types from §3.2 (git
+`x-token-auth` / `x-bitbucket-api-token-auth`, Bearer for the pull request).
+
+### 3.7 Compatibility
+
+- **App-password connections:** handled exactly as before (Basic). Atlassian has removed app
+  passwords, so they already fail; the card says so.
+- **Project matching:** UUID, then exact path. A project that matched only by substring (a
+  different repository with a longer name) no longer matches. That match was a bug.
+- **New behaviour on existing webhooks:**
+  - `updated` without a new source commit is ignored (fewer scans);
+  - a pending build status appears while a scan is queued;
+  - repositories added by URL now clone with the connection;
+  - fork PRs scan the fork instead of the default branch.
+- **`.pepper.yaml` defaults** keep today's behaviour (drafts and bots reviewed).
+- **Migration:** additive (`authType`, `tokenEnc`, nullable `appPasswordEnc`).
+
+### 3.8 Testing
+
+- **Unit:**
+  - the auth header and git credentials per token type, and only for bitbucket.org;
+  - connect verification per token type;
+  - event mapping (created, updated with and without a new commit, draft, fork, closed);
+  - permission checks and the private-repository fallback;
+  - comment commands;
+  - the config read;
+  - statuses;
+  - onboarding and exact matching;
+  - remediation with a token.
+- **Regression:** the existing Bitbucket tests pass, and the full suite.

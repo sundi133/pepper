@@ -94,7 +94,12 @@ model OrgBitbucketConnection {
   organizationId  String   @unique
   workspace       String?
   username        String
-  appPasswordEnc  String   @db.Text
+  /// Legacy app password (Atlassian removed app passwords on 2026-07-28).
+  appPasswordEnc  String?  @db.Text
+  /// "app_password" (legacy), "access_token" (repository/project/workspace) or "api_token".
+  authType        String   @default("app_password")
+  /// Access token or API token, encrypted (docs/PR_REVIEW_PROVIDERS_SPEC.md §3.2).
+  tokenEnc        String?  @db.Text
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

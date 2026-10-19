@@ -211,18 +211,14 @@ export async function processScanJob(job: Job<ScanJobData>) {
           repoUrl = withGitCredentials(repoLog, gh.token);
         }
       } else if (job.data.useOrgBitbucketToken && job.data.orgSettings.orgId) {
-        const { withBitbucketCredentials } = await import("@/lib/git-repo-url");
+        const { withBitbucketAuth } = await import("@/lib/bitbucket-api");
         const { getOrgBitbucketAuth } = await import(
           "@/lib/bitbucket-connection"
         );
         const bbAuth = await getOrgBitbucketAuth(job.data.orgSettings.orgId);
-        if (bbAuth) {
-          repoUrl = withBitbucketCredentials(
-            repoLog,
-            bbAuth.username,
-            bbAuth.appPassword,
-          );
-        }
+        // Token or app password, only ever sent to bitbucket.org.
+        const authed = bbAuth ? withBitbucketAuth(repoLog, bbAuth) : null;
+        if (authed) repoUrl = authed;
       } else if (
         job.data.useOrgAzureDevOpsToken &&
         job.data.orgSettings.orgId

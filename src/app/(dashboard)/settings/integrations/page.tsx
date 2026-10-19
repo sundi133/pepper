@@ -41,15 +41,13 @@ export default function IntegrationsPage() {
     connected: boolean;
     username: string | null;
     workspace: string | null;
+    authType?: string;
   } | null>(null);
   const [bitbucketFormOpen, setBitbucketFormOpen] = useState(false);
   const [bitbucketSubmitting, setBitbucketSubmitting] = useState(false);
   const [bitbucketDisconnecting, setBitbucketDisconnecting] = useState(false);
-  const [bitbucketForm, setBitbucketForm] = useState({
-    username: "",
-    appPassword: "",
-    workspace: "",
-  });
+  const emptyBitbucketForm = { authType: "access_token" as "access_token" | "api_token", token: "", workspace: "" };
+  const [bitbucketForm, setBitbucketForm] = useState(emptyBitbucketForm);
 
   // ─── Azure DevOps Services ──────────────────────────────────────────
   const [azureConn, setAzureConn] = useState<{
@@ -185,11 +183,13 @@ export default function IntegrationsPage() {
         connected?: boolean;
         username?: string | null;
         workspace?: string | null;
+        authType?: string;
       };
       setBitbucketConn({
         connected: Boolean(data.connected),
         username: data.username ?? null,
         workspace: data.workspace ?? null,
+        authType: data.authType,
       });
     } catch {
       /* ignore */
@@ -221,11 +221,10 @@ export default function IntegrationsPage() {
 
   async function connectBitbucket(e: React.FormEvent) {
     e.preventDefault();
-    const username = bitbucketForm.username.trim();
-    const appPassword = bitbucketForm.appPassword.trim();
+    const token = bitbucketForm.token.trim();
     const workspace = bitbucketForm.workspace.trim();
-    if (!username || !appPassword) {
-      toast.error("Username and app password are required");
+    if (!token || !workspace) {
+      toast.error("Token and workspace are required");
       return;
     }
     setBitbucketSubmitting(true);
@@ -234,9 +233,9 @@ export default function IntegrationsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username,
-          appPassword,
-          workspace: workspace || undefined,
+          authType: bitbucketForm.authType,
+          token,
+          workspace,
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -244,7 +243,7 @@ export default function IntegrationsPage() {
         throw new Error(data.error || "Failed to connect Bitbucket");
       }
       toast.success("Bitbucket connected");
-      setBitbucketForm({ username: "", appPassword: "", workspace: "" });
+      setBitbucketForm(emptyBitbucketForm);
       setBitbucketFormOpen(false);
       await refreshBitbucket();
     } catch (err) {
@@ -470,12 +469,13 @@ export default function IntegrationsPage() {
           <div className="flex items-center gap-2">
             <GitBranch className="h-5 w-5" />
             <CardTitle>Bitbucket Cloud</CardTitle>
-            <Badge variant="outline">App password</Badge>
+            <Badge variant="outline">Access token</Badge>
           </div>
           <CardDescription>
-            Import repos, clone private code on the worker, and post PR review
-            comments and build statuses. Uses a Bitbucket app password (not your
-            login password).
+            Import repos, clone private code on the worker, review pull requests, post
+            comments and build statuses, answer <code>@pepper</code> commands and open
+            fix pull requests. Use a workspace, project or repository{" "}
+            <strong>access token</strong>: it belongs to Bitbucket, not to a person.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -493,6 +493,12 @@ export default function IntegrationsPage() {
                   </>
                 ) : null}
               </p>
+              {bitbucketConn.authType === "app_password" && (
+                <p className="text-sm text-amber-600 dark:text-amber-400">
+                  This connection uses an app password. Atlassian removed app passwords on
+                  28 July 2026, so it no longer works. Disconnect and reconnect with an access token.
+                </p>
+              )}
               <Button
                 variant="ghost"
                 onClick={() => void disconnectBitbucket()}
@@ -509,43 +515,43 @@ export default function IntegrationsPage() {
               className="space-y-3"
             >
               <div className="space-y-1">
-                <Label htmlFor="bb-username">Bitbucket username</Label>
-                <Input
-                  id="bb-username"
-                  value={bitbucketForm.username}
+                <Label htmlFor="bb-auth-type">Token</Label>
+                <select
+                  id="bb-auth-type"
+                  value={bitbucketForm.authType}
                   onChange={(e) =>
                     setBitbucketForm((f) => ({
                       ...f,
-                      username: e.target.value,
+                      authType: e.target.value as "access_token" | "api_token",
                     }))
                   }
-                  placeholder="your-bitbucket-username"
-                  autoComplete="off"
-                  required
-                />
+                  className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="access_token">Access token: workspace, project or repository (recommended)</option>
+                  <option value="api_token">API token of an Atlassian account</option>
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {bitbucketForm.authType === "access_token"
+                    ? "Workspace (Premium), project or repository settings → Access tokens. Permissions: Repositories Read and Write, Pull requests Read and Write; Admin lets Pepper check fork authors' and commenters' permissions."
+                    : "Atlassian account → Security → API tokens, with scopes for Bitbucket repositories and pull requests (read and write). It stops working if its owner leaves."}
+                </p>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="bb-apppassword">App password</Label>
+                <Label htmlFor="bb-token">{bitbucketForm.authType === "access_token" ? "Access token" : "API token"}</Label>
                 <Input
-                  id="bb-apppassword"
+                  id="bb-token"
                   type="password"
-                  value={bitbucketForm.appPassword}
+                  value={bitbucketForm.token}
                   onChange={(e) =>
                     setBitbucketForm((f) => ({
                       ...f,
-                      appPassword: e.target.value,
+                      token: e.target.value,
                     }))
                   }
-                  placeholder="ATBB••••••••"
+                  placeholder="ATCTT••••••••"
                   autoComplete="new-password"
                   required
                 />
-                <p className="text-xs text-muted-foreground">
-                  Create one at Bitbucket → Personal settings → App passwords.
-                  Required scopes: <code>account:read</code>,{" "}
-                  <code>repository:read</code>, <code>repository:write</code>,{" "}
-                  <code>pullrequest:write</code>.
-                </p>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="bb-workspace">Workspace slug</Label>
@@ -575,11 +581,7 @@ export default function IntegrationsPage() {
                   variant="ghost"
                   onClick={() => {
                     setBitbucketFormOpen(false);
-                    setBitbucketForm({
-                      username: "",
-                      appPassword: "",
-                      workspace: "",
-                    });
+                    setBitbucketForm(emptyBitbucketForm);
                   }}
                   disabled={bitbucketSubmitting}
                 >
@@ -630,7 +632,8 @@ export default function IntegrationsPage() {
           </div>
           <div className="text-sm text-muted-foreground space-y-1">
             <p>
-              1. In Bitbucket: open the repo → <strong>Repository settings</strong>{" "}
+              1. In Bitbucket: <strong>Workspace settings</strong> → <strong>Webhooks</strong>{" "}
+              (one webhook for every repository), or a repo&apos;s <strong>Repository settings</strong>{" "}
               → <strong>Webhooks</strong> → <strong>Add webhook</strong>{" "}
               (<a
                 href="https://support.atlassian.com/bitbucket-cloud/docs/manage-webhooks/"
@@ -646,8 +649,9 @@ export default function IntegrationsPage() {
             <p>
               3. Under <strong>Triggers</strong>, enable{" "}
               <strong>Repository push</strong>,{" "}
-              <strong>Pull request created</strong>, and{" "}
-              <strong>Pull request updated</strong>
+              <strong>Pull request created</strong>,{" "}
+              <strong>Pull request updated</strong> and{" "}
+              <strong>Pull request comment created</strong> (for <code>@pepper</code> commands)
             </p>
             <p>
               4. Set <strong>Secret</strong> to the same value as{" "}
@@ -655,12 +659,12 @@ export default function IntegrationsPage() {
               (Pepper verifies <code>X-Hub-Signature: sha256=…</code>)
             </p>
             <p>
-              5. Import the repo on{" "}
+              5. With your organization&apos;s secret, repositories appear in Pepper on their
+              first pull request or push. You can also import them on{" "}
               <Link href="/scans/new" className="text-primary hover:underline">
                 Repositories
               </Link>{" "}
-              (Bitbucket tab) so <code>repoUrl</code> matches{" "}
-              <code>workspace/repo-slug</code>
+              (Bitbucket tab)
             </p>
             <p>
               6. Connect Bitbucket above for private clone and PR comments.

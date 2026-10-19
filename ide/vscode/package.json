@@ -1,0 +1,60 @@
+{
+  "name": "pepper-sast",
+  "displayName": "Pepper SAST",
+  "description": "Pepper security findings (AI SAST, secrets, logic flaws) in the editor: diagnostics, details on hover, rescans and an instant check on save.",
+  "version": "0.1.0",
+  "publisher": "votal",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": { "type": "git", "url": "https://github.com/sundi133/pepper" },
+  "engines": { "vscode": "^1.91.0" },
+  "categories": ["Linters", "Other"],
+  "keywords": ["security", "sast", "secrets", "vulnerabilities", "pepper"],
+  "icon": "media/icon.png",
+  "main": "dist/extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "capabilities": {
+    "untrustedWorkspaces": { "supported": "limited", "description": "In untrusted workspaces Pepper does not run git or send file contents." }
+  },
+  "contributes": {
+    "commands": [
+      { "command": "pepper.signIn", "title": "Sign in", "category": "Pepper" },
+      { "command": "pepper.signOut", "title": "Sign out", "category": "Pepper" },
+      { "command": "pepper.refresh", "title": "Refresh findings", "category": "Pepper", "icon": "$(refresh)" },
+      { "command": "pepper.rescan", "title": "Rescan repository", "category": "Pepper" },
+      { "command": "pepper.scanWorkingTree", "title": "Scan working tree", "category": "Pepper" },
+      { "command": "pepper.selectRepository", "title": "Select repository for this folder", "category": "Pepper" },
+      { "command": "pepper.openInPepper", "title": "Open latest scan in Pepper", "category": "Pepper" },
+      { "command": "pepper.copyFinding", "title": "Copy finding", "category": "Pepper" }
+    ],
+    "menus": {
+      "commandPalette": [{ "command": "pepper.copyFinding", "when": "false" }]
+    },
+    "configuration": {
+      "title": "Pepper",
+      "properties": {
+        "pepper.serverUrl": { "type": "string", "default": "https://sast.votal.ai", "description": "Your Pepper server (sast.votal.ai or your on-prem URL). Must be https:// except for localhost." },
+        "pepper.minSeverity": { "type": "string", "enum": ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"], "default": "LOW", "description": "Lowest severity shown in the editor." },
+        "pepper.checkOnSave": { "type": "boolean", "default": true, "description": "Check a file for secrets and risky patterns when it is saved (sends the saved file to your Pepper server; no AI)." },
+        "pepper.branch": { "type": "string", "default": "", "description": "Show findings from this branch's latest scan. Empty: the current git branch, falling back to the repository's latest scan." },
+        "pepper.refreshMinutes": { "type": "number", "default": 10, "minimum": 0, "description": "Refresh findings in the background every N minutes (0 turns it off)." },
+        "pepper.caFile": { "type": "string", "default": "", "description": "PEM file with your organization's CA certificate, for an on-prem server with an internal certificate." }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "typecheck": "tsc --noEmit -p .",
+    "package": "node -e \"require('fs').copyFileSync('../../LICENSE','LICENSE')\" && npm run build && vsce package --no-dependencies --out pepper-sast.vsix"
+  },
+  "dependencies": {
+    "vscode-languageclient": "10.1.2"
+  },
+  "devDependencies": {
+    "@pepper/lsp": "0.1.0",
+    "@types/node": "^20",
+    "@types/vscode": "1.91.0",
+    "@vscode/vsce": "3.9.2",
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3"
+  }
+}

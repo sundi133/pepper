@@ -1,0 +1,12 @@
+Pepper SAST for VS Code bundles the following open-source components:
+
+- vscode-languageclient, vscode-languageserver, vscode-languageserver-protocol,
+  vscode-jsonrpc, vscode-languageserver-types, vscode-languageserver-textdocument
+  Copyright (c) Microsoft Corporation. MIT License.
+  https://github.com/microsoft/vscode-languageserver-node
+
+- semver (dependency of vscode-languageclient)
+  Copyright (c) Isaac Z. Schlueter and Contributors. ISC License.
+
+- minimatch, brace-expansion, balanced-match (dependencies of vscode-languageclient)
+  Copyright (c) Isaac Z. Schlueter and Contributors; Julian Gruber. ISC / MIT Licenses.

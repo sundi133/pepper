@@ -43,3 +43,6 @@ vitest.config.ts
 
 # Local scratch
 testcode
+
+# IDE extension sources (not part of the API or worker images)
+ide

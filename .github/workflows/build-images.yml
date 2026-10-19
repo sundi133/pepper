@@ -221,13 +221,31 @@ jobs:
       - name: Package install bundle
         run: scripts/package-install-bundle.sh "${{ steps.v.outputs.version }}"
 
+      - name: Set up Node for the IDE extension
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The VS Code extension and the standalone language server (for JetBrains
+      # via LSP4IJ and Eclipse via LSP4E), versioned like the release.
+      - name: Build IDE extension
+        working-directory: ide
+        env:
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          npm ci --no-audit --no-fund
+          node -e 'const f="vscode/package.json",p=require("./"+f);p.version=process.env.V;require("fs").writeFileSync(f,JSON.stringify(p,null,2)+"\n")'
+          npm run package
+          cp vscode/pepper-sast.vsix "../release/pepper-sast-$V.vsix"
+          cp vscode/dist/server.js "../release/pepper-lsp-$V.js"
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           V: ${{ steps.v.outputs.version }}
         run: |
           cd release
-          sha256sum "pepper-install-$V.tar.gz" "pepper-install-$V.zip" > "pepper-install-$V.sha256"
+          sha256sum "pepper-install-$V.tar.gz" "pepper-install-$V.zip" "pepper-sast-$V.vsix" "pepper-lsp-$V.js" > "pepper-install-$V.sha256"
           {
             echo "## Install"
             echo
@@ -236,6 +254,11 @@ jobs:
             echo "Images (linux/amd64 and linux/arm64, public on Docker Hub):"
             echo "- \`docker.io/sundi133/pepper-api:$V\`"
             echo "- \`docker.io/sundi133/pepper-worker:$V\`"
+            echo
+            echo "## IDE extension"
+            echo
+            echo "- VS Code, Cursor, Windsurf: \`pepper-sast-$V.vsix\` (Extensions → … → Install from VSIX), then **Pepper: Sign in**."
+            echo "- JetBrains IDEs (LSP4IJ) and Eclipse (LSP4E): \`pepper-lsp-$V.js\`, started with \`node pepper-lsp-$V.js --stdio\` (Node 18+); see \`ide/README.md\`."
             echo
             echo "## Checksums (SHA-256)"
             echo
@@ -246,5 +269,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             "pepper-install-$V.tar.gz#Install bundle (Linux, tar.gz)" \
             "pepper-install-$V.zip#Install bundle (zip)" \
+            "pepper-sast-$V.vsix#VS Code extension (.vsix)" \
+            "pepper-lsp-$V.js#Pepper language server (JetBrains / Eclipse)" \
             "pepper-install-$V.sha256#SHA-256 checksums" \
             --title "Pepper $V" --notes-file notes.md --generate-notes --verify-tag

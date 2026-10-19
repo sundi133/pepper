@@ -1,0 +1,11 @@
+{
+  "name": "pepper-ide",
+  "private": true,
+  "description": "Pepper IDE integrations: the shared language server and the VS Code extension (docs/IDE_EXTENSION_SPEC.md).",
+  "workspaces": ["pepper-lsp", "vscode"],
+  "scripts": {
+    "build": "npm run build -w pepper-lsp && npm run build -w vscode",
+    "typecheck": "npm run typecheck -w pepper-lsp && npm run typecheck -w vscode",
+    "package": "npm run package -w vscode"
+  }
+}

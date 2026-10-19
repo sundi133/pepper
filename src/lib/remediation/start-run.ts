@@ -44,6 +44,8 @@ export async function startRemediationRun(params: {
           connectedViaGithub: true,
           connectedViaBitbucket: true,
           connectedViaAzure: true,
+          connectedViaGitlab: true,
+          gitlabProjectId: true,
         },
       },
     },

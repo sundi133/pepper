@@ -3,6 +3,7 @@ import { getOrgGitLabAuth } from "./gitlab-connection";
 import { gitlabGet, gitlabPost, gitlabPut } from "./gitlab-api";
 import type { GitLabAuth } from "./gitlab-api";
 import { logger } from "./logger";
+import { postGitLabCommitStatus, scanCommitStatus } from "./gitlab-commit-status";
 import { buildPrMarker, findExistingCommentId, renderPrSummary } from "./github-pr-summary";
 import {
   parsePatchAddedLines,
@@ -343,6 +344,23 @@ export async function postScanGitLabMrSummary(scanId: string): Promise<void> {
     marker,
     body,
   );
+
+  if (scan.commitSha) {
+    const final = scanCommitStatus(status, scan.gateResult, {
+      critical: scan.criticalCount,
+      high: scan.highCount,
+      medium: scan.mediumCount,
+      low: scan.lowCount,
+    });
+    await postGitLabCommitStatus({
+      organizationId,
+      auth,
+      gitlabProjectId,
+      sha: scan.commitSha,
+      ...final,
+      targetUrl: reviewUrl,
+    }).catch((e) => log.warn({ scanId, e }, "GitLab commit status failed (non-blocking)"));
+  }
 
   if (!noteResult.ok) {
     log.warn(

@@ -243,6 +243,13 @@ export async function processScanJob(job: Job<ScanJobData>) {
         } else if (adoAuth) {
           repoUrl = withAzureDevOpsCredentials(repoLog, adoAuth.pat);
         }
+      } else if (job.data.useOrgGitLabToken && job.data.orgSettings.orgId) {
+        const { getOrgGitLabAuth } = await import("@/lib/gitlab-connection");
+        const { withGitLabCredentials } = await import("@/lib/gitlab-api");
+        const glAuth = await getOrgGitLabAuth(job.data.orgSettings.orgId);
+        // null when the repository isn't on the connection's host: clone without it.
+        const authed = glAuth ? withGitLabCredentials(repoLog, glAuth) : null;
+        if (authed) repoUrl = authed;
       }
       const branch = job.data.branch?.trim();
       const repoDir = path.join(workDir, "repo");
@@ -284,9 +291,10 @@ export async function processScanJob(job: Job<ScanJobData>) {
       }
 
       // Fork PRs: their head branch isn't in this repository; fetch the PR ref
-      // (GitHub refs/pull/<n>/head, Azure DevOps refs/pull/<id>/merge).
+      // (GitHub refs/pull/<n>/head, Azure DevOps refs/pull/<id>/merge, GitLab
+      // refs/merge-requests/<iid>/head).
       const fetchRef = job.data.fetchRef?.trim();
-      if (fetchRef && /^refs\/pull\/\d+\/(?:head|merge)$/.test(fetchRef)) {
+      if (fetchRef && /^refs\/(?:pull\/\d+\/(?:head|merge)|merge-requests\/\d+\/head)$/.test(fetchRef)) {
         try {
           execFileSync("git", ["-C", repoDir, "fetch", "--depth", "1", "origin", fetchRef], {
             timeout: 120000,

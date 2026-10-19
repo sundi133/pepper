@@ -159,6 +159,8 @@ export async function runRemediation(runId: string): Promise<void> {
               connectedViaGithub: true,
               connectedViaBitbucket: true,
               connectedViaAzure: true,
+              connectedViaGitlab: true,
+              gitlabProjectId: true,
             },
           },
         },

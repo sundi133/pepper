@@ -12,11 +12,10 @@ import { STATUS_CONTEXT_GENRE, STATUS_CONTEXT_NAME } from "@/lib/azure-devops-pr
 import { queueAzureDevOpsWebhookScan, type AzureDevOpsWebhookProject } from "@/lib/azure-devops-webhook-scan";
 import { parseAzureDevOpsRef } from "@/lib/parse-azure-devops-repo-input";
 import { createProjectWithBuildGate } from "@/lib/create-project-with-build-gate";
-import { buildFindingMarker, extractFindingMarkers } from "@/lib/github-pr-inline-format";
-import { startRemediationRun } from "@/lib/remediation/start-run";
 import { CONFIG_FILE_NAMES, DEFAULT_REPO_CONFIG, parseRepoConfig, type RepoConfig } from "./config";
 import { HELP_TEXT, botHandles, parsePrCommand } from "./commands";
 import { decidePrReview } from "./decision";
+import { fixForInlineComment, isPrPaused, setPrPaused } from "./shared";
 
 const log = logger.child({ module: "pr-review-azure" });
 
@@ -165,7 +164,7 @@ export async function handleAzurePullRequest(project: Project, eventType: string
   const auth = await getOrgAzureDevOpsAuth(project.organizationId);
   const targetBranch = parseAzureDevOpsRef(pr.targetRefName);
   const cfg = auth ? (await loadAzureRepoConfig(auth, project, targetBranch)).config : DEFAULT_REPO_CONFIG;
-  const paused = Boolean((await prisma.prReviewState.findUnique({ where: { projectId_prNumber: { projectId: project.id, prNumber: prId } }, select: { paused: true } }))?.paused);
+  const paused = await isPrPaused(project.id, prId);
 
   const decision = decidePrReview(
     {
@@ -240,13 +239,7 @@ export async function handleAzureComment(
       return { message: command };
     case "pause":
     case "resume": {
-      const paused = command === "pause";
-      await prisma.prReviewState.upsert({
-        where: { projectId_prNumber: { projectId: project.id, prNumber: prId } },
-        create: { projectId: project.id, prNumber: prId, paused, pausedBy: paused ? who : null },
-        update: { paused, pausedBy: paused ? who : null },
-      });
-      await reply(paused ? `Automatic reviews are paused on this PR (by ${who}). Comment \`@pepper resume\` to restart them.` : "Automatic reviews are back on for this PR.");
+      await reply(await setPrPaused(project.id, prId, command === "pause", who));
       return { message: command };
     }
     case "review":
@@ -276,17 +269,5 @@ export async function handleAzureComment(
 /** `@pepper fix` in a Pepper inline thread: a remediation run for that finding, into the PR's branch. */
 async function fixFromThread(auth: AzureDevOpsAuth, project: Project, prId: number, threadId: number): Promise<string> {
   const thread = await azureGet<{ comments?: Array<{ content?: string }> }>(auth, `${repoPath(project)}/pullRequests/${prId}/threads/${threadId}`);
-  const marker = extractFindingMarkers(thread.data?.comments?.[0]?.content)[0];
-  if (!marker) return "Reply `@pepper fix` in one of Pepper's inline threads to fix that finding.";
-  const scan = await prisma.scan.findFirst({
-    where: { projectId: project.id, prNumber: prId, status: "COMPLETED" },
-    orderBy: { completedAt: "desc" },
-    select: { id: true, findings: { select: { id: true, title: true, description: true, severity: true, filePath: true, startLine: true, ruleId: true, cweId: true } } },
-  });
-  const finding = scan?.findings.find((f) => buildFindingMarker(f) === marker);
-  if (!scan || !finding) return "That finding isn't in this PR's latest review any more. Comment `@pepper review` and try again.";
-  const run = await startRemediationRun({ organizationId: project.organizationId, userId: null, scanId: scan.id, findingIds: [finding.id], via: "pr-comment" });
-  if (!run.ok) return `Couldn't start a fix: ${run.error}`;
-  const base = process.env.NEXTAUTH_URL?.replace(/\/+$/, "");
-  return `Working on a fix${base ? ` ([follow it in Pepper](${base}/scans/${scan.id}))` : ""}. Its pull request into this PR's branch will appear here when it's ready.`;
+  return fixForInlineComment(project, prId, thread.data?.comments?.[0]?.content);
 }

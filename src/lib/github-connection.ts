@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { decryptSecret, encryptSecret } from "@/lib/token-encryption";
+import { encryptSecret } from "@/lib/token-encryption";
 import { githubGet } from "@/lib/github-api";
+import { resolveGithubToken, type GithubRepoRef } from "@/lib/github-token-resolve";
 
 export type GithubConnectionStatus = {
   connected: boolean;
@@ -36,20 +37,16 @@ export async function getGithubConnectionStatus(
   };
 }
 
-/** Returns decrypted access token or null if not connected / decrypt fails. */
+/**
+ * A GitHub token for the organization, or null. With `repo`, a linked GitHub
+ * App installation for the repository's owner is used first; otherwise the
+ * organization's OAuth connection, as before (docs/GITHUB_APP_SPEC.md §7).
+ */
 export async function getOrgGithubAccessToken(
   organizationId: string,
+  repo?: GithubRepoRef | null,
 ): Promise<string | null> {
-  const row = await prisma.orgGithubConnection.findUnique({
-    where: { organizationId },
-    select: { accessTokenEnc: true },
-  });
-  if (!row?.accessTokenEnc) return null;
-  try {
-    return decryptSecret(row.accessTokenEnc);
-  } catch {
-    return null;
-  }
+  return (await resolveGithubToken(organizationId, repo))?.token ?? null;
 }
 
 export async function saveOrgGithubConnection(params: {
@@ -104,15 +101,20 @@ export class GithubTokenInvalidError extends Error {
 
 export async function getOrgGithubAccessTokenOrThrow(
   organizationId: string,
+  repo?: GithubRepoRef | null,
 ): Promise<string> {
-  const token = await getOrgGithubAccessToken(organizationId);
-  if (!token) {
+  const resolved = await resolveGithubToken(organizationId, repo);
+  if (!resolved) {
     throw new GithubTokenInvalidError("GitHub is not connected for this organization");
   }
-  const ok = await verifyGithubToken(token);
-  if (!ok) {
-    await deleteOrgGithubConnection(organizationId);
-    throw new GithubTokenInvalidError();
+  // App installation tokens are freshly minted (and can't call /user); only
+  // the OAuth token is checked, and only a failed OAuth token is removed.
+  if (resolved.source === "oauth") {
+    const ok = await verifyGithubToken(resolved.token);
+    if (!ok) {
+      await deleteOrgGithubConnection(organizationId);
+      throw new GithubTokenInvalidError();
+    }
   }
-  return token;
+  return resolved.token;
 }

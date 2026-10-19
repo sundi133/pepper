@@ -20,6 +20,7 @@ model Organization {
   projects         Project[]
   settings         OrgSettings?
   githubConnection    OrgGithubConnection?
+  githubAppInstallations OrgGithubAppInstallation[]
   bitbucketConnection OrgBitbucketConnection?
   azureDevOpsConnection OrgAzureDevOpsConnection?
   gitLabConnection    OrgGitLabConnection?
@@ -44,6 +45,29 @@ model OrgGithubConnection {
   updatedAt        DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+/// A GitHub App installation linked to an organization (docs/GITHUB_APP_SPEC.md).
+/// Pepper acts as the App on the installation's repositories; installation
+/// tokens are minted on demand from the App's private key and never stored.
+model OrgGithubAppInstallation {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  installationId      BigInt    @unique
+  /// GitHub organization or user login that owns the installed repositories.
+  accountLogin        String
+  /// "Organization" | "User"
+  accountType         String
+  /// "all" | "selected"
+  repositorySelection String
+  suspendedAt         DateTime?
+  createdBy           String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
 }
 
 /// Bitbucket Cloud connection: app-password based.

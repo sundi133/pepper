@@ -264,7 +264,7 @@ export async function runRemediation(runId: string): Promise<void> {
       await finish("FAILED", { error: target.error });
       return;
     }
-    const creds = await loadProviderCredentials(run.organizationId, target.provider);
+    const creds = await loadProviderCredentials(run.organizationId, target.provider, target.repoUrl);
     if (!creds) {
       await finish("FAILED", { error: missingCredentialsMessage(target.provider) });
       return;

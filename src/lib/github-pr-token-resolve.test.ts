@@ -1,31 +1,38 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { getOrgGithubAccessToken } = vi.hoisted(() => ({
-  getOrgGithubAccessToken: vi.fn(),
+const { resolveGithubToken } = vi.hoisted(() => ({
+  resolveGithubToken: vi.fn(),
 }));
 
-vi.mock("@/lib/github-connection", () => ({
-  getOrgGithubAccessToken,
+vi.mock("@/lib/github-token-resolve", () => ({
+  resolveGithubToken,
 }));
 
 import { resolveGithubPrTokenForOrg } from "./github-pr-token-resolve";
 
 describe("resolveGithubPrTokenForOrg", () => {
   beforeEach(() => {
-    getOrgGithubAccessToken.mockReset();
+    resolveGithubToken.mockReset();
   });
 
   it("returns oauth token when connected", async () => {
-    getOrgGithubAccessToken.mockResolvedValue("oauth-token-abc");
+    resolveGithubToken.mockResolvedValue({ token: "oauth-token-abc", source: "oauth" });
     const r = await resolveGithubPrTokenForOrg("org1");
     expect(r.source).toBe("github_oauth");
     expect(r.token).toBe("oauth-token-abc");
   });
 
   it("returns none when not connected", async () => {
-    getOrgGithubAccessToken.mockResolvedValue(null);
+    resolveGithubToken.mockResolvedValue(null);
     const r = await resolveGithubPrTokenForOrg("org1");
     expect(r.source).toBe("none");
     expect(r.token).toBeUndefined();
+  });
+
+  it("uses the GitHub App installation for the repository when one is linked", async () => {
+    resolveGithubToken.mockResolvedValue({ token: "ghs_app", source: "app", installationId: BigInt(7) });
+    const r = await resolveGithubPrTokenForOrg("org1", { owner: "acme", name: "api" });
+    expect(resolveGithubToken).toHaveBeenCalledWith("org1", { owner: "acme", name: "api" });
+    expect(r).toEqual({ token: "ghs_app", source: "github_app" });
   });
 });

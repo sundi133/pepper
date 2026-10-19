@@ -79,7 +79,7 @@ export async function POST(
   if (!target.ok) {
     return NextResponse.json({ error: target.error, code: target.code }, { status: 400 });
   }
-  const creds = await loadProviderCredentials(orgId, target.provider);
+  const creds = await loadProviderCredentials(orgId, target.provider, target.repoUrl);
   if (!creds) {
     return NextResponse.json(
       { error: missingCredentialsMessage(target.provider), code: "PROVIDER_NOT_CONNECTED" },

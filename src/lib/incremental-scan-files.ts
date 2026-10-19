@@ -277,7 +277,7 @@ async function loadGithubPrContext(
   });
   if (!project?.githubOwner || !project.githubRepoName) return undefined;
 
-  const token = await getOrgGithubAccessToken(orgId);
+  const token = await getOrgGithubAccessToken(orgId, { owner: project.githubOwner, name: project.githubRepoName });
   if (!token) return undefined;
 
   return {

@@ -35,7 +35,7 @@ GitHub App**, and fill in:
 | Commit statuses | Read and write |
 | Metadata | Read (set automatically) |
 
-- **Subscribe to events:** Push, Pull request.
+- **Subscribe to events:** Push, Pull request, Issue comment, Pull request review comment (the last two carry `@pepper` commands).
 - **Where can this GitHub App be installed?** "Only on this account" is enough for one
   GitHub organization. Choose "Any account" if Pepper should be installed on several.
 
@@ -100,3 +100,52 @@ events arrive through the App.
 | "The installation was requested" | An organization owner must approve the request on GitHub; then install from Pepper again |
 | "already linked to another Pepper organization" | Unlink it in the other Pepper organization first |
 | The App block is missing in Pepper | A `GITHUB_APP_*` setting is missing or the private key is invalid (see the API log) |
+
+## Pull-request reviews (like CodeRabbit)
+
+With the App installed, Pepper reviews pull requests with no other setup (design:
+`docs/PR_REVIEW_BOT_SPEC.md`):
+
+- **Onboarding:** a repository's first pull request or push creates its Pepper repository.
+  Nothing is scanned when you install the App.
+- **When a PR is reviewed:** on opened, new commits and reopened, with a summary comment,
+  inline comments on changed lines and a commit status. Drafts and bot PRs (Dependabot,
+  Renovate) are reviewed unless `.pepper.yaml` says otherwise. Fork PRs from outside
+  contributors wait, with a pending status, until a collaborator comments `@pepper review`.
+- **Concurrent PRs:** a new commit replaces only that PR's running review.
+
+**Commands** (repository collaborators, in a PR comment):
+
+| Comment | |
+|---|---|
+| `@pepper review` | Review the PR's latest commit now |
+| `@pepper full review` | Full scan of the PR's branch |
+| `@pepper pause` / `@pepper resume` | Stop or restart automatic reviews of this PR |
+| `@pepper fix` | In reply to a Pepper inline comment: open a fix PR into this PR's branch |
+| `@pepper help` | List the commands |
+
+The App's handle (`@<app-slug>`) works too.
+
+**`.pepper.yaml`:** read from the PR's base branch, so a PR can't turn its own review off.
+Every key is optional:
+
+```yaml
+reviews:
+  auto: true                 # review every PR automatically (false: only on @pepper review)
+  drafts: true               # false: skip drafts, review when marked ready
+  bots: true                 # false: skip Dependabot/Renovate PRs
+  forks: collaborators       # collaborators | all | none
+  base_branches: ["*"]       # glob patterns
+  scan: incremental          # incremental | full
+comments:
+  summary: true
+  inline: true
+  inline_min_severity: INFO  # MEDIUM recommended for busy repositories
+  max_inline: 30             # at most 50
+paths:
+  exclude: ["docs/**", "**/*.md"]   # left out of the scan and the comments
+```
+
+**GitHub App only:** once the App covers your repositories, turn off **Allow personal GitHub
+connections** in Settings → Integrations → GitHub. "Connect GitHub" is then refused, existing
+personal connections are ignored, and pasted tokens are refused for App-covered repositories.

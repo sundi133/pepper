@@ -86,6 +86,8 @@ function severityHint(severity: string): string {
 
 export interface InlineCommentBuildOptions {
   reviewUrl: string | null;
+  /** Add "reply `@pepper fix`" (the PR bot can open a fix PR for it). */
+  fixHint?: boolean;
 }
 
 export function buildInlineCommentBody(
@@ -113,6 +115,10 @@ export function buildInlineCommentBody(
   if (opts.reviewUrl) {
     lines.push("");
     lines.push(`[View full finding in Pepper](${opts.reviewUrl})`);
+  }
+  if (opts.fixHint) {
+    lines.push("");
+    lines.push("_Reply `@pepper fix` to get a pull request that fixes this._");
   }
   return lines.join("\n");
 }

@@ -184,7 +184,15 @@ export async function processScanJob(job: Job<ScanJobData>) {
       );
       let repoUrl = job.data.repoUrl || sourceRef;
       const repoLog = job.data.repoUrlDisplay || repoUrl;
-      if (job.data.useOrgGithubToken && job.data.orgSettings.orgId) {
+      if (job.data.repoTokenEnc) {
+        // A token pasted for this scan, kept encrypted in the job until now.
+        const { decryptSecret } = await import("@/lib/token-encryption");
+        try {
+          repoUrl = withGitCredentials(repoLog, decryptSecret(job.data.repoTokenEnc));
+        } catch {
+          log.warn("Could not decrypt the repository token for this scan; cloning without it");
+        }
+      } else if (job.data.useOrgGithubToken && job.data.orgSettings.orgId) {
         // The GitHub App installation for this repository's owner when one is
         // linked, else the org's OAuth connection (docs/GITHUB_APP_SPEC.md §7).
         const { resolveGithubToken } = await import("@/lib/github-token-resolve");
@@ -267,6 +275,23 @@ export async function processScanJob(job: Job<ScanJobData>) {
         }
       }
 
+      // Fork PRs: their head branch isn't in this repository; fetch the PR ref.
+      const fetchRef = job.data.fetchRef?.trim();
+      if (fetchRef && /^refs\/pull\/\d+\/head$/.test(fetchRef)) {
+        try {
+          execFileSync("git", ["-C", repoDir, "fetch", "--depth", "1", "origin", fetchRef], {
+            timeout: 120000,
+            windowsHide: process.platform === "win32",
+          });
+          execFileSync("git", ["-C", repoDir, "checkout", "--detach", "FETCH_HEAD"], {
+            timeout: 60000,
+            windowsHide: process.platform === "win32",
+          });
+        } catch (error) {
+          throw sanitizeGitCloneError(error, repoUrl, repoLog);
+        }
+      }
+
       if (scanType === "INCREMENTAL") {
         const { resolveIncrementalPathsForScanJob } = await import(
           "@/lib/incremental-scan-files"
@@ -309,6 +334,18 @@ export async function processScanJob(job: Job<ScanJobData>) {
       const svnRevision = job.data.svnRevision;
       const repoDir = path.join(workDir, "repo");
 
+      // Encrypted in the job (svnPasswordEnc); plain svnPassword from jobs
+      // queued before that change still works.
+      let svnPassword = job.data.svnPassword;
+      if (job.data.svnPasswordEnc) {
+        const { decryptSecret } = await import("@/lib/token-encryption");
+        try {
+          svnPassword = decryptSecret(job.data.svnPasswordEnc);
+        } catch {
+          log.warn("Could not decrypt the SVN password for this scan");
+        }
+      }
+
       // Verify svn CLI is available
       try {
         execFileSync("svn", ["--version", "--quiet"], {
@@ -334,8 +371,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
       if (job.data.svnUsername) {
         exportArgs.push("--username", job.data.svnUsername);
       }
-      if (job.data.svnPassword) {
-        exportArgs.push("--password", job.data.svnPassword);
+      if (svnPassword) {
+        exportArgs.push("--password", svnPassword);
       }
       exportArgs.push(svnUrl, repoDir);
 
@@ -350,8 +387,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
         // execFileSync embeds the full argv (including --password) in a
         // failed command's message; strip it before it can reach
         // Scan.errorMessage.
-        if (job.data.svnPassword) {
-          msg = msg.split(job.data.svnPassword).join("[REDACTED]");
+        if (svnPassword) {
+          msg = msg.split(svnPassword).join("[REDACTED]");
         }
         if (msg.includes("E170013") || msg.includes("Unable to connect")) {
           throw new Error(`SVN connection failed — check URL: ${svnUrl}`);
@@ -385,8 +422,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
         if (job.data.svnUsername) {
           infoArgs.push("--username", job.data.svnUsername);
         }
-        if (job.data.svnPassword) {
-          infoArgs.push("--password", job.data.svnPassword);
+        if (svnPassword) {
+          infoArgs.push("--password", svnPassword);
         }
         infoArgs.push(svnUrl);
 
@@ -417,8 +454,15 @@ export async function processScanJob(job: Job<ScanJobData>) {
     }
     await assertScanActive();
 
-    // 2. Enumerate files (INCREMENTAL PR scans limit scanners to changed paths)
-    const allFiles = enumerateFiles(workDir);
+    // 2. Enumerate files (INCREMENTAL PR scans limit scanners to changed paths;
+    // a repository's .pepper.yaml can exclude paths from PR scans).
+    let allFiles = enumerateFiles(workDir);
+    if (job.data.pathExcludes?.length) {
+      const { matchesAny } = await import("@/lib/pr-review/config");
+      const before = allFiles.length;
+      allFiles = allFiles.filter((f) => !matchesAny(f, job.data.pathExcludes!));
+      log.info({ excluded: before - allFiles.length, patterns: job.data.pathExcludes.length }, ".pepper.yaml path exclusions applied");
+    }
     let fileList = allFiles;
     let scaFileList: string[] | undefined;
 

@@ -33,3 +33,34 @@ export async function cancelActiveScansForProject(projectId: string): Promise<st
   });
   return active.map((s) => s.id);
 }
+
+/**
+ * Like cancelActiveScansForProject, but only the scans matching `scope`: one
+ * pull request's, or one branch's outside any pull request. Webhook scans use
+ * it so a review of one PR never stops another PR's (docs/PR_REVIEW_BOT_SPEC.md §3).
+ */
+export async function cancelActiveScansInScope(
+  projectId: string,
+  scope: { prNumber: number } | { branch: string },
+): Promise<string[]> {
+  const where =
+    "prNumber" in scope
+      ? { projectId, prNumber: scope.prNumber, status: { in: [...ACTIVE] } }
+      : { projectId, prNumber: null, branch: scope.branch, status: { in: [...ACTIVE] } };
+  const active = await prisma.scan.findMany({ where, select: { id: true, jobId: true } });
+  if (active.length === 0) return [];
+  for (const s of active) {
+    if (!s.jobId) continue;
+    try {
+      const job = await scanQueue.getJob(s.jobId);
+      if (job) await job.remove();
+    } catch {
+      // Already processing (the status change below stops it) or already gone.
+    }
+  }
+  await prisma.scan.updateMany({
+    where: { id: { in: active.map((s) => s.id) }, status: { in: [...ACTIVE] } },
+    data: { status: "CANCELLED", completedAt: new Date() },
+  });
+  return active.map((s) => s.id);
+}

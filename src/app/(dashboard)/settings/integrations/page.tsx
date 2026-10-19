@@ -19,6 +19,7 @@ import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 import { WebhookSecretsCard } from "@/components/settings/webhook-secrets-card";
 import { CicdSetupWizard } from "@/components/settings/cicd-setup-wizard";
 import { GitLabConnectionCard } from "@/components/settings/gitlab-connection-card";
+import { GithubAppSection } from "@/components/settings/github-app-section";
 
 export default function IntegrationsPage() {
   const webhookUrl =
@@ -32,6 +33,8 @@ export default function IntegrationsPage() {
     oauthConfigured: boolean;
   } | null>(null);
   const [githubDisconnecting, setGithubDisconnecting] = useState(false);
+  /** GitHub App configured on this server (then OAuth is the "personal (legacy)" connection). */
+  const [githubApp, setGithubApp] = useState<{ configured: boolean; installations: number }>({ configured: false, installations: 0 });
 
   // ─── Bitbucket Cloud ────────────────────────────────────────────────
   const [bitbucketConn, setBitbucketConn] = useState<{
@@ -304,7 +307,7 @@ export default function IntegrationsPage() {
           <div className="flex items-center gap-2">
             <Github className="h-5 w-5" />
             <CardTitle>GitHub</CardTitle>
-            <Badge variant="outline">OAuth</Badge>
+            <Badge variant="outline">{githubApp.configured ? "GitHub App · OAuth" : "OAuth"}</Badge>
           </div>
           <CardDescription>
             One GitHub authorization for importing repositories, cloning private
@@ -313,6 +316,18 @@ export default function IntegrationsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <GithubAppSection onLoaded={(configured, installations) => setGithubApp({ configured, installations })} />
+          {githubApp.configured && (
+            <div>
+              <p className="font-medium">Personal connection (legacy)</p>
+              <p className="text-sm text-muted-foreground">
+                Acts as one person&apos;s GitHub account.
+                {githubApp.installations > 0 && githubConn?.connected
+                  ? " Repositories covered by the GitHub App use the App; the others use this connection. Disconnect it once the App covers every repository."
+                  : " Prefer the GitHub App above."}
+              </p>
+            </div>
+          )}
           {githubConn && !githubConn.oauthConfigured ? (
             <p className="text-sm text-destructive">
               GitHub OAuth is not configured. Set GITHUB_OAUTH_CLIENT_ID and

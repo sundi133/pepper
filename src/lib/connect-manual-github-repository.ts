@@ -33,7 +33,7 @@ export async function connectManualGithubRepository(params: {
     );
   }
 
-  const token = await getOrgGithubAccessTokenOrThrow(params.organizationId);
+  const token = await getOrgGithubAccessTokenOrThrow(params.organizationId, { owner: parsed.owner, name: parsed.repo });
 
   const meta = await githubGet<GithubRepoApi>(
     token,

@@ -62,7 +62,7 @@ export async function postPrScanQueuedStatus(scanId: string): Promise<void> {
   const { githubOwner, githubRepoName, organizationId } = scan.project;
   if (!githubOwner || !githubRepoName) return;
 
-  const token = await getOrgGithubAccessToken(organizationId);
+  const token = await getOrgGithubAccessToken(organizationId, { owner: githubOwner, name: githubRepoName });
   if (!token) return;
 
   try {
@@ -182,7 +182,7 @@ export async function postScanPrSummary(scanId: string): Promise<void> {
     return;
   }
 
-  const token = await getOrgGithubAccessToken(organizationId);
+  const token = await getOrgGithubAccessToken(organizationId, { owner: githubOwner, name: githubRepoName });
   if (!token) {
     log.info(
       { scanId, organizationId },

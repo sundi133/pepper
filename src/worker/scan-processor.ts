@@ -185,14 +185,20 @@ export async function processScanJob(job: Job<ScanJobData>) {
       let repoUrl = job.data.repoUrl || sourceRef;
       const repoLog = job.data.repoUrlDisplay || repoUrl;
       if (job.data.useOrgGithubToken && job.data.orgSettings.orgId) {
-        const { getOrgGithubAccessToken } = await import(
-          "@/lib/github-connection"
-        );
-        const ghToken = await getOrgGithubAccessToken(
+        // The GitHub App installation for this repository's owner when one is
+        // linked, else the org's OAuth connection (docs/GITHUB_APP_SPEC.md §7).
+        const { resolveGithubToken } = await import("@/lib/github-token-resolve");
+        const { parseGithubRepo } = await import("@/lib/github-source-link");
+        const ghRepo = parseGithubRepo(repoLog);
+        const gh = await resolveGithubToken(
           job.data.orgSettings.orgId,
+          ghRepo ? { owner: ghRepo.owner, name: ghRepo.repo } : null,
         );
-        if (ghToken) {
-          repoUrl = withGitCredentials(repoLog, ghToken);
+        if (gh?.source === "app") {
+          const { withGithubAppCredentials } = await import("@/lib/github-app");
+          repoUrl = withGithubAppCredentials(repoLog, gh.token);
+        } else if (gh) {
+          repoUrl = withGitCredentials(repoLog, gh.token);
         }
       } else if (job.data.useOrgBitbucketToken && job.data.orgSettings.orgId) {
         const { withBitbucketCredentials } = await import("@/lib/git-repo-url");

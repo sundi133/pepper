@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
 import { prisma } from "@/lib/prisma";
-import {
-  getOrgGithubAccessTokenOrThrow,
-  GithubTokenInvalidError,
-} from "@/lib/github-connection";
-import { listGithubRepositoriesForUser } from "@/lib/github-repos";
+import { GithubTokenInvalidError } from "@/lib/github-connection";
+import { listOrgGithubRepositories } from "@/lib/github-repo-access";
 
 export async function GET() {
   const auth = await requireAuth();
@@ -17,8 +14,6 @@ export async function GET() {
   }
 
   try {
-    const token = await getOrgGithubAccessTokenOrThrow(orgId);
-
     const existing = await prisma.project.findMany({
       where: {
         organizationId: orgId,
@@ -32,10 +27,8 @@ export async function GET() {
         .filter((id): id is number => id != null),
     );
 
-    const repositories = await listGithubRepositoriesForUser(
-      token,
-      connectedIds,
-    );
+    // The OAuth user's repositories and every linked GitHub App installation's.
+    const repositories = await listOrgGithubRepositories(orgId, connectedIds);
 
     return NextResponse.json({ repositories });
   } catch (e) {

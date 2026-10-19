@@ -8,13 +8,29 @@ import {
   queueGithubWebhookScan,
 } from "@/lib/github-webhook-scan";
 import { postPrScanQueuedStatus } from "@/lib/github-pr-comment";
+import { authenticateAppWebhook } from "@/lib/github-app-webhook";
 
 export async function POST(req: NextRequest) {
   const signature = req.headers.get("x-hub-signature-256");
   const event = req.headers.get("x-github-event");
   const body = await req.text();
 
-  const authResult = await requireGithubWebhookAuth(body, signature);
+  // Deliveries from the GitHub App are signed with its own secret; the linked
+  // installation decides the organization (docs/GITHUB_APP_SPEC.md §8).
+  // Everything else uses the per-organization webhook secrets as before.
+  const app = await authenticateAppWebhook({
+    body,
+    signature,
+    event,
+    secret: process.env.GITHUB_APP_WEBHOOK_SECRET?.trim(),
+  });
+  if (app.kind === "handled") {
+    return NextResponse.json({ message: app.message });
+  }
+  const authResult =
+    app.kind === "event"
+      ? ({ ok: true, organizationId: app.organizationId } as const)
+      : await requireGithubWebhookAuth(body, signature);
   if (!authResult.ok) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }

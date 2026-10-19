@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const token = await getOrgGithubAccessTokenOrThrow(orgId);
+    const token = await getOrgGithubAccessTokenOrThrow(orgId, { owner, name: repo });
     const branches = await listGithubBranches(token, owner, repo);
     return NextResponse.json({ branches });
   } catch (e) {

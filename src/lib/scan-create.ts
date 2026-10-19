@@ -204,7 +204,10 @@ export async function queueNewScan(params: {
     data: { sourceRef },
   });
 
-  const orgGhToken = await getOrgGithubAccessToken(orgId);
+  const ghRepo = scanParams.repoUrl ? parseGithubRepo(scanParams.repoUrl) : null;
+  const orgGhToken = ghRepo
+    ? await getOrgGithubAccessToken(orgId, { owner: ghRepo.owner, name: ghRepo.repo })
+    : null;
   const useOAuthClone = Boolean(
     scanParams.repoUrl?.trim() &&
       parseGithubRepo(scanParams.repoUrl) &&

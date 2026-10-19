@@ -141,10 +141,13 @@ export type ProviderCredentials =
 export async function loadProviderCredentials(
   organizationId: string,
   provider: RemediationProvider,
+  repoUrl?: string | null,
 ): Promise<ProviderCredentials | null> {
   if (provider === "github") {
     const { getOrgGithubAccessToken } = await import("@/lib/github-connection");
-    const token = (await getOrgGithubAccessToken(organizationId))?.trim();
+    const { parseGithubRepo } = await import("@/lib/github-source-link");
+    const parsed = parseGithubRepo(repoUrl);
+    const token = (await getOrgGithubAccessToken(organizationId, parsed ? { owner: parsed.owner, name: parsed.repo } : null))?.trim();
     return token ? { provider, token } : null;
   }
   if (provider === "azure_devops") {

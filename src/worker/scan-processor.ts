@@ -59,6 +59,8 @@ import {
 import { decompiledOriginOf } from "@/lib/compiled-scan/finding-origin";
 import { uploadedArtifactName } from "@/lib/compiled-scan/upload";
 import { maxUploadBytes } from "@/lib/upload-limits";
+import { mobilePlatformOf } from "@/lib/mobile-platform";
+import { aiMobileReviewAccess, aiMobileReviewConfig, findJadxJar, runAiMobileReview } from "@/lib/mobile-ai-review";
 
 // prisma is imported from @/lib/prisma
 
@@ -746,8 +748,9 @@ Schema:
         log.warn({ err }, "Compiled-code scan failed; continuing with source only");
       }
       await assertScanActive();
-    } else if (uploadedArtifact) {
+    } else if (uploadedArtifact && mobilePlatformOf(uploadedArtifact) !== "ios") {
       // The upload is nothing but a compiled artifact, and nothing will look inside it.
+      // (An iOS app is never decompiled; the GPT-6 Astra review covers it.)
       log.warn({ artifact: uploadedArtifact }, "Compiled-code scanning is off; the uploaded artifact is not decompiled");
       await setDecompileProgress(scanId, {
         status: "DONE",
@@ -874,6 +877,60 @@ Schema:
       { findings: result.findings.length, deps: result.depsScanned },
       "Scan complete",
     );
+
+    // 5a. GPT-6 Astra review of an uploaded mobile app (opt-in per upload):
+    // the app goes to an OpenAI-hosted container under the organization's
+    // OpenAI key. Never fails the scan; the outcome is recorded for the scan page.
+    const mobilePlatform = mobilePlatformOf(uploadedArtifact);
+    if (job.data.aiMobileReview && uploadedArtifact && mobilePlatform) {
+      const reviewConfig = aiMobileReviewConfig();
+      const access = aiMobileReviewAccess(orgSettings);
+      const reviewBase = { platform: mobilePlatform, model: reviewConfig.model };
+      if (!access.ok) {
+        log.warn({ reason: access.reason }, "GPT-6 Astra review skipped");
+        await setAiMobileReviewProgress(scanId, {
+          status: "DONE",
+          findingsCount: 0,
+          outcome: "skipped",
+          note: access.reason,
+          ...reviewBase,
+        });
+      } else {
+        await setAiMobileReviewProgress(scanId, { status: "RUNNING", findingsCount: 0, ...reviewBase });
+        await reportProgress(`Reviewing ${uploadedArtifact} with ${reviewConfig.model}`);
+        try {
+          const outcome = await runAiMobileReview({
+            scanId,
+            appPath: path.join(workDir, uploadedArtifact),
+            appName: uploadedArtifact,
+            platform: mobilePlatform,
+            access,
+            config: { ...reviewConfig, jadxJar: reviewConfig.jadxJar ?? findJadxJar(compiledConfig.jadxBin) },
+            signal: abortController.signal,
+          });
+          await insertFindings(outcome.findings);
+          await setAiMobileReviewProgress(scanId, {
+            status: "DONE",
+            findingsCount: outcome.findings.length,
+            outcome: "completed",
+            ...outcome.summary,
+          });
+        } catch (err) {
+          if (abortController.signal.aborted || err instanceof ScanCancelledError || err instanceof ScanStoppedError) {
+            throw err;
+          }
+          log.warn({ err }, "GPT-6 Astra review failed; continuing without it");
+          await setAiMobileReviewProgress(scanId, {
+            status: "DONE",
+            findingsCount: 0,
+            outcome: "failed",
+            note: err instanceof Error ? err.message : String(err),
+            ...reviewBase,
+          });
+        }
+      }
+      await assertScanActive();
+    }
 
     // 5. Generate SBOMs (CycloneDX + SPDX) from parsed dependencies
     if (result.dependencies.length > 0) {
@@ -1340,6 +1397,15 @@ const STOP_WATCH_INTERVAL_MS = 5000;
 
 /** Scan types whose scanners (SAST, secrets) review decompiled compiled code. */
 const COMPILED_SCAN_TYPES = new Set(["FULL", "SAST_ONLY", "SECRETS_ONLY", "INCREMENTAL"]);
+
+/** The AI_MOBILE_REVIEW entry of Scan.scannerProgress (progress, then the review's outcome on the scan page). */
+async function setAiMobileReviewProgress(scanId: string, entry: Record<string, unknown>): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE "Scan"
+    SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ AI_MOBILE_REVIEW: entry })}::jsonb
+    WHERE id = ${scanId}
+  `;
+}
 
 /** The DECOMPILE entry of Scan.scannerProgress (progress badge, then the decompile summary). */
 async function setDecompileProgress(scanId: string, entry: Record<string, unknown>): Promise<void> {

@@ -7,6 +7,7 @@ import {
 import type { ScanJobData } from "@/lib/queue";
 import type { Logger } from "pino";
 import { UNTRUSTED_CONTENT_GUARD } from "@/scanners/shared/prompts";
+import { isAiMobileReviewFinding } from "@/lib/mobile-ai-review";
 
 const BATCH_SIZE = 40;
 const CONFIDENCE_THRESHOLD = 0.85;
@@ -73,7 +74,7 @@ export async function autoVerifyFalsePositives(
   }
 
   // Only verify SAST and secrets findings (pattern-based are most FP-prone)
-  const findings = await prisma.finding.findMany({
+  const candidates = await prisma.finding.findMany({
     where: {
       scanId,
       status: "OPEN",
@@ -102,6 +103,10 @@ export async function autoVerifyFalsePositives(
     },
     orderBy: { severity: "asc" }, // process lower-severity first (more likely FP)
   });
+  // The mobile app review traced its findings through the app with a stronger
+  // model; a snippet-only second opinion would only dismiss them wrongly.
+  // (Filtered here, not with NOT in the query, which would also drop rows with no ruleId.)
+  const findings = candidates.filter((f) => !isAiMobileReviewFinding(f));
 
   if (findings.length === 0) {
     return { analyzed: 0, marked: 0 };

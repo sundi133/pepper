@@ -76,6 +76,7 @@ import { ScanTriageChat } from "@/components/scans/scan-triage-chat";
 import { computeScanProgress } from "@/lib/scan-progress";
 import { CustomReportDialog } from "@/components/scans/custom-report-dialog";
 import { CompiledCodeSummary } from "@/components/scans/compiled-code-summary";
+import { AiMobileReviewSummary } from "@/components/scans/ai-mobile-review-summary";
 
 type Finding = {
   id: string;
@@ -954,6 +955,7 @@ export default function ScanDetailPage() {
 
       {/* What the compiled-code scan decompiled and skipped */}
       {!isActive && <CompiledCodeSummary scannerProgress={scan.scannerProgress} />}
+      {!isActive && <AiMobileReviewSummary scannerProgress={scan.scannerProgress} />}
 
       {/* Error / stop details */}
       {scan.errorMessage &&

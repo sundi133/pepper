@@ -120,6 +120,8 @@ export interface ScanJobData {
   /** Resolve org Bitbucket app password at worker runtime (never sent from browser). */
   useOrgBitbucketToken?: boolean;
   useOrgAzureDevOpsToken?: boolean;
+  /** Review the uploaded mobile app with GPT-6 Astra (lib/mobile-ai-review). */
+  aiMobileReview?: boolean;
   orgSettings: {
     llmProvider: string;
     llmBaseUrl: string;

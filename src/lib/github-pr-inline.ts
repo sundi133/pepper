@@ -76,18 +76,12 @@ export interface PostInlineReviewInput {
   headSha: string;
   findings: InlineFinding[];
   reviewUrl: string | null;
-  /** Cap from .pepper.yaml `comments.max_inline` (default 30). */
-  maxComments?: number;
-  /** Add the "reply `@pepper fix`" line (PR bot). */
-  fixHint?: boolean;
 }
 
 export async function postInlineReview(
   input: PostInlineReviewInput,
 ): Promise<{ posted: number; skipped: number }> {
   const { token, owner, repo, prNumber, headSha, findings, reviewUrl } = input;
-  const maxComments = Math.min(input.maxComments ?? MAX_INLINE_COMMENTS_PER_REVIEW, 50);
-  if (maxComments <= 0) return { posted: 0, skipped: findings.length };
 
   const [changedFileLines, existingMarkers] = await Promise.all([
     fetchPrChangedFiles(token, owner, repo, prNumber),
@@ -102,7 +96,7 @@ export async function postInlineReview(
     findings,
     changedFileLines,
     existingMarkers,
-    maxComments,
+    MAX_INLINE_COMMENTS_PER_REVIEW,
   );
 
   if (picked.length === 0) {
@@ -121,7 +115,7 @@ export async function postInlineReview(
       path: p.path,
       line: p.line,
       side: p.side,
-      body: buildInlineCommentBody(finding, { reviewUrl, fixHint: input.fixHint }),
+      body: buildInlineCommentBody(finding, { reviewUrl }),
     };
   });
 

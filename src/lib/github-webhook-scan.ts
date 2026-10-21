@@ -68,18 +68,12 @@ export async function queueGithubWebhookScan(params: {
   commitSha?: string;
   baseSha?: string;
   prNumber?: number;
-  /** Fork PRs: the PR ref to fetch after cloning the base repository. */
-  fetchRef?: string;
-  /** .pepper.yaml paths.exclude */
-  pathExcludes?: string[];
 }): Promise<{ scanId: string; status: "QUEUED" | "ALREADY_QUEUED" }> {
   const commitSha = params.commitSha?.trim();
   const slot = await ensureWebhookScanSlot({
     projectId: params.project.id,
     commitSha,
     scanType: params.scanType,
-    prNumber: params.prNumber,
-    branch: params.branch,
   });
   if (slot.status === "ALREADY_QUEUED") {
     return { scanId: slot.scanId, status: "ALREADY_QUEUED" };
@@ -113,8 +107,6 @@ export async function queueGithubWebhookScan(params: {
     repoUrl: params.repoUrl,
     branch: params.branch,
     useOrgGithubToken: params.project.connectedViaGithub,
-    ...(params.fetchRef ? { fetchRef: params.fetchRef } : {}),
-    ...(params.pathExcludes?.length ? { pathExcludes: params.pathExcludes } : {}),
     orgSettings: buildOrgSettingsForJob(
       settings,
       params.project.organizationId,

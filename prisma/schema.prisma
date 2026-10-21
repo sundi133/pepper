@@ -20,7 +20,6 @@ model Organization {
   projects         Project[]
   settings         OrgSettings?
   githubConnection    OrgGithubConnection?
-  githubAppInstallations OrgGithubAppInstallation[]
   bitbucketConnection OrgBitbucketConnection?
   azureDevOpsConnection OrgAzureDevOpsConnection?
   gitLabConnection    OrgGitLabConnection?
@@ -47,44 +46,6 @@ model OrgGithubConnection {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
-/// A GitHub App installation linked to an organization (docs/GITHUB_APP_SPEC.md).
-/// Pepper acts as the App on the installation's repositories; installation
-/// tokens are minted on demand from the App's private key and never stored.
-model OrgGithubAppInstallation {
-  id                  String    @id @default(cuid())
-  organizationId      String
-  installationId      BigInt    @unique
-  /// GitHub organization or user login that owns the installed repositories.
-  accountLogin        String
-  /// "Organization" | "User"
-  accountType         String
-  /// "all" | "selected"
-  repositorySelection String
-  suspendedAt         DateTime?
-  createdBy           String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@index([organizationId])
-}
-
-/// Per-pull-request review state for the PR bot (docs/PR_REVIEW_BOT_SPEC.md §8).
-model PrReviewState {
-  id        String   @id @default(cuid())
-  projectId String
-  prNumber  Int
-  paused    Boolean  @default(false)
-  pausedBy  String?
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@unique([projectId, prNumber])
-}
-
 /// Bitbucket Cloud connection: app-password based.
 /// Customer creates an app password under their Bitbucket account settings,
 /// pastes username + app password into Pepper. We store the app password
@@ -94,12 +55,7 @@ model OrgBitbucketConnection {
   organizationId  String   @unique
   workspace       String?
   username        String
-  /// Legacy app password (Atlassian removed app passwords on 2026-07-28).
-  appPasswordEnc  String?  @db.Text
-  /// "app_password" (legacy), "access_token" (repository/project/workspace) or "api_token".
-  authType        String   @default("app_password")
-  /// Access token or API token, encrypted (docs/PR_REVIEW_PROVIDERS_SPEC.md §3.2).
-  tokenEnc        String?  @db.Text
+  appPasswordEnc  String   @db.Text
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -119,14 +75,7 @@ model OrgAzureDevOpsConnection {
   /// the collection). Null for the hosted service (dev.azure.com).
   azureServerUrl      String?
   azureUser           String?
-  /// PAT connections (authType "pat"); null for a service principal.
-  patEnc              String?  @db.Text
-  /// "pat" (default) | "service_principal" (Entra ID, Azure DevOps Services only;
-  /// docs/PR_REVIEW_PROVIDERS_SPEC.md §1.2).
-  authType            String   @default("pat")
-  tenantId            String?
-  clientId            String?
-  clientSecretEnc     String?  @db.Text
+  patEnc              String   @db.Text
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -142,13 +91,6 @@ model OrgGitLabConnection {
   gitlabUserId    Int?
   gitlabUsername  String?
   accessTokenEnc  String   @db.Text
-  /// "personal" or "bot" (group/project access token or service account); display only.
-  tokenKind       String?
-  tokenScopes     String?
-  tokenExpiresAt  DateTime?
-  /// Post `pepper/security` commit statuses on merge requests. Off for connections
-  /// made before statuses existed: a failed status blocks merges under "Pipelines must succeed".
-  commitStatuses  Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -266,8 +208,6 @@ model Project {
   /// Set when a GitLab MR webhook triggers a scan. Used to post MR notes.
   gitlabProjectId     Int?
   gitlabNamespace     String?    // e.g. "myorg/myrepo"
-  /// Created from a GitLab webhook (docs/PR_REVIEW_PROVIDERS_SPEC.md §2.4).
-  connectedViaGitlab  Boolean @default(false)
 
 
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -276,7 +216,6 @@ model Project {
   schedule     ScanSchedule?
   snapshots    ScanSnapshot[]
   tickets      FindingTicket[]
-  prReviewStates PrReviewState[]
 
   @@unique([organizationId, githubRepoId])
   @@unique([organizationId, bitbucketRepoUuid])
@@ -742,9 +681,6 @@ enum ScheduleFreq {
 model OrgSettings {
   id               String  @id @default(cuid())
   organizationId   String  @unique
-  /// Personal GitHub (OAuth) connections allowed; off = GitHub App only
-  /// (docs/PR_REVIEW_BOT_SPEC.md §6).
-  allowPersonalGithub Boolean @default(true)
   llmProvider      String  @default("openai")
   llmBaseUrl       String  @default("https://api.openai.com/v1")
   llmModel         String  @default("gpt-4o-mini")

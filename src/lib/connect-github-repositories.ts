@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import type { ScanJobData } from "@/lib/queue";
-import { listOrgGithubRepositories } from "@/lib/github-repo-access";
+import {
+  getOrgGithubAccessTokenOrThrow,
+  GithubTokenInvalidError,
+} from "@/lib/github-connection";
+import { listGithubRepositoriesForUser } from "@/lib/github-repos";
 import { connectGithubRepositoryRecord } from "@/lib/github-repository-connect";
 
 export type ConnectGithubRepoResult = {
@@ -15,6 +19,8 @@ export async function connectGithubRepositories(params: {
   branchesByRepoId?: Map<number, string>;
   scanType?: ScanJobData["scanType"];
 }): Promise<ConnectGithubRepoResult> {
+  const token = await getOrgGithubAccessTokenOrThrow(params.organizationId);
+
   const existing = await prisma.project.findMany({
     where: {
       organizationId: params.organizationId,
@@ -26,8 +32,15 @@ export async function connectGithubRepositories(params: {
     existing.map((p) => p.githubRepoId).filter((id): id is number => id != null),
   );
 
-  // The OAuth user's repositories and every linked GitHub App installation's.
-  const available = await listOrgGithubRepositories(params.organizationId, connectedIds);
+  let available;
+  try {
+    available = await listGithubRepositoriesForUser(token, connectedIds);
+  } catch (e) {
+    if (e instanceof Error && /401|403|Bad credentials/i.test(e.message)) {
+      throw new GithubTokenInvalidError();
+    }
+    throw e;
+  }
 
   const byId = new Map(available.map((r) => [r.id, r]));
   const connected: ConnectGithubRepoResult["connected"] = [];

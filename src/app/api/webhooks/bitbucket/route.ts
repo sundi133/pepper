@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireBitbucketWebhookAuth } from "@/lib/webhook-secrets";
 import {
   findProjectForBitbucketWebhook,
@@ -6,26 +6,12 @@ import {
   mainBranchWebhookScanType,
   queueBitbucketWebhookScan,
 } from "@/lib/bitbucket-webhook-scan";
-import {
-  ensureProjectForBitbucketRepo,
-  handleBitbucketComment,
-  handleBitbucketPullRequest,
-  type BitbucketComment,
-  type BitbucketPr,
-  type BitbucketRepoPayload,
-} from "@/lib/pr-review/bitbucket";
-import { logger } from "@/lib/logger";
 
 /**
  * Bitbucket Cloud webhooks.
  *
  * - `repo:push` — scan on push to the default branch (code changes)
- * - `pullrequest:created` / `pullrequest:updated` — PR reviews, through the
- *   shared review decision (docs/PR_REVIEW_PROVIDERS_SPEC.md §3.4)
- * - `pullrequest:comment_created` — `@pepper` commands (§3.5)
- *
- * A webhook authenticated with an organization's secret onboards repositories
- * it hasn't seen, so one workspace webhook covers them all (§3.3).
+ * - `pullrequest:created` / `pullrequest:updated` — incremental PR scans
  *
  * Bitbucket signs the body with the webhook secret using HMAC SHA-256 and
  * puts the digest in `X-Hub-Signature` (format `sha256=<hex>`). If
@@ -48,7 +34,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const repository = payload.repository as BitbucketRepoPayload | undefined;
+  const repository = payload.repository as
+    | { full_name?: string; uuid?: string }
+    | undefined;
   if (!repository?.full_name) {
     return NextResponse.json({ message: "Missing repository" });
   }
@@ -56,20 +44,11 @@ export async function POST(req: NextRequest) {
   const fullName = repository.full_name;
   const repoUrl = `https://bitbucket.org/${fullName}.git`;
 
-  const lookup = {
+  const project = await findProjectForBitbucketWebhook({
     fullName,
     repoUuid: repository.uuid,
     organizationId: authResult.organizationId,
-  };
-  let project = await findProjectForBitbucketWebhook(lookup);
-  // Onboard on PR and push events from an organization's own webhook (not on
-  // comments, and never with the env-only secret, which names no organization).
-  const isComment = eventKey === "pullrequest:comment_created";
-  if (!project && authResult.organizationId && !isComment && eventKey?.match(/^(repo:push|pullrequest:(created|updated))$/)) {
-    if (await ensureProjectForBitbucketRepo(authResult.organizationId, repository)) {
-      project = await findProjectForBitbucketWebhook(lookup);
-    }
-  }
+  });
   if (!project) {
     return NextResponse.json({ message: "No matching project found" });
   }
@@ -119,23 +98,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Event ignored" });
   }
 
-  if (isComment) {
-    const result = await handleBitbucketComment(
-      project,
-      fullName,
-      payload as { comment?: BitbucketComment; pullrequest?: BitbucketPr; repository?: BitbucketRepoPayload },
-      (work) =>
-        after(async () => {
-          try {
-            await work();
-          } catch (err) {
-            logger.error({ err }, "Bitbucket PR command failed");
-          }
-        }),
-    );
-    return NextResponse.json(result);
-  }
-
   if (
     eventKey !== "pullrequest:created" &&
     eventKey !== "pullrequest:updated"
@@ -143,12 +105,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Event ignored" });
   }
 
-  const pullRequest = payload.pullrequest as BitbucketPr | undefined;
+  const pullRequest = payload.pullrequest as
+    | {
+        id?: number;
+        source?: {
+          branch?: { name?: string };
+          commit?: { hash?: string };
+        };
+        destination?: {
+          commit?: { hash?: string };
+        };
+      }
+    | undefined;
+
   if (!pullRequest?.id) {
     return NextResponse.json({ message: "Missing pull request" });
   }
 
-  return NextResponse.json(
-    await handleBitbucketPullRequest(project, fullName, eventKey, pullRequest),
-  );
+  const branch = pullRequest.source?.branch?.name ?? null;
+  const headSha = pullRequest.source?.commit?.hash ?? null;
+  const baseSha = pullRequest.destination?.commit?.hash ?? null;
+  const prId = pullRequest.id;
+
+  const result = await queueBitbucketWebhookScan({
+    project,
+    scanType: "INCREMENTAL",
+    repoUrl,
+    branch: branch ?? project.defaultBranch,
+    commitSha: headSha ?? undefined,
+    baseSha: baseSha ?? undefined,
+    prNumber: prId,
+  });
+
+  return NextResponse.json({
+    scanId: result.scanId,
+    status: result.status,
+  });
 }

@@ -1,18 +1,14 @@
-import { resolveGithubToken, type GithubRepoRef } from "@/lib/github-token-resolve";
+import { getOrgGithubAccessToken } from "@/lib/github-connection";
 
-export type GithubPrTokenSource = "github_app" | "github_oauth" | "none";
+export type GithubPrTokenSource = "github_oauth" | "none";
 
-/**
- * Token for opening a fix PR: the GitHub App installation for the repository's
- * owner when one is linked, else the org's GitHub OAuth connection.
- */
+/** Open fix PR uses only the org GitHub OAuth connection (Repositories / Connect flow). */
 export async function resolveGithubPrTokenForOrg(
   organizationId: string,
-  repo?: GithubRepoRef | null,
 ): Promise<{ token: string | undefined; source: GithubPrTokenSource }> {
-  const resolved = await resolveGithubToken(organizationId, repo);
-  if (resolved?.token.trim()) {
-    return { token: resolved.token.trim(), source: resolved.source === "app" ? "github_app" : "github_oauth" };
+  const oauth = await getOrgGithubAccessToken(organizationId);
+  if (oauth?.trim()) {
+    return { token: oauth.trim(), source: "github_oauth" };
   }
   return { token: undefined, source: "none" };
 }

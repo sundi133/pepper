@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireAzureDevOpsWebhookAuth } from "@/lib/webhook-secrets";
 import {
   findProjectForAzureDevOpsWebhook,
@@ -6,24 +6,11 @@ import {
   mainBranchWebhookScanType,
   queueAzureDevOpsWebhookScan,
 } from "@/lib/azure-devops-webhook-scan";
-import {
-  ensureProjectForAzureRepo,
-  handleAzureComment,
-  handleAzurePullRequest,
-  type AzureComment,
-  type AzurePr,
-} from "@/lib/pr-review/azure-devops";
-import { logger } from "@/lib/logger";
 /**
  * Azure DevOps Services webhooks (Service Hooks).
  *
  * - `git.push` — scan on push to the default branch
- * - `git.pullrequest.created` / `git.pullrequest.updated` — PR reviews, through
- *   the shared review decision (docs/PR_REVIEW_PROVIDERS_SPEC.md §1.4)
- * - `ms.vss-code.git-pullrequest-comment-event` — `@pepper` commands (§1.5)
- *
- * A service hook authenticated with an organization's secret onboards
- * repositories it hasn't seen (one project-level hook covers them all, §1.3).
+ * - `git.pullrequest.created` / `git.pullrequest.updated` — incremental PR scans
  *
  * ADO service hooks use Basic auth; verify the password against
  * `AZURE_DEVOPS_WEBHOOK_SECRET` when set.
@@ -47,26 +34,17 @@ export async function POST(req: NextRequest) {
 
   const eventType = payload.eventType;
   const resource = payload.resource;
-  const isComment = eventType === "ms.vss-code.git-pullrequest-comment-event";
-  // Comment events carry the PR (and its repository) under resource.pullRequest.
-  const repository = isComment ? resource?.pullRequest?.repository : resource?.repository;
+  const repository = resource?.repository;
   const repoId = repository?.id;
 
   if (!repoId) {
     return NextResponse.json({ message: "Missing repository id" });
   }
 
-  let project = await findProjectForAzureDevOpsWebhook(
+  const project = await findProjectForAzureDevOpsWebhook(
     repoId,
     authResult.organizationId,
   );
-  // Onboard on PR and push events from an organization's own hook (not on
-  // comments, and never with the env-only secret, which names no organization).
-  if (!project && authResult.organizationId && !isComment) {
-    if (await ensureProjectForAzureRepo(authResult.organizationId, repository)) {
-      project = await findProjectForAzureDevOpsWebhook(repoId, authResult.organizationId);
-    }
-  }
   if (!project) {
     return NextResponse.json({ message: "No matching project found" });
   }
@@ -112,22 +90,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Event ignored" });
   }
 
-  if (isComment) {
-    if (!resource?.comment || !resource.pullRequest) {
-      return NextResponse.json({ message: "Missing comment" });
-    }
-    const result = await handleAzureComment(project, resource.comment, resource.pullRequest, (work) =>
-      after(async () => {
-        try {
-          await work();
-        } catch (err) {
-          logger.error({ err }, "Azure DevOps PR command failed");
-        }
-      }),
-    );
-    return NextResponse.json(result);
-  }
-
   if (
     eventType !== "git.pullrequest.created" &&
     eventType !== "git.pullrequest.updated"
@@ -139,14 +101,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Missing pull request" });
   }
 
-  return NextResponse.json(await handleAzurePullRequest(project, eventType, resource as AzurePr));
+  const branch =
+    resource.sourceRefName?.replace(/^refs\/heads\//, "") ??
+    project.defaultBranch;
+  const headSha = resource.lastMergeSourceCommit?.commitId ?? null;
+  const baseSha = resource.lastMergeTargetCommit?.commitId ?? null;
+
+  const result = await queueAzureDevOpsWebhookScan({
+    project,
+    scanType: "INCREMENTAL",
+    repoUrl,
+    branch,
+    commitSha: headSha ?? undefined,
+    baseSha: baseSha ?? undefined,
+    prNumber: resource.pullRequestId,
+  });
+
+  return NextResponse.json({
+    scanId: result.scanId,
+    status: result.status,
+  });
 }
 
 interface AzureWebhookPayload {
   eventType?: string;
-  resource?: AzurePr & {
-    comment?: AzureComment;
-    pullRequest?: AzurePr;
+  resource?: {
     pullRequestId?: number;
     sourceRefName?: string;
     lastMergeSourceCommit?: { commitId?: string };

@@ -46,7 +46,6 @@ import {
 import {
   PROVIDER_LABELS,
   authenticatedRepoUrl,
-  repoGitEnv,
   credentialsMismatch,
   loadProviderCredentials,
   missingCredentialsMessage,
@@ -159,8 +158,6 @@ export async function runRemediation(runId: string): Promise<void> {
               connectedViaGithub: true,
               connectedViaBitbucket: true,
               connectedViaAzure: true,
-              connectedViaGitlab: true,
-              gitlabProjectId: true,
             },
           },
         },
@@ -267,7 +264,7 @@ export async function runRemediation(runId: string): Promise<void> {
       await finish("FAILED", { error: target.error });
       return;
     }
-    const creds = await loadProviderCredentials(run.organizationId, target.provider, target.repoUrl);
+    const creds = await loadProviderCredentials(run.organizationId, target.provider);
     if (!creds) {
       await finish("FAILED", { error: missingCredentialsMessage(target.provider) });
       return;
@@ -296,7 +293,6 @@ export async function runRemediation(runId: string): Promise<void> {
       displayUrl: target.repoUrl,
       preferredBranch: target.baseBranch,
       runId,
-      gitEnv: repoGitEnv(creds),
     });
     if (target.baseBranch && ws.baseBranch !== target.baseBranch) {
       await log(

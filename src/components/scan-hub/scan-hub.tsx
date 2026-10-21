@@ -60,12 +60,6 @@ export function ScanHub() {
           selectedBranch: hub.selectedBranches[r.id] || r.defaultBranch,
           language: r.language,
           private: r.private,
-          // Only when the GitHub App is in use, so the list is unchanged otherwise.
-          subtitle: hub.importable.some((x) => x.via === "app")
-            ? r.via === "app"
-              ? "via GitHub App"
-              : "via personal connection"
-            : undefined,
         }))}
         selectedKeys={new Set(Array.from(hub.selected).map(String))}
         onToggle={(key, checked) => {

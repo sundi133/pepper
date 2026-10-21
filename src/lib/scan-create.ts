@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { scanQueue, ScanJobData } from "@/lib/queue";
 import { uploadObject, ensureBucket } from "@/lib/minio";
 import { compiledUploadObjectKey, isCompiledArtifactUpload } from "@/lib/compiled-scan/upload";
-import { encryptSecret } from "@/lib/token-encryption";
+import { withGitCredentials } from "@/lib/git-repo-url";
 import { parseGithubRepo } from "@/lib/github-source-link";
 import { getOrgGithubAccessToken } from "@/lib/github-connection";
 import { createProjectWithBuildGate } from "@/lib/create-project-with-build-gate";
@@ -86,25 +86,6 @@ export async function queueNewScan(params: {
       status: 400,
       error: "Provide a repository URL, SVN URL, or upload a source archive",
     };
-  }
-
-  // GitHub App only: a token pasted for a repository the App covers is refused
-  // (docs/PR_REVIEW_BOT_SPEC.md §6).
-  if (scanParams.repoToken?.trim() && scanParams.repoUrl) {
-    const gh = parseGithubRepo(scanParams.repoUrl);
-    if (gh) {
-      const { isPersonalGithubAllowed, resolveGithubToken } = await import("@/lib/github-token-resolve");
-      if (!(await isPersonalGithubAllowed(orgId))) {
-        const resolved = await resolveGithubToken(orgId, { owner: gh.owner, name: gh.repo });
-        if (resolved?.source === "app") {
-          return {
-            ok: false,
-            status: 400,
-            error: `This organization uses the GitHub App for ${gh.owner}; remove the access token and scan again.`,
-          };
-        }
-      }
-    }
   }
 
   const requestedProjectId = scanParams.projectId?.trim();
@@ -223,10 +204,7 @@ export async function queueNewScan(params: {
     data: { sourceRef },
   });
 
-  const ghRepo = scanParams.repoUrl ? parseGithubRepo(scanParams.repoUrl) : null;
-  const orgGhToken = ghRepo
-    ? await getOrgGithubAccessToken(orgId, { owner: ghRepo.owner, name: ghRepo.repo })
-    : null;
+  const orgGhToken = await getOrgGithubAccessToken(orgId);
   const useOAuthClone = Boolean(
     scanParams.repoUrl?.trim() &&
       parseGithubRepo(scanParams.repoUrl) &&
@@ -234,14 +212,11 @@ export async function queueNewScan(params: {
       !scanParams.repoToken?.trim(),
   );
 
-  // Enqueue job. Credentials pasted for this scan travel encrypted and are
-  // decrypted by the worker at clone time: completed jobs kept in the queue
-  // never hold a usable token or password (docs/PR_REVIEW_BOT_SPEC.md §6).
-  const repoTokenEnc =
+  // Enqueue job
+  const cloneRepoUrl =
     scanParams.repoUrl && scanParams.repoToken?.trim()
-      ? encryptSecret(scanParams.repoToken.trim())
-      : undefined;
-  const svnPasswordEnc = scanParams.svnPassword ? encryptSecret(scanParams.svnPassword) : undefined;
+      ? withGitCredentials(scanParams.repoUrl, scanParams.repoToken)
+      : scanParams.repoUrl;
 
   const jobData: ScanJobData = {
     scanId: scan.id,
@@ -258,13 +233,12 @@ export async function queueNewScan(params: {
     baseSha: scanParams.baseSha,
     commitSha: scanParams.commitSha,
     prNumber: scanParams.prNumber,
-    repoUrl: scanParams.repoUrl,
+    repoUrl: cloneRepoUrl,
     repoUrlDisplay: scanParams.repoUrl,
-    repoTokenEnc,
     svnUrl: scanParams.svnUrl,
     svnRevision: scanParams.svnRevision,
     svnUsername: scanParams.svnUsername,
-    svnPasswordEnc,
+    svnPassword: scanParams.svnPassword,
     branch: scanParams.branch,
     useOrgGithubToken: useOAuthClone,
     orgSettings: buildOrgSettingsForJob(orgSettings, project.organizationId),

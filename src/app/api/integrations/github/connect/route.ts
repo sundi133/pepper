@@ -21,14 +21,6 @@ export async function GET(req: NextRequest) {
   const roleAuth = await requireRole(orgId, "SECURITY");
   if ("error" in roleAuth) return roleAuth.error;
 
-  const { isPersonalGithubAllowed } = await import("@/lib/github-token-resolve");
-  if (!(await isPersonalGithubAllowed(orgId))) {
-    return NextResponse.json(
-      { error: "This organization uses the GitHub App only; personal GitHub connections are turned off (Settings → Integrations)." },
-      { status: 403 },
-    );
-  }
-
   if (!isGithubRepoOAuthConfigured()) {
     return NextResponse.json(
       {

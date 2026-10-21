@@ -2,11 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
 import {
   saveOrgAzureDevOpsConnection,
-  saveOrgAzureDevOpsServicePrincipal,
   deleteOrgAzureDevOpsConnection,
   getAzureDevOpsConnectionStatus,
 } from "@/lib/azure-devops-connection";
-import { EntraTokenError, getEntraAccessToken, validServicePrincipalIds } from "@/lib/azure-devops-entra";
 import { azureGet } from "@/lib/azure-devops-api";
 import { explainFetchError } from "@/lib/network-error";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
@@ -43,19 +41,11 @@ export async function POST(req: NextRequest) {
     azureOrganization?: unknown;
     pat?: unknown;
     azureServerUrl?: unknown;
-    authType?: unknown;
-    tenantId?: unknown;
-    clientId?: unknown;
-    clientSecret?: unknown;
   };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  if (body.authType === "service_principal") {
-    return connectServicePrincipal(req, orgId, auth.session.user.id, body);
   }
 
   const azureOrganization =
@@ -179,71 +169,4 @@ export async function DELETE(req: Request) {
     ipAddress: ipFromHeaders(req.headers),
   });
   return NextResponse.json({ connected: false });
-}
-
-/**
- * Service principal (Entra ID) connection, Azure DevOps Services only
- * (docs/PR_REVIEW_PROVIDERS_SPEC.md §1.2): get a token, check it against
- * /_apis/connectionData, then save. The secret is never returned or logged.
- */
-async function connectServicePrincipal(
-  req: NextRequest,
-  orgId: string,
-  userId: string,
-  body: { azureOrganization?: unknown; azureServerUrl?: unknown; tenantId?: unknown; clientId?: unknown; clientSecret?: unknown },
-) {
-  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-  const azureOrganization = str(body.azureOrganization);
-  const tenantId = str(body.tenantId);
-  const clientId = str(body.clientId);
-  const clientSecret = typeof body.clientSecret === "string" ? body.clientSecret : "";
-  if (!azureOrganization || !tenantId || !clientId || !clientSecret) {
-    return NextResponse.json({ error: "azureOrganization, tenantId, clientId and clientSecret are required" }, { status: 400 });
-  }
-  if (str(body.azureServerUrl)) {
-    return NextResponse.json(
-      { error: "Service principals work with Azure DevOps Services (dev.azure.com) only. For Azure DevOps Server, use a dedicated service account's PAT." },
-      { status: 400 },
-    );
-  }
-  const badIds = validServicePrincipalIds({ tenantId, clientId });
-  if (badIds) return NextResponse.json({ error: badIds }, { status: 400 });
-
-  let bearer: string;
-  try {
-    bearer = await getEntraAccessToken({ tenantId, clientId, clientSecret });
-  } catch (e) {
-    return NextResponse.json({ error: e instanceof EntraTokenError ? e.message : "Could not get a token from Entra ID" }, { status: 400 });
-  }
-
-  type ConnData = { authenticatedUser?: { providerDisplayName?: string } };
-  let probe;
-  try {
-    probe = await azureGet<ConnData>({ organization: azureOrganization, pat: "", bearer }, "/_apis/connectionData");
-  } catch (e) {
-    return NextResponse.json({ error: explainFetchError(e, "https://dev.azure.com") }, { status: 502 });
-  }
-  if (!probe.ok) {
-    return NextResponse.json(
-      {
-        error:
-          probe.status === 401 || probe.status === 403
-            ? `Azure DevOps didn't accept the service principal. Add it to the "${azureOrganization}" organization (Organization settings → Users, Basic access) and give it Contribute and "Contribute to pull requests" on the repositories to scan.`
-            : `Azure DevOps probe failed (${probe.status})`,
-      },
-      { status: 400 },
-    );
-  }
-
-  const azureUser = probe.data.authenticatedUser?.providerDisplayName ?? null;
-  await saveOrgAzureDevOpsServicePrincipal({ organizationId: orgId, azureOrganization, tenantId, clientId, clientSecret, azureUser });
-  await writeAuditLog({
-    organizationId: orgId,
-    userId,
-    action: "integration.created",
-    resource: "integration",
-    details: { provider: "azure_devops", authType: "service_principal", azureOrganization, tenantId, clientId, azureUser },
-    ipAddress: ipFromHeaders(req.headers),
-  });
-  return NextResponse.json({ connected: true, azureOrganization, azureServerUrl: null, azureUser, authType: "service_principal" });
 }

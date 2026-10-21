@@ -31,17 +31,14 @@ export class RemediationWorkspace {
   readonly dir: string;
   private readonly authedUrl: string;
   private readonly displayUrl: string;
-  /** Extra git environment (an Azure DevOps service principal's bearer header). */
-  private readonly gitEnv: Record<string, string>;
   baseBranch = "";
   /** Commit the run started from — file contents here match the scan's line numbers. */
   baseSha = "";
 
-  private constructor(dir: string, authedUrl: string, displayUrl: string, gitEnv: Record<string, string> = {}) {
+  private constructor(dir: string, authedUrl: string, displayUrl: string) {
     this.dir = dir;
     this.authedUrl = authedUrl;
     this.displayUrl = displayUrl;
-    this.gitEnv = gitEnv;
   }
 
   private scrub(text: string): string {
@@ -60,7 +57,7 @@ export class RemediationWorkspace {
           cwd: this.dir,
           timeout,
           maxBuffer: 16 * 1024 * 1024,
-          env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...this.gitEnv },
+          env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
         },
         (err, stdout, stderr) => {
           if (err) {
@@ -83,10 +80,9 @@ export class RemediationWorkspace {
     displayUrl: string;
     preferredBranch: string | null;
     runId: string;
-    gitEnv?: Record<string, string>;
   }): Promise<RemediationWorkspace> {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), `pepper-remediate-${options.runId}-`));
-    const ws = new RemediationWorkspace(dir, options.authedUrl, options.displayUrl, options.gitEnv);
+    const ws = new RemediationWorkspace(dir, options.authedUrl, options.displayUrl);
     const base = ["clone", "--depth", "1", "--no-tags"];
     try {
       if (options.preferredBranch) {

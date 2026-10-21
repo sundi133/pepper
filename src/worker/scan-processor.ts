@@ -184,41 +184,29 @@ export async function processScanJob(job: Job<ScanJobData>) {
       );
       let repoUrl = job.data.repoUrl || sourceRef;
       const repoLog = job.data.repoUrlDisplay || repoUrl;
-      /** Extra environment for git (a bearer token as an HTTP header). */
-      let gitEnv: Record<string, string> | undefined;
-      if (job.data.repoTokenEnc) {
-        // A token pasted for this scan, kept encrypted in the job until now.
-        const { decryptSecret } = await import("@/lib/token-encryption");
-        try {
-          repoUrl = withGitCredentials(repoLog, decryptSecret(job.data.repoTokenEnc));
-        } catch {
-          log.warn("Could not decrypt the repository token for this scan; cloning without it");
-        }
-      } else if (job.data.useOrgGithubToken && job.data.orgSettings.orgId) {
-        // The GitHub App installation for this repository's owner when one is
-        // linked, else the org's OAuth connection (docs/GITHUB_APP_SPEC.md §7).
-        const { resolveGithubToken } = await import("@/lib/github-token-resolve");
-        const { parseGithubRepo } = await import("@/lib/github-source-link");
-        const ghRepo = parseGithubRepo(repoLog);
-        const gh = await resolveGithubToken(
-          job.data.orgSettings.orgId,
-          ghRepo ? { owner: ghRepo.owner, name: ghRepo.repo } : null,
+      if (job.data.useOrgGithubToken && job.data.orgSettings.orgId) {
+        const { getOrgGithubAccessToken } = await import(
+          "@/lib/github-connection"
         );
-        if (gh?.source === "app") {
-          const { withGithubAppCredentials } = await import("@/lib/github-app");
-          repoUrl = withGithubAppCredentials(repoLog, gh.token);
-        } else if (gh) {
-          repoUrl = withGitCredentials(repoLog, gh.token);
+        const ghToken = await getOrgGithubAccessToken(
+          job.data.orgSettings.orgId,
+        );
+        if (ghToken) {
+          repoUrl = withGitCredentials(repoLog, ghToken);
         }
       } else if (job.data.useOrgBitbucketToken && job.data.orgSettings.orgId) {
-        const { withBitbucketAuth } = await import("@/lib/bitbucket-api");
+        const { withBitbucketCredentials } = await import("@/lib/git-repo-url");
         const { getOrgBitbucketAuth } = await import(
           "@/lib/bitbucket-connection"
         );
         const bbAuth = await getOrgBitbucketAuth(job.data.orgSettings.orgId);
-        // Token or app password, only ever sent to bitbucket.org.
-        const authed = bbAuth ? withBitbucketAuth(repoLog, bbAuth) : null;
-        if (authed) repoUrl = authed;
+        if (bbAuth) {
+          repoUrl = withBitbucketCredentials(
+            repoLog,
+            bbAuth.username,
+            bbAuth.appPassword,
+          );
+        }
       } else if (
         job.data.useOrgAzureDevOpsToken &&
         job.data.orgSettings.orgId
@@ -232,20 +220,9 @@ export async function processScanJob(job: Job<ScanJobData>) {
         const adoAuth = await getOrgAzureDevOpsAuth(
           job.data.orgSettings.orgId,
         );
-        if (adoAuth?.bearer) {
-          // Service principal: the token goes in an HTTP header, not the URL.
-          const { bearerGitEnv } = await import("@/lib/azure-devops-entra");
-          gitEnv = bearerGitEnv(adoAuth.bearer);
-        } else if (adoAuth) {
+        if (adoAuth) {
           repoUrl = withAzureDevOpsCredentials(repoLog, adoAuth.pat);
         }
-      } else if (job.data.useOrgGitLabToken && job.data.orgSettings.orgId) {
-        const { getOrgGitLabAuth } = await import("@/lib/gitlab-connection");
-        const { withGitLabCredentials } = await import("@/lib/gitlab-api");
-        const glAuth = await getOrgGitLabAuth(job.data.orgSettings.orgId);
-        // null when the repository isn't on the connection's host: clone without it.
-        const authed = glAuth ? withGitLabCredentials(repoLog, glAuth) : null;
-        if (authed) repoUrl = authed;
       }
       const branch = job.data.branch?.trim();
       const repoDir = path.join(workDir, "repo");
@@ -256,7 +233,6 @@ export async function processScanJob(job: Job<ScanJobData>) {
         execFileSync("git", cloneArgs, {
           timeout: 120000,
           windowsHide: process.platform === "win32",
-            ...(gitEnv ? { env: { ...process.env, ...gitEnv } } : {}),
         });
       } catch (error) {
         const message =
@@ -278,32 +254,10 @@ export async function processScanJob(job: Job<ScanJobData>) {
             {
               timeout: 120000,
               windowsHide: process.platform === "win32",
-            ...(gitEnv ? { env: { ...process.env, ...gitEnv } } : {}),
             },
           );
         } catch (retryError) {
           throw sanitizeGitCloneError(retryError, repoUrl, repoLog);
-        }
-      }
-
-      // Fork PRs: their head branch isn't in this repository; fetch the PR ref
-      // (GitHub refs/pull/<n>/head, Azure DevOps refs/pull/<id>/merge, GitLab
-      // refs/merge-requests/<iid>/head).
-      const fetchRef = job.data.fetchRef?.trim();
-      if (fetchRef && /^refs\/(?:pull\/\d+\/(?:head|merge)|merge-requests\/\d+\/head)$/.test(fetchRef)) {
-        try {
-          execFileSync("git", ["-C", repoDir, "fetch", "--depth", "1", "origin", fetchRef], {
-            timeout: 120000,
-            windowsHide: process.platform === "win32",
-            ...(gitEnv ? { env: { ...process.env, ...gitEnv } } : {}),
-          });
-          execFileSync("git", ["-C", repoDir, "checkout", "--detach", "FETCH_HEAD"], {
-            timeout: 60000,
-            windowsHide: process.platform === "win32",
-            ...(gitEnv ? { env: { ...process.env, ...gitEnv } } : {}),
-          });
-        } catch (error) {
-          throw sanitizeGitCloneError(error, repoUrl, repoLog);
         }
       }
 
@@ -319,7 +273,6 @@ export async function processScanJob(job: Job<ScanJobData>) {
           projectId,
           useOrgGithubToken: job.data.useOrgGithubToken,
           orgId: job.data.orgSettings.orgId,
-          gitEnv,
         });
         incrementalChangedPaths = diffResult.paths;
         if (diffResult.paths !== null) {
@@ -350,18 +303,6 @@ export async function processScanJob(job: Job<ScanJobData>) {
       const svnRevision = job.data.svnRevision;
       const repoDir = path.join(workDir, "repo");
 
-      // Encrypted in the job (svnPasswordEnc); plain svnPassword from jobs
-      // queued before that change still works.
-      let svnPassword = job.data.svnPassword;
-      if (job.data.svnPasswordEnc) {
-        const { decryptSecret } = await import("@/lib/token-encryption");
-        try {
-          svnPassword = decryptSecret(job.data.svnPasswordEnc);
-        } catch {
-          log.warn("Could not decrypt the SVN password for this scan");
-        }
-      }
-
       // Verify svn CLI is available
       try {
         execFileSync("svn", ["--version", "--quiet"], {
@@ -387,8 +328,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
       if (job.data.svnUsername) {
         exportArgs.push("--username", job.data.svnUsername);
       }
-      if (svnPassword) {
-        exportArgs.push("--password", svnPassword);
+      if (job.data.svnPassword) {
+        exportArgs.push("--password", job.data.svnPassword);
       }
       exportArgs.push(svnUrl, repoDir);
 
@@ -403,8 +344,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
         // execFileSync embeds the full argv (including --password) in a
         // failed command's message; strip it before it can reach
         // Scan.errorMessage.
-        if (svnPassword) {
-          msg = msg.split(svnPassword).join("[REDACTED]");
+        if (job.data.svnPassword) {
+          msg = msg.split(job.data.svnPassword).join("[REDACTED]");
         }
         if (msg.includes("E170013") || msg.includes("Unable to connect")) {
           throw new Error(`SVN connection failed — check URL: ${svnUrl}`);
@@ -438,8 +379,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
         if (job.data.svnUsername) {
           infoArgs.push("--username", job.data.svnUsername);
         }
-        if (svnPassword) {
-          infoArgs.push("--password", svnPassword);
+        if (job.data.svnPassword) {
+          infoArgs.push("--password", job.data.svnPassword);
         }
         infoArgs.push(svnUrl);
 
@@ -470,15 +411,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
     }
     await assertScanActive();
 
-    // 2. Enumerate files (INCREMENTAL PR scans limit scanners to changed paths;
-    // a repository's .pepper.yaml can exclude paths from PR scans).
-    let allFiles = enumerateFiles(workDir);
-    if (job.data.pathExcludes?.length) {
-      const { matchesAny } = await import("@/lib/pr-review/config");
-      const before = allFiles.length;
-      allFiles = allFiles.filter((f) => !matchesAny(f, job.data.pathExcludes!));
-      log.info({ excluded: before - allFiles.length, patterns: job.data.pathExcludes.length }, ".pepper.yaml path exclusions applied");
-    }
+    // 2. Enumerate files (INCREMENTAL PR scans limit scanners to changed paths)
+    const allFiles = enumerateFiles(workDir);
     let fileList = allFiles;
     let scaFileList: string[] | undefined;
 

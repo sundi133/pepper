@@ -144,7 +144,7 @@ export async function POST(
     where: { organizationId: orgId },
   });
 
-  const { token: githubToken } = await resolveGithubPrTokenForOrg(orgId, { owner: parsed.owner, name: parsed.repo });
+  const { token: githubToken } = await resolveGithubPrTokenForOrg(orgId);
   if (!githubToken) {
     return NextResponse.json(
       {

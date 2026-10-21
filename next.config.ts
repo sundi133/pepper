@@ -1,5 +1,11 @@
 import type { NextConfig } from "next";
 
+// Largest scan upload in MB. Mirrors maxUploadMb / proxyBodySizeLimit in
+// src/lib/upload-limits.ts (next.config.ts cannot import project modules;
+// next-config.test.ts keeps the two in step).
+const parsedUploadMb = Math.floor(Number(process.env.MAX_UPLOAD_MB?.trim()));
+const maxUploadMb = Number.isFinite(parsedUploadMb) && parsedUploadMb > 0 ? parsedUploadMb : 500;
+
 // Static security headers applied to every response. The Content-Security-Policy
 // is intentionally NOT set here: it is generated per-request in middleware.ts so
 // that a fresh nonce can be injected, which lets us drop 'unsafe-inline' /
@@ -46,8 +52,13 @@ const nextConfig: NextConfig = {
   },
   poweredByHeader: false,
   serverExternalPackages: ["pdfkit", "fontkit", "linebreak", "png-js"],
+  // One upload limit for the form, the API and the middleware body buffer
+  // (MAX_UPLOAD_MB, default 500; see src/lib/upload-limits.ts).
+  env: {
+    MAX_UPLOAD_MB: String(maxUploadMb),
+  },
   experimental: {
-    proxyClientMaxBodySize: "150mb",
+    proxyClientMaxBodySize: `${maxUploadMb + Math.max(50, Math.ceil(maxUploadMb / 10))}mb`,
   },
 };
 

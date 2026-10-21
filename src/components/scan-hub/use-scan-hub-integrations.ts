@@ -16,6 +16,26 @@ import type {
 
 const SCAN_HUB_PATH = "/scans/new";
 
+/**
+ * Parse a JSON response body without throwing on an empty or non-JSON body
+ * (e.g. an unhandled 500 or a proxy 502), so callers surface the HTTP status
+ * instead of "Unexpected end of JSON input".
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function readJson(res: Response): Promise<any> {
+  const text = await res.text();
+  if (text) {
+    try {
+      return JSON.parse(text);
+    } catch {
+      // fall through
+    }
+  }
+  return res.ok
+    ? {}
+    : { error: `Server error (HTTP ${res.status}). Check the server logs.` };
+}
+
 type GithubAvailableRepo = {
   id: number;
   fullName: string;
@@ -121,10 +141,10 @@ export function useScanHubIntegrations(scanType?: string) {
         fetch("/api/integrations/github"),
         fetch("/api/integrations/github/repositories/connected"),
       ]);
-      const statusJson = (await statusRes.json()) as GithubStatus & {
+      const statusJson = (await readJson(statusRes)) as GithubStatus & {
         error?: string;
       };
-      const connectedJson = (await connectedRes.json()) as {
+      const connectedJson = (await readJson(connectedRes)) as {
         repositories?: Omit<GithubConnectedRepo, "provider">[];
         error?: string;
       };
@@ -155,7 +175,7 @@ export function useScanHubIntegrations(scanType?: string) {
     else setPickLoading(true);
     try {
       const res = await fetch("/api/integrations/github/repositories");
-      const json = (await res.json()) as {
+      const json = (await readJson(res)) as {
         repositories?: GithubAvailableRepo[];
         error?: string;
         code?: string;
@@ -191,10 +211,10 @@ export function useScanHubIntegrations(scanType?: string) {
         fetch("/api/integrations/bitbucket/connect"),
         fetch("/api/integrations/bitbucket/repositories/connected"),
       ]);
-      const statusJson = (await statusRes.json()) as BitbucketStatus & {
+      const statusJson = (await readJson(statusRes)) as BitbucketStatus & {
         error?: string;
       };
-      const connectedJson = (await connectedRes.json()) as {
+      const connectedJson = (await readJson(connectedRes)) as {
         repositories?: Omit<BitbucketConnectedRepo, "provider">[];
         error?: string;
       };
@@ -225,7 +245,7 @@ export function useScanHubIntegrations(scanType?: string) {
     else setBitbucketPickLoading(true);
     try {
       const res = await fetch("/api/integrations/bitbucket/repositories");
-      const json = (await res.json()) as {
+      const json = (await readJson(res)) as {
         repositories?: BitbucketAvailableRepo[];
         error?: string;
         code?: string;
@@ -256,10 +276,10 @@ export function useScanHubIntegrations(scanType?: string) {
         fetch("/api/integrations/azure-devops/connect"),
         fetch("/api/integrations/azure-devops/repositories/connected"),
       ]);
-      const statusJson = (await statusRes.json()) as AzureDevOpsStatus & {
+      const statusJson = (await readJson(statusRes)) as AzureDevOpsStatus & {
         error?: string;
       };
-      const connectedJson = (await connectedRes.json()) as {
+      const connectedJson = (await readJson(connectedRes)) as {
         repositories?: Omit<AzureConnectedRepo, "provider">[];
         error?: string;
       };
@@ -290,7 +310,7 @@ export function useScanHubIntegrations(scanType?: string) {
     else setAzurePickLoading(true);
     try {
       const res = await fetch("/api/integrations/azure-devops/repositories");
-      const json = (await res.json()) as {
+      const json = (await readJson(res)) as {
         repositories?: AzureAvailableRepo[];
         error?: string;
         code?: string;
@@ -445,7 +465,7 @@ export function useScanHubIntegrations(scanType?: string) {
     setDisconnecting(true);
     try {
       const res = await fetch("/api/integrations/github", { method: "DELETE" });
-      const json = (await res.json()) as { error?: string };
+      const json = (await readJson(res)) as { error?: string };
       if (!res.ok) throw new Error(json.error || "Failed to disconnect");
       toast.success("GitHub disconnected");
       setStatus((s) =>
@@ -477,7 +497,7 @@ export function useScanHubIntegrations(scanType?: string) {
           ...(scanType && { scanType }),
         }),
       });
-      const json = (await res.json()) as {
+      const json = (await readJson(res)) as {
         connected?: { fullName: string }[];
         error?: string;
       };
@@ -546,7 +566,7 @@ export function useScanHubIntegrations(scanType?: string) {
           }),
         },
       );
-      const json = (await res.json()) as {
+      const json = (await readJson(res)) as {
         error?: string;
         code?: string;
         fullName?: string;
@@ -630,7 +650,7 @@ export function useScanHubIntegrations(scanType?: string) {
           }),
         },
       );
-      const json = (await res.json()) as {
+      const json = (await readJson(res)) as {
         connected?: { fullName: string }[];
         error?: string;
       };
@@ -678,7 +698,7 @@ export function useScanHubIntegrations(scanType?: string) {
           }),
         },
       );
-      const json = (await res.json()) as {
+      const json = (await readJson(res)) as {
         error?: string;
         code?: string;
         fullName?: string;
@@ -726,7 +746,7 @@ export function useScanHubIntegrations(scanType?: string) {
           }),
         },
       );
-      const json = (await res.json()) as {
+      const json = (await readJson(res)) as {
         connected?: { fullName: string }[];
         error?: string;
       };
@@ -774,7 +794,7 @@ export function useScanHubIntegrations(scanType?: string) {
           }),
         },
       );
-      const json = (await res.json()) as {
+      const json = (await readJson(res)) as {
         error?: string;
         code?: string;
         fullName?: string;
@@ -842,7 +862,7 @@ export function useScanHubIntegrations(scanType?: string) {
             }),
           },
         );
-        const json = (await res.json()) as {
+        const json = (await readJson(res)) as {
           error?: string;
           fullName?: string;
           created?: boolean;
@@ -883,7 +903,7 @@ export function useScanHubIntegrations(scanType?: string) {
             }),
           },
         );
-        const json = (await res.json()) as {
+        const json = (await readJson(res)) as {
           error?: string;
           fullName?: string;
           created?: boolean;
@@ -928,7 +948,7 @@ export function useScanHubIntegrations(scanType?: string) {
             }),
           },
         );
-        const json = (await res.json()) as {
+        const json = (await readJson(res)) as {
           error?: string;
           code?: string;
           fullName?: string;
@@ -980,10 +1000,10 @@ export function useScanHubIntegrations(scanType?: string) {
     );
     const res = await fetch("/api/scans", { method: "POST", body: formData });
     if (!res.ok) {
-      const err = (await res.json()) as { error?: string };
+      const err = (await readJson(res)) as { error?: string };
       throw new Error(err.error || "Failed to create scan");
     }
-    const result = (await res.json()) as { scanId: string };
+    const result = (await readJson(res)) as { scanId: string };
     return result.scanId;
   }
 
@@ -999,7 +1019,7 @@ export function useScanHubIntegrations(scanType?: string) {
           `/api/integrations/github/branches?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(name)}`,
         );
         if (!res.ok) return;
-        const json = (await res.json()) as { branches?: string[] };
+        const json = (await readJson(res)) as { branches?: string[] };
         const branches = json.branches ?? [repo.defaultBranch];
         setAvailable((prev) =>
           prev.map((r) =>

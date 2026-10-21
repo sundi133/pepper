@@ -58,6 +58,7 @@ import {
 } from "@/lib/compiled-scan";
 import { decompiledOriginOf } from "@/lib/compiled-scan/finding-origin";
 import { uploadedArtifactName } from "@/lib/compiled-scan/upload";
+import { maxUploadBytes } from "@/lib/upload-limits";
 
 // prisma is imported from @/lib/prisma
 
@@ -705,6 +706,12 @@ Schema:
     // .NET assemblies so the source scanners review them too. Never fails
     // the scan: a problem here only means compiled code goes unscanned.
     const compiledConfig = compiledScanConfig();
+    if (uploadedArtifact) {
+      // The upload limit already bounds an uploaded artifact: one the API
+      // accepted is decompiled even when it is over the per-artifact limit
+      // (which still applies to artifacts found in repositories and archives).
+      compiledConfig.maxArtifactBytes = Math.max(compiledConfig.maxArtifactBytes, maxUploadBytes());
+    }
     if (compiledConfig.enabled && COMPILED_SCAN_TYPES.has(scanType)) {
       let decompileStarted = false;
       try {

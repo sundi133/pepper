@@ -35,6 +35,8 @@ RUN npx prisma generate
 
 # ─── API (Next.js) ──────────────────────────────────────────────────
 FROM base AS api-build
+# Largest scan upload in MB (default 500): inlined into the build, see src/lib/upload-limits.ts.
+ARG MAX_UPLOAD_MB
 RUN npm run build
 
 FROM node:22-alpine AS api

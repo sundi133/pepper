@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import type { ScanJobData } from "@/lib/queue";
 import { MANUAL_SCAN_TYPE_OPTIONS } from "@/lib/scan-types";
 import { UPLOADABLE_ARTIFACT_EXTENSIONS } from "@/lib/compiled-scan/upload";
+import { maxUploadBytes, maxUploadMb } from "@/lib/upload-limits";
 
 type SourceTab = "repository" | "upload" | "svn";
 
@@ -478,9 +479,8 @@ export function NewSecurityScanForm({
                   }}
                   onChange={(e) => {
                     const selected = e.target.files?.[0] || null;
-                    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
-                    if (selected && selected.size > MAX_FILE_SIZE) {
-                      toast.error("File too large. Maximum allowed size is 100 MB.");
+                    if (selected && selected.size > maxUploadBytes()) {
+                      toast.error(`File too large. Maximum allowed size is ${maxUploadMb()} MB.`);
                       e.target.value = "";
                       setFile(null);
                       return;
@@ -510,7 +510,7 @@ export function NewSecurityScanForm({
                 )}
                 <p className="text-xs text-muted-foreground">
                   Source as .zip / .tar.gz, or a single .jar, .war, .ear, .apk, .aab, .dll or .exe:
-                  compiled code is decompiled and scanned.
+                  compiled code is decompiled and scanned. Up to {maxUploadMb()} MB.
                 </p>
               </div>
             )}

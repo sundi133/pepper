@@ -29,10 +29,10 @@ vi.mock("@/lib/scan-notifications", () => ({ createScanQueuedNotification: vi.fn
 
 import { POST } from "./route";
 
-async function upload(fileName: string, type = "") {
+async function upload(fileName: string, type = "", extra: Record<string, unknown> = {}) {
   const form = new FormData();
   form.append("file", new File([Buffer.from("PK\u0003\u0004 test")], fileName, { type }));
-  form.append("data", JSON.stringify({ projectId: "p1", scanType: "FULL" }));
+  form.append("data", JSON.stringify({ projectId: "p1", scanType: "FULL", ...extra }));
   const res = await POST(new NextRequest("http://localhost/api/scans", { method: "POST", body: form }));
   return res!;
 }
@@ -70,5 +70,39 @@ describe("POST /api/scans uploads", () => {
   it("rejects an artifact with an implausible MIME type", async () => {
     const res = await upload("app.jar", "text/html");
     expect(res.status).toBe(400);
+  });
+});
+
+describe("POST /api/scans GPT-6 Astra mobile review", () => {
+  it("does not request the review unless asked", async () => {
+    const res = await upload("app-release.apk", "application/vnd.android.package-archive");
+    expect(res.status).toBe(201);
+    expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: false });
+  });
+
+  it("passes the review request for an Android app to the worker", async () => {
+    const res = await upload("app-release.apk", "application/vnd.android.package-archive", { aiMobileReview: true });
+    expect(res.status).toBe(201);
+    expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: true, sourceRef: "scans/s1/compiled/app-release.apk" });
+  });
+
+  it("accepts an iOS app with the review and stores it under its own name", async () => {
+    const res = await upload("MyApp.ipa", "application/octet-stream", { aiMobileReview: true });
+    expect(res.status).toBe(201);
+    expect(uploadObject.mock.calls[0][0]).toBe("scans/s1/compiled/MyApp.ipa");
+    expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: true, sourceRef: "scans/s1/compiled/MyApp.ipa" });
+  });
+
+  it("rejects an iOS app without the review (nothing else can scan it)", async () => {
+    const res = await upload("MyApp.ipa", "application/octet-stream");
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/GPT-6 Astra/);
+    expect(uploadObject).not.toHaveBeenCalled();
+  });
+
+  it("ignores the request for files that are not mobile apps", async () => {
+    const res = await upload("service.jar", "application/java-archive", { aiMobileReview: true });
+    expect(res.status).toBe(201);
+    expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: false });
   });
 });

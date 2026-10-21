@@ -6,6 +6,7 @@ import { ipFromHeaders } from "@/lib/audit-log";
 import { createScanSchema, queueNewScan } from "@/lib/scan-create";
 import { scanListWhere } from "@/lib/scan-queries";
 import { maxUploadBytes, maxUploadMb } from "@/lib/upload-limits";
+import { mobilePlatformOf } from "@/lib/mobile-platform";
 
 import {
   ARTIFACT_MIME_TYPES,
@@ -85,6 +86,18 @@ export async function POST(req: NextRequest) {
               error: isArtifact
                 ? "Invalid file MIME type for a compiled artifact"
                 : "Invalid file MIME type. Only archive files (zip, tar, tar.gz) are accepted",
+            },
+            { status: 400 },
+          );
+        }
+
+        // Only the GPT-6 Astra review looks inside an iOS app; without it the
+        // scan would report "no findings" for a file nothing inspected.
+        if (mobilePlatformOf(fileName) === "ios" && !scanParams.aiMobileReview) {
+          return NextResponse.json(
+            {
+              error:
+                "iOS apps (.ipa) are only scanned by the GPT-6 Astra review: request it (aiMobileReview) to scan this file",
             },
             { status: 400 },
           );

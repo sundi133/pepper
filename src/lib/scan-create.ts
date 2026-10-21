@@ -16,6 +16,7 @@ import {
 } from "@/lib/project-name-from-source";
 import { API_CREATE_SCAN_TYPES } from "@/lib/scan-types";
 import type { ScanActionResult } from "@/lib/scan-rescan";
+import { mobilePlatformOf } from "@/lib/mobile-platform";
 
 /** Strip HTML tags and trim whitespace to prevent stored XSS. */
 function sanitizeText(value: string): string {
@@ -51,6 +52,11 @@ export const createScanSchema = z
       .optional(),
     svnUsername: z.string().optional(),
     svnPassword: z.string().optional(),
+    /**
+     * Also review an uploaded .apk / .aab / .ipa with GPT-6 Astra in an
+     * OpenAI-hosted container (sends the app to OpenAI with the org's key).
+     */
+    aiMobileReview: z.boolean().optional(),
   })
   .refine((data) => !(data.repoUrl && data.svnUrl), {
     message: "Cannot specify both repoUrl and svnUrl",
@@ -241,6 +247,8 @@ export async function queueNewScan(params: {
     svnPassword: scanParams.svnPassword,
     branch: scanParams.branch,
     useOrgGithubToken: useOAuthClone,
+    aiMobileReview:
+      !!scanParams.aiMobileReview && !!fileBuffer && mobilePlatformOf(originalFileName) !== null,
     orgSettings: buildOrgSettingsForJob(orgSettings, project.organizationId),
     buildGate: project.buildGate
       ? {

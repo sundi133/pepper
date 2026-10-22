@@ -1,6 +1,7 @@
 /** Centralized LLM prompt fragments — avoid duplicating long policy blocks. */
 
 import { SEVERITY_CALIBRATION_PROMPT } from "@/lib/severity-calibration";
+import { BENCHMARK_MODE, BENCHMARK_PROMPT_SUFFIX } from "@/lib/constants";
 
 export { SEVERITY_CALIBRATION_PROMPT };
 
@@ -209,7 +210,8 @@ For each TRUE secret (confidence >= 0.80) return:
     "metadata": { "weaknessClass": "Hardcoded Credential", "severityJustification": "..." }
   }]
 }
-If none: {"findings": []}`;
+If none: {"findings": []}` +
+  (BENCHMARK_MODE ? BENCHMARK_PROMPT_SUFFIX : "");
 
 export const SCA_TRIAGE_PROMPT = `Triage OSV CVE findings. Group duplicate CVEs per package@version.
 For each kept finding add: directDependency (bool), reachable (bool), exploitPreconditions, prioritized fixVersion, remediation.

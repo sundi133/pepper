@@ -6,6 +6,7 @@ import {
 import { RawFinding } from "../types";
 import { logger } from "@/lib/logger";
 import { UNTRUSTED_CONTENT_GUARD } from "../shared/prompts";
+import { BENCHMARK_MODE, BENCHMARK_PROMPT_SUFFIX } from "@/lib/constants";
 
 export const SYSTEM_PROMPT = `You are a security expert classifying potential secret/credential findings in source code.
 
@@ -65,7 +66,8 @@ Respond with JSON:
       "reasoning": "This is a real AWS key matching the AKIA pattern in a production client file"
     }
   ]
-}`;
+}` +
+  (BENCHMARK_MODE ? BENCHMARK_PROMPT_SUFFIX : "");
 
 interface Classification {
   index: number;

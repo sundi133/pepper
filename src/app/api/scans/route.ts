@@ -5,8 +5,8 @@ import { z } from "zod";
 import { ipFromHeaders } from "@/lib/audit-log";
 import { createScanSchema, queueNewScan } from "@/lib/scan-create";
 import { scanListWhere } from "@/lib/scan-queries";
-
-const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100 MB
+import { maxUploadBytes, maxUploadMb } from "@/lib/upload-limits";
+import { mobilePlatformOf } from "@/lib/mobile-platform";
 
 import {
   ARTIFACT_MIME_TYPES,
@@ -51,10 +51,10 @@ export async function POST(req: NextRequest) {
 
       if (file) {
         // Validate file size
-        if (file.size > MAX_UPLOAD_SIZE) {
+        if (file.size > maxUploadBytes()) {
           return NextResponse.json(
             {
-              error: `File too large. Maximum allowed size is ${MAX_UPLOAD_SIZE / (1024 * 1024)} MB`,
+              error: `File too large. Maximum allowed size is ${maxUploadMb()} MB`,
             },
             { status: 400 },
           );
@@ -86,6 +86,18 @@ export async function POST(req: NextRequest) {
               error: isArtifact
                 ? "Invalid file MIME type for a compiled artifact"
                 : "Invalid file MIME type. Only archive files (zip, tar, tar.gz) are accepted",
+            },
+            { status: 400 },
+          );
+        }
+
+        // Only the GPT-6 Astra review looks inside an iOS app; without it the
+        // scan would report "no findings" for a file nothing inspected.
+        if (mobilePlatformOf(fileName) === "ios" && !scanParams.aiMobileReview) {
+          return NextResponse.json(
+            {
+              error:
+                "iOS apps (.ipa) are only scanned by the GPT-6 Astra review: request it (aiMobileReview) to scan this file",
             },
             { status: 400 },
           );

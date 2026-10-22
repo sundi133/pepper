@@ -72,7 +72,6 @@ const ITEM_STATUS_LABEL: Record<RemediationItemStatus, string> = {
 const PROVIDER_NAMES: Record<string, string> = {
   github: "GitHub",
   azure_devops: "Azure DevOps",
-  gitlab: "GitLab",
   bitbucket: "Bitbucket",
 };
 

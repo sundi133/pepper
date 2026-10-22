@@ -44,18 +44,12 @@ export async function queueAzureDevOpsWebhookScan(params: {
   commitSha?: string;
   baseSha?: string;
   prNumber?: number;
-  /** Fork PRs: the PR's merge ref, fetched after cloning the target repository. */
-  fetchRef?: string;
-  /** .pepper.yaml paths.exclude */
-  pathExcludes?: string[];
 }): Promise<{ scanId: string; status: "QUEUED" | "ALREADY_QUEUED" }> {
   const commitSha = params.commitSha?.trim();
   const slot = await ensureWebhookScanSlot({
     projectId: params.project.id,
     commitSha,
     scanType: params.scanType,
-    prNumber: params.prNumber,
-    branch: params.branch,
   });
   if (slot.status === "ALREADY_QUEUED") {
     return { scanId: slot.scanId, status: "ALREADY_QUEUED" };
@@ -89,8 +83,6 @@ export async function queueAzureDevOpsWebhookScan(params: {
     repoUrl: params.repoUrl,
     branch: params.branch,
     useOrgAzureDevOpsToken: params.project.connectedViaAzure,
-    ...(params.fetchRef ? { fetchRef: params.fetchRef } : {}),
-    ...(params.pathExcludes?.length ? { pathExcludes: params.pathExcludes } : {}),
     orgSettings: buildOrgSettingsForJob(
       settings,
       params.project.organizationId,

@@ -19,7 +19,6 @@ import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 import { WebhookSecretsCard } from "@/components/settings/webhook-secrets-card";
 import { CicdSetupWizard } from "@/components/settings/cicd-setup-wizard";
 import { GitLabConnectionCard } from "@/components/settings/gitlab-connection-card";
-import { GithubAppSection } from "@/components/settings/github-app-section";
 
 export default function IntegrationsPage() {
   const webhookUrl =
@@ -33,43 +32,36 @@ export default function IntegrationsPage() {
     oauthConfigured: boolean;
   } | null>(null);
   const [githubDisconnecting, setGithubDisconnecting] = useState(false);
-  /** GitHub App configured on this server (then OAuth is the "personal (legacy)" connection). */
-  const [githubApp, setGithubApp] = useState<{ configured: boolean; installations: number }>({ configured: false, installations: 0 });
 
   // ─── Bitbucket Cloud ────────────────────────────────────────────────
   const [bitbucketConn, setBitbucketConn] = useState<{
     connected: boolean;
     username: string | null;
     workspace: string | null;
-    authType?: string;
   } | null>(null);
   const [bitbucketFormOpen, setBitbucketFormOpen] = useState(false);
   const [bitbucketSubmitting, setBitbucketSubmitting] = useState(false);
   const [bitbucketDisconnecting, setBitbucketDisconnecting] = useState(false);
-  const emptyBitbucketForm = { authType: "access_token" as "access_token" | "api_token", token: "", workspace: "" };
-  const [bitbucketForm, setBitbucketForm] = useState(emptyBitbucketForm);
+  const [bitbucketForm, setBitbucketForm] = useState({
+    username: "",
+    appPassword: "",
+    workspace: "",
+  });
 
   // ─── Azure DevOps Services ──────────────────────────────────────────
   const [azureConn, setAzureConn] = useState<{
     connected: boolean;
     azureOrganization: string | null;
     azureUser: string | null;
-    authType: string | null;
   } | null>(null);
   const [azureFormOpen, setAzureFormOpen] = useState(false);
   const [azureSubmitting, setAzureSubmitting] = useState(false);
   const [azureDisconnecting, setAzureDisconnecting] = useState(false);
-  const EMPTY_AZURE_FORM = {
+  const [azureForm, setAzureForm] = useState({
     azureOrganization: "",
     pat: "",
     azureServerUrl: "",
-    /** "pat" or "service_principal" (Entra ID, Azure DevOps Services only). */
-    authType: "pat" as "pat" | "service_principal",
-    tenantId: "",
-    clientId: "",
-    clientSecret: "",
-  };
-  const [azureForm, setAzureForm] = useState(EMPTY_AZURE_FORM);
+  });
 
   async function refreshAzure() {
     try {
@@ -79,13 +71,11 @@ export default function IntegrationsPage() {
         connected?: boolean;
         azureOrganization?: string | null;
         azureUser?: string | null;
-        authType?: string | null;
       };
       setAzureConn({
         connected: Boolean(data.connected),
         azureOrganization: data.azureOrganization ?? null,
         azureUser: data.azureUser ?? null,
-        authType: data.authType ?? null,
       });
     } catch {
       /* ignore */
@@ -97,13 +87,8 @@ export default function IntegrationsPage() {
     const azureOrganization = azureForm.azureOrganization.trim();
     const pat = azureForm.pat.trim();
     const azureServerUrl = azureForm.azureServerUrl.trim();
-    const sp = azureForm.authType === "service_principal";
-    if (!azureOrganization || (!sp && !pat)) {
+    if (!azureOrganization || !pat) {
       toast.error("Organization and PAT are required");
-      return;
-    }
-    if (sp && (!azureForm.tenantId.trim() || !azureForm.clientId.trim() || !azureForm.clientSecret)) {
-      toast.error("Tenant ID, client ID and client secret are required");
       return;
     }
     setAzureSubmitting(true);
@@ -111,21 +96,11 @@ export default function IntegrationsPage() {
       const res = await fetch("/api/integrations/azure-devops/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          sp
-            ? {
-                authType: "service_principal",
-                azureOrganization,
-                tenantId: azureForm.tenantId.trim(),
-                clientId: azureForm.clientId.trim(),
-                clientSecret: azureForm.clientSecret,
-              }
-            : {
-                azureOrganization,
-                pat,
-                ...(azureServerUrl ? { azureServerUrl } : {}),
-              },
-        ),
+        body: JSON.stringify({
+          azureOrganization,
+          pat,
+          ...(azureServerUrl ? { azureServerUrl } : {}),
+        }),
       });
       // A proxy or crash can return an empty / non-JSON body.
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -133,7 +108,7 @@ export default function IntegrationsPage() {
         throw new Error(data.error || `Failed to connect Azure DevOps (HTTP ${res.status})`);
       }
       toast.success("Azure DevOps connected");
-      setAzureForm(EMPTY_AZURE_FORM);
+      setAzureForm({ azureOrganization: "", pat: "", azureServerUrl: "" });
       setAzureFormOpen(false);
       await refreshAzure();
     } catch (err) {
@@ -164,7 +139,6 @@ export default function IntegrationsPage() {
         connected: false,
         azureOrganization: null,
         azureUser: null,
-        authType: null,
       });
     } catch (err) {
       toast.error(
@@ -183,13 +157,11 @@ export default function IntegrationsPage() {
         connected?: boolean;
         username?: string | null;
         workspace?: string | null;
-        authType?: string;
       };
       setBitbucketConn({
         connected: Boolean(data.connected),
         username: data.username ?? null,
         workspace: data.workspace ?? null,
-        authType: data.authType,
       });
     } catch {
       /* ignore */
@@ -221,10 +193,11 @@ export default function IntegrationsPage() {
 
   async function connectBitbucket(e: React.FormEvent) {
     e.preventDefault();
-    const token = bitbucketForm.token.trim();
+    const username = bitbucketForm.username.trim();
+    const appPassword = bitbucketForm.appPassword.trim();
     const workspace = bitbucketForm.workspace.trim();
-    if (!token || !workspace) {
-      toast.error("Token and workspace are required");
+    if (!username || !appPassword) {
+      toast.error("Username and app password are required");
       return;
     }
     setBitbucketSubmitting(true);
@@ -233,9 +206,9 @@ export default function IntegrationsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          authType: bitbucketForm.authType,
-          token,
-          workspace,
+          username,
+          appPassword,
+          workspace: workspace || undefined,
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -243,7 +216,7 @@ export default function IntegrationsPage() {
         throw new Error(data.error || "Failed to connect Bitbucket");
       }
       toast.success("Bitbucket connected");
-      setBitbucketForm(emptyBitbucketForm);
+      setBitbucketForm({ username: "", appPassword: "", workspace: "" });
       setBitbucketFormOpen(false);
       await refreshBitbucket();
     } catch (err) {
@@ -331,7 +304,7 @@ export default function IntegrationsPage() {
           <div className="flex items-center gap-2">
             <Github className="h-5 w-5" />
             <CardTitle>GitHub</CardTitle>
-            <Badge variant="outline">{githubApp.configured ? "GitHub App · OAuth" : "OAuth"}</Badge>
+            <Badge variant="outline">OAuth</Badge>
           </div>
           <CardDescription>
             One GitHub authorization for importing repositories, cloning private
@@ -340,18 +313,6 @@ export default function IntegrationsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <GithubAppSection onLoaded={(configured, installations) => setGithubApp({ configured, installations })} />
-          {githubApp.configured && (
-            <div>
-              <p className="font-medium">Personal connection (legacy)</p>
-              <p className="text-sm text-muted-foreground">
-                Acts as one person&apos;s GitHub account.
-                {githubApp.installations > 0 && githubConn?.connected
-                  ? " Repositories covered by the GitHub App use the App; the others use this connection. Disconnect it once the App covers every repository."
-                  : " Prefer the GitHub App above."}
-              </p>
-            </div>
-          )}
           {githubConn && !githubConn.oauthConfigured ? (
             <p className="text-sm text-destructive">
               GitHub OAuth is not configured. Set GITHUB_OAUTH_CLIENT_ID and
@@ -469,13 +430,12 @@ export default function IntegrationsPage() {
           <div className="flex items-center gap-2">
             <GitBranch className="h-5 w-5" />
             <CardTitle>Bitbucket Cloud</CardTitle>
-            <Badge variant="outline">Access token</Badge>
+            <Badge variant="outline">App password</Badge>
           </div>
           <CardDescription>
-            Import repos, clone private code on the worker, review pull requests, post
-            comments and build statuses, answer <code>@pepper</code> commands and open
-            fix pull requests. Use a workspace, project or repository{" "}
-            <strong>access token</strong>: it belongs to Bitbucket, not to a person.
+            Import repos, clone private code on the worker, and post PR review
+            comments and build statuses. Uses a Bitbucket app password (not your
+            login password).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -493,12 +453,6 @@ export default function IntegrationsPage() {
                   </>
                 ) : null}
               </p>
-              {bitbucketConn.authType === "app_password" && (
-                <p className="text-sm text-amber-600 dark:text-amber-400">
-                  This connection uses an app password. Atlassian removed app passwords on
-                  28 July 2026, so it no longer works. Disconnect and reconnect with an access token.
-                </p>
-              )}
               <Button
                 variant="ghost"
                 onClick={() => void disconnectBitbucket()}
@@ -515,43 +469,43 @@ export default function IntegrationsPage() {
               className="space-y-3"
             >
               <div className="space-y-1">
-                <Label htmlFor="bb-auth-type">Token</Label>
-                <select
-                  id="bb-auth-type"
-                  value={bitbucketForm.authType}
+                <Label htmlFor="bb-username">Bitbucket username</Label>
+                <Input
+                  id="bb-username"
+                  value={bitbucketForm.username}
                   onChange={(e) =>
                     setBitbucketForm((f) => ({
                       ...f,
-                      authType: e.target.value as "access_token" | "api_token",
+                      username: e.target.value,
                     }))
                   }
-                  className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="access_token">Access token: workspace, project or repository (recommended)</option>
-                  <option value="api_token">API token of an Atlassian account</option>
-                </select>
-                <p className="text-xs text-muted-foreground">
-                  {bitbucketForm.authType === "access_token"
-                    ? "Workspace (Premium), project or repository settings → Access tokens. Permissions: Repositories Read and Write, Pull requests Read and Write; Admin lets Pepper check fork authors' and commenters' permissions."
-                    : "Atlassian account → Security → API tokens, with scopes for Bitbucket repositories and pull requests (read and write). It stops working if its owner leaves."}
-                </p>
+                  placeholder="your-bitbucket-username"
+                  autoComplete="off"
+                  required
+                />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="bb-token">{bitbucketForm.authType === "access_token" ? "Access token" : "API token"}</Label>
+                <Label htmlFor="bb-apppassword">App password</Label>
                 <Input
-                  id="bb-token"
+                  id="bb-apppassword"
                   type="password"
-                  value={bitbucketForm.token}
+                  value={bitbucketForm.appPassword}
                   onChange={(e) =>
                     setBitbucketForm((f) => ({
                       ...f,
-                      token: e.target.value,
+                      appPassword: e.target.value,
                     }))
                   }
-                  placeholder="ATCTT••••••••"
+                  placeholder="ATBB••••••••"
                   autoComplete="new-password"
                   required
                 />
+                <p className="text-xs text-muted-foreground">
+                  Create one at Bitbucket → Personal settings → App passwords.
+                  Required scopes: <code>account:read</code>,{" "}
+                  <code>repository:read</code>, <code>repository:write</code>,{" "}
+                  <code>pullrequest:write</code>.
+                </p>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="bb-workspace">Workspace slug</Label>
@@ -581,7 +535,11 @@ export default function IntegrationsPage() {
                   variant="ghost"
                   onClick={() => {
                     setBitbucketFormOpen(false);
-                    setBitbucketForm(emptyBitbucketForm);
+                    setBitbucketForm({
+                      username: "",
+                      appPassword: "",
+                      workspace: "",
+                    });
                   }}
                   disabled={bitbucketSubmitting}
                 >
@@ -632,8 +590,7 @@ export default function IntegrationsPage() {
           </div>
           <div className="text-sm text-muted-foreground space-y-1">
             <p>
-              1. In Bitbucket: <strong>Workspace settings</strong> → <strong>Webhooks</strong>{" "}
-              (one webhook for every repository), or a repo&apos;s <strong>Repository settings</strong>{" "}
+              1. In Bitbucket: open the repo → <strong>Repository settings</strong>{" "}
               → <strong>Webhooks</strong> → <strong>Add webhook</strong>{" "}
               (<a
                 href="https://support.atlassian.com/bitbucket-cloud/docs/manage-webhooks/"
@@ -649,9 +606,8 @@ export default function IntegrationsPage() {
             <p>
               3. Under <strong>Triggers</strong>, enable{" "}
               <strong>Repository push</strong>,{" "}
-              <strong>Pull request created</strong>,{" "}
-              <strong>Pull request updated</strong> and{" "}
-              <strong>Pull request comment created</strong> (for <code>@pepper</code> commands)
+              <strong>Pull request created</strong>, and{" "}
+              <strong>Pull request updated</strong>
             </p>
             <p>
               4. Set <strong>Secret</strong> to the same value as{" "}
@@ -659,12 +615,12 @@ export default function IntegrationsPage() {
               (Pepper verifies <code>X-Hub-Signature: sha256=…</code>)
             </p>
             <p>
-              5. With your organization&apos;s secret, repositories appear in Pepper on their
-              first pull request or push. You can also import them on{" "}
+              5. Import the repo on{" "}
               <Link href="/scans/new" className="text-primary hover:underline">
                 Repositories
               </Link>{" "}
-              (Bitbucket tab)
+              (Bitbucket tab) so <code>repoUrl</code> matches{" "}
+              <code>workspace/repo-slug</code>
             </p>
             <p>
               6. Connect Bitbucket above for private clone and PR comments.
@@ -681,7 +637,7 @@ export default function IntegrationsPage() {
           <div className="flex items-center gap-2">
             <GitBranch className="h-5 w-5" />
             <CardTitle>Azure DevOps Services</CardTitle>
-            <Badge variant="outline">{azureConn?.authType === "service_principal" ? "Service principal" : "PAT or service principal"}</Badge>
+            <Badge variant="outline">PAT</Badge>
           </div>
           <CardDescription>
             Import repos, clone with a PAT on the worker, and post PR review
@@ -694,7 +650,6 @@ export default function IntegrationsPage() {
               <p className="text-sm">
                 Connected as{" "}
                 <strong>{azureConn.azureUser ?? "Azure DevOps user"}</strong>
-                {azureConn.authType === "service_principal" ? " (service principal)" : ""}
                 {azureConn.azureOrganization ? (
                   <>
                     {" "}
@@ -743,44 +698,6 @@ export default function IntegrationsPage() {
                 </p>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="azure-auth-type">Authentication</Label>
-                <select
-                  id="azure-auth-type"
-                  value={azureForm.authType}
-                  onChange={(e) => setAzureForm((f) => ({ ...f, authType: e.target.value as "pat" | "service_principal" }))}
-                  className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="pat">Personal access token (Services or Server)</option>
-                  <option value="service_principal">Service principal, Entra ID (Services, recommended)</option>
-                </select>
-                <p className="text-xs text-muted-foreground">
-                  A service principal is a workload identity: it keeps working when people leave.
-                  On Azure DevOps Server, use a PAT of a dedicated service account.
-                </p>
-              </div>
-              {azureForm.authType === "service_principal" ? (
-                <>
-                  <div className="space-y-1">
-                    <Label htmlFor="azure-tenant">Tenant ID</Label>
-                    <Input id="azure-tenant" value={azureForm.tenantId} onChange={(e) => setAzureForm((f) => ({ ...f, tenantId: e.target.value }))} placeholder="00000000-0000-0000-0000-000000000000 or contoso.onmicrosoft.com" autoComplete="off" required />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="azure-client">Client (application) ID</Label>
-                    <Input id="azure-client" value={azureForm.clientId} onChange={(e) => setAzureForm((f) => ({ ...f, clientId: e.target.value }))} placeholder="00000000-0000-0000-0000-000000000000" autoComplete="off" required />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="azure-secret">Client secret</Label>
-                    <Input id="azure-secret" type="password" value={azureForm.clientSecret} onChange={(e) => setAzureForm((f) => ({ ...f, clientSecret: e.target.value }))} autoComplete="new-password" required />
-                    <p className="text-xs text-muted-foreground">
-                      Register an app in Entra ID, create a client secret, then add the app to your Azure DevOps
-                      organization (Organization settings → Users, Basic access) with Contribute and
-                      &quot;Contribute to pull requests&quot; on the repositories to scan.
-                    </p>
-                  </div>
-                </>
-              ) : (
-              <>
-              <div className="space-y-1">
                 <Label htmlFor="azure-server-url">
                   Server URL{" "}
                   <span className="text-muted-foreground">
@@ -825,8 +742,6 @@ export default function IntegrationsPage() {
                   <code>Project and Team (read)</code>.
                 </p>
               </div>
-              </>
-              )}
               <div className="flex gap-2">
                 <Button type="submit" disabled={azureSubmitting}>
                   {azureSubmitting ? "Connecting…" : "Connect"}
@@ -836,7 +751,11 @@ export default function IntegrationsPage() {
                   variant="ghost"
                   onClick={() => {
                     setAzureFormOpen(false);
-                    setAzureForm(EMPTY_AZURE_FORM);
+                    setAzureForm({
+                      azureOrganization: "",
+                      pat: "",
+                      azureServerUrl: "",
+                    });
                   }}
                   disabled={azureSubmitting}
                 >
@@ -902,11 +821,9 @@ export default function IntegrationsPage() {
             </p>
             <p>
               2. Create subscriptions for{" "}
-              <strong>Code pushed</strong>, <strong>Pull request created</strong>,{" "}
-              <strong>Pull request updated</strong> and{" "}
-              <strong>Pull request commented on</strong> (for <code>@pepper</code> commands), one
-              subscription per event type if your UI requires it. Leave the repository filter empty
-              so one project-level hook covers every repository.
+              <strong>Code pushed</strong>, <strong>Pull request created</strong>,
+              and <strong>Pull request updated</strong> (one subscription per
+              event type if your UI requires it)
             </p>
             <p>3. <strong>Action URL</strong>: paste the URL above</p>
             <p>
@@ -916,13 +833,12 @@ export default function IntegrationsPage() {
               secrets card
             </p>
             <p>
-              5. Repositories are added to Pepper on their first pull request or push (or import them
-              on{" "}
+              5. Import the repo on{" "}
               <Link href="/scans/new" className="text-primary hover:underline">
                 Repositories
               </Link>{" "}
-              to scan them right away). Configure reviews with <code>.pepper.yaml</code> on the
-              target branch.
+              (Azure DevOps tab) so Pepper stores <code>azureRepoId</code> for
+              webhook matching
             </p>
             <p>
               6. Connect Azure DevOps above for private clone and PR feedback.
@@ -941,7 +857,7 @@ export default function IntegrationsPage() {
             <CardTitle>GitLab</CardTitle>
             <Badge variant="outline">Webhook</Badge>
           </div>
-          <CardDescription>Review merge requests, scan the default branch, and answer @pepper commands</CardDescription>
+          <CardDescription>Automatically scan merge requests</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -958,15 +874,9 @@ export default function IntegrationsPage() {
             </div>
           </div>
           <div className="text-sm text-muted-foreground space-y-1">
-            <p>
-              1. In the <strong>group&apos;s</strong> Settings &gt; Webhooks (one hook for every project; GitLab
-              Premium), or each project&apos;s Settings &gt; Webhooks
-            </p>
-            <p>2. Add a webhook with the URL above</p>
-            <p>
-              3. Select <strong>Push events</strong>, <strong>Merge request events</strong> and{" "}
-              <strong>Comments</strong> (for <code>@pepper</code> commands)
-            </p>
+            <p>1. Go to your GitLab project Settings &gt; Webhooks</p>
+            <p>2. Add webhook with the URL above</p>
+            <p>3. Select &quot;Merge request events&quot;</p>
             <p>
               4. Set the secret token to the same value as <strong>GitLab webhook secret token</strong>{" "}
               in the Webhook secrets card above

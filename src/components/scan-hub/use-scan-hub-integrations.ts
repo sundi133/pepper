@@ -27,8 +27,6 @@ type GithubAvailableRepo = {
   language: string | null;
   private: boolean;
   alreadyConnected: boolean;
-  /** Which GitHub credential Pepper uses for it (GitHub App or the OAuth connection). */
-  via?: "app" | "oauth";
 };
 
 type BitbucketAvailableRepo = {

@@ -100,27 +100,3 @@ function describeCounts(prefix: string, c: SeverityCountsLite): string {
   if (c.low) parts.push(`${c.low} low`);
   return parts.length ? `${prefix} — ${parts.join(", ")}` : prefix;
 }
-
-/**
- * A status before the scan finishes (docs/PR_REVIEW_PROVIDERS_SPEC.md §3.4):
- * INPROGRESS while a review is queued (or waits for a collaborator), SUCCESSFUL
- * for a deliberate skip. Uses the same key, so the final status replaces it.
- */
-export async function postBitbucketSimpleStatus(input: {
-  auth: BitbucketAuth;
-  workspace: string;
-  repoSlug: string;
-  sha: string;
-  state: "INPROGRESS" | "SUCCESSFUL";
-  description: string;
-  url: string | null;
-}): Promise<void> {
-  // Bitbucket requires a link (see above).
-  if (!input.url) return;
-  const r = await bitbucketPost(
-    input.auth,
-    `/repositories/${encodeURIComponent(input.workspace)}/${encodeURIComponent(input.repoSlug)}/commit/${encodeURIComponent(input.sha)}/statuses/build`,
-    { key: STATUS_KEY, state: input.state, name: STATUS_NAME, url: input.url, description: input.description.slice(0, 140) },
-  );
-  if (!r.ok) log.warn({ workspace: input.workspace, repoSlug: input.repoSlug, status: r.status }, "Bitbucket build status failed");
-}

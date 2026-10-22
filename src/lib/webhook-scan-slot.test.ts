@@ -10,11 +10,10 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/active-project-scans", () => ({
   cancelActiveScansForProject: vi.fn(),
-  cancelActiveScansInScope: vi.fn(),
 }));
 
 import { prisma } from "@/lib/prisma";
-import { cancelActiveScansForProject, cancelActiveScansInScope } from "@/lib/active-project-scans";
+import { cancelActiveScansForProject } from "@/lib/active-project-scans";
 import { ensureWebhookScanSlot } from "./webhook-scan-slot";
 
 describe("ensureWebhookScanSlot", () => {
@@ -66,20 +65,5 @@ describe("ensureWebhookScanSlot", () => {
       }),
     ).resolves.toEqual({ status: "READY" });
     expect(cancelActiveScansForProject).toHaveBeenCalledWith("p1");
-  });
-
-  it("replaces only the same PR's scan, so concurrent PRs don't cancel each other", async () => {
-    vi.mocked(prisma.scan.findFirst).mockResolvedValue({ id: "old", commitSha: "old", scanType: "INCREMENTAL", status: "RUNNING" } as never);
-    await ensureWebhookScanSlot({ projectId: "p1", commitSha: "new", scanType: "INCREMENTAL", prNumber: 7, branch: "feature" });
-    expect(vi.mocked(prisma.scan.findFirst).mock.calls[0][0]).toMatchObject({ where: { projectId: "p1", prNumber: 7 } });
-    expect(cancelActiveScansInScope).toHaveBeenCalledWith("p1", { prNumber: 7 });
-    expect(cancelActiveScansForProject).not.toHaveBeenCalled();
-  });
-
-  it("replaces only the same branch's push scan", async () => {
-    vi.mocked(prisma.scan.findFirst).mockResolvedValue({ id: "old", commitSha: "old", scanType: "SAST_ONLY", status: "RUNNING" } as never);
-    await ensureWebhookScanSlot({ projectId: "p1", commitSha: "new", scanType: "SAST_ONLY", branch: "main" });
-    expect(vi.mocked(prisma.scan.findFirst).mock.calls[0][0]).toMatchObject({ where: { projectId: "p1", prNumber: null, branch: "main" } });
-    expect(cancelActiveScansInScope).toHaveBeenCalledWith("p1", { branch: "main" });
   });
 });

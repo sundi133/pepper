@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireGithubWebhookAuth } from "@/lib/webhook-secrets";
 import {
   findProjectForGithubWebhook,
@@ -7,33 +7,14 @@ import {
   mainBranchWebhookScanType,
   queueGithubWebhookScan,
 } from "@/lib/github-webhook-scan";
-import { authenticateAppWebhook } from "@/lib/github-app-webhook";
-import { ensureProjectForGithubRepo, type RepoPayload } from "@/lib/pr-review/onboard";
-import { handlePrComment, handlePullRequestReview } from "@/lib/pr-review/handle";
-import { REVIEW_ACTIONS } from "@/lib/pr-review/decision";
-import { logger } from "@/lib/logger";
+import { postPrScanQueuedStatus } from "@/lib/github-pr-comment";
 
 export async function POST(req: NextRequest) {
   const signature = req.headers.get("x-hub-signature-256");
   const event = req.headers.get("x-github-event");
   const body = await req.text();
 
-  // Deliveries from the GitHub App are signed with its own secret; the linked
-  // installation decides the organization (docs/GITHUB_APP_SPEC.md §8).
-  // Everything else uses the per-organization webhook secrets as before.
-  const app = await authenticateAppWebhook({
-    body,
-    signature,
-    event,
-    secret: process.env.GITHUB_APP_WEBHOOK_SECRET?.trim(),
-  });
-  if (app.kind === "handled") {
-    return NextResponse.json({ message: app.message });
-  }
-  const authResult =
-    app.kind === "event"
-      ? ({ ok: true, organizationId: app.organizationId } as const)
-      : await requireGithubWebhookAuth(body, signature);
+  const authResult = await requireGithubWebhookAuth(body, signature);
   if (!authResult.ok) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
@@ -46,33 +27,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Event ignored" });
   }
 
-  let project = await findProjectForGithubWebhook(
+  const project = await findProjectForGithubWebhook(
     fullName,
     authResult.organizationId,
   );
-  // Zero-setup onboarding: a repository the App was installed on gets its
-  // project on its first pull request or push (docs/PR_REVIEW_BOT_SPEC.md §2).
-  if (!project && app.kind === "event" && (event === "pull_request" || event === "push")) {
-    const created = await ensureProjectForGithubRepo(app.organizationId, payload.repository as RepoPayload);
-    if (created) project = await findProjectForGithubWebhook(fullName, app.organizationId);
-  }
   if (!project) {
     return NextResponse.json({ message: "No matching project found" });
-  }
-
-  // `@pepper` commands in PR comments (docs/PR_REVIEW_BOT_SPEC.md §4). Slow
-  // work (scans, fix PRs) runs after the response, within GitHub's timeout.
-  if (event === "issue_comment" || event === "pull_request_review_comment") {
-    const result = await handlePrComment(project, event, payload as never, (work) =>
-      after(async () => {
-        try {
-          await work();
-        } catch (err) {
-          logger.error({ err, event }, "PR command failed");
-        }
-      }),
-    );
-    return NextResponse.json(result);
   }
 
   // Always clone from the project's own stored, trusted repoUrl — never the
@@ -97,12 +57,25 @@ export async function POST(req: NextRequest) {
         }
       | undefined;
 
-    // opened, reopened, synchronize, ready_for_review: review unless the
-    // repository's settings, a pause, a draft or a bot author say otherwise
-    // (docs/PR_REVIEW_BOT_SPEC.md §3).
-    if (action && REVIEW_ACTIONS.has(action) && pr) {
-      const result = await handlePullRequestReview(project, payload as never);
-      return NextResponse.json(result);
+    if (action && ["opened", "synchronize"].includes(action) && pr) {
+      const result = await queueGithubWebhookScan({
+        project,
+        scanType: "INCREMENTAL",
+        repoUrl: cloneUrl,
+        branch: pr.head?.ref ?? project.defaultBranch,
+        commitSha: pr.head?.sha,
+        baseSha: pr.base?.sha,
+        prNumber: pr.number,
+      });
+      // Mark the required check as in-progress so it doesn't read as an
+      // indefinite "Expected" while the scan runs.
+      if (result.status === "QUEUED") {
+        await postPrScanQueuedStatus(result.scanId);
+      }
+      return NextResponse.json({
+        scanId: result.scanId,
+        status: result.status,
+      });
     }
 
     // PR merged into default branch — re-run SAST on main

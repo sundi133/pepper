@@ -1,7 +1,48 @@
 import { execFileSync } from "child_process";
 import * as fs from "fs";
+import * as path from "path";
 
 const isWin = process.platform === "win32";
+
+/** Exit status of a failed execFileSync, if it ran at all. */
+function exitStatus(err: unknown): number | null {
+  const status = (err as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : null;
+}
+
+/** Whether `destDir` holds anything besides the archive itself (it is often extracted next to it). */
+function hasExtractedFiles(archivePath: string, destDir: string): boolean {
+  const archive = path.resolve(archivePath);
+  return fs.readdirSync(destDir).some((name) => path.resolve(destDir, name) !== archive);
+}
+
+/**
+ * Info-ZIP unzip exits 1 for warnings after extracting everything it could:
+ * a zip made by Windows PowerShell's Compress-Archive ("appears to use
+ * backslashes as path separators"), entries whose unsafe "../" parts it
+ * dropped, odd timestamps. That is a successful extraction when files came out.
+ */
+function unzipArchive(archivePath: string, destDir: string) {
+  try {
+    execFileSync("unzip", ["-o", "-q", archivePath, "-d", destDir], {
+      timeout: 120_000,
+      windowsHide: isWin,
+      // No stdin: a password-protected zip fails instead of waiting for a password.
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (err) {
+    if (exitStatus(err) === 1 && hasExtractedFiles(archivePath, destDir)) return;
+    throw err;
+  }
+}
+
+/** One line of a tool's failure for the scan's error message. */
+function describeFailure(err: unknown): string {
+  const stderr = (err as { stderr?: Buffer | string } | null)?.stderr?.toString().trim();
+  const text = stderr || (err instanceof Error ? err.message : String(err));
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  return oneLine.length > 300 ? `${oneLine.slice(0, 300)}…` : oneLine;
+}
 
 function psEscapeLiteral(s: string): string {
   return `'${s.replace(/'/g, "''")}'`;
@@ -43,11 +84,7 @@ function extractZip(archivePath: string, destDir: string) {
 
   attempts.push({
     label: "unzip",
-    fn: () =>
-      execFileSync("unzip", ["-o", "-q", archivePath, "-d", destDir], {
-        timeout: 120_000,
-        windowsHide: isWin,
-      }),
+    fn: () => unzipArchive(archivePath, destDir),
   });
 
   if (!isWin) {
@@ -60,20 +97,20 @@ function extractZip(archivePath: string, destDir: string) {
     });
   }
 
-  let lastError: unknown;
-  for (const { fn } of attempts) {
+  // Every tool's reason, not just the last one: on Linux the last is tar,
+  // which cannot read ZIP files at all ("invalid tar magic").
+  const failures: string[] = [];
+  for (const { label, fn } of attempts) {
     try {
       fn();
       return;
     } catch (err) {
-      lastError = err;
+      failures.push(`${label}: ${describeFailure(err)}`);
     }
   }
 
   const tried = attempts.map((a) => a.label).join(", ");
-  const msg =
-    lastError instanceof Error ? lastError.message : String(lastError);
-  throw new Error(`Failed to extract ZIP (tried ${tried}): ${msg}`);
+  throw new Error(`Failed to extract ZIP (tried ${tried}): ${failures.join(" | ")}`);
 }
 
 function extractTar(

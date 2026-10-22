@@ -3,7 +3,7 @@
  *
  * Resolution is provider-agnostic: the agent works in a real git clone and
  * pushes with the org's stored credentials, so only PR creation differs per
- * provider (GitHub, Azure DevOps Services / Server, Bitbucket Cloud, GitLab).
+ * provider (GitHub, Azure DevOps Services / Server, Bitbucket Cloud).
  */
 import { parseGithubRepo } from "@/lib/github-source-link";
 import { parseBitbucketRepoInput } from "@/lib/parse-bitbucket-repo-input";
@@ -22,19 +22,16 @@ import {
 } from "@/lib/azure-devops-api";
 import {
   bitbucketPost,
-  withBitbucketAuth,
   parseBitbucketErrorBody,
   type BitbucketAuth,
 } from "@/lib/bitbucket-api";
-import { gitlabPost, gitlabProjectPath, isOnGitLabHost, withGitLabCredentials, type GitLabAuth } from "@/lib/gitlab-api";
 
-export type RemediationProvider = "github" | "azure_devops" | "bitbucket" | "gitlab";
+export type RemediationProvider = "github" | "azure_devops" | "bitbucket";
 
 export const PROVIDER_LABELS: Record<RemediationProvider, string> = {
   github: "GitHub",
   azure_devops: "Azure DevOps",
   bitbucket: "Bitbucket",
-  gitlab: "GitLab",
 };
 
 export interface RemediationRepoInput {
@@ -49,9 +46,6 @@ export interface RemediationRepoInput {
     connectedViaGithub: boolean;
     connectedViaBitbucket: boolean;
     connectedViaAzure: boolean;
-    /** Created from a GitLab webhook; self-managed GitLab is recognised by this or gitlabProjectId. */
-    connectedViaGitlab?: boolean;
-    gitlabProjectId?: number | null;
   };
 }
 
@@ -106,7 +100,7 @@ export function resolveRemediationRepo(
       ok: false,
       code: "REPO_REQUIRED",
       error:
-        "This scan is not linked to a git repository. AI remediation needs a GitHub, Azure DevOps, Bitbucket or GitLab repo — scan from a connected repository, or set the project repository URL.",
+        "This scan is not linked to a git repository. AI remediation needs a GitHub, Azure DevOps or Bitbucket repo — scan from a connected repository, or set the project repository URL.",
     };
   }
 
@@ -114,7 +108,6 @@ export function resolveRemediationRepo(
   let provider: RemediationProvider | null = null;
   if (host === "github.com" || host === "www.github.com") provider = "github";
   else if (host === "bitbucket.org") provider = "bitbucket";
-  else if (host === "gitlab.com") provider = "gitlab";
   else if (host === "dev.azure.com" || host.endsWith(".visualstudio.com")) {
     provider = "azure_devops";
   } else if (project.connectedViaAzure || isAzureDevOpsGitUrl(repoUrl)) {
@@ -123,7 +116,6 @@ export function resolveRemediationRepo(
     // host is the connected server before the PAT is used.
     provider = "azure_devops";
   }
-  else if (project.connectedViaGitlab || project.gitlabProjectId != null) provider = "gitlab";
   else if (project.connectedViaBitbucket) provider = "bitbucket";
   else if (project.connectedViaGithub) provider = "github";
 
@@ -131,7 +123,7 @@ export function resolveRemediationRepo(
     return {
       ok: false,
       code: "PROVIDER_UNSUPPORTED",
-      error: `AI remediation can open pull requests on GitHub, Azure DevOps, Bitbucket and GitLab; ${host || "this repository"} is not one of them.`,
+      error: `AI remediation can open pull requests on GitHub, Azure DevOps and Bitbucket; ${host || "this repository"} is not one of them.`,
     };
   }
 
@@ -143,30 +135,21 @@ export function resolveRemediationRepo(
 export type ProviderCredentials =
   | { provider: "github"; token: string }
   | { provider: "azure_devops"; auth: AzureDevOpsAuth }
-  | { provider: "bitbucket"; auth: BitbucketAuth }
-  | { provider: "gitlab"; auth: GitLabAuth };
+  | { provider: "bitbucket"; auth: BitbucketAuth };
 
 /** Load the org's stored credentials for a provider (null when not connected). */
 export async function loadProviderCredentials(
   organizationId: string,
   provider: RemediationProvider,
-  repoUrl?: string | null,
 ): Promise<ProviderCredentials | null> {
   if (provider === "github") {
     const { getOrgGithubAccessToken } = await import("@/lib/github-connection");
-    const { parseGithubRepo } = await import("@/lib/github-source-link");
-    const parsed = parseGithubRepo(repoUrl);
-    const token = (await getOrgGithubAccessToken(organizationId, parsed ? { owner: parsed.owner, name: parsed.repo } : null))?.trim();
+    const token = (await getOrgGithubAccessToken(organizationId))?.trim();
     return token ? { provider, token } : null;
   }
   if (provider === "azure_devops") {
     const { getOrgAzureDevOpsAuth } = await import("@/lib/azure-devops-connection");
     const auth = await getOrgAzureDevOpsAuth(organizationId);
-    return auth ? { provider, auth } : null;
-  }
-  if (provider === "gitlab") {
-    const { getOrgGitLabAuth } = await import("@/lib/gitlab-connection");
-    const auth = await getOrgGitLabAuth(organizationId);
     return auth ? { provider, auth } : null;
   }
   const { getOrgBitbucketAuth } = await import("@/lib/bitbucket-connection");
@@ -180,20 +163,6 @@ export async function loadProviderCredentials(
  * hand it to that host. Returns an error message, or null when they match.
  */
 export function credentialsMismatch(repoUrl: string, creds: ProviderCredentials): string | null {
-  if (creds.provider === "gitlab") {
-    if (isOnGitLabHost(repoUrl, creds.auth)) return null;
-    let host = repoUrl;
-    try {
-      host = new URL(repoUrl).host;
-    } catch {
-      return `Not a valid repository URL: ${repoUrl}`;
-    }
-    return `${host} is not the connected GitLab (${creds.auth.hostUrl}). Connect that GitLab under Settings → Integrations, or correct the project's repository URL.`;
-  }
-  if (creds.provider === "bitbucket" && creds.auth.token) {
-    if (withBitbucketAuth(repoUrl, creds.auth)) return null;
-    return `Bitbucket tokens are only sent to https://bitbucket.org; ${repoUrl} is elsewhere. Correct the project's repository URL.`;
-  }
   if (creds.provider !== "azure_devops") return null;
   let repo: URL;
   try {
@@ -243,16 +212,8 @@ export function authenticatedRepoUrl(
     return withGitCredentials(repoUrl, creds.token);
   }
   if (creds.provider === "azure_devops") {
-    // A service principal's token travels as a header (repoGitEnv), not in the URL.
-    if (creds.auth.bearer) return repoUrl;
     return withAzureDevOpsCredentials(repoUrl, creds.auth.pat);
   }
-  if (creds.provider === "gitlab") {
-    // credentialsMismatch() has checked the host; never embed the token for another one.
-    return withGitLabCredentials(repoUrl, creds.auth) ?? repoUrl;
-  }
-  // Access/API tokens only go to bitbucket.org; app passwords as before.
-  if (creds.auth.token) return withBitbucketAuth(repoUrl, creds.auth) ?? repoUrl;
   return withBitbucketCredentials(repoUrl, creds.auth.username, creds.auth.appPassword);
 }
 
@@ -337,30 +298,6 @@ export async function openProviderPullRequest(
     };
   }
 
-  if (creds.provider === "gitlab") {
-    const path = gitlabProjectPath(input.repoUrl, creds.auth);
-    if (!path) return { ok: false, error: `Not a GitLab repository URL: ${input.repoUrl}` };
-    const r = await gitlabPost<{ iid?: number; web_url?: string; message?: unknown; error?: unknown }>(
-      creds.auth,
-      `/projects/${encodeURIComponent(path)}/merge_requests`,
-      {
-        source_branch: input.head,
-        target_branch: input.base,
-        title: input.title.slice(0, 255),
-        description: input.body.slice(0, 60_000),
-        remove_source_branch: true,
-      },
-    );
-    if (!r.ok || !r.data.web_url) {
-      const why = r.data.message ?? r.data.error;
-      return {
-        ok: false,
-        error: `GitLab rejected the merge request (${r.status}): ${why ? (typeof why === "string" ? why : JSON.stringify(why)).slice(0, 300) : "unknown error"}`,
-      };
-    }
-    return { ok: true, url: r.data.web_url, number: r.data.iid ?? null };
-  }
-
   const parsed = parseBitbucketRepoInput(input.repoUrl);
   if (!parsed) return { ok: false, error: `Not a Bitbucket repository URL: ${input.repoUrl}` };
   const r = await bitbucketPost<{ id?: number; links?: { html?: { href?: string } } }>(
@@ -382,16 +319,4 @@ export async function openProviderPullRequest(
     };
   }
   return { ok: true, url: href, number: r.data.id ?? null };
-}
-
-/** Extra git environment for these credentials (an Azure DevOps bearer header), else none. */
-export function repoGitEnv(creds: ProviderCredentials): Record<string, string> | undefined {
-  if (creds.provider === "azure_devops" && creds.auth.bearer) {
-    return {
-      GIT_CONFIG_COUNT: "1",
-      GIT_CONFIG_KEY_0: "http.extraHeader",
-      GIT_CONFIG_VALUE_0: `Authorization: Bearer ${creds.auth.bearer}`,
-    };
-  }
-  return undefined;
 }

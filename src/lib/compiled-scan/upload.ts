@@ -5,7 +5,7 @@
  * Archives (.zip / .tar.gz) keep their `scans/<scanId>/source.<ext>` key.
  */
 
-export const UPLOADABLE_ARTIFACT_EXTENSIONS = [".jar", ".war", ".ear", ".apk", ".aab", ".dll", ".exe", ".ipa"] as const;
+export const UPLOADABLE_ARTIFACT_EXTENSIONS = [".jar", ".war", ".ear", ".apk", ".aab", ".ipa", ".dll", ".exe"] as const;
 
 /** MIME types browsers and CI clients send for these files. */
 export const ARTIFACT_MIME_TYPES = new Set([
@@ -22,6 +22,8 @@ export const ARTIFACT_MIME_TYPES = new Set([
   "application/vnd.microsoft.portable-executable",
   "application/octet-stream",
   "application/zip",
+  "application/x-itunes-ipa", // .ipa
+  "application/x-ios-app",
   "application/x-zip-compressed",
 ]);
 
@@ -44,7 +46,7 @@ export function compiledUploadObjectKey(scanId: string, fileName: string): strin
 }
 
 /** Object keys of uploaded compiled artifacts (for data retention). */
-export const COMPILED_UPLOAD_KEY = /^scans\/[^/]+\/compiled\/[^/]+\.(?:jar|war|ear|apk|aab|dll|exe|ipa)$/i;
+export const COMPILED_UPLOAD_KEY = /^scans\/[^/]+\/compiled\/[^/]+\.(?:jar|war|ear|apk|aab|ipa|dll|exe)$/i;
 
 /** The artifact's file name when a scan's sourceRef is an uploaded compiled artifact. */
 export function uploadedArtifactName(sourceRef: string | null | undefined): string | null {

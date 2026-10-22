@@ -9,33 +9,6 @@ export type BitbucketWebhookProject = NonNullable<
   Awaited<ReturnType<typeof findProjectForBitbucketWebhook>>
 >;
 
-const include = {
-  buildGate: true,
-  organization: { include: { settings: true } },
-} as const;
-
-/** `workspace/slug` of a stored repository URL, lower-cased, without `.git`. */
-function repoPathOf(repoUrl: string | null): string | null {
-  const raw = repoUrl?.trim();
-  if (!raw) return null;
-  const scp = /^[^@\s/]+@[^:\s/]+:(?!\/)(.+)$/.exec(raw);
-  let path: string;
-  if (scp) path = scp[1];
-  else {
-    try {
-      path = decodeURIComponent(new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`).pathname);
-    } catch {
-      return null;
-    }
-  }
-  return path.replace(/^\/+|\/+$/g, "").replace(/\.git$/i, "").toLowerCase();
-}
-
-/**
- * The project a Bitbucket event is for: by repository UUID first, then by an
- * exact match of `workspace/slug` on the stored URL (`acme/api` never matches
- * `acme/api-legacy`).
- */
 export async function findProjectForBitbucketWebhook(params: {
   fullName: string;
   repoUuid?: string | null;
@@ -43,23 +16,25 @@ export async function findProjectForBitbucketWebhook(params: {
 }) {
   const slug = params.fullName?.trim();
   if (!slug) return null;
-  const org = params.organizationId ? { organizationId: params.organizationId } : {};
 
   const repoUuid = params.repoUuid?.trim();
   const normalizedUuid = repoUuid ? normalizeBitbucketUuid(repoUuid) : null;
-  if (normalizedUuid) {
-    const byUuid = await prisma.project.findFirst({ where: { bitbucketRepoUuid: normalizedUuid, ...org }, include });
-    if (byUuid) return byUuid;
-  }
 
-  const wanted = slug.toLowerCase();
-  const candidates = await prisma.project.findMany({
-    where: { repoUrl: { contains: slug, mode: "insensitive" }, ...org },
-    include,
-    orderBy: { createdAt: "asc" },
-    take: 50,
+  return prisma.project.findFirst({
+    where: {
+      OR: [
+        { repoUrl: { contains: slug } },
+        ...(normalizedUuid
+          ? [{ bitbucketRepoUuid: normalizedUuid }]
+          : []),
+      ],
+      ...(params.organizationId ? { organizationId: params.organizationId } : {}),
+    },
+    include: {
+      buildGate: true,
+      organization: { include: { settings: true } },
+    },
   });
-  return candidates.find((p) => repoPathOf(p.repoUrl) === wanted) ?? null;
 }
 
 /** True when a push targets the project's default branch (e.g. main). */
@@ -80,16 +55,12 @@ export async function queueBitbucketWebhookScan(params: {
   commitSha?: string;
   baseSha?: string;
   prNumber?: number;
-  /** .pepper.yaml paths.exclude */
-  pathExcludes?: string[];
 }): Promise<{ scanId: string; status: "QUEUED" | "ALREADY_QUEUED" }> {
   const commitSha = params.commitSha?.trim();
   const slot = await ensureWebhookScanSlot({
     projectId: params.project.id,
     commitSha,
     scanType: params.scanType,
-    prNumber: params.prNumber,
-    branch: params.branch,
   });
   if (slot.status === "ALREADY_QUEUED") {
     return { scanId: slot.scanId, status: "ALREADY_QUEUED" };
@@ -122,10 +93,7 @@ export async function queueBitbucketWebhookScan(params: {
     prNumber: params.prNumber,
     repoUrl: params.repoUrl,
     branch: params.branch,
-    // Webhook scans always ask for the connection; the worker sends tokens
-    // only to bitbucket.org (docs/PR_REVIEW_PROVIDERS_SPEC.md §3.3).
-    useOrgBitbucketToken: true,
-    ...(params.pathExcludes?.length ? { pathExcludes: params.pathExcludes } : {}),
+    useOrgBitbucketToken: params.project.connectedViaBitbucket,
     orgSettings: buildOrgSettingsForJob(
       settings,
       params.project.organizationId,

@@ -28,6 +28,8 @@ import { cn } from "@/lib/utils";
 import type { ScanJobData } from "@/lib/queue";
 import { MANUAL_SCAN_TYPE_OPTIONS } from "@/lib/scan-types";
 import { UPLOADABLE_ARTIFACT_EXTENSIONS } from "@/lib/compiled-scan/upload";
+import { maxUploadBytes, maxUploadMb } from "@/lib/upload-limits";
+import { MOBILE_PLATFORM_LABELS, mobilePlatformOf } from "@/lib/mobile-platform";
 
 type SourceTab = "repository" | "upload" | "svn";
 
@@ -83,6 +85,7 @@ export function NewSecurityScanForm({
   const [svnUsername, setSvnUsername] = useState("");
   const [svnPassword, setSvnPassword] = useState("");
   const [legalConfirm, setLegalConfirm] = useState(false);
+  const [aiMobileReview, setAiMobileReview] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<CreateScanFieldErrors>({});
   const [touched, setTouched] = useState<{ project?: boolean; source?: boolean }>(
     {},
@@ -110,6 +113,10 @@ export function NewSecurityScanForm({
 
   const sourceMode =
     tab === "svn" ? "svn" : tab === "upload" ? "upload" : "git";
+  // An uploaded .apk / .aab / .ipa can also go to the GPT-6 Astra review;
+  // for an .ipa it is the only scan, so it is always on.
+  const uploadPlatform = sourceMode === "upload" ? mobilePlatformOf(file?.name) : null;
+  const aiMobileReviewOn = uploadPlatform === "ios" || (uploadPlatform !== null && aiMobileReview);
 
   function runValidation(): CreateScanFieldErrors {
     return validateCreateScanFields({
@@ -169,6 +176,7 @@ export function NewSecurityScanForm({
       if (!isExistingProjectSelection(projectId) && newProjectName.trim()) {
         data.newProjectName = newProjectName.trim();
       }
+      if (aiMobileReviewOn) data.aiMobileReview = true;
       formData.append("data", JSON.stringify(data));
       if (sourceMode === "upload" && file) formData.append("file", file);
 
@@ -478,9 +486,8 @@ export function NewSecurityScanForm({
                   }}
                   onChange={(e) => {
                     const selected = e.target.files?.[0] || null;
-                    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
-                    if (selected && selected.size > MAX_FILE_SIZE) {
-                      toast.error("File too large. Maximum allowed size is 100 MB.");
+                    if (selected && selected.size > maxUploadBytes()) {
+                      toast.error(`File too large. Maximum allowed size is ${maxUploadMb()} MB.`);
                       e.target.value = "";
                       setFile(null);
                       return;
@@ -510,8 +517,31 @@ export function NewSecurityScanForm({
                 )}
                 <p className="text-xs text-muted-foreground">
                   Source as .zip / .tar.gz, or a single .jar, .war, .ear, .apk, .aab, .dll or .exe:
-                  compiled code is decompiled and scanned.
+                  compiled code is decompiled and scanned. iOS apps (.ipa) are reviewed by GPT-6 Astra.
+                  Up to {maxUploadMb()} MB.
                 </p>
+                {uploadPlatform && (
+                  <div className="mt-2 flex items-start gap-2 rounded-md border border-border bg-muted/40 p-2.5">
+                    <Checkbox
+                      id="nss-ai-mobile-review"
+                      checked={aiMobileReviewOn}
+                      disabled={uploadPlatform === "ios"}
+                      onCheckedChange={(c) => setAiMobileReview(c === true)}
+                      className="mt-0.5"
+                    />
+                    <Label
+                      htmlFor="nss-ai-mobile-review"
+                      className="cursor-pointer text-sm font-normal leading-snug text-foreground"
+                    >
+                      Also review this {MOBILE_PLATFORM_LABELS[uploadPlatform]} app with GPT-6 Astra
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        Sends the app to OpenAI using your organization&apos;s OpenAI key from LLM Config;
+                        usage is billed to that key.
+                        {uploadPlatform === "ios" ? " Required for .ipa files: iOS apps can't be decompiled." : ""}
+                      </span>
+                    </Label>
+                  </div>
+                )}
               </div>
             )}
 

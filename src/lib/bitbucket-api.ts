@@ -1,46 +1,13 @@
 const BITBUCKET_API = "https://api.bitbucket.org/2.0";
 
-export type BitbucketAuthType = "app_password" | "access_token" | "api_token";
-
 export interface BitbucketAuth {
   username: string;
   appPassword: string;
-  /** Access token or API token: sent as a Bearer token (docs/PR_REVIEW_PROVIDERS_SPEC.md §3.2). */
-  token?: string;
-  authType?: BitbucketAuthType;
 }
 
-/** Bearer for access and API tokens; Basic `username:app password` for legacy connections. */
-export function bitbucketAuthHeader(auth: BitbucketAuth): string {
-  if (auth.token) return `Bearer ${auth.token}`;
+function basicAuthHeader(auth: BitbucketAuth): string {
   const raw = `${auth.username}:${auth.appPassword}`;
   return `Basic ${Buffer.from(raw, "utf8").toString("base64")}`;
-}
-
-const basicAuthHeader = bitbucketAuthHeader;
-
-/**
- * Clone/push URL with the connection's credentials, or null when the
- * repository isn't on bitbucket.org, so they're never sent elsewhere.
- * Never persist or log it.
- */
-export function withBitbucketAuth(repoUrl: string, auth: BitbucketAuth): string | null {
-  let u: URL;
-  try {
-    u = new URL(repoUrl);
-  } catch {
-    return null;
-  }
-  if (u.protocol !== "https:" || u.hostname.toLowerCase() !== "bitbucket.org" || u.port) return null;
-  if (auth.token) {
-    u.username = auth.authType === "api_token" ? "x-bitbucket-api-token-auth" : "x-token-auth";
-    u.password = encodeURIComponent(auth.token);
-  } else {
-    if (!auth.username.trim() || !auth.appPassword.trim()) return null;
-    u.username = encodeURIComponent(auth.username.trim());
-    u.password = encodeURIComponent(auth.appPassword.trim());
-  }
-  return u.toString();
 }
 
 function jsonHeaders(auth: BitbucketAuth, extra?: HeadersInit): HeadersInit {

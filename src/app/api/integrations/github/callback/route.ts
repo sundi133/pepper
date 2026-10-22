@@ -57,11 +57,6 @@ export async function GET(req: NextRequest) {
     return redirectWithError("Missing authorization code from GitHub.", returnTo);
   }
 
-  const { isPersonalGithubAllowed } = await import("@/lib/github-token-resolve");
-  if (!(await isPersonalGithubAllowed(payload.orgId))) {
-    return redirectWithError("This organization uses the GitHub App only; personal GitHub connections are turned off.", returnTo);
-  }
-
   try {
     const tokenRes = await exchangeGithubCode(code);
     const userRes = await githubGet<{ id: number; login: string }>(

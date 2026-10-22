@@ -6,7 +6,6 @@ import { ipFromHeaders } from "@/lib/audit-log";
 import { createScanSchema, queueNewScan } from "@/lib/scan-create";
 import { scanListWhere } from "@/lib/scan-queries";
 import { maxUploadBytes, maxUploadMb } from "@/lib/upload-limits";
-import { mobilePlatformOf } from "@/lib/mobile-platform";
 
 import {
   ARTIFACT_MIME_TYPES,
@@ -91,18 +90,9 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        // Only the GPT-6 Astra review looks inside an iOS app; without it the
-        // scan would report "no findings" for a file nothing inspected.
-        if (mobilePlatformOf(fileName) === "ios" && !scanParams.aiMobileReview) {
-          return NextResponse.json(
-            {
-              error:
-                "iOS apps (.ipa) are only scanned by the GPT-6 Astra review: request it (aiMobileReview) to scan this file",
-            },
-            { status: 400 },
-          );
-        }
-
+        // The mobile review (gpt-6-astra + glm-5.3, stored keys) always runs for
+        // an uploaded app; no per-scan opt-in. iOS relies on it entirely, and it
+        // adds depth for Android on top of the decompiled-source scanners.
         const arrayBuffer = await file.arrayBuffer();
         fileBuffer = Buffer.from(arrayBuffer);
         originalFileName = file.name;

@@ -247,8 +247,10 @@ export async function queueNewScan(params: {
     svnPassword: scanParams.svnPassword,
     branch: scanParams.branch,
     useOrgGithubToken: useOAuthClone,
+    // Mobile reviews (gpt-6-astra + glm-5.3, stored keys) always run for an
+    // uploaded app — not a user choice; the non-mobile LLM Config is separate.
     aiMobileReview:
-      !!scanParams.aiMobileReview && !!fileBuffer && mobilePlatformOf(originalFileName) !== null,
+      !!fileBuffer && mobilePlatformOf(originalFileName) !== null,
     orgSettings: buildOrgSettingsForJob(orgSettings, project.organizationId),
     buildGate: project.buildGate
       ? {

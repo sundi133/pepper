@@ -74,10 +74,10 @@ describe("POST /api/scans uploads", () => {
 });
 
 describe("POST /api/scans GPT-6 Astra mobile review", () => {
-  it("does not request the review unless asked", async () => {
+  it("always requests the review for an uploaded mobile app", async () => {
     const res = await upload("app-release.apk", "application/vnd.android.package-archive");
     expect(res.status).toBe(201);
-    expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: false });
+    expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: true });
   });
 
   it("passes the review request for an Android app to the worker", async () => {
@@ -93,11 +93,11 @@ describe("POST /api/scans GPT-6 Astra mobile review", () => {
     expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: true, sourceRef: "scans/s1/compiled/MyApp.ipa" });
   });
 
-  it("rejects an iOS app without the review (nothing else can scan it)", async () => {
+  it("accepts an iOS app and runs the review (always on)", async () => {
     const res = await upload("MyApp.ipa", "application/octet-stream");
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/GPT-6 Astra/);
-    expect(uploadObject).not.toHaveBeenCalled();
+    expect(res.status).toBe(201);
+    expect(uploadObject.mock.calls[0][0]).toBe("scans/s1/compiled/MyApp.ipa");
+    expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: true, sourceRef: "scans/s1/compiled/MyApp.ipa" });
   });
 
   it("ignores the request for files that are not mobile apps", async () => {

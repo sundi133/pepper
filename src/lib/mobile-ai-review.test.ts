@@ -64,23 +64,43 @@ describe("mobilePlatformOf", () => {
 });
 
 describe("aiMobileReviewAccess", () => {
-  it("accepts an OpenAI key on api.openai.com", () => {
-    expect(aiMobileReviewAccess({ llmProvider: "openai", llmBaseUrl: "https://api.openai.com/v1", llmApiKey: " sk-1 " })).toEqual({
+  const NO_ENV = {}; // force the org-config fallback path
+
+  it("uses a stored key regardless of the org provider (dedicated, then OPENAI_API_KEY)", () => {
+    // Org is OpenRouter, but a dedicated mobile key is set → mobile still runs.
+    expect(
+      aiMobileReviewAccess(
+        { llmProvider: "openrouter", llmApiKey: "orgkey" },
+        { MOBILE_AI_REVIEW_API_KEY: " sk-mobile " },
+      ),
+    ).toEqual({ ok: true, apiKey: "sk-mobile", baseURL: "https://api.openai.com/v1" });
+    // Falls back to OPENAI_API_KEY.
+    expect(
+      aiMobileReviewAccess({ llmProvider: "openrouter" }, { OPENAI_API_KEY: "sk-openai" }),
+    ).toMatchObject({ ok: true, apiKey: "sk-openai" });
+    // A stored key on a non-OpenAI host is refused (hosted shell is OpenAI-only).
+    expect(
+      aiMobileReviewAccess({}, { MOBILE_AI_REVIEW_API_KEY: "k", MOBILE_AI_REVIEW_BASE_URL: "https://proxy.example.com/v1" }).ok,
+    ).toBe(false);
+  });
+
+  it("accepts an OpenAI key on api.openai.com (org fallback)", () => {
+    expect(aiMobileReviewAccess({ llmProvider: "openai", llmBaseUrl: "https://api.openai.com/v1", llmApiKey: " sk-1 " }, NO_ENV)).toEqual({
       ok: true,
       apiKey: "sk-1",
       baseURL: "https://api.openai.com/v1",
     });
-    expect(aiMobileReviewAccess({ llmProvider: "OpenAI", llmBaseUrl: "", llmApiKey: "sk-1" })).toMatchObject({ ok: true });
+    expect(aiMobileReviewAccess({ llmProvider: "OpenAI", llmBaseUrl: "", llmApiKey: "sk-1" }, NO_ENV)).toMatchObject({ ok: true });
   });
 
-  it("refuses other providers, missing keys and other hosts", () => {
-    expect(aiMobileReviewAccess({ llmProvider: "openrouter", llmBaseUrl: "https://openrouter.ai/api/v1", llmApiKey: "k" }).ok).toBe(false);
-    expect(aiMobileReviewAccess({ llmProvider: "openai", llmBaseUrl: "https://api.openai.com/v1", llmApiKey: "" }).ok).toBe(false);
-    expect(aiMobileReviewAccess({ llmProvider: "openai", llmBaseUrl: "https://proxy.example.com/v1", llmApiKey: "k" })).toMatchObject({
+  it("refuses other providers, missing keys and other hosts (no stored key)", () => {
+    expect(aiMobileReviewAccess({ llmProvider: "openrouter", llmBaseUrl: "https://openrouter.ai/api/v1", llmApiKey: "k" }, NO_ENV).ok).toBe(false);
+    expect(aiMobileReviewAccess({ llmProvider: "openai", llmBaseUrl: "https://api.openai.com/v1", llmApiKey: "" }, NO_ENV).ok).toBe(false);
+    expect(aiMobileReviewAccess({ llmProvider: "openai", llmBaseUrl: "https://proxy.example.com/v1", llmApiKey: "k" }, NO_ENV)).toMatchObject({
       ok: false,
       reason: expect.stringContaining("proxy.example.com"),
     });
-    expect(aiMobileReviewAccess({ llmProvider: "openai", llmBaseUrl: "not a url", llmApiKey: "k" }).ok).toBe(false);
+    expect(aiMobileReviewAccess({ llmProvider: "openai", llmBaseUrl: "not a url", llmApiKey: "k" }, NO_ENV).ok).toBe(false);
   });
 });
 

@@ -87,31 +87,57 @@ export type AiMobileReviewAccess =
   | { ok: true; apiKey: string; baseURL: string }
   | { ok: false; reason: string };
 
-/**
- * Whether the organization's LLM settings can run this review: an OpenAI key
- * against api.openai.com (hosted shell is an OpenAI-only tool).
- */
-export function aiMobileReviewAccess(org: {
-  llmProvider?: string | null;
-  llmBaseUrl?: string | null;
-  llmApiKey?: string | null;
-}): AiMobileReviewAccess {
-  const apiKey = org.llmApiKey?.trim();
-  if ((org.llmProvider ?? "").trim().toLowerCase() !== "openai") {
-    return { ok: false, reason: "the organization's AI provider is not OpenAI (Settings → LLM Config)" };
-  }
-  if (!apiKey) return { ok: false, reason: "no OpenAI API key in Settings → LLM Config" };
-  const baseURL = org.llmBaseUrl?.trim() || "https://api.openai.com/v1";
+function openAiHostOk(baseURL: string): AiMobileReviewAccess | null {
   let host: string;
   try {
     host = new URL(baseURL).hostname.toLowerCase();
   } catch {
-    return { ok: false, reason: `invalid LLM base URL ${baseURL}` };
+    return { ok: false, reason: `invalid base URL ${baseURL}` };
   }
   if (host !== "api.openai.com") {
-    return { ok: false, reason: `hosted shell is only available on api.openai.com (LLM Config points at ${host})` };
+    return { ok: false, reason: `hosted shell is only available on api.openai.com (got ${host})` };
   }
-  return { ok: true, apiKey, baseURL };
+  return null; // host is fine
+}
+
+/**
+ * Whether the mobile review can run. The mobile review uses a dedicated, stored
+ * OpenAI key and a hardcoded model (gpt-6-astra) — independent of the org's
+ * non-mobile LLM Config — so switching the org provider (e.g. to OpenRouter for
+ * SAST) never disables it. Prefer the dedicated key (MOBILE_AI_REVIEW_API_KEY,
+ * then OPENAI_API_KEY); fall back to the org's OpenAI config only when no
+ * dedicated key is set.
+ */
+export function aiMobileReviewAccess(
+  org: {
+    llmProvider?: string | null;
+    llmBaseUrl?: string | null;
+    llmApiKey?: string | null;
+  },
+  env: Env = process.env,
+): AiMobileReviewAccess {
+  const storedKey =
+    env.MOBILE_AI_REVIEW_API_KEY?.trim() || env.OPENAI_API_KEY?.trim();
+  if (storedKey) {
+    const baseURL =
+      env.MOBILE_AI_REVIEW_BASE_URL?.trim() || "https://api.openai.com/v1";
+    const bad = openAiHostOk(baseURL);
+    return bad ?? { ok: true, apiKey: storedKey, baseURL };
+  }
+
+  // Fallback: the org's OpenAI config (only used when no dedicated key is set).
+  const apiKey = org.llmApiKey?.trim();
+  if ((org.llmProvider ?? "").trim().toLowerCase() !== "openai") {
+    return {
+      ok: false,
+      reason: "set MOBILE_AI_REVIEW_API_KEY (a stored OpenAI key) to enable the mobile review",
+    };
+  }
+  if (!apiKey)
+    return { ok: false, reason: "no OpenAI API key in Settings → LLM Config (or set MOBILE_AI_REVIEW_API_KEY)" };
+  const baseURL = org.llmBaseUrl?.trim() || "https://api.openai.com/v1";
+  const bad = openAiHostOk(baseURL);
+  return bad ?? { ok: true, apiKey, baseURL };
 }
 
 // ─── Instructions ──────────────────────────────────────────────────────

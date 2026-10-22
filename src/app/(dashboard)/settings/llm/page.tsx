@@ -314,6 +314,9 @@ export default function LlmSettingsPage() {
   }
 
   function handleProviderChange(v: string) {
+    // Re-selecting the same provider must not reset the model/base URL to the
+    // provider default — that silently reverts a model the user just chose.
+    if (v === settings.llmProvider) return;
     const d = PROVIDER_DEFAULTS[v];
     if (!d) return;
 

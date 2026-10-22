@@ -406,17 +406,47 @@ export async function analyzeWithLlm(
   } = maskPrompt(rawSystemPrompt, [rawUserContent], options?.redaction);
 
   if (llmClient.type === "ollama") {
+    const useModel = model || llmClient.model;
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userContent },
+    ];
+    const ollamaOptions = {
+      temperature,
+      num_predict: options?.maxTokens ?? 8192,
+    };
+    // Opt-in reasoning: ask the model to think and stream, capturing
+    // `message.thinking` deltas. Any error (the model can't think or can't
+    // stream) falls back to the normal non-streaming JSON call below, so a
+    // non-reasoning model is never affected and this is inert without onReasoning.
+    if (options?.onReasoning) {
+      try {
+        const stream = await llmClient.client.chat({
+          model: useModel,
+          messages,
+          format: "json",
+          think: true,
+          stream: true,
+          options: ollamaOptions,
+        });
+        let content = "";
+        for await (const part of stream) {
+          if (part.message?.thinking) options.onReasoning(part.message.thinking);
+          if (part.message?.content) content += part.message.content;
+        }
+        return content || "{}";
+      } catch (err) {
+        logger.warn(
+          { model: useModel, err: err instanceof Error ? err.message : err },
+          "Ollama reasoning stream failed; using non-streaming call",
+        );
+      }
+    }
     const response = await llmClient.client.chat({
-      model: model || llmClient.model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userContent },
-      ],
+      model: useModel,
+      messages,
       format: "json",
-      options: {
-        temperature,
-        num_predict: options?.maxTokens ?? 8192,
-      },
+      options: ollamaOptions,
     });
     return response.message?.content || "{}";
   }
@@ -424,6 +454,47 @@ export async function analyzeWithLlm(
   // Anthropic path — uses native Messages API
   if (llmClient.type === "anthropic") {
     const useModel = model || llmClient.model;
+    // Opt-in extended thinking: stream `thinking_delta`s to onReasoning. This
+    // changes cost (thinking tokens are billed) and forces temperature to its
+    // default (thinking requires temperature 1), so it only ever runs when a
+    // caller asked for reasoning. Any error falls back to the normal
+    // non-streaming call below, leaving the default (non-thinking) path exactly
+    // as it was.
+    if (options?.onReasoning) {
+      try {
+        const answerBudget = Math.max(options?.maxTokens ?? 0, ANTHROPIC_MIN_MAX_TOKENS);
+        const thinkingBudget = Math.max(1024, Math.floor(answerBudget / 2));
+        let content = "";
+        const stream = llmClient.client.messages.stream({
+          model: useModel,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userContent }],
+          // Omit temperature: thinking requires the default (1), and newer
+          // models reject any sampling parameter outright.
+          max_tokens: answerBudget + thinkingBudget,
+          thinking: { type: "enabled", budget_tokens: thinkingBudget },
+        });
+        for await (const event of stream) {
+          if (event.type === "content_block_delta") {
+            if (event.delta.type === "thinking_delta") {
+              options.onReasoning(event.delta.thinking);
+            } else if (event.delta.type === "text_delta") {
+              content += event.delta.text;
+            }
+          }
+        }
+        return content || "{}";
+      } catch (err) {
+        if (err instanceof Anthropic.APIError) {
+          logger.warn(
+            { model: useModel, status: err.status, error: err.message },
+            "Anthropic reasoning stream failed; using non-streaming call",
+          );
+        } else {
+          logger.warn({ model: useModel, err }, "Anthropic reasoning stream failed; using non-streaming call");
+        }
+      }
+    }
     try {
       const response = await llmClient.client.messages.create({
         model: useModel,
@@ -460,6 +531,39 @@ export async function analyzeWithLlm(
 
   // Azure AI Foundry path — tolerant of its heterogeneous model catalog.
   if (llmClient.type === "azure") {
+    const useModel = model || llmClient.model;
+    // Best-effort opt-in reasoning: try a streamed call that captures reasoning
+    // deltas (the same delta.reasoning / reasoning_details shape as OpenRouter).
+    // On any error — a model that won't stream, or rejects max_tokens — fall
+    // back to the tolerant non-streaming foundryChat, so default behavior and
+    // Foundry's parameter negotiation are unchanged.
+    if (options?.onReasoning) {
+      try {
+        const params = {
+          model: useModel,
+          messages: [
+            {
+              role: "system",
+              content: `${systemPrompt}\n\nIMPORTANT: respond with valid JSON only. No markdown, no code fences, no prose.`,
+            },
+            { role: "user", content: userContent },
+          ],
+          max_tokens: options?.maxTokens ?? 8192,
+          temperature,
+        } satisfies OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming;
+        const content = await streamChatCaptureReasoning(
+          llmClient.client,
+          params,
+          options.onReasoning,
+        );
+        return content || "{}";
+      } catch (err) {
+        logger.warn(
+          { model: useModel, err: err instanceof Error ? err.message : err },
+          "Azure Foundry reasoning stream failed; using foundryChat",
+        );
+      }
+    }
     return foundryChat(
       (params) => llmClient.client.chat.completions.create(params as never),
       {

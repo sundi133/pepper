@@ -5,7 +5,7 @@
  * Archives (.zip / .tar.gz) keep their `scans/<scanId>/source.<ext>` key.
  */
 
-export const UPLOADABLE_ARTIFACT_EXTENSIONS = [".jar", ".war", ".ear", ".apk", ".aab", ".dll", ".exe"] as const;
+export const UPLOADABLE_ARTIFACT_EXTENSIONS = [".jar", ".war", ".ear", ".apk", ".aab", ".dll", ".exe", ".ipa"] as const;
 
 /** MIME types browsers and CI clients send for these files. */
 export const ARTIFACT_MIME_TYPES = new Set([
@@ -44,7 +44,7 @@ export function compiledUploadObjectKey(scanId: string, fileName: string): strin
 }
 
 /** Object keys of uploaded compiled artifacts (for data retention). */
-export const COMPILED_UPLOAD_KEY = /^scans\/[^/]+\/compiled\/[^/]+\.(?:jar|war|ear|apk|aab|dll|exe)$/i;
+export const COMPILED_UPLOAD_KEY = /^scans\/[^/]+\/compiled\/[^/]+\.(?:jar|war|ear|apk|aab|dll|exe|ipa)$/i;
 
 /** The artifact's file name when a scan's sourceRef is an uploaded compiled artifact. */
 export function uploadedArtifactName(sourceRef: string | null | undefined): string | null {

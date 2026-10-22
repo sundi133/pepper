@@ -35,10 +35,16 @@ import {
   walkFiles,
   type Budget,
   type DecompilerName,
+  type OutputFile,
   type ToolRunner,
 } from "./decompile";
 import { DecompiledPathMap, type DecompiledArtifactRecord } from "./path-mapping";
 import { isInDependencyDir, type PackageFilter } from "./third-party";
+import { extractArchive } from "@/lib/extract-archive";
+import { extractIpaMetadata } from "@/lib/mobile-ios/ipa-extract";
+
+/** Unzips an archive into destDir (must exist); injectable for tests. */
+export type ArchiveUnzipper = (archivePath: string, destDir: string) => void;
 
 export { compiledScanConfig } from "./config";
 export { DecompiledPathMap } from "./path-mapping";
@@ -100,6 +106,71 @@ function safeName(name: string): string {
   return (s || "artifact").slice(0, 80);
 }
 
+/**
+ * In-process handling of an iOS .ipa: unzip it and extract the reviewable
+ * metadata into `outDir`. There is no FOSS iOS decompiler, so instead of source
+ * we surface Info.plist (also the mobile scanner's iOS anchor), entitlements,
+ * linked frameworks and Mach-O strings. The written files are kept within the
+ * per-scan output budget, exactly as a decompiler's output is.
+ */
+export function extractIosArtifact(opts: {
+  ipaPath: string;
+  outDir: string;
+  tmpDir: string;
+  budget: Budget;
+  maxFileBytes: number;
+  unzip: ArchiveUnzipper;
+}): { files: OutputFile[]; overBudget: boolean; detail?: string } {
+  const extractDir = path.join(opts.tmpDir, "ipa");
+  fs.mkdirSync(extractDir, { recursive: true });
+
+  // extractArchive dispatches on a .zip/.tar extension; an .ipa is a zip, so
+  // give it a .zip-named hardlink to the uploaded artifact (no data copy;
+  // copyFileSync only if the link can't be made, e.g. across filesystems).
+  const zipPath = path.join(opts.tmpDir, "app.zip");
+  try {
+    fs.linkSync(opts.ipaPath, zipPath);
+  } catch {
+    try {
+      fs.copyFileSync(opts.ipaPath, zipPath);
+    } catch (err) {
+      return { files: [], overBudget: false, detail: err instanceof Error ? err.message : "could not stage .ipa" };
+    }
+  }
+
+  try {
+    opts.unzip(zipPath, extractDir);
+  } catch (err) {
+    return { files: [], overBudget: false, detail: err instanceof Error ? err.message : "could not unzip .ipa" };
+  }
+
+  const result = extractIpaMetadata(extractDir, opts.outDir);
+  if (result.written.length === 0) {
+    return { files: [], overBudget: false, detail: "no Payload/*.app or Info.plist in the .ipa" };
+  }
+
+  // Keep the written metadata within the per-scan output budget (reduced in
+  // place, as trimOutput does), deleting anything over it from disk so a
+  // whole-tree scanner never sees it.
+  const kept: OutputFile[] = [];
+  let overBudget = false;
+  for (const f of walkFiles(opts.outDir)) {
+    if (opts.budget.files > 0 && opts.budget.bytes >= f.bytes && f.bytes <= opts.maxFileBytes) {
+      kept.push(f);
+      opts.budget.files--;
+      opts.budget.bytes -= f.bytes;
+    } else {
+      overBudget = true;
+      try {
+        fs.rmSync(path.join(opts.outDir, f.innerPath), { force: true });
+      } catch {
+        /* the work dir is removed after the scan */
+      }
+    }
+  }
+  return { files: kept, overBudget };
+}
+
 export function emptyOutcome(skipped: SkipNote[] = []): CompiledScanOutcome {
   return { files: [], pathMap: new DecompiledPathMap(), summary: summarize([], skipped, 0, 0, 0, false) };
 }
@@ -151,11 +222,14 @@ export async function runCompiledScan(opts: {
   onStart?: (artifacts: number) => void | Promise<void>;
   config?: CompiledScanConfig;
   runner?: ToolRunner;
+  /** Unzips an .ipa in-process (iOS); defaults to the shared extractArchive. */
+  unzip?: ArchiveUnzipper;
   log?: Log;
 }): Promise<CompiledScanOutcome> {
   const config = opts.config ?? compiledScanConfig();
   const log = opts.log ?? logger;
   const run = opts.runner ?? spawnTool;
+  const unzip = opts.unzip ?? extractArchive;
   const filter: PackageFilter = {
     skipThirdParty: config.skipThirdParty,
     excludePackages: config.excludePackages,
@@ -240,6 +314,45 @@ export async function runCompiledScan(opts: {
         input = path.join(tmpDir, "classes");
         fs.mkdirSync(input, { recursive: true });
         stageClasses(opts.workDir, item.artifact.classes ?? [], input);
+      }
+
+      // iOS .ipa: there is no spawned decompiler. Unzip in-process and extract
+      // the reviewable metadata (Info.plist, entitlements, frameworks, Mach-O
+      // strings) the mobile reviewer reads; the written files join the
+      // decompiled output like a decompiler's would.
+      if (item.artifact.kind === "ios") {
+        const ios = extractIosArtifact({
+          ipaPath: input,
+          outDir,
+          tmpDir,
+          budget,
+          maxFileBytes: config.maxFileBytes,
+          unzip,
+        });
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+        if (opts.signal?.aborted) break;
+        if (ios.files.length === 0) {
+          failed++;
+          skipped.push({ path: item.label, reason: "failed", detail: ios.detail ?? "no iOS metadata extracted from the .ipa" });
+          log.warn({ artifact: item.label, detail: ios.detail }, "iOS .ipa yielded no reviewable metadata");
+          fs.rmSync(outDir, { recursive: true, force: true });
+          continue;
+        }
+        if (ios.overBudget) truncated = true;
+        records.push({ artifact: item.label, outDir: outDirRel, tool: "ipa-extract" });
+        for (const f of ios.files) {
+          files.push(`${outDirRel}/${f.innerPath}`);
+          bytesAdded += f.bytes;
+        }
+        done.push({
+          artifact: item.label,
+          tool: "ipa-extract",
+          files: ios.files.length,
+          status: ios.overBudget ? "partial" : "ok",
+          ...(ios.overBudget ? { note: "some metadata files over the output limit not scanned" } : {}),
+        });
+        log.info({ artifact: item.label, tool: "ipa-extract", kept: ios.files.length }, "iOS artifact extracted");
+        continue;
       }
 
       const cmd = buildDecompileCommand({ kind: item.artifact.kind, input, outDir, tmpDir, config, filter });

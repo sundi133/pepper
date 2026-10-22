@@ -14,9 +14,9 @@ import {
 } from "./binary-format";
 import { isInDependencyDir, isThirdPartyAssembly, type PackageFilter } from "./third-party";
 
-export type ArtifactKind = "jvm" | "android" | "dotnet" | "classes";
+export type ArtifactKind = "jvm" | "android" | "dotnet" | "classes" | "ios";
 
-const EXTENSION_KIND: Record<string, "jvm" | "android" | "pe" | "class"> = {
+const EXTENSION_KIND: Record<string, "jvm" | "android" | "pe" | "class" | "ios"> = {
   ".jar": "jvm",
   ".war": "jvm",
   ".ear": "jvm",
@@ -26,6 +26,9 @@ const EXTENSION_KIND: Record<string, "jvm" | "android" | "pe" | "class"> = {
   ".dll": "pe",
   ".exe": "pe",
   ".class": "class",
+  // iOS app archive: a zip with no FOSS decompiler; handled in-process by
+  // unzip + metadata extraction (see compiled-scan dispatch), not a tool.
+  ".ipa": "ios",
 };
 
 export function compiledExtensionOf(relPath: string): string | null {
@@ -243,7 +246,9 @@ export function discoverArtifacts(opts: DiscoveryOptions): DiscoveryResult {
         continue;
       }
     }
-    artifacts.push({ path: rel, kind: family === "android" ? "android" : "jvm", size });
+    const archiveKind: ArtifactKind =
+      family === "android" ? "android" : family === "ios" ? "ios" : "jvm";
+    artifacts.push({ path: rel, kind: archiveKind, size });
   }
 
   for (const [root, classes] of [...classGroups.entries()].sort(([a], [b]) => byDepthThenName(a, b))) {

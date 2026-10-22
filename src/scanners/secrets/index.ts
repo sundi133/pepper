@@ -36,6 +36,7 @@ import {
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { llmExcludedPath } from "@/lib/llm-exclusions";
+import { makeReasoningSink } from "../shared/reasoning-sink";
 
 interface SecretLlmFinding {
   title: string;
@@ -228,6 +229,11 @@ export const secretsLlmScanner: ScannerPlugin = {
       model: ctx.orgSettings.llmModel,
     });
 
+    // Stream + persist the model's reasoning (per-chunk analysis and the
+    // classification pass). Opt-in in the gateway, so a non-reasoning
+    // model/provider is unaffected.
+    const reasoning = makeReasoningSink(ctx, "SECRETS_LLM");
+
     const repoContext = buildDeepRepoContext(ctx.workDir, ctx.fileList);
     const pathSummary = buildRepoContextSummary(ctx.fileList);
     const chunks: Chunk[] = [];
@@ -275,6 +281,7 @@ export const secretsLlmScanner: ScannerPlugin = {
             chunk,
             pathSummary,
             repoContext.summary,
+            reasoning.onReasoning,
           ),
         ),
       );
@@ -307,17 +314,23 @@ export const secretsLlmScanner: ScannerPlugin = {
 
     if (dedupedFindings.length > 0 && ctx.orgSettings.enableLlmSecrets) {
       ctx.onProgress?.(`Secrets AI: classifying ${dedupedFindings.length} candidate(s)...`);
-      const classified = await classifySecrets(dedupedFindings, {
-        provider: ctx.orgSettings.llmProvider,
-        baseUrl: ctx.orgSettings.llmBaseUrl,
-        apiKey: ctx.orgSettings.llmApiKey,
-        model: ctx.orgSettings.llmModel,
-      });
+      const classified = await classifySecrets(
+        dedupedFindings,
+        {
+          provider: ctx.orgSettings.llmProvider,
+          baseUrl: ctx.orgSettings.llmBaseUrl,
+          apiKey: ctx.orgSettings.llmApiKey,
+          model: ctx.orgSettings.llmModel,
+        },
+        { onReasoning: reasoning.onReasoning },
+      );
       ctx.onProgress?.(`Secrets AI: ${classified.length} confirmed secret(s) after classification`);
+      await reasoning.finalize();
       return classified;
     }
 
     ctx.onProgress?.(`Secrets AI: ${dedupedFindings.length} confirmed secret(s)`);
+    await reasoning.finalize();
     return dedupedFindings;
   },
 };
@@ -345,6 +358,7 @@ async function analyzeSecretChunk(
   chunk: Chunk,
   pathSummary: string,
   deepContext: string,
+  onReasoning?: (delta: string) => void,
 ): Promise<RawFinding[]> {
   const userContent = `${pathSummary}\n${deepContext}\n--- FILE CHUNK ---\n${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n\`\`\`\n${chunk.content}\n\`\`\``;
 
@@ -356,6 +370,7 @@ async function analyzeSecretChunk(
     const raw = await analyzeWithLlm(client, model, SECRETS_AI_PROMPT, userContent, {
       maxTokens: LLM_MAX_RESPONSE_TOKENS,
       redaction,
+      onReasoning,
     });
     const parsed = parseLlmJsonResponse<{ findings: SecretLlmFinding[] }>(raw, {
       findings: [],

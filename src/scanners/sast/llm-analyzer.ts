@@ -50,6 +50,7 @@ import {
 import { SAST_EXCLUDED_EXTENSIONS } from "../shared/extension-filters";
 import { scanMissingHardeningHeaders } from "./hardening-headers";
 import { llmExcludedPath } from "@/lib/llm-exclusions";
+import { makeReasoningSink } from "../shared/reasoning-sink";
 
 // Dependency manifest files excluded from SAST analysis (more aggressive filtering)
 const DEPENDENCY_MANIFEST_FILES = new Set([
@@ -421,6 +422,13 @@ export async function runLlmSastScanner(
     model: ctx.orgSettings.llmModel,
   });
 
+  // Capture the model's reasoning: streamed live to the progress feed and
+  // persisted as one trace on finalize. Opt-in in the gateway, so a
+  // non-reasoning model/provider is unaffected. Chunks run concurrently, so the
+  // live trace interleaves reasoning from several chunks — acceptable for a
+  // developer-facing "thinking" view.
+  const reasoning = makeReasoningSink(ctx, "SAST_LLM");
+
   // Fetch custom policies. The first batch is injected into the normal SAST pass;
   // additional batches get policy-only passes to keep prompts bounded.
   const MAX_INLINE_POLICIES = 14;
@@ -605,6 +613,7 @@ export async function runLlmSastScanner(
         `LLM SAST: ${completedFiles.size}/${totalFiles} files scanned (${findings.length} findings)`,
       );
     },
+    onReasoning: reasoning.onReasoning,
   });
 
   for (
@@ -641,6 +650,7 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
       tally,
       findings,
       fileContentMap,
+      onReasoning: reasoning.onReasoning,
     });
   }
 
@@ -661,6 +671,7 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
       maxResponseTokens,
       chunkContentMap,
       fileContentMap,
+      reasoning.onReasoning,
     );
     validated = [...validated, ...pass2];
     if (pass2.length > 0 && ctx.onBatchFindings) {
@@ -710,6 +721,9 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
     ctx.onProgress?.(`LLM SAST: ${validated.length} findings across ${totalFiles} files`);
   }
 
+  // Persist the full reasoning trace (no-op when the model emitted none).
+  await reasoning.finalize();
+
   return [...controlFindings, ...validated];
 }
 
@@ -746,6 +760,7 @@ export async function validateCandidatesPass2(
   maxResponseTokens: number,
   chunkContentMap: Map<string, string> = new Map(),
   fileContentMap: Map<string, string> = new Map(),
+  onReasoning?: (delta: string) => void,
 ): Promise<RawFinding[]> {
   // Small batches keep the validator's answer well inside its output budget;
   // reasoning models spend much of that budget before writing any JSON.
@@ -785,7 +800,7 @@ export async function validateCandidatesPass2(
         model,
         `${SYSTEM_PROMPT}\n\n${SAST_PASS2_PROMPT}`,
         `${repoContextBlock}\n\nCANDIDATES TO VALIDATE:\n${JSON.stringify(payload, null, 2)}`,
-        { maxTokens: maxResponseTokens },
+        { maxTokens: maxResponseTokens, onReasoning },
       );
       const { value: parsed, status } = parseLlmJsonResponseDetailed<{ findings: LlmFinding[] }>(raw, {
         findings: [],
@@ -928,6 +943,8 @@ interface RunChunkBatchesOptions {
   onChunkSuccess?: (chunk: Chunk) => void;
   /** Called after each batch flushes, so callers can report progress. */
   onProgress?: () => void;
+  /** Reasoning-token deltas (opt-in); forwarded to analyzeWithLlm per chunk. */
+  onReasoning?: (delta: string) => void;
 }
 
 /** Run chunk analysis in bounded-concurrency batches, collecting findings. */
@@ -949,6 +966,7 @@ async function runChunkBatches(opts: RunChunkBatchesOptions): Promise<void> {
     onChunkDone,
     onChunkSuccess,
     onProgress,
+    onReasoning,
   } = opts;
 
   for (let i = 0; i < chunks.length; i += maxConcurrency) {
@@ -967,6 +985,7 @@ async function runChunkBatches(opts: RunChunkBatchesOptions): Promise<void> {
           policyNames,
           repoContextBlock,
           fileContentMap.get(chunk.filePath),
+          onReasoning,
         ),
       ),
     );
@@ -989,6 +1008,7 @@ async function runChunkBatches(opts: RunChunkBatchesOptions): Promise<void> {
             policyNames,
             repoContextBlock,
             fileContentMap.get(chunk.filePath),
+            onReasoning,
           );
           result = { status: "fulfilled", value };
         } catch (err) {
@@ -1032,6 +1052,7 @@ async function analyzeChunk(
   policyNames: string[] = [],
   repoContextBlock = "",
   fileContent?: string,
+  onReasoning?: (delta: string) => void,
 ): Promise<RawFinding[]> {
   const scopeNote = chunk.wholeFile
     ? "This is the ENTIRE file with line numbers. Read every line before reporting."
@@ -1050,6 +1071,7 @@ async function analyzeChunk(
     );
     const raw = await analyzeWithLlm(client, model, systemPrompt, userContent, {
       maxTokens: maxResponseTokens,
+      onReasoning,
     });
     logger.info(
       { filePath: chunk.filePath, responseLength: raw.length },

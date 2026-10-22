@@ -639,11 +639,17 @@ export async function analyzeWithLlm(
         temperature,
         max_tokens: options?.maxTokens ?? 8192,
       } satisfies OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming;
+      // When we capture reasoning, run reasoning models (e.g. glm-5.3) at high
+      // effort. `reasoning` is an OpenRouter passthrough field; non-reasoning
+      // models ignore it, so default behavior is unchanged.
+      const callParams = options?.onReasoning
+        ? ({ ...params, reasoning: { enabled: true, effort: "high" } } as typeof params)
+        : params;
       if (options?.onReasoning) {
         try {
           const content = await streamChatCaptureReasoning(
             llmClient.client,
-            params,
+            callParams,
             options.onReasoning,
           );
           return content || "{}";
@@ -657,7 +663,7 @@ export async function analyzeWithLlm(
         }
       }
       let attemptParams: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming =
-        params;
+        callParams;
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
           const response = await llmClient.client.chat.completions.create(attemptParams);

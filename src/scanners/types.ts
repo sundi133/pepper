@@ -62,6 +62,13 @@ export interface ScanContext {
   onFindingsReplaced?: (
     replacements: Array<{ superseded: RawFinding; replacement: RawFinding }>,
   ) => Promise<void>;
+  /**
+   * A scanner's full model reasoning trace, for the processor to persist so
+   * developers can read how the AI reached its findings. Called once per
+   * scanner that produces reasoning (the mobile review streams it live via
+   * onProgress and stores the whole trace here).
+   */
+  onReasoning?: (scannerName: string, reasoning: string) => Promise<void>;
 }
 
 /** @see scanners/shared/finding-metadata.ts */

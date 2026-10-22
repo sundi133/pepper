@@ -6,6 +6,7 @@ import {
   SuppressedVulnerability,
 } from "./types";
 import { sastLlmScanner, sastPatternScanner } from "./sast";
+import { mobileLlmScanner } from "./mobile";
 import { scaScanner, parseDependencies } from "./sca";
 import { secretsPatternScanner, secretsLlmScanner } from "./secrets";
 import { iacScanner } from "./iac";
@@ -31,6 +32,8 @@ export const COMPILED_CODE_SCANNERS = new Set([
   "SAST_LLM",
   "SECRETS_PATTERN",
   "SECRETS_LLM",
+  // Mobile review reads decompiled Android source + the decoded manifest.
+  "mobile-llm",
 ]);
 
 export function getScanners(
@@ -61,6 +64,10 @@ export function getScanners(
 
   if (includeSast && orgSettings.enableLlmSast) {
     scanners.push(sastLlmScanner);
+    // Mobile review: no-ops unless the scan has a decompiled AndroidManifest
+    // (uploaded .apk) and OPENROUTER_API_KEY is set, so non-mobile scans are
+    // unaffected.
+    scanners.push(mobileLlmScanner);
   }
 
   if (includeSca) {

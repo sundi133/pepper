@@ -82,6 +82,7 @@ export async function classifySecrets(
     apiKey?: string;
     model: string;
   },
+  options?: { onReasoning?: (delta: string) => void },
 ): Promise<RawFinding[]> {
   if (findings.length === 0) return [];
 
@@ -122,6 +123,7 @@ export async function classifySecrets(
       llmConfig.model,
       SYSTEM_PROMPT,
       JSON.stringify({ findings: context }),
+      options?.onReasoning ? { onReasoning: options.onReasoning } : undefined,
     );
 
     const parsed = parseLlmJsonResponse<{ classifications: Classification[] }>(

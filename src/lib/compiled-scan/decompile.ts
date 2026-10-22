@@ -99,7 +99,7 @@ export const spawnTool: ToolRunner = (run) =>
 
 // ─── Commands ─────────────────────────────────────────────────────────
 
-export type DecompilerName = "vineflower" | "jadx" | "ilspycmd";
+export type DecompilerName = "vineflower" | "jadx" | "ilspycmd" | "ipa-extract";
 
 export interface DecompileCommand {
   tool: DecompilerName;
@@ -171,6 +171,10 @@ export function buildDecompileCommand(opts: {
           DOTNET_CLI_TELEMETRY_OPTOUT: "1",
         },
       };
+    case "ios":
+      // iOS has no spawned decompiler; the compiled-scan dispatch handles .ipa
+      // in-process (unzip + metadata extraction) and never calls this.
+      throw new Error("iOS artifacts are extracted in-process, not via buildDecompileCommand");
   }
 }
 

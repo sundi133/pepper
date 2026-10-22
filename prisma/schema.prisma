@@ -640,6 +640,8 @@ enum ArtifactType {
   VEX_OPENVEX
   /// CycloneDX 1.5 VEX — same statements for CycloneDX-native consumers.
   VEX_CYCLONEDX
+  /// Streamed model reasoning trace from an AI scanner (e.g. mobile review), kept for developers to read.
+  AI_REASONING
 }
 
 model BuildGate {

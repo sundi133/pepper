@@ -33,6 +33,7 @@ import {
   LOGIC_PATTERN_PACK,
 } from "@/lib/constants";
 import { buildLogicMap, endpointTable, runLogicChecks, type LogicOptions } from "./logic";
+import { makeReasoningSink } from "../shared/reasoning-sink";
 
 interface ZeroDayLlmFinding {
   title: string;
@@ -94,7 +95,14 @@ export const zeroDayScanner: ScannerPlugin = {
         : Promise.resolve(null);
     const table = LOGIC_MAP_IN_PROMPT && mapState ? endpointTable(mapState.map) : "";
 
-    const [main, logic] = await Promise.all([mainPass(ctx, client, maxResponseTokens, table), checks]);
+    // Stream + persist the model's reasoning for the cross-file pass. Opt-in in
+    // the gateway, so a non-reasoning model/provider is unaffected.
+    const reasoning = makeReasoningSink(ctx, "ZERO_DAY");
+    const [main, logic] = await Promise.all([
+      mainPass(ctx, client, maxResponseTokens, table, reasoning.onReasoning),
+      checks,
+    ]);
+    await reasoning.finalize();
     const logicFindings = (logic?.findings ?? []).filter((f) => !coveredByMainPass(f, main));
     if (logicFindings.length > 0 && ctx.onBatchFindings) {
       await ctx.onBatchFindings("ZERO_DAY", logicFindings);
@@ -133,6 +141,7 @@ async function mainPass(
   client: ReturnType<typeof createLlmClient>,
   maxResponseTokens: number,
   endpointTableText: string,
+  onReasoning?: (delta: string) => void,
 ): Promise<RawFinding[]> {
   {
     const repoContext = buildDeepRepoContext(ctx.workDir, ctx.fileList);
@@ -179,7 +188,7 @@ async function mainPass(
         ctx.orgSettings.llmModel,
         ZERO_DAY_SYSTEM_PROMPT,
         userContent,
-        { maxTokens: maxResponseTokens },
+        { maxTokens: maxResponseTokens, onReasoning },
       );
 
       const parsed = parseLlmJsonResponse<{ findings: ZeroDayLlmFinding[] }>(

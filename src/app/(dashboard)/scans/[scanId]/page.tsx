@@ -733,6 +733,12 @@ export default function ScanDetailPage() {
                       <Sparkles className="h-3.5 w-3.5" aria-hidden />
                       Model thinking
                     </div>
+                    <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">
+                      Live reasoning as each AI scanner works. It streams in real
+                      time and can jump between files (they are reviewed in
+                      parallel); the full per-finding reasoning is saved to the
+                      scan&apos;s AI report.
+                    </p>
                     {Object.entries(tails).map(([name, text]) => (
                       <div key={name} className="space-y-1">
                         <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">

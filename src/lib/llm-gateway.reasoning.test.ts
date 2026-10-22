@@ -60,3 +60,44 @@ describe("analyzeWithLlm reasoning capture", () => {
     expect(create.mock.calls[0][0].stream).toBeUndefined();
   });
 });
+
+describe("analyzeWithLlm reasoning-model param adaptation", () => {
+  function openaiClient(
+    create: (p: Record<string, unknown>) => Promise<unknown>,
+  ): LlmClient {
+    return {
+      type: "openai",
+      client: { chat: { completions: { create } } },
+      model: "gpt-6-astra",
+    } as unknown as LlmClient;
+  }
+
+  it("retries max_tokens -> max_completion_tokens when the model rejects it", async () => {
+    const create = vi.fn(async (p: Record<string, unknown>) => {
+      if ("max_tokens" in p) {
+        throw new Error(
+          "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+        );
+      }
+      return { choices: [{ message: { content: '{"ok":1}' } }] };
+    });
+    const out = await analyzeWithLlm(openaiClient(create), "", "sys", "user");
+    expect(out).toBe('{"ok":1}');
+    expect("max_tokens" in create.mock.calls[0][0]).toBe(true);
+    expect("max_completion_tokens" in create.mock.calls[1][0]).toBe(true);
+  });
+
+  it("drops an unsupported temperature after the token swap", async () => {
+    const create = vi.fn(async (p: Record<string, unknown>) => {
+      if ("max_tokens" in p) throw new Error("use 'max_completion_tokens' instead");
+      if ("temperature" in p)
+        throw new Error("Unsupported value: 'temperature' does not support 0.1");
+      return { choices: [{ message: { content: '{"ok":2}' } }] };
+    });
+    const out = await analyzeWithLlm(openaiClient(create), "", "sys", "user");
+    expect(out).toBe('{"ok":2}');
+    const last = create.mock.calls[create.mock.calls.length - 1][0];
+    expect("temperature" in last).toBe(false);
+    expect("max_completion_tokens" in last).toBe(true);
+  });
+});

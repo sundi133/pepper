@@ -339,21 +339,69 @@ function maskPrompt(
 // ─── Unified Analysis Function ────────────────────────────────────────
 
 /**
+ * When a model rejects a chat parameter, adapt the params and return a new set
+ * to retry with; return null when the error isn't one we can adapt. Reasoning
+ * models (o-series, gpt-6 / astra) require `max_completion_tokens` instead of
+ * `max_tokens`, allow only the default temperature, and some reject
+ * `response_format`. Mirrors the retry logic in foundryChat so every
+ * OpenAI-SDK path tolerates these models.
+ */
+function adaptChatParamsForError<T extends Record<string, unknown>>(
+  params: T,
+  err: unknown,
+): T | null {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  if ("max_tokens" in params && /max_completion_tokens/.test(msg)) {
+    const { max_tokens, ...rest } = params as Record<string, unknown>;
+    return { ...rest, max_completion_tokens: max_tokens } as unknown as T;
+  }
+  if (
+    "max_completion_tokens" in params &&
+    /max_tokens/.test(msg) &&
+    /unsupported|unknown|not supported|unrecognized|instead/.test(msg)
+  ) {
+    const { max_completion_tokens, ...rest } = params as Record<string, unknown>;
+    return { ...rest, max_tokens: max_completion_tokens } as unknown as T;
+  }
+  if ("temperature" in params && /temperature/.test(msg)) {
+    const { temperature, ...rest } = params as Record<string, unknown>;
+    return rest as unknown as T;
+  }
+  if ("response_format" in params && /response_format/.test(msg)) {
+    const { response_format, ...rest } = params as Record<string, unknown>;
+    return rest as unknown as T;
+  }
+  return null;
+}
+
+/**
  * Streams an OpenAI-compatible chat call, accumulating the answer and feeding
  * reasoning-token deltas to onReasoning. Reasoning only fires when the model
  * actually emits it (delta.reasoning / reasoning_details), so a non-reasoning
- * model just returns its content. Throws on transport errors so the caller can
- * fall back to the normal non-streaming request.
+ * model just returns its content. Adapts params for reasoning models that
+ * reject max_tokens/temperature, then throws on any other transport error so
+ * the caller can fall back to the normal non-streaming request.
  */
 async function streamChatCaptureReasoning(
   client: OpenAI,
   params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
   onReasoning: (delta: string) => void,
 ): Promise<string> {
-  const stream = await client.chat.completions.create({
-    ...params,
-    stream: true,
-  } as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming);
+  let attemptParams: Record<string, unknown> = { ...params };
+  let stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      stream = (await client.chat.completions.create({
+        ...attemptParams,
+        stream: true,
+      } as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming)) as unknown as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
+      break;
+    } catch (err) {
+      const adapted = attempt < 3 ? adaptChatParamsForError(attemptParams, err) : null;
+      if (!adapted) throw err;
+      attemptParams = adapted;
+    }
+  }
   let content = "";
   for await (const chunk of stream) {
     const delta = chunk.choices?.[0]?.delta as
@@ -608,8 +656,23 @@ export async function analyzeWithLlm(
           );
         }
       }
-      const response = await llmClient.client.chat.completions.create(params);
-      return response.choices[0]?.message?.content || "{}";
+      let attemptParams: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming =
+        params;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          const response = await llmClient.client.chat.completions.create(attemptParams);
+          return response.choices[0]?.message?.content || "{}";
+        } catch (err) {
+          const adapted = adaptChatParamsForError(
+            attemptParams as unknown as Record<string, unknown>,
+            err,
+          );
+          if (!adapted) throw err; // outer catch logs + returns "{}"
+          attemptParams =
+            adapted as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming;
+        }
+      }
+      return "{}";
     } catch (err) {
       // Degrade to "{}" like the other providers, but log: a bad key, base URL,
       // model slug (e.g. a missing vendor prefix), or credit balance must be
@@ -647,12 +710,25 @@ export async function analyzeWithLlm(
       // non-reasoning model (or endpoint) behaves exactly as before.
     }
   }
-  try {
-    const response = await llmClient.client.chat.completions.create(params);
-    return response.choices[0]?.message?.content || "{}";
-  } catch {
-    return "{}";
+  // Retry loop so reasoning models (which reject max_tokens / temperature) are
+  // adapted instead of silently degrading to "{}".
+  let attemptParams: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming =
+    params;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const response = await llmClient.client.chat.completions.create(attemptParams);
+      return response.choices[0]?.message?.content || "{}";
+    } catch (err) {
+      const adapted = adaptChatParamsForError(
+        attemptParams as unknown as Record<string, unknown>,
+        err,
+      );
+      if (!adapted) return "{}";
+      attemptParams =
+        adapted as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming;
+    }
   }
+  return "{}";
 }
 
 // ─── Streaming Chat ───────────────────────────────────────────────────

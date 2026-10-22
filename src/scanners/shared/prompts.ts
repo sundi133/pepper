@@ -619,7 +619,7 @@ A finding is CONFIRMED only if ALL hold:
 - Exploitation is realistic, not merely theoretical.
 State the concrete attack path: source → how it flows → sink, in one or two sentences.
 
-Mark it NOT confirmed when: the input is not attacker-controllable; a guard prevents the flow; the sink is safe in this context (e.g., parameterised query, escaped output); the code is test/mock/fixture; or the claim describes a pattern the surrounding code does not actually contain.
+Mark it NOT confirmed when: the input is not attacker-controllable; a guard prevents the flow; the sink is safe in this context (e.g., parameterised query, escaped output); the finding is in test/mock/fixture code that does not ship or run in the app (NOT merely because the whole app looks like a sample or training app); or the claim describes a pattern the surrounding code does not actually contain.
 
 SOURCE TAXONOMY — what counts as genuinely attacker-controllable:
 - request query/path params, request body/JSON/form fields, headers (Host, X-Forwarded-*, custom), cookies,
@@ -641,6 +641,12 @@ guard is missing or unverified instead of assuming it exists.
 Do NOT confirm on pattern familiarity. The code resembling a known vulnerable pattern is not evidence: apply
 the source→flow→sink→guard test to the actual lines shown. When a guard is present and sufficient, mark
 confirmed=false even if the finding is HIGH/CRITICAL severity; severity does not override the evidence.
+
+Do NOT dismiss a finding because the app appears to be a deliberately-vulnerable, training, CTF, demo, sample,
+or "intentionally insecure" application, or because the code looks intentionally vulnerable. Such apps contain
+genuinely exploitable code — a real source→sink flow is a true positive regardless of the app's purpose. That
+the app is a known lab, a benchmark, or "not a production app" is never, by itself, a reason to set
+confirmed=false; decide only by the source→flow→sink→guard test on the actual lines shown.
 
 Do NOT invent code that is not shown. If the snippet is insufficient to decide, set confirmed=false with a LOW confidence (below 0.5) and say what is missing — that keeps the finding for human review rather than removing it.
 

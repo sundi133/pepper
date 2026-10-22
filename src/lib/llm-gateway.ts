@@ -338,6 +338,46 @@ function maskPrompt(
 
 // ─── Unified Analysis Function ────────────────────────────────────────
 
+/**
+ * Streams an OpenAI-compatible chat call, accumulating the answer and feeding
+ * reasoning-token deltas to onReasoning. Reasoning only fires when the model
+ * actually emits it (delta.reasoning / reasoning_details), so a non-reasoning
+ * model just returns its content. Throws on transport errors so the caller can
+ * fall back to the normal non-streaming request.
+ */
+async function streamChatCaptureReasoning(
+  client: OpenAI,
+  params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+  onReasoning: (delta: string) => void,
+): Promise<string> {
+  const stream = await client.chat.completions.create({
+    ...params,
+    stream: true,
+  } as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming);
+  let content = "";
+  for await (const chunk of stream) {
+    const delta = chunk.choices?.[0]?.delta as
+      | { content?: string; reasoning?: string; reasoning_details?: unknown }
+      | undefined;
+    if (!delta) continue;
+    if (delta.content) content += delta.content;
+    let r = typeof delta.reasoning === "string" ? delta.reasoning : "";
+    if (!r && Array.isArray(delta.reasoning_details)) {
+      r = (delta.reasoning_details as unknown[])
+        .map((d) =>
+          d && typeof d === "object"
+            ? ((d as Record<string, unknown>).text as string) ||
+              ((d as Record<string, unknown>).summary as string) ||
+              ""
+            : "",
+        )
+        .join("");
+    }
+    if (r) onReasoning(r);
+  }
+  return content;
+}
+
 export async function analyzeWithLlm(
   llmClient: LlmClient,
   model: string,
@@ -348,6 +388,15 @@ export async function analyzeWithLlm(
     maxTokens?: number;
     /** Share or restore masked secrets (see maskPrompt). */
     redaction?: RedactionSession;
+    /**
+     * Called with reasoning-token deltas as they stream, when the chosen model
+     * emits them. Opt-in: only the OpenAI-SDK paths (OpenRouter / OpenAI-
+     * compatible) honor it, and only by switching to a streamed request that
+     * falls back to the normal call on any error — so a non-reasoning model (or
+     * a provider that can't stream) is never affected, and this is simply never
+     * called when no reasoning tokens arrive.
+     */
+    onReasoning?: (delta: string) => void;
   },
 ): Promise<string> {
   const temperature = options?.temperature ?? 0.1;
@@ -429,7 +478,7 @@ export async function analyzeWithLlm(
     const useModel = model || llmClient.model;
     try {
       const jsonSystemPrompt = `${systemPrompt}\n\nIMPORTANT: You MUST respond with valid JSON only. No markdown, no explanation, no code fences — just raw JSON.`;
-      const response = await llmClient.client.chat.completions.create({
+      const params = {
         model: useModel,
         messages: [
           { role: "system", content: jsonSystemPrompt },
@@ -437,7 +486,25 @@ export async function analyzeWithLlm(
         ],
         temperature,
         max_tokens: options?.maxTokens ?? 8192,
-      });
+      } satisfies OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming;
+      if (options?.onReasoning) {
+        try {
+          const content = await streamChatCaptureReasoning(
+            llmClient.client,
+            params,
+            options.onReasoning,
+          );
+          return content || "{}";
+        } catch (err) {
+          // Streaming/reasoning unsupported for this model — fall back to the
+          // normal call below so a non-reasoning model is never broken.
+          logger.warn(
+            { model: useModel, err: err instanceof Error ? err.message : err },
+            "OpenRouter reasoning stream failed; using non-streaming call",
+          );
+        }
+      }
+      const response = await llmClient.client.chat.completions.create(params);
       return response.choices[0]?.message?.content || "{}";
     } catch (err) {
       // Degrade to "{}" like the other providers, but log: a bad key, base URL,
@@ -453,17 +520,31 @@ export async function analyzeWithLlm(
   }
 
   // OpenAI-compatible path
+  const params = {
+    model: model || llmClient.model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userContent },
+    ],
+    temperature,
+    max_tokens: options?.maxTokens ?? 8192,
+    response_format: { type: "json_object" as const },
+  } satisfies OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming;
+  if (options?.onReasoning) {
+    try {
+      const content = await streamChatCaptureReasoning(
+        llmClient.client,
+        params,
+        options.onReasoning,
+      );
+      return content || "{}";
+    } catch {
+      // Streaming/reasoning unsupported — fall through to the normal call so a
+      // non-reasoning model (or endpoint) behaves exactly as before.
+    }
+  }
   try {
-    const response = await llmClient.client.chat.completions.create({
-      model: model || llmClient.model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userContent },
-      ],
-      temperature,
-      max_tokens: options?.maxTokens ?? 8192,
-      response_format: { type: "json_object" },
-    });
+    const response = await llmClient.client.chat.completions.create(params);
     return response.choices[0]?.message?.content || "{}";
   } catch {
     return "{}";

@@ -735,6 +735,11 @@ Schema:
 
     // Track cumulative batch finding counts per scanner for progress
     const batchFindingCounts: Record<string, number> = {};
+    // Full model reasoning trace per AI scanner, aggregated into one artifact
+    // at finalize; reasoningTails holds a rolling tail per scanner for the live
+    // scannerProgress view during the scan.
+    const reasoningByScanner: Record<string, string> = {};
+    const reasoningTails: Record<string, string> = {};
 
     // 3. Build scan context with incremental DB insert callbacks
     async function reportProgress(msg: string) {
@@ -761,6 +766,25 @@ Schema:
                 filesTotal: parseInt(filesTotal),
               },
             },
+          )}::jsonb
+          WHERE id = ${scanId}
+        `;
+      }
+
+      // Live reasoning stream: the shared reasoning sink emits "[<scanner>
+      // reasoning] <chunk>" messages. Keep a rolling tail per scanner under a
+      // dedicated __reasoning__ key so developers watch the model think during
+      // the scan without clobbering each scanner's status entry.
+      const reasoningMatch = msg.match(/^\[(\S+) reasoning\] ([\s\S]*)$/);
+      if (reasoningMatch) {
+        const [, scanner, chunk] = reasoningMatch;
+        reasoningTails[scanner] = ((reasoningTails[scanner] || "") + chunk).slice(
+          -4000,
+        );
+        await prisma.$executeRaw`
+          UPDATE "Scan"
+          SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify(
+            { __reasoning__: reasoningTails },
           )}::jsonb
           WHERE id = ${scanId}
         `;
@@ -864,6 +888,36 @@ Schema:
           SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ [scannerName]: { status: "DONE", findingsCount: totalFindings } })}::jsonb
           WHERE id = ${scanId}
         `;
+      },
+      onReasoning: async (scannerName: string, reasoning: string) => {
+        if (!reasoning?.trim()) return;
+        // Aggregate every AI scanner's trace into one AI_REASONING artifact
+        // (ScanArtifact is unique per [scanId, type]). Best-effort: a storage
+        // failure must never fail the scan.
+        try {
+          reasoningByScanner[scannerName] = reasoning;
+          const combined = Object.entries(reasoningByScanner)
+            .map(([name, text]) => `# ${name}\n\n${text}`)
+            .join("\n\n---\n\n");
+          const key = `scans/${scanId}/ai-reasoning.md`;
+          await uploadObject(key, combined, "text/markdown");
+          await prisma.scanArtifact.upsert({
+            where: { scanId_type: { scanId, type: "AI_REASONING" } },
+            create: {
+              scanId,
+              type: "AI_REASONING",
+              objectKey: key,
+              size: Buffer.byteLength(combined),
+            },
+            update: { objectKey: key, size: Buffer.byteLength(combined) },
+          });
+          log.info(
+            { scanner: scannerName, bytes: Buffer.byteLength(reasoning) },
+            "Stored AI reasoning trace",
+          );
+        } catch (err) {
+          log.warn({ err }, "Could not store AI reasoning trace");
+        }
       },
       onBatchFindings: async (scannerName: string, findings: RawFinding[]) => {
         await assertScanActive();

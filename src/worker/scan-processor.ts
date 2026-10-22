@@ -718,10 +718,17 @@ Schema:
         reasoningTails[scanner] = ((reasoningTails[scanner] || "") + chunk).slice(
           -4000,
         );
+        // Display copy: when the tail is truncated, start it at a clean word
+        // boundary (with a leading ellipsis) so it never begins mid-word.
+        const display: Record<string, string> = {};
+        for (const [s, t] of Object.entries(reasoningTails)) {
+          const cut = t.length >= 4000 ? t.search(/\s/) : -1;
+          display[s] = cut > 0 ? "… " + t.slice(cut).replace(/^\s+/, "") : t;
+        }
         await prisma.$executeRaw`
           UPDATE "Scan"
           SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify(
-            { __reasoning__: reasoningTails },
+            { __reasoning__: display },
           )}::jsonb
           WHERE id = ${scanId}
         `;

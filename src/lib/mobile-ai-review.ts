@@ -24,6 +24,7 @@ import { z } from "zod";
 import type { RawFinding, SeverityLevel } from "@/scanners/types";
 import { DECOMPILED_PATH_SEPARATOR } from "@/lib/compiled-scan/finding-origin";
 import { MOBILE_PLATFORM_LABELS, type MobilePlatform } from "@/lib/mobile-platform";
+import { MOBILE_ANDROID_CHECKLIST } from "@/lib/mobile-vuln-checklist";
 
 /** Findings from this review carry this ruleId prefix. */
 export const AI_MOBILE_REVIEW_RULE_PREFIX = "ai-mobile-review/";
@@ -168,6 +169,8 @@ Check, and trace each candidate through the app's own code before reporting it:
 - WebView: setJavaScriptEnabled with addJavascriptInterface, file access from URLs, loading untrusted URLs, ignored SSL errors.
 - Injection: SQL built from input in queries or content providers, path traversal in file providers, PendingIntent and intent redirection.
 - Authentication and session handling done only on the client, root/debug detection that is the only protection.
+
+${MOBILE_ANDROID_CHECKLIST}
 ${COMMON_RULES}`;
 }
 

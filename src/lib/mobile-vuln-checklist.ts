@@ -1,0 +1,16 @@
+/**
+ * Explicit Android issue classes the mobile reviews hunt for (OWASP MASTG and
+ * the common mobile-pentest checklist). Shared by the GLM scanner prompt
+ * (scanners/mobile/prompt.ts) and the gpt-6-astra review instructions
+ * (mobile-ai-review.ts) so the two stay in sync. Neutral wording: describe the
+ * weakness, its risk and the fix — never an attack recipe.
+ */
+export const MOBILE_ANDROID_CHECKLIST = `Specifically look for these Android issue classes, and report each only with code evidence (most severe first):
+- WebView: loading arbitrary or attacker-controllable URLs (via deep link, intent extra, or loadUrl), including untrusted data:/content:/file: URIs; weak host or allowlist validation that can be bypassed to load any URL; insecure settings (JavaScript enabled with untrusted content, addJavascriptInterface bridges, setAllowFileAccess / AllowFileAccessFromFileURLs / AllowUniversalAccessFromFileURLs) that permit local-file exfiltration; onReceivedSslError that proceeds despite SSL errors.
+- Components / IPC: exported activities, services, receivers or providers without a permission; a forwarded or embedded Intent passed to startActivity (intent redirection that launches protected components); implicit intents that carry sensitive data or can be intercepted to load an arbitrary URL; a broadcast registered in onCreate of an exported component that acts on an attacker-supplied parameter (e.g. web_url); insecure setResult in an exported Activity that exposes content providers; intent sniffing or injection.
+- Content providers / FileProvider: exported or otherwise insecure ContentProvider that exposes user data or credentials; over-broad FileProvider paths (e.g. path=".") that expose app files or the root directory; theft of files via a Chooser or intermediate activity.
+- Secrets & authentication: hardcoded credentials or secrets usable to authenticate; developer backdoors; weak authorization; username enumeration; weak change-password flow; auth or role decisions made only on the client.
+- Cryptography & storage: weak or misused cryptography (ECB, static key or IV, DES, MD5/SHA-1 used for security, insecure Random); weak local encryption; plaintext credentials in SharedPreferences, SQLite, external/SD-card storage or cache; allowBackup exposure; clipboard/pasteboard leakage, keyboard-cache capture, and sensitive data left in memory.
+- Network: cleartext or insecure HTTP; missing or bypassable TLS validation or certificate pinning; request parameter manipulation.
+- Code integrity / platform: arbitrary or external code execution via createPackageContext / third-party package contexts, dynamic class loading, or unsafe reflection on untrusted names; debuggable builds; application-patching or runtime-manipulation exposure (report the presence or absence of integrity, root and emulator detection — do not overstate absence as a vulnerability).
+- Logging, dependencies & cloud: credentials or tokens leaked to logcat or other insecure logging; third-party components or libraries with known vulnerabilities (map to a CVE where possible); misconfigured cloud backends reachable from the app (e.g. an AWS Cognito instance that grants S3 access) and exposed service URLs.`;

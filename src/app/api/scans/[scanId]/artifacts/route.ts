@@ -9,6 +9,7 @@ const TYPE_TO_PATH: Record<string, string> = {
   CONTAINER_REPORT: "container",
   SARIF: "sarif",
   SIGNATURE: "signature",
+  AI_REASONING: "ai-reasoning",
 };
 
 export async function GET(

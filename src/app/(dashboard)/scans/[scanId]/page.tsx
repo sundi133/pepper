@@ -73,7 +73,11 @@ import { useRouter } from "next/navigation";
 import { nextFindingSelection } from "@/lib/create-scan-validation";
 import { runOpenFixPrFlow } from "@/lib/open-fix-pr-flow";
 import { ScanTriageChat } from "@/components/scans/scan-triage-chat";
-import { computeScanProgress } from "@/lib/scan-progress";
+import {
+  computeScanProgress,
+  reasoningTails,
+  REASONING_PROGRESS_KEY,
+} from "@/lib/scan-progress";
 import { CustomReportDialog } from "@/components/scans/custom-report-dialog";
 import { CompiledCodeSummary } from "@/components/scans/compiled-code-summary";
 
@@ -613,6 +617,22 @@ export default function ScanDetailPage() {
                         window.open(`/api/scans/${scanId}/artifacts/spdx`, "_blank")
                       }
                     >SBOM (SPDX)</Button>
+                    {/* The full AI reasoning trace, when an AI scanner produced
+                        one (the live tails persist under __reasoning__). */}
+                    {reasoningTails(
+                      scan.scannerProgress as Record<string, unknown> | null,
+                    ) && (
+                      <Button
+                        variant="ghost"
+                        className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
+                        onClick={() =>
+                          window.open(
+                            `/api/scans/${scanId}/artifacts/ai-reasoning`,
+                            "_blank",
+                          )
+                        }
+                      >AI reasoning</Button>
+                    )}
                   </>
                 )}
               </div>
@@ -670,7 +690,10 @@ export default function ScanDetailPage() {
                           filesTotal?: number;
                         }
                       >,
-                    ).map(([name, info]) => (
+                    )
+                      // __reasoning__ is the live-reasoning store, not a scanner.
+                      .filter(([name]) => name !== REASONING_PROGRESS_KEY)
+                      .map(([name, info]) => (
                       <Badge
                         key={name}
                         variant={info.status === "DONE" ? "default" : "secondary"}
@@ -695,6 +718,33 @@ export default function ScanDetailPage() {
                     ))}
                   </div>
                 )}
+              {/* Live model reasoning: what each AI scanner is thinking, as it
+                  streams. Only shown when a reasoning model actually emitted
+                  tokens, so non-reasoning scans are unaffected. */}
+              {(() => {
+                const tails = reasoningTails(
+                  scan.scannerProgress as Record<string, unknown> | null,
+                );
+                if (!tails) return null;
+                return (
+                  <div className="mt-1 space-y-2 rounded-lg border border-indigo-200/70 bg-white/70 p-3 dark:border-indigo-900/50 dark:bg-slate-950/40">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                      <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                      Model thinking
+                    </div>
+                    {Object.entries(tails).map(([name, text]) => (
+                      <div key={name} className="space-y-1">
+                        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                          {name}
+                        </div>
+                        <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-slate-50 p-2 font-mono text-[11px] leading-relaxed text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                          {text}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

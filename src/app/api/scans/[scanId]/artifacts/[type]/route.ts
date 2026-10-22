@@ -9,7 +9,8 @@ type ArtifactKind =
   | "SBOM_SPDX"
   | "CONTAINER_REPORT"
   | "SARIF"
-  | "SIGNATURE";
+  | "SIGNATURE"
+  | "AI_REASONING";
 
 const TYPE_MAP: Record<
   string,
@@ -54,6 +55,11 @@ const TYPE_MAP: Record<
     type: "SIGNATURE",
     contentType: "application/json",
     filename: "signature.json",
+  },
+  "ai-reasoning": {
+    type: "AI_REASONING",
+    contentType: "text/markdown",
+    filename: "ai-reasoning.md",
   },
 };
 

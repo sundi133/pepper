@@ -48,6 +48,7 @@ import { validateExploitability } from "@/scanners/shared/exploit-validation";
 import { evaluateBuildGate } from "@/lib/build-gate";
 import {
   ENABLE_EXPLOIT_VALIDATION,
+  BENCHMARK_MODE,
   EXPLOIT_VALIDATION_MIN_SEVERITY,
 } from "@/lib/constants";
 import {
@@ -1580,6 +1581,7 @@ async function runExploitValidation(
   workDir: string,
   log: ReturnType<typeof createScanLogger>,
 ): Promise<void> {
+  if (BENCHMARK_MODE) return; // benchmark: never suppress findings as false positives
   if (!ENABLE_EXPLOIT_VALIDATION) return;
   if (!orgSettings.enableLlmSast) return;
   const isOllama = orgSettings.llmProvider?.toLowerCase() === "ollama";

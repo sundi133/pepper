@@ -356,6 +356,19 @@ export const LLM_VALIDATION_CONTEXT_CHARS = parseInt(
 export const ENABLE_EXPLOIT_VALIDATION =
   process.env.ENABLE_EXPLOIT_VALIDATION === "true";
 
+/**
+ * Benchmark mode (default off). For running against known-vulnerable apps to
+ * validate detection: maximizes recall and disables every finding-suppression
+ * step — the exploit-validation false-positive pass is skipped and the LLM
+ * scanners are told to report everything (no test/fixture/unreachable/demo
+ * dropping). Never enable on a tenant serving real customer scans.
+ */
+export const BENCHMARK_MODE = process.env.BENCHMARK_MODE === "true";
+
+/** Appended to the SAST/secrets LLM system prompts when BENCHMARK_MODE is on. */
+export const BENCHMARK_PROMPT_SUFFIX =
+  "\n\nBENCHMARK MODE (maximize recall; benchmarking against known-vulnerable apps): report EVERY issue the visible code supports, including lower-confidence ones. Do NOT withhold a finding because code looks like a test/fixture/mock, is only reachable from a demo/dev path, appears unreachable, or because the app is a security-training / deliberately-vulnerable / benchmark app. When unsure, report it with a lower confidence rather than dropping it.";
+
 /** Findings per validation LLM request. */
 export const EXPLOIT_VALIDATION_BATCH = parseInt(
   process.env.EXPLOIT_VALIDATION_BATCH || "10",

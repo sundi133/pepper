@@ -33,6 +33,8 @@ import {
   OLLAMA_WHOLE_FILE_TOKEN_BUDGET,
   LLM_EVIDENCE_VERIFICATION,
   LLM_VALIDATION_CONTEXT_CHARS,
+  BENCHMARK_MODE,
+  BENCHMARK_PROMPT_SUFFIX,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -377,7 +379,8 @@ REPOSITORY-AWARE REVIEW (Pepper also runs SCA, secrets, IaC, and zero-day passes
 - You may reference duplicate paths from the context only when the chunk provides evidence (e.g. conflicting pins visible in this file while the context lists sibling requirements files).
 - In metadata when it is obvious from the chunk, set "findingLayer" to one of: "application-code" | "web-template" | "manifest-dependencies" | "container-build" | "ci-or-deploy-config".${UNTRUSTED_CONTENT_GUARD}
 
-${SEVERITY_CALIBRATION_PROMPT}`;
+${SEVERITY_CALIBRATION_PROMPT}` +
+  (BENCHMARK_MODE ? BENCHMARK_PROMPT_SUFFIX : "");
 
 interface LlmFinding {
   title: string;

@@ -27,6 +27,8 @@ beforeEach(() => {
     "MOBILE_AGENT_MAX_STEPS",
     "AGENT_SCAN_TIMEOUT_MINUTES",
     "MOBILE_AGENT_TIMEOUT_MINUTES",
+    "WEB_SEARCH_API_KEY",
+    "WEB_SEARCH_PROVIDER",
   ]) {
     delete process.env[k];
   }
@@ -139,5 +141,37 @@ describe("agentScanUnavailableReason", () => {
     process.env.E2B_API_KEY = "e2b";
     const { agentScanUnavailableReason } = await loadConfig();
     expect(agentScanUnavailableReason(ORG_OPENROUTER)).toBeNull();
+  });
+});
+
+describe("web search config (self-gated)", () => {
+  it("is undefined when no WEB_SEARCH_API_KEY is set", async () => {
+    const { webSearchConfigFromEnv } = await loadConfig();
+    expect(webSearchConfigFromEnv()).toBeUndefined();
+  });
+
+  it("defaults to the tavily provider when a key is set", async () => {
+    process.env.WEB_SEARCH_API_KEY = "ws-key";
+    const { webSearchConfigFromEnv } = await loadConfig();
+    expect(webSearchConfigFromEnv()).toEqual({ apiKey: "ws-key", provider: "tavily" });
+  });
+
+  it("honors WEB_SEARCH_PROVIDER=brave", async () => {
+    process.env.WEB_SEARCH_API_KEY = "ws-key";
+    process.env.WEB_SEARCH_PROVIDER = "brave";
+    const { webSearchConfigFromEnv } = await loadConfig();
+    expect(webSearchConfigFromEnv()?.provider).toBe("brave");
+  });
+
+  it("attaches web search to the agent config only when the key is present", async () => {
+    process.env.ENABLE_AGENT_SCAN = "true";
+    process.env.E2B_API_KEY = "e2b";
+    process.env.OPENROUTER_API_KEY = "sk-or";
+    let { agentScanConfig } = await loadConfig();
+    expect(agentScanConfig()!.webSearch).toBeUndefined();
+
+    process.env.WEB_SEARCH_API_KEY = "ws-key";
+    ({ agentScanConfig } = await loadConfig());
+    expect(agentScanConfig()!.webSearch).toEqual({ apiKey: "ws-key", provider: "tavily" });
   });
 });

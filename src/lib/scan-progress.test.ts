@@ -3,7 +3,26 @@ import {
   computeScanProgress,
   reasoningTails,
   REASONING_PROGRESS_KEY,
+  agentScanKeptCount,
 } from "./scan-progress";
+
+describe("agentScanKeptCount", () => {
+  it("returns null when there is no agent-scan progress entry", () => {
+    expect(agentScanKeptCount(null)).toBeNull();
+    expect(agentScanKeptCount({})).toBeNull();
+    expect(agentScanKeptCount({ AGENT_SCAN: { status: "DONE", reported: 14 } })).toBeNull();
+  });
+
+  it("returns the deduped/persisted findingsCount the worker recorded for the agent scanner", () => {
+    // The banner must show this (matches the Findings tab), not the agent's
+    // pre-dedup `reported` number.
+    const scannerProgress = {
+      "agent-scan": { status: "DONE", findingsCount: 10 },
+      AGENT_SCAN: { status: "DONE", outcome: "completed", reported: 14 },
+    };
+    expect(agentScanKeptCount(scannerProgress)).toBe(10);
+  });
+});
 
 describe("reasoningTails", () => {
   it("returns null when there is no __reasoning__ entry", () => {

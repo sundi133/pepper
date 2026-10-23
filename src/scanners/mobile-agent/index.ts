@@ -239,7 +239,10 @@ export const mobileAgentScanner: ScannerPlugin = {
     await ctx.onAgentStatus?.({
       status: "DONE",
       outcome: run.finished ? "completed" : "incomplete",
-      findingsCount: distinct,
+      // Raw pre-dedup count the agent produced; the banner shows the deduped,
+      // persisted count (scannerProgress["agent-scan"].findingsCount) so it
+      // matches the Findings tab, and uses this only for a "N reported" note.
+      reported: distinct,
       note: run.finished
         ? undefined
         : "stopped at the step/time limit; reported what it found so far",

@@ -226,6 +226,80 @@ describe("runMobileAgent", () => {
     expect(kill).toHaveBeenCalledOnce();
   });
 
+  it("iOS: deterministically extracts the IPA and hands the model the artifacts, then streams report_finding", async () => {
+    // The fixed extraction reads these back from the sandbox.
+    read.mockImplementation(async (p: string) => {
+      if (p.endsWith("Info.plist.xml")) return "<plist><dict><key>NSAllowsArbitraryLoads</key><true/></dict></plist>";
+      if (p.endsWith("meta.json")) return '{"bundle_id":"com.example.app","ats":{"NSAllowsArbitraryLoads":true}}';
+      if (p.endsWith("posture.json")) return '{"pie":true,"encrypted":false,"dylibs":["UIKit"]}';
+      if (p.endsWith("strings.txt")) return "CC_MD5\nhttps://api.example.com/v1\nNSUserDefaults\n";
+      return "";
+    });
+    run.mockImplementation(async (cmd: string) => {
+      if (cmd.includes("ios_analyze.py")) {
+        return { exitCode: 0, stdout: "/tmp/out/Payload/App.app/App\nNOT_ENCRYPTED", stderr: "" };
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
+
+    const reported: unknown[] = [];
+    create
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              content: "",
+              reasoning: "",
+              tool_calls: [
+                {
+                  id: "call_ios",
+                  type: "function",
+                  function: {
+                    name: "report_finding",
+                    arguments: JSON.stringify({
+                      title: "App Transport Security disabled",
+                      severity: "HIGH",
+                      file: "Info.plist",
+                      vulnerability: "NSAllowsArbitraryLoads is true",
+                      fix: "Remove the arbitrary-loads exception",
+                      confidence: "high",
+                    }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce(finalResponse([]));
+
+    await runAgentScan(artifactPath, "App.ipa", CFG, {
+      onFinding: (f) => {
+        reported.push(f);
+      },
+    });
+
+    // deterministic pipeline ran: unzip + the analyze script + strings
+    const ranCmds = run.mock.calls.map((c) => c[0] as string);
+    expect(ranCmds.some((c) => c.includes("unzip"))).toBe(true);
+    expect(ranCmds.some((c) => c.includes("ios_analyze.py"))).toBe(true);
+    expect(ranCmds.some((c) => c.includes("strings -a"))).toBe(true);
+    expect(write.mock.calls.some((c) => c[0] === "/tmp/ios_analyze.py")).toBe(true);
+
+    // the model's first user message carries the extracted artifacts as context
+    const userMsg = create.mock.calls[0][0].messages.find(
+      (m: { role: string }) => m.role === "user",
+    );
+    expect(userMsg.content).toContain("has been extracted");
+    expect(userMsg.content).toContain("Info.plist");
+    expect(userMsg.content).toContain("api.example.com"); // bucketed strings
+
+    // and it reported a finding through the same live path as Android
+    expect(reported).toHaveLength(1);
+    expect((reported[0] as { title: string }).title).toBe("App Transport Security disabled");
+    expect(kill).toHaveBeenCalledOnce();
+  });
+
   const toolNames = (call: unknown): string[] =>
     ((call as { tools?: Array<{ function: { name: string } }> }).tools ?? []).map(
       (t) => t.function.name,

@@ -30,6 +30,7 @@ const CFG: AgentScanConfig = {
   e2bApiKey: "e2b-test",
   model: "z-ai/glm-5.3",
   baseUrl: "https://openrouter.ai/api/v1",
+  keySource: "env",
   maxSteps: 50,
   sandboxTimeoutMs: 1_800_000,
   cmdTimeoutMs: 240_000,

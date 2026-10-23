@@ -1,4 +1,5 @@
 import { decryptSecret } from "@/lib/token-encryption";
+import { logger } from "@/lib/logger";
 import type { ScanJobData } from "@/lib/queue";
 
 type RawOrgSettings = {
@@ -50,7 +51,18 @@ export function buildOrgSettingsForJob(
     if (stored.startsWith("enc:")) {
       try {
         return decryptSecret(stored.slice(4));
-      } catch {
+      } catch (err) {
+        // A saved customer secret that won't decrypt usually means the service
+        // building the job has a different TOKEN_ENCRYPTION_KEY/NEXTAUTH_SECRET
+        // than the one that saved it. Silently falling back to the env key hides
+        // this; log it (never the key) so the misconfiguration is visible.
+        logger.warn(
+          {
+            organizationId,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "Could not decrypt the org LLM API key; falling back to env (check TOKEN_ENCRYPTION_KEY/NEXTAUTH_SECRET match between web and worker)",
+        );
         return undefined;
       }
     }

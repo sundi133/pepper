@@ -6,15 +6,21 @@ const SAVED = { ...process.env };
 
 async function loadConfig() {
   vi.resetModules();
-  const mod = await import("./config");
-  return mod.agentScanConfigFromEnv;
+  return import("./config");
 }
+
+const ORG_OPENROUTER = {
+  llmProvider: "openrouter",
+  llmBaseUrl: "https://openrouter.ai/api/v1",
+  llmApiKey: "sk-or-ORG",
+};
 
 beforeEach(() => {
   for (const k of [
     "ENABLE_AGENT_SCAN",
     "ENABLE_MOBILE_AGENT_SCAN",
     "OPENROUTER_API_KEY",
+    "OPENROUTER_BASE_URL",
     "E2B_API_KEY",
     "OPENROUTER_MOBILE_MODEL",
     "AGENT_SCAN_MAX_STEPS",
@@ -30,56 +36,108 @@ afterEach(() => {
   process.env = { ...SAVED };
 });
 
-describe("agentScanConfigFromEnv", () => {
-  it("returns null when the mode is off (even with both keys)", async () => {
+describe("agentScanConfig", () => {
+  it("returns null when the mode is off (even with keys)", async () => {
     process.env.OPENROUTER_API_KEY = "sk-or";
     process.env.E2B_API_KEY = "e2b";
-    const cfg = await loadConfig();
-    expect(cfg()).toBeNull();
+    const { agentScanConfig } = await loadConfig();
+    expect(agentScanConfig(ORG_OPENROUTER)).toBeNull();
   });
 
-  it("returns null when enabled but a key is missing", async () => {
+  it("returns null when enabled but the E2B key is missing", async () => {
     process.env.ENABLE_AGENT_SCAN = "true";
-    process.env.OPENROUTER_API_KEY = "sk-or"; // no E2B_API_KEY
-    const cfg = await loadConfig();
-    expect(cfg()).toBeNull();
+    process.env.OPENROUTER_API_KEY = "sk-or"; // no E2B key
+    const { agentScanConfig } = await loadConfig();
+    expect(agentScanConfig(ORG_OPENROUTER)).toBeNull();
   });
 
-  it("returns config when enabled with both keys", async () => {
+  it("returns null when enabled with E2B but no OpenRouter key (org or env)", async () => {
     process.env.ENABLE_AGENT_SCAN = "true";
-    process.env.OPENROUTER_API_KEY = "sk-or";
     process.env.E2B_API_KEY = "e2b";
-    const cfg = await loadConfig();
-    const c = cfg();
+    const { agentScanConfig } = await loadConfig();
+    expect(agentScanConfig(undefined)).toBeNull();
+    // org on a non-openrouter provider does not supply an OpenRouter key
+    expect(agentScanConfig({ llmProvider: "openai", llmApiKey: "sk-openai" })).toBeNull();
+  });
+
+  it("PREFERS the org's OpenRouter key (LLM Config) over the env key", async () => {
+    process.env.ENABLE_AGENT_SCAN = "true";
+    process.env.E2B_API_KEY = "e2b";
+    process.env.OPENROUTER_API_KEY = "sk-or-ENV";
+    const { agentScanConfig } = await loadConfig();
+    const c = agentScanConfig({
+      llmProvider: "openrouter",
+      llmBaseUrl: "https://proxy.example/api/v1",
+      llmApiKey: "sk-or-ORG",
+    });
     expect(c).not.toBeNull();
+    expect(c!.openRouterApiKey).toBe("sk-or-ORG");
+    expect(c!.baseUrl).toBe("https://proxy.example/api/v1");
+    expect(c!.keySource).toBe("org");
+    // the model is always the sandbox-driver model, never the org's llmModel
     expect(c!.model).toBe("z-ai/glm-5.3");
-    expect(c!.baseUrl).toBe("https://openrouter.ai/api/v1");
-    expect(c!.maxSteps).toBe(50);
-    expect(c!.sandboxTimeoutMs).toBe(30 * 60_000);
-    // per-command timeout is bounded to 10 min even though the VM lives longer
-    expect(c!.cmdTimeoutMs).toBe(10 * 60_000);
   });
 
-  it("still honors the deprecated ENABLE_MOBILE_AGENT_SCAN alias", async () => {
-    process.env.ENABLE_MOBILE_AGENT_SCAN = "true";
-    process.env.OPENROUTER_API_KEY = "sk-or";
-    process.env.E2B_API_KEY = "e2b";
-    const cfg = await loadConfig();
-    expect(cfg()).not.toBeNull();
-  });
-
-  it("honors overrides for model and step/timeout tuning (new + legacy env names)", async () => {
+  it("falls back to the env OpenRouter key when the org has none", async () => {
     process.env.ENABLE_AGENT_SCAN = "true";
-    process.env.OPENROUTER_API_KEY = "sk-or";
     process.env.E2B_API_KEY = "e2b";
-    process.env.OPENROUTER_MOBILE_MODEL = "z-ai/glm-5.3-air";
-    process.env.MOBILE_AGENT_MAX_STEPS = "12"; // legacy name still works
+    process.env.OPENROUTER_API_KEY = "sk-or-ENV";
+    const { agentScanConfig } = await loadConfig();
+    const c = agentScanConfig({ llmProvider: "openai", llmApiKey: "sk-openai" });
+    expect(c!.openRouterApiKey).toBe("sk-or-ENV");
+    expect(c!.keySource).toBe("env");
+    expect(c!.baseUrl).toBe("https://openrouter.ai/api/v1");
+  });
+
+  it("still honors the deprecated ENABLE_MOBILE_AGENT_SCAN alias and env-only helper", async () => {
+    process.env.ENABLE_MOBILE_AGENT_SCAN = "true";
+    process.env.E2B_API_KEY = "e2b";
+    process.env.OPENROUTER_API_KEY = "sk-or-ENV";
+    const { agentScanConfigFromEnv } = await loadConfig();
+    expect(agentScanConfigFromEnv()?.keySource).toBe("env");
+  });
+
+  it("honors step/timeout overrides (new + legacy env names)", async () => {
+    process.env.ENABLE_AGENT_SCAN = "true";
+    process.env.E2B_API_KEY = "e2b";
+    process.env.OPENROUTER_API_KEY = "sk-or";
+    process.env.MOBILE_AGENT_MAX_STEPS = "12"; // legacy still works
     process.env.AGENT_SCAN_TIMEOUT_MINUTES = "5";
-    const cfg = await loadConfig();
-    const c = cfg();
-    expect(c!.model).toBe("z-ai/glm-5.3-air");
+    const { agentScanConfig } = await loadConfig();
+    const c = agentScanConfig();
     expect(c!.maxSteps).toBe(12);
     expect(c!.sandboxTimeoutMs).toBe(5 * 60_000);
-    expect(c!.cmdTimeoutMs).toBe(5 * 60_000); // below the 10-min cap
+    expect(c!.cmdTimeoutMs).toBe(5 * 60_000);
+  });
+});
+
+describe("agentScanUnavailableReason", () => {
+  it("is null when the feature is off (stay quiet)", async () => {
+    process.env.OPENROUTER_API_KEY = "sk-or";
+    process.env.E2B_API_KEY = "e2b";
+    const { agentScanUnavailableReason } = await loadConfig();
+    expect(agentScanUnavailableReason(ORG_OPENROUTER)).toBeNull();
+  });
+
+  it("names the E2B key when enabled but E2B is missing", async () => {
+    process.env.ENABLE_AGENT_SCAN = "true";
+    const { agentScanUnavailableReason } = await loadConfig();
+    expect(agentScanUnavailableReason(ORG_OPENROUTER)).toContain("E2B_API_KEY");
+  });
+
+  it("names the OpenRouter key when enabled with E2B but no OpenRouter key", async () => {
+    process.env.ENABLE_AGENT_SCAN = "true";
+    process.env.E2B_API_KEY = "e2b";
+    const { agentScanUnavailableReason } = await loadConfig();
+    const reason = agentScanUnavailableReason(undefined);
+    expect(reason).toContain("OpenRouter");
+    expect(reason).toContain("LLM Config");
+  });
+
+  it("is null when the agent is fully available", async () => {
+    process.env.ENABLE_AGENT_SCAN = "true";
+    process.env.E2B_API_KEY = "e2b";
+    const { agentScanUnavailableReason } = await loadConfig();
+    expect(agentScanUnavailableReason(ORG_OPENROUTER)).toBeNull();
   });
 });

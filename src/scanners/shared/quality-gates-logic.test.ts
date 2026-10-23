@@ -69,10 +69,13 @@ describe("quality gates and agent deep-scan (binary) findings", () => {
     expect(kept.map((x) => x.severity).sort()).toEqual(["HIGH", "MEDIUM"]);
   });
 
-  it("drops a LOW-confidence (0.3) agent finding below the relaxed floor", () => {
+  it("keeps a LOW-confidence (0.3) agent finding — the mobile/agent path has NO confidence floor", () => {
+    // The sandboxed binary review has no source for a second validation pass, so
+    // every finding it reports is surfaced (matching the standalone agent's
+    // recall); dedup + the other gates + the reviewer judge. Source SAST keeps 0.75.
     expect(
       applyQualityGates([agentFinding({ severity: "LOW", confidence: 0.3 })]),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
   });
 
   it("keeps an agent finding with no line number and no written fix", () => {

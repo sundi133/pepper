@@ -33,11 +33,6 @@ const PLACEHOLDER_TEXT =
 // literal (mirrors AGENT_SCANNER_KEY in mobile-agent/index.ts) so this shared
 // gate module does not pull in the heavy E2B agent runtime.
 const AGENT_SCANNER_KEY = "agent-scan";
-// Agent confidence maps high→0.9, medium→0.6, low→0.3 (confidenceOf in
-// mobile-agent/index.ts). A 0.5 floor keeps medium+high and still drops
-// low/noise, without inflating the agent's honest confidence values.
-const AGENT_MIN_CONFIDENCE = 0.5;
-
 /**
  * A finding from the agent "deep scan" of an uploaded binary artifact. The
  * carve-outs below are scoped strictly to these findings so the real
@@ -104,10 +99,13 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
     // SCA findings are database-confirmed from OSV (confidence=1.0) and are
     // not LLM-generated — skip the LLM confidence floor so triaged findings
     // whose confidence was adjusted by the AI triage are never silently dropped.
-    if (f.scanner !== "SCA" && !unjudgedLogic) {
-      // Agent deep-scan findings use a lower floor (binary review maps
-      // medium→0.6); source SAST_LLM keeps the 0.75 LLM floor.
-      const floor = agent ? AGENT_MIN_CONFIDENCE : confidenceFloor(f.scanner);
+    // The mobile/agent deep scan is ALSO exempt from the confidence floor: it is
+    // a sandboxed binary review (no source for a second validation pass), so we
+    // surface every finding it reports and let dedup + the other gates + the
+    // reviewer judge — matching the standalone agent's recall. Source SAST_LLM
+    // keeps the 0.75 LLM floor.
+    if (f.scanner !== "SCA" && !unjudgedLogic && !agent) {
+      const floor = confidenceFloor(f.scanner);
       if ((f.confidence ?? 0) < floor) return false;
     }
 

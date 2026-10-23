@@ -249,6 +249,169 @@ async function webSearch(
   }
 }
 
+// ─── Deterministic iOS pre-extraction ─────────────────────────────────────
+// iOS on Linux has no decompiler and the Mach-O tools the model reaches for
+// (otool/class-dump/radare2) are not in the VM — pure autonomy flails and hits
+// the step cap. So for an .ipa we run a FIXED extraction (ported from the proven
+// e2b_ipa_demo.py prototype) and hand the model real artifacts to review.
+
+/** Runs inside the sandbox: parse Info.plist (plistlib handles binary plists) + Mach-O posture via macholib. */
+const IOS_ANALYZE_PY = String.raw`
+import plistlib, glob, os, json
+try:
+    from macholib.MachO import MachO
+    from macholib import mach_o as mo
+except Exception:
+    MachO = None
+apps = glob.glob('/tmp/out/Payload/*.app')
+app = apps[0] if apps else None
+os.makedirs('/tmp/ios', exist_ok=True)
+pl = {}
+if app:
+    try:
+        with open(os.path.join(app, 'Info.plist'), 'rb') as f:
+            pl = plistlib.load(f)
+    except Exception:
+        pl = {}
+with open('/tmp/ios/Info.plist.xml', 'wb') as f:
+    f.write(plistlib.dumps(pl))
+exe = pl.get('CFBundleExecutable') or (os.path.basename(app)[:-4] if app else '')
+exe_path = os.path.join(app, exe) if app else ''
+encrypted, pie, dylibs = False, None, []
+if MachO and exe_path and os.path.exists(exe_path):
+    try:
+        m = MachO(exe_path)
+        for hdr in m.headers:
+            pie = bool(hdr.header.flags & mo.MH_PIE)
+            for lc, cmd, data in hdr.commands:
+                if lc.cmd in (mo.LC_LOAD_DYLIB, getattr(mo, 'LC_LOAD_WEAK_DYLIB', -1)):
+                    try:
+                        dylibs.append(bytes(data).split(b'\x00', 1)[0].decode('utf-8', 'ignore'))
+                    except Exception:
+                        pass
+                if lc.cmd in (getattr(mo, 'LC_ENCRYPTION_INFO', -1), getattr(mo, 'LC_ENCRYPTION_INFO_64', -1)):
+                    if getattr(cmd, 'cryptid', 0):
+                        encrypted = True
+    except Exception as e:
+        print('MACHO_ERR', e)
+with open('/tmp/ios/posture.json', 'w') as f:
+    json.dump({'exe': exe_path, 'pie': pie, 'encrypted': encrypted, 'dylibs': sorted(set(dylibs))}, f, indent=2, default=str)
+meta = {
+    'app': app, 'exe': exe_path,
+    'bundle_id': pl.get('CFBundleIdentifier'), 'min_os': pl.get('MinimumOSVersion'),
+    'url_schemes': [t.get('CFBundleURLSchemes') for t in pl.get('CFBundleURLTypes', []) if isinstance(t, dict)],
+    'ats': pl.get('NSAppTransportSecurity'),
+    'permissions': {k: v for k, v in pl.items() if str(k).startswith('NS') and str(k).endswith('UsageDescription')},
+}
+with open('/tmp/ios/meta.json', 'w') as f:
+    json.dump(meta, f, indent=2, default=str)
+print(exe_path)
+print('ENCRYPTED' if encrypted else 'NOT_ENCRYPTED')
+`;
+
+const IOS_STRING_BUCKETS: Record<string, RegExp> = {
+  "secrets/urls":
+    /(https?:\/\/[^ ]+|api[_-]?key|apikey|secret|token|password|passwd|AKIA[0-9A-Z]{16}|sk_live_|sk_test_|AIza[0-9A-Za-z_-]{20,})/i,
+  crypto: /(kCCAlgorithmDES|ECB|CC_MD5|CC_SHA1|CCCrypt|CommonCrypto|arc4random|kSecAttrAccessibleAlways)/i,
+  "sql/webview":
+    /(sqlite3_exec|sqlite3_prepare|SELECT .* FROM|UIWebView|evaluateJavaScript|allowFileAccess|loadFileURL)/i,
+  "storage/paths":
+    /(NSUserDefaults|NSFileProtectionNone|\/var\/mobile|\/Documents\/|\.sqlite|\.plist|Keychain|SecItem)/i,
+  "apis/selectors":
+    /(_system|strcpy|strcat|sprintf|memcpy|NSLog|UIPasteboard|jailbr|cydia|\/bin\/|\/Applications\/|fopen)/i,
+};
+
+function bucketStrings(all: string): string {
+  const lines = all.split("\n");
+  const parts: string[] = [];
+  for (const [name, pat] of Object.entries(IOS_STRING_BUCKETS)) {
+    const hits = Array.from(new Set(lines.filter((l) => pat.test(l)))).slice(0, 150);
+    if (hits.length) parts.push(`## strings: ${name}\n${hits.join("\n")}`);
+  }
+  return parts.join("\n\n");
+}
+
+/** Runs a command, swallowing E2B's non-zero-exit throw into a normal result (fixed pipeline continues). */
+async function safeRun(
+  sandbox: SandboxLike,
+  cmd: string,
+  timeoutMs: number,
+): Promise<CommandResultLike> {
+  try {
+    return await sandbox.commands.run(cmd, { timeoutMs, requestTimeoutMs: timeoutMs });
+  } catch (err) {
+    const e = err as Partial<CommandResultLike>;
+    return { exitCode: e.exitCode ?? 1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
+  }
+}
+
+async function readSafe(sandbox: SandboxLike, path: string): Promise<string> {
+  try {
+    const c = await sandbox.files.read(path);
+    return typeof c === "string" ? c : String(c ?? "");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Deterministically unpacks an .ipa and extracts the review artifacts (Info.plist,
+ * Mach-O posture, bucketed strings), returning a context block for the model, or
+ * null if the unpack produced nothing to review. Streams progress to `emit`.
+ */
+async function extractIpaContext(
+  sandbox: SandboxLike,
+  remotePath: string,
+  timeoutMs: number,
+  emit: (s: string) => void,
+): Promise<string | null> {
+  const toolTimeout = Math.min(timeoutMs, 10 * 60_000);
+  emit("\n$ (iOS) installing unzip + binutils + macholib\n");
+  await safeRun(
+    sandbox,
+    "sudo apt-get update -qq && sudo apt-get install -y -qq unzip binutils python3 python3-pip",
+    toolTimeout,
+  );
+  await safeRun(
+    sandbox,
+    "pip3 install -q --break-system-packages macholib 2>/dev/null || pip3 install -q macholib",
+    Math.min(timeoutMs, 5 * 60_000),
+  );
+  emit("\n$ (iOS) unzip IPA + parse Info.plist / Mach-O\n");
+  await safeRun(
+    sandbox,
+    `rm -rf /tmp/out && mkdir -p /tmp/out && unzip -q -o '${remotePath}' -d /tmp/out`,
+    timeoutMs,
+  );
+  await sandbox.files.write("/tmp/ios_analyze.py", IOS_ANALYZE_PY);
+  const analyze = await safeRun(sandbox, "python3 /tmp/ios_analyze.py", timeoutMs);
+  const lines = (analyze.stdout || "").trim().split("\n");
+  const exe = lines[0]?.trim() || "";
+  const encrypted = lines.includes("ENCRYPTED");
+
+  const infoPlist = await readSafe(sandbox, "/tmp/ios/Info.plist.xml");
+  const posture = await readSafe(sandbox, "/tmp/ios/posture.json");
+  const meta = await readSafe(sandbox, "/tmp/ios/meta.json");
+  if (!infoPlist && !meta && !exe) return null; // nothing extracted — let the model try autonomously
+
+  emit("\n$ (iOS) strings on the main binary\n");
+  if (exe) {
+    await safeRun(sandbox, `strings -a -n 6 '${exe}' > /tmp/ios/strings.txt 2>/dev/null || true`, timeoutMs);
+  }
+  const allStrings = await readSafe(sandbox, "/tmp/ios/strings.txt");
+  const buckets = bucketStrings(allStrings);
+
+  return [
+    `Binary FairPlay-encrypted: ${encrypted}${encrypted ? " (strings/symbols will be limited)" : ""}`,
+    meta && `## Info.plist summary (ATS / URL schemes / permissions)\n${meta.slice(0, 4000)}`,
+    posture && `## Mach-O posture (PIE / encryption / linked dylibs)\n${posture.slice(0, 4000)}`,
+    infoPlist && `## Info.plist (full)\n${infoPlist.slice(0, 12000)}`,
+    buckets && `# Interesting strings & symbol/selector names from the binary\n${buckets.slice(0, 20000)}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 async function dispatchTool(
   sandbox: SandboxLike,
   name: string,
@@ -317,18 +480,40 @@ export async function runAgentScan(
     if (s) opts.onReasoning?.(s);
   };
 
+  let reasoningAll = "";
+  const trace = (s: string) => {
+    if (!s) return;
+    reasoningAll += s;
+    emit(s);
+  };
+
   try {
     // Stream the artifact into the VM — a Blob reads from disk lazily, so a
     // large upload is not buffered in the worker's memory.
     const blob = await fs.openAsBlob(localArtifactPath);
     await sandbox.files.write(remotePath, blob);
 
+    // iOS: deterministic extraction up front (the model can't guess Mach-O tools
+    // on Linux). Android and everything else stay fully autonomous.
+    let userContent = `Review ${remotePath} and report the security findings. Call report_finding for each confirmed issue as you verify it, then end with the final findings JSON.`;
+    if (artifactName.toLowerCase().endsWith(".ipa")) {
+      const iosContext = await extractIpaContext(sandbox, remotePath, cfg.cmdTimeoutMs, trace);
+      if (iosContext) {
+        userContent =
+          `An iOS .ipa (${remotePath}) has been extracted for you in the sandbox. iOS static review on ` +
+          `Linux is config/metadata/strings level (no decompiler) — that is expected, not a failure. ` +
+          `Review the extracted artifacts below and call report_finding for EACH confirmed issue; use a ` +
+          `file path like "Info.plist" or the binary's name so the finding attaches to the app. You may ` +
+          `read more under /tmp/ios and /tmp/out with read_file/run_command. Finish with the final ` +
+          `findings JSON.\n\n${iosContext}`;
+      }
+    }
+
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: "system", content: agentScanSystemPrompt(remotePath) },
-      { role: "user", content: `Review ${remotePath} and report the security findings as JSON.` },
+      { role: "user", content: userContent },
     ];
 
-    let reasoningAll = "";
     let steps = 0;
 
     // Offer web_search only when a provider key is configured (self-gated).

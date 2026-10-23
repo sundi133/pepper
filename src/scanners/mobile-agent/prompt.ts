@@ -40,11 +40,11 @@ export function agentScanSystemPrompt(artifactPath: string): string {
     "what the file actually is, and generalize to whatever you are given.\n\n" +
     "Common cases, as EXAMPLES only (not exhaustive — generalize):\n" +
     "- Android APK/AAB: jadx to decompile; apktool to decode the binary manifest/resources.\n" +
-    "- iOS IPA: unzip; read Info.plist, entitlements, embedded frameworks, Mach-O strings/load commands.\n" +
+    "- iOS IPA (compiled Mach-O; this is a Linux sandbox with NO Mach-O decompiler — do NOT reach for otool/class-dump/radare2): `unzip` the IPA; parse Info.plist with `python3` + plistlib (handles binary plists); get the Mach-O posture (PIE, FairPlay cryptid, linked dylibs) with `macholib` (`pip install macholib`); run `strings -a -n 6` on the main binary — symbol and ObjC-selector names live in the string table, so this recovers the API signal. iOS review on Linux is config/metadata/strings level, which is expected.\n" +
     "- JVM JAR/WAR/EAR: unzip, then a Java decompiler (CFR, procyon, or vineflower); read manifests/configs.\n" +
     "- .NET DLL/EXE: ilspycmd (dotnet tool) to recover C#; inspect config/resources.\n" +
     "- Android DEX: jadx (or dex2jar + a Java decompiler).\n" +
-    "- Native ELF executables / .so / firmware images: strings, objdump, nm, readelf, binwalk, radare2.\n" +
+    "- Native ELF executables / .so / firmware images: prefer `strings`, `objdump`, `nm`, `readelf`, `binwalk` (apt-installable); use radare2 only if it actually installs, otherwise fall back to objdump/nm/strings.\n" +
     "- Packed/obfuscated apps and generic archives (.zip/.tar/.7z/.gz): unpack, then recurse into what you find.\n" +
     "Install whatever the real artifact needs, including tools not listed here. The " +
     "file may be large: stream/extract it efficiently and focus on first-party " +

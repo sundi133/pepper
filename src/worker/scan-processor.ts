@@ -933,7 +933,7 @@ Schema:
         // completed/incomplete/failed) so it survives the ephemeral sandbox and
         // shows on the scan page. Best-effort: never fail the scan over it.
         try {
-          await setAgentScanProgress(scanId, { findingsCount: 0, ...entry });
+          await setAgentScanProgress(scanId, entry);
         } catch (err) {
           log.warn({ err }, "Could not record agent deep scan status");
         }

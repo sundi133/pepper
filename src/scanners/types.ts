@@ -86,7 +86,8 @@ export interface ScanContext {
     status: "RUNNING" | "DONE";
     outcome?: "completed" | "incomplete" | "failed" | "skipped";
     sandboxId?: string;
-    findingsCount?: number;
+    /** Raw pre-dedup count the agent reported; the banner shows the deduped count. */
+    reported?: number;
     note?: string;
   }) => Promise<void>;
 }

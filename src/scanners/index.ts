@@ -7,6 +7,7 @@ import {
 } from "./types";
 import { sastLlmScanner, sastPatternScanner } from "./sast";
 import { mobileLlmScanner } from "./mobile";
+import { mobileAgentScanner } from "./mobile-agent";
 import { scaScanner, parseDependencies } from "./sca";
 import { secretsPatternScanner, secretsLlmScanner } from "./secrets";
 import { iacScanner } from "./iac";
@@ -68,6 +69,10 @@ export function getScanners(
     // (uploaded .apk) and OPENROUTER_API_KEY is set, so non-mobile scans are
     // unaffected.
     scanners.push(mobileLlmScanner);
+    // Mobile agent deep scan (opt-in): no-ops unless ENABLE_MOBILE_AGENT_SCAN is
+    // set with E2B + OpenRouter keys AND the scan has an uploaded mobile app, so
+    // non-mobile scans — and mobile scans with the mode off — are untouched.
+    scanners.push(mobileAgentScanner);
   }
 
   if (includeSca) {

@@ -57,6 +57,29 @@ function toolCallResponse(command: string, reasoning = "") {
   };
 }
 
+/** A response with one web_search tool call. */
+function webSearchResponse(query: string) {
+  return {
+    choices: [
+      {
+        message: {
+          content: "",
+          reasoning: "",
+          tool_calls: [
+            {
+              id: "call_ws",
+              type: "function",
+              function: { name: "web_search", arguments: JSON.stringify({ query }) },
+            },
+          ],
+        },
+      },
+    ],
+  };
+}
+
+const WS_CFG = { apiKey: "ws-key", provider: "tavily" as const };
+
 /** A final response (no tool calls) carrying the findings JSON. */
 function finalResponse(findings: unknown[], reasoning = "") {
   return {
@@ -197,5 +220,50 @@ describe("runMobileAgent", () => {
     expect(result.finished).toBe(false);
     expect(result.content).toBe("");
     expect(kill).toHaveBeenCalledOnce();
+  });
+
+  const toolNames = (call: unknown): string[] =>
+    ((call as { tools?: Array<{ function: { name: string } }> }).tools ?? []).map(
+      (t) => t.function.name,
+    );
+
+  it("offers only run_command + read_file when no web search provider is configured", async () => {
+    run.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    create.mockResolvedValueOnce(finalResponse([]));
+    await runAgentScan(artifactPath, "app.apk", CFG, {});
+    expect(toolNames(create.mock.calls[0][0])).toEqual(["run_command", "read_file"]);
+  });
+
+  it("offers a web_search tool when a provider key is configured", async () => {
+    create.mockResolvedValueOnce(finalResponse([]));
+    await runAgentScan(artifactPath, "app.apk", { ...CFG, webSearch: WS_CFG }, {});
+    expect(toolNames(create.mock.calls[0][0])).toContain("web_search");
+  });
+
+  it("runs a web_search tool call via the provider fetch and feeds results back", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [{ title: "CVE-2021-44228 (Log4Shell)", url: "https://x", content: "RCE in log4j" }],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      create
+        .mockResolvedValueOnce(webSearchResponse("log4j 2.14 CVE"))
+        .mockResolvedValueOnce(finalResponse([]));
+      await runAgentScan(artifactPath, "app.apk", { ...CFG, webSearch: WS_CFG }, {});
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://api.tavily.com/search",
+        expect.objectContaining({ method: "POST" }),
+      );
+      const toolMsg = create.mock.calls[1][0].messages.find(
+        (m: { role: string }) => m.role === "tool",
+      );
+      expect(toolMsg.content).toContain("CVE-2021-44228");
+      expect(kill).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

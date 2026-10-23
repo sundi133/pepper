@@ -57,6 +57,12 @@ export const createScanSchema = z
      * OpenAI-hosted container (sends the app to OpenAI with the org's key).
      */
     aiMobileReview: z.boolean().optional(),
+    /**
+     * Also run the glm-5.3 + E2B agent "deep scan" on an uploaded mobile app.
+     * Unlike aiMobileReview this is a genuine per-upload choice: it runs only
+     * when the box is checked (and the instance has the mode + keys enabled).
+     */
+    mobileAgentScan: z.boolean().optional(),
   })
   .refine((data) => !(data.repoUrl && data.svnUrl), {
     message: "Cannot specify both repoUrl and svnUrl",
@@ -251,6 +257,11 @@ export async function queueNewScan(params: {
     // uploaded app — not a user choice; the non-mobile LLM Config is separate.
     aiMobileReview:
       !!fileBuffer && mobilePlatformOf(originalFileName) !== null,
+    // Agent deep scan is a per-upload opt-in (only when the box is checked).
+    mobileAgentScan:
+      !!fileBuffer &&
+      mobilePlatformOf(originalFileName) !== null &&
+      !!scanParams.mobileAgentScan,
     orgSettings: buildOrgSettingsForJob(orgSettings, project.organizationId),
     buildGate: project.buildGate
       ? {

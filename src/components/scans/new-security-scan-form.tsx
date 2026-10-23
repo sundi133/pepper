@@ -86,6 +86,7 @@ export function NewSecurityScanForm({
   const [svnPassword, setSvnPassword] = useState("");
   const [legalConfirm, setLegalConfirm] = useState(false);
   const [aiMobileReview, setAiMobileReview] = useState(false);
+  const [mobileAgentScan, setMobileAgentScan] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<CreateScanFieldErrors>({});
   const [touched, setTouched] = useState<{ project?: boolean; source?: boolean }>(
     {},
@@ -177,6 +178,7 @@ export function NewSecurityScanForm({
         data.newProjectName = newProjectName.trim();
       }
       if (aiMobileReviewOn) data.aiMobileReview = true;
+      if (uploadPlatform !== null && mobileAgentScan) data.mobileAgentScan = true;
       formData.append("data", JSON.stringify(data));
       if (sourceMode === "upload" && file) formData.append("file", file);
 
@@ -538,6 +540,26 @@ export function NewSecurityScanForm({
                         Sends the app to OpenAI using your organization&apos;s OpenAI key from LLM Config;
                         usage is billed to that key.
                         {uploadPlatform === "ios" ? " Required for .ipa files: iOS apps can't be decompiled." : ""}
+                      </span>
+                    </Label>
+                  </div>
+                )}
+                {uploadPlatform && (
+                  <div className="mt-2 flex items-start gap-2 rounded-md border border-border bg-muted/40 p-2.5">
+                    <Checkbox
+                      id="nss-mobile-agent-scan"
+                      checked={mobileAgentScan}
+                      onCheckedChange={(c) => setMobileAgentScan(c === true)}
+                      className="mt-0.5"
+                    />
+                    <Label
+                      htmlFor="nss-mobile-agent-scan"
+                      className="cursor-pointer text-sm font-normal leading-snug text-foreground"
+                    >
+                      Also run the agent deep scan on this {MOBILE_PLATFORM_LABELS[uploadPlatform]} app
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        glm-5.3 drives an E2B cloud sandbox to install tools, decompile and inspect the app.
+                        Runs only when enabled on this instance (E2B + OpenRouter keys); otherwise it is skipped.
                       </span>
                     </Label>
                   </div>

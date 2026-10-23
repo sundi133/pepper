@@ -810,6 +810,7 @@ Schema:
       decompiledFileList: decompiledFiles,
       scanType,
       scanId,
+      mobileAgentScan: job.data.mobileAgentScan === true,
       orgSettings,
       signal: abortController.signal,
       waitIfPaused: assertScanActive,

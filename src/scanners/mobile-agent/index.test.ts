@@ -42,11 +42,12 @@ let workDir: string;
 const onReasoning = vi.fn();
 const onProgress = vi.fn();
 
-function ctx(fileList: string[]): ScanContext {
+function ctx(fileList: string[], mobileAgentScan = true): ScanContext {
   return {
     workDir,
     fileList,
     scanType: "FULL",
+    mobileAgentScan,
     orgSettings: {
       llmProvider: "openai",
       llmBaseUrl: "",
@@ -86,6 +87,14 @@ afterEach(() => {
 });
 
 describe("mobileAgentScanner", () => {
+  it("no-ops when the per-upload toggle is off, even on a mobile upload", async () => {
+    writeFile("app.apk", "PK\u0003\u0004 fake");
+    const out = await mobileAgentScanner.scan(ctx(["app.apk"], false));
+    expect(out).toEqual([]);
+    expect(mobileAgentConfigFromEnv).not.toHaveBeenCalled();
+    expect(runMobileAgent).not.toHaveBeenCalled();
+  });
+
   it("no-ops when the scan has no mobile artifact (non-mobile scan)", async () => {
     writeFile("src/app.ts", "const x = 1;");
     const out = await mobileAgentScanner.scan(ctx(["src/app.ts"]));

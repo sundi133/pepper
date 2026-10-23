@@ -106,3 +106,25 @@ describe("POST /api/scans GPT-6 Astra mobile review", () => {
     expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: false });
   });
 });
+
+describe("POST /api/scans mobile agent deep scan (per-upload opt-in)", () => {
+  it("passes the agent deep-scan request for a mobile app when the box is checked", async () => {
+    const res = await upload("app-release.apk", "application/vnd.android.package-archive", {
+      mobileAgentScan: true,
+    });
+    expect(res.status).toBe(201);
+    expect(queueAdd.mock.calls[0][1]).toMatchObject({ mobileAgentScan: true });
+  });
+
+  it("does NOT request the agent deep scan when the box is left unchecked (unlike GPT-6 Astra)", async () => {
+    const res = await upload("app-release.apk", "application/vnd.android.package-archive");
+    expect(res.status).toBe(201);
+    expect(queueAdd.mock.calls[0][1]).toMatchObject({ mobileAgentScan: false });
+  });
+
+  it("ignores the agent deep-scan request for files that are not mobile apps", async () => {
+    const res = await upload("service.jar", "application/java-archive", { mobileAgentScan: true });
+    expect(res.status).toBe(201);
+    expect(queueAdd.mock.calls[0][1]).toMatchObject({ mobileAgentScan: false });
+  });
+});

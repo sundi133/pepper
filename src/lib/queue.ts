@@ -122,6 +122,12 @@ export interface ScanJobData {
   useOrgAzureDevOpsToken?: boolean;
   /** Review the uploaded mobile app with GPT-6 Astra (lib/mobile-ai-review). */
   aiMobileReview?: boolean;
+  /**
+   * Run the glm-5.3 + E2B agent "deep scan" on the uploaded mobile app
+   * (scanners/mobile-agent). Per-upload opt-in; still requires the instance to
+   * have ENABLE_MOBILE_AGENT_SCAN + the E2B/OpenRouter keys, else it no-ops.
+   */
+  mobileAgentScan?: boolean;
   orgSettings: {
     llmProvider: string;
     llmBaseUrl: string;

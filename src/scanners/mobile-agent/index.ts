@@ -92,6 +92,9 @@ function ruleIdFor(category: string | undefined): string {
 export const mobileAgentScanner: ScannerPlugin = {
   name: SCANNER_KEY,
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
+    // Per-upload opt-in: the user asked for the deep scan on this upload.
+    if (ctx.mobileAgentScan !== true) return [];
+
     const artifact = findMobileArtifact(ctx);
     if (!artifact) return []; // not a mobile upload — no-op
 

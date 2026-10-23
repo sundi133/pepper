@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, requireRole, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, requireRole, getActiveOrgId } from "@/lib/auth-guard";
 import { getLlmConfig } from "@/lib/llm-gateway";
 import { getReportQueue } from "@/lib/queue";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
@@ -27,7 +27,7 @@ export async function POST(
 ) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
   const role = await requireRole(orgId, "DEVELOPER");
   if ("error" in role) return role.error;
@@ -127,7 +127,7 @@ export async function GET(
 ) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
 
   const { scanId } = await params;

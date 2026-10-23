@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, requireRole, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, requireRole, getActiveOrgId } from "@/lib/auth-guard";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 
 type Params = { params: Promise<{ scanId: string; reportId: string }> };
@@ -9,7 +9,7 @@ type Params = { params: Promise<{ scanId: string; reportId: string }> };
 export async function GET(_req: NextRequest, { params }: Params) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
 
   const { scanId, reportId } = await params;
@@ -48,7 +48,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function DELETE(req: NextRequest, { params }: Params) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
   const role = await requireRole(orgId, "DEVELOPER");
   if ("error" in role) return role.error;

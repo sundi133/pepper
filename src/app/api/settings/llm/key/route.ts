@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
+import { requireAuth, getActiveOrgId, requireRole } from "@/lib/auth-guard";
 
 export async function DELETE(req: Request) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId)
     return NextResponse.json({ error: "No organization" }, { status: 403 });
 

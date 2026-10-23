@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
+import { requireAuth, getActiveOrgId, requireRole } from "@/lib/auth-guard";
 import {
   IntegrationNotFoundError,
   findSameTargetIntegration,
@@ -13,7 +13,7 @@ import { boardsConfigError } from "@/lib/integrations/azure-boards";
 export async function GET() {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
@@ -24,7 +24,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }

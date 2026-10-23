@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
+import { requireAuth, getActiveOrgId, requireRole } from "@/lib/auth-guard";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import { TICKET_FINDING_SELECT } from "@/lib/integrations/finding-tickets";
 import {
@@ -31,7 +31,7 @@ async function scanInOrg(scanId: string, orgId: string) {
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ scanId: string }> }) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
   const { scanId } = await params;
   if (!(await scanInOrg(scanId, orgId))) return NextResponse.json({ error: "Scan not found" }, { status: 404 });
@@ -57,7 +57,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ sca
 export async function POST(req: NextRequest, { params }: { params: Promise<{ scanId: string }> }) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
   // Creates tickets in external systems, like the single-finding action.
   const roleAuth = await requireRole(orgId, "DEVELOPER");

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
+import { requireAuth, getActiveOrgId, requireRole } from "@/lib/auth-guard";
 import { decryptSecret } from "@/lib/token-encryption";
 import { notifySlackFinding } from "@/lib/integrations/slack";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
@@ -71,7 +71,7 @@ export async function GET(
 ) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
@@ -110,7 +110,7 @@ export async function POST(
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }

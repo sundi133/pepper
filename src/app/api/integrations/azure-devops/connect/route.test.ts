@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 vi.mock("@/lib/auth-guard", () => ({
   requireAuth: vi.fn(async () => ({ session: { user: { id: "u1" } } })),
   getDefaultOrgId: vi.fn(() => "o1"),
+  getActiveOrgId: vi.fn(async () => "o1"),
   requireRole: vi.fn(async () => ({ session: {}, membership: { role: "ADMIN" } })),
 }));
 const save = vi.fn(async () => undefined);

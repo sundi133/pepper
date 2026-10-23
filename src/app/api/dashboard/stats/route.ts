@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getActiveOrgId } from "@/lib/auth-guard";
 import { latestCompletedScanIds } from "@/lib/latest-scans";
 
 export async function GET() {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId)
     return NextResponse.json({ error: "No organization" }, { status: 403 });
 

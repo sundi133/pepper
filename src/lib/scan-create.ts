@@ -16,7 +16,6 @@ import {
 } from "@/lib/project-name-from-source";
 import { API_CREATE_SCAN_TYPES } from "@/lib/scan-types";
 import type { ScanActionResult } from "@/lib/scan-rescan";
-import { mobilePlatformOf } from "@/lib/mobile-platform";
 
 /** Strip HTML tags and trim whitespace to prevent stored XSS. */
 function sanitizeText(value: string): string {
@@ -52,17 +51,6 @@ export const createScanSchema = z
       .optional(),
     svnUsername: z.string().optional(),
     svnPassword: z.string().optional(),
-    /**
-     * Also review an uploaded .apk / .aab / .ipa with GPT-6 Astra in an
-     * OpenAI-hosted container (sends the app to OpenAI with the org's key).
-     */
-    aiMobileReview: z.boolean().optional(),
-    /**
-     * Also run the glm-5.3 + E2B agent "deep scan" on an uploaded mobile app.
-     * Unlike aiMobileReview this is a genuine per-upload choice: it runs only
-     * when the box is checked (and the instance has the mode + keys enabled).
-     */
-    mobileAgentScan: z.boolean().optional(),
   })
   .refine((data) => !(data.repoUrl && data.svnUrl), {
     message: "Cannot specify both repoUrl and svnUrl",
@@ -253,15 +241,6 @@ export async function queueNewScan(params: {
     svnPassword: scanParams.svnPassword,
     branch: scanParams.branch,
     useOrgGithubToken: useOAuthClone,
-    // Mobile reviews (gpt-6-astra + glm-5.3, stored keys) always run for an
-    // uploaded app — not a user choice; the non-mobile LLM Config is separate.
-    aiMobileReview:
-      !!fileBuffer && mobilePlatformOf(originalFileName) !== null,
-    // Agent deep scan is a per-upload opt-in (only when the box is checked).
-    mobileAgentScan:
-      !!fileBuffer &&
-      mobilePlatformOf(originalFileName) !== null &&
-      !!scanParams.mobileAgentScan,
     orgSettings: buildOrgSettingsForJob(orgSettings, project.organizationId),
     buildGate: project.buildGate
       ? {

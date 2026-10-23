@@ -1,16 +1,16 @@
 /**
- * Environment-driven config for the mobile agent deep scan. Returns null unless
- * the feature is explicitly enabled AND both the E2B and OpenRouter keys are
- * present — which is how the scanner self-gates to no-op (so non-mobile and
- * existing mobile scans are byte-for-byte unchanged when the mode is off).
+ * Environment-driven config for the agent deep scan. Returns null unless the
+ * feature is explicitly enabled AND both the E2B and OpenRouter keys are
+ * present — which is how the processor decides "agent-only" vs. the fallback
+ * pipeline, and how the scanner self-gates to a no-op.
  */
 import {
-  ENABLE_MOBILE_AGENT_SCAN,
-  MOBILE_AGENT_MAX_STEPS,
-  MOBILE_AGENT_TIMEOUT_MINUTES,
+  ENABLE_AGENT_SCAN,
+  AGENT_SCAN_MAX_STEPS,
+  AGENT_SCAN_TIMEOUT_MINUTES,
 } from "@/lib/constants";
 
-export interface MobileAgentConfig {
+export interface AgentScanConfig {
   /** OpenRouter key the glm-5.3 function-calling loop authenticates with. */
   openRouterApiKey: string;
   /** E2B cloud key the sandbox is created under. */
@@ -30,17 +30,17 @@ const MAX_CMD_TIMEOUT_MS = 10 * 60_000;
 
 /**
  * Reads config from the environment. Returns null when the mode is off or a
- * required key is missing, so the scanner no-ops.
+ * required key is missing.
  */
-export function mobileAgentConfigFromEnv(): MobileAgentConfig | null {
-  if (!ENABLE_MOBILE_AGENT_SCAN) return null;
+export function agentScanConfigFromEnv(): AgentScanConfig | null {
+  if (!ENABLE_AGENT_SCAN) return null;
   const openRouterApiKey = process.env.OPENROUTER_API_KEY?.trim();
   const e2bApiKey = process.env.E2B_API_KEY?.trim();
   if (!openRouterApiKey || !e2bApiKey) return null;
 
   const timeoutMin =
-    Number.isFinite(MOBILE_AGENT_TIMEOUT_MINUTES) && MOBILE_AGENT_TIMEOUT_MINUTES > 0
-      ? MOBILE_AGENT_TIMEOUT_MINUTES
+    Number.isFinite(AGENT_SCAN_TIMEOUT_MINUTES) && AGENT_SCAN_TIMEOUT_MINUTES > 0
+      ? AGENT_SCAN_TIMEOUT_MINUTES
       : 30;
   const sandboxTimeoutMs = timeoutMin * 60_000;
 
@@ -51,11 +51,21 @@ export function mobileAgentConfigFromEnv(): MobileAgentConfig | null {
     baseUrl:
       process.env.OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1",
     maxSteps:
-      Number.isFinite(MOBILE_AGENT_MAX_STEPS) && MOBILE_AGENT_MAX_STEPS > 0
-        ? MOBILE_AGENT_MAX_STEPS
+      Number.isFinite(AGENT_SCAN_MAX_STEPS) && AGENT_SCAN_MAX_STEPS > 0
+        ? AGENT_SCAN_MAX_STEPS
         : 50,
     sandboxTimeoutMs,
     // A single command should never outlast the VM lease.
     cmdTimeoutMs: Math.min(sandboxTimeoutMs, MAX_CMD_TIMEOUT_MS),
   };
 }
+
+/** Cheap "is the agent deep scan available on this instance?" check (flag + both keys). */
+export function isAgentScanConfigured(): boolean {
+  return agentScanConfigFromEnv() !== null;
+}
+
+/** @deprecated renamed to {@link agentScanConfigFromEnv}. */
+export const mobileAgentConfigFromEnv = agentScanConfigFromEnv;
+/** @deprecated renamed to {@link AgentScanConfig}. */
+export type MobileAgentConfig = AgentScanConfig;

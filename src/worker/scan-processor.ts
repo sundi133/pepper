@@ -61,7 +61,8 @@ import { decompiledOriginOf } from "@/lib/compiled-scan/finding-origin";
 import { uploadedArtifactName } from "@/lib/compiled-scan/upload";
 import { maxUploadBytes } from "@/lib/upload-limits";
 import { mobilePlatformOf } from "@/lib/mobile-platform";
-import { aiMobileReviewAccess, aiMobileReviewConfig, findJadxJar, runAiMobileReview } from "@/lib/mobile-ai-review";
+import { isAgentArtifact, agentOwnsUpload } from "@/scanners/mobile-agent/artifact";
+import { isAgentScanConfigured } from "@/scanners/mobile-agent/config";
 
 // prisma is imported from @/lib/prisma
 
@@ -748,7 +749,43 @@ Schema:
       // (which still applies to artifacts found in repositories and archives).
       compiledConfig.maxArtifactBytes = Math.max(compiledConfig.maxArtifactBytes, maxUploadBytes());
     }
-    if (compiledConfig.enabled && COMPILED_SCAN_TYPES.has(scanType)) {
+    // Agent "deep scan" owns a configured binary upload end to end: it
+    // decompiles and inspects inside the E2B sandbox, so the local decompile +
+    // rule-based scanners are skipped for it. Only when the agent will actually
+    // run — it is registered under LLM SAST (enableLlmSast + a SAST scan type),
+    // so tie the skip to that; otherwise the binary falls back to the normal
+    // compiled-scan pipeline, and so it does when the agent is not configured.
+    const agentScanBinary =
+      !!uploadedArtifact && isAgentArtifact(uploadedArtifact);
+    const agentSastScan =
+      ["FULL", "SAST_ONLY", "INCREMENTAL"].includes(scanType) &&
+      orgSettings.enableLlmSast === true;
+    const agentScanOnly = agentOwnsUpload({
+      uploadedArtifact,
+      scanType,
+      enableLlmSast: orgSettings.enableLlmSast,
+      configured: isAgentScanConfigured(),
+    });
+    if (agentScanOnly) {
+      log.info({ artifact: uploadedArtifact }, "Agent deep scan owns this binary upload; skipping local decompile");
+      await setDecompileProgress(scanId, {
+        status: "DONE",
+        findingsCount: 0,
+        decompiled: 0,
+        filesAdded: 0,
+        skipped: [
+          {
+            path: uploadedArtifact!,
+            reason: "disabled",
+            detail: "handled by the agent deep scan (decompiled inside the sandbox)",
+          },
+        ],
+      });
+      await setAgentScanProgress(scanId, {
+        status: "RUNNING",
+        note: "starting the E2B sandbox",
+      });
+    } else if (compiledConfig.enabled && COMPILED_SCAN_TYPES.has(scanType)) {
       let decompileStarted = false;
       try {
         const outcome = await runCompiledScan({
@@ -784,7 +821,7 @@ Schema:
       await assertScanActive();
     } else if (uploadedArtifact && mobilePlatformOf(uploadedArtifact) !== "ios") {
       // The upload is nothing but a compiled artifact, and nothing will look inside it.
-      // (An iOS app is never decompiled; the GPT-6 Astra review covers it.)
+      // (An iOS app has no FOSS decompiler; the in-process .ipa dispatch handles it.)
       log.warn({ artifact: uploadedArtifact }, "Compiled-code scanning is off; the uploaded artifact is not decompiled");
       await setDecompileProgress(scanId, {
         status: "DONE",
@@ -803,6 +840,18 @@ Schema:
       });
     }
 
+    // A binary upload that the agent would have owned (LLM SAST on), but the
+    // agent is not configured on this instance: it fell back to the normal
+    // pipeline above. Surface why the deep scan did not run, so a missing key is
+    // not a silent no-op.
+    if (agentScanBinary && agentSastScan && !isAgentScanConfigured()) {
+      await setAgentScanProgress(scanId, {
+        status: "DONE",
+        outcome: "skipped",
+        note: "agent not configured — set ENABLE_AGENT_SCAN with E2B_API_KEY and OPENROUTER_API_KEY",
+      });
+    }
+
     const ctx: ScanContext = {
       workDir,
       fileList,
@@ -810,7 +859,7 @@ Schema:
       decompiledFileList: decompiledFiles,
       scanType,
       scanId,
-      mobileAgentScan: job.data.mobileAgentScan === true,
+      uploadedArtifact: uploadedArtifact ?? undefined,
       orgSettings,
       signal: abortController.signal,
       waitIfPaused: assertScanActive,
@@ -872,6 +921,16 @@ Schema:
           );
         } catch (err) {
           log.warn({ err }, "Could not store AI reasoning trace");
+        }
+      },
+      onAgentStatus: async (entry) => {
+        // Persist the agent deep scan's visible status (running + sandbox id,
+        // completed/incomplete/failed) so it survives the ephemeral sandbox and
+        // shows on the scan page. Best-effort: never fail the scan over it.
+        try {
+          await setAgentScanProgress(scanId, { findingsCount: 0, ...entry });
+        } catch (err) {
+          log.warn({ err }, "Could not record agent deep scan status");
         }
       },
       onBatchFindings: async (scannerName: string, findings: RawFinding[]) => {
@@ -943,59 +1002,10 @@ Schema:
       "Scan complete",
     );
 
-    // 5a. GPT-6 Astra review of an uploaded mobile app (opt-in per upload):
-    // the app goes to an OpenAI-hosted container under the organization's
-    // OpenAI key. Never fails the scan; the outcome is recorded for the scan page.
-    const mobilePlatform = mobilePlatformOf(uploadedArtifact);
-    if (job.data.aiMobileReview && uploadedArtifact && mobilePlatform) {
-      const reviewConfig = aiMobileReviewConfig();
-      const access = aiMobileReviewAccess(orgSettings);
-      const reviewBase = { platform: mobilePlatform, model: reviewConfig.model };
-      if (!access.ok) {
-        log.warn({ reason: access.reason }, "GPT-6 Astra review skipped");
-        await setAiMobileReviewProgress(scanId, {
-          status: "DONE",
-          findingsCount: 0,
-          outcome: "skipped",
-          note: access.reason,
-          ...reviewBase,
-        });
-      } else {
-        await setAiMobileReviewProgress(scanId, { status: "RUNNING", findingsCount: 0, ...reviewBase });
-        await reportProgress(`Reviewing ${uploadedArtifact} with ${reviewConfig.model}`);
-        try {
-          const outcome = await runAiMobileReview({
-            scanId,
-            appPath: path.join(workDir, uploadedArtifact),
-            appName: uploadedArtifact,
-            platform: mobilePlatform,
-            access,
-            config: { ...reviewConfig, jadxJar: reviewConfig.jadxJar ?? findJadxJar(compiledConfig.jadxBin) },
-            signal: abortController.signal,
-          });
-          await insertFindings(outcome.findings);
-          await setAiMobileReviewProgress(scanId, {
-            status: "DONE",
-            findingsCount: outcome.findings.length,
-            outcome: "completed",
-            ...outcome.summary,
-          });
-        } catch (err) {
-          if (abortController.signal.aborted || err instanceof ScanCancelledError || err instanceof ScanStoppedError) {
-            throw err;
-          }
-          log.warn({ err }, "GPT-6 Astra review failed; continuing without it");
-          await setAiMobileReviewProgress(scanId, {
-            status: "DONE",
-            findingsCount: 0,
-            outcome: "failed",
-            note: err instanceof Error ? err.message : String(err),
-            ...reviewBase,
-          });
-        }
-      }
-      await assertScanActive();
-    }
+    // The agent deep scan (scanners/mobile-agent) is the sole reviewer for a
+    // configured binary upload; it runs inside runScanners and reports its
+    // findings and status through the normal pipeline, so there is no separate
+    // post-scan mobile-review step here.
 
     // 5. Generate SBOMs (CycloneDX + SPDX) from parsed dependencies
     if (result.dependencies.length > 0) {
@@ -1463,11 +1473,11 @@ const STOP_WATCH_INTERVAL_MS = 5000;
 /** Scan types whose scanners (SAST, secrets) review decompiled compiled code. */
 const COMPILED_SCAN_TYPES = new Set(["FULL", "SAST_ONLY", "SECRETS_ONLY", "INCREMENTAL"]);
 
-/** The AI_MOBILE_REVIEW entry of Scan.scannerProgress (progress, then the review's outcome on the scan page). */
-async function setAiMobileReviewProgress(scanId: string, entry: Record<string, unknown>): Promise<void> {
+/** The AGENT_SCAN entry of Scan.scannerProgress (running + sandbox id, then the deep scan's outcome on the scan page). */
+async function setAgentScanProgress(scanId: string, entry: Record<string, unknown>): Promise<void> {
   await prisma.$executeRaw`
     UPDATE "Scan"
-    SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ AI_MOBILE_REVIEW: entry })}::jsonb
+    SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ AGENT_SCAN: entry })}::jsonb
     WHERE id = ${scanId}
   `;
 }

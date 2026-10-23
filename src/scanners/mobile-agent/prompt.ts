@@ -71,6 +71,18 @@ export function agentScanSystemPrompt(artifactPath: string): string {
     "(and OWASP MASVS for mobile) where you can.\n\n" +
     "This is a defensive review: describe each weakness, its risk, and the fix — " +
     "no exploit code or payloads.\n\n" +
+    "GUIDANCE (apply judgement, don't follow it as a rigid pipeline):\n" +
+    "- Read the app's real package from the manifest and review ITS OWN code even " +
+    "when it lives under com.android/com.google/org/io — do not dismiss the app's " +
+    "package as a third-party library.\n" +
+    "- Review the AndroidManifest and resources (strings.xml, " +
+    "network_security_config), not just .java/.kt: exported components, " +
+    "debuggable, allowBackup, cleartext config, and secrets hardcoded in resources.\n" +
+    "- Decompile Android with `jadx --show-bad-code`; if few classes come out, " +
+    "fall back to `apktool` smali. For iOS: unzip + Info.plist + Mach-O " +
+    "strings/symbols.\n" +
+    "- Call report_finding for EACH confirmed issue the moment you verify it — do " +
+    "NOT wait until the end. Then also include every finding in the final JSON.\n\n" +
     AGENT_SCAN_JSON_CONTRACT
   );
 }

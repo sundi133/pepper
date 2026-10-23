@@ -25,12 +25,27 @@ const MAX_FILE = 12000;
 /** Home of the E2B sandbox's default user; the artifact is uploaded here. */
 const SANDBOX_HOME = "/home/user";
 
+/** A finding the model streams mid-run via the report_finding tool. */
+export interface ReportedFinding {
+  title?: string;
+  severity?: string;
+  file?: string;
+  line?: number | null;
+  vulnerability?: string;
+  attack?: string;
+  fix?: string;
+  confidence?: string;
+  cwe?: string | null;
+}
+
 export interface AgentScanOptions {
   signal?: AbortSignal;
   /** Streamed reasoning + a short `$ <command>` note per tool call (buffered by the caller's sink). */
   onReasoning?: (delta: string) => void;
   /** Called once the sandbox exists, with its id, for visible scan status. */
   onSandbox?: (sandboxId: string | undefined) => void;
+  /** Called each time the model reports a confirmed finding (report_finding tool), for live insertion. */
+  onFinding?: (finding: ReportedFinding) => void | Promise<void>;
 }
 
 export interface AgentScanRun {
@@ -74,6 +89,29 @@ const BASE_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "report_finding",
+      description:
+        "Report ONE confirmed security finding as soon as you have verified it — do not wait until the end. Each call is surfaced in the Findings tab immediately.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          severity: { type: "string", enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+          file: { type: "string", description: "path inside the artifact, e.g. com/example/Login.java" },
+          line: { type: ["integer", "null"] },
+          vulnerability: { type: "string", description: "what the weakness is, grounded in the evidence" },
+          attack: { type: "string", description: "how it is exploited / the risk (no payloads)" },
+          fix: { type: "string", description: "the concrete remediation" },
+          confidence: { type: "string", enum: ["high", "medium", "low"] },
+          cwe: { type: ["string", "null"] },
+        },
+        required: ["title", "severity", "file", "vulnerability", "fix"],
+      },
+    },
+  },
 ];
 
 /** Offered only when a web search provider key is configured (self-gated). */
@@ -94,7 +132,12 @@ const WEB_SEARCH_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
 /** Minimal slice of the E2B Sandbox this loop uses (keeps the loop testable). */
 interface SandboxLike {
   sandboxId?: string;
-  commands: { run: (cmd: string, opts?: { timeoutMs?: number }) => Promise<CommandResultLike> };
+  commands: {
+    run: (
+      cmd: string,
+      opts?: { timeoutMs?: number; requestTimeoutMs?: number },
+    ) => Promise<CommandResultLike>;
+  };
   files: {
     write: (path: string, data: unknown) => Promise<unknown>;
     read: (path: string) => Promise<unknown>;
@@ -125,7 +168,9 @@ async function runCommand(
   timeoutMs: number,
 ): Promise<string> {
   try {
-    const r = await sandbox.commands.run(command, { timeoutMs });
+    // Match the network request deadline to the command timeout, or E2B's
+    // default ~60s request timeout would kill a long decompile (jadx) mid-run.
+    const r = await sandbox.commands.run(command, { timeoutMs, requestTimeoutMs: timeoutMs });
     return formatCommandResult(r.exitCode, r.stdout, r.stderr);
   } catch (err) {
     // CommandExitError carries the result; surface it instead of failing the loop.
@@ -336,6 +381,20 @@ export async function runAgentScan(
         } catch {
           args = {};
         }
+        // report_finding streams one confirmed finding for immediate insertion.
+        if (tc.function.name === "report_finding") {
+          const note = `\n(reported: ${String(args.title ?? "").slice(0, 120)})\n`;
+          reasoningAll += note;
+          emit(note);
+          try {
+            await opts.onFinding?.(args as ReportedFinding);
+          } catch {
+            /* live insertion is best-effort; the final JSON is the safety net */
+          }
+          messages.push({ role: "tool", tool_call_id: tc.id, content: "finding recorded" });
+          continue;
+        }
+
         let note: string;
         if (tc.function.name === "run_command") {
           note = `\n$ ${String(args.command ?? "").slice(0, 300)}\n`;

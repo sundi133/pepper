@@ -21,10 +21,11 @@ import { logger } from "@/lib/logger";
 import { makeReasoningSink } from "../shared/reasoning-sink";
 import { agentScanConfig } from "./config";
 import { isAgentArtifact } from "./artifact";
-import { runAgentScan } from "./agent";
+import { runAgentScan, type ReportedFinding } from "./agent";
 
 export const AGENT_SCANNER_KEY = "agent-scan";
 
+/** The final-JSON finding shape (safety-net for anything not streamed via report_finding). */
 interface AgentFinding {
   title?: string;
   severity?: string;
@@ -37,6 +38,21 @@ interface AgentFinding {
   impact?: string;
   remediation?: string;
   description?: string;
+}
+
+/** Normalized shape both report_finding and the final JSON map through, so they dedupe cleanly. */
+interface CommonFinding {
+  title: string;
+  severity?: string;
+  confidence?: number;
+  category?: string;
+  cweId?: string;
+  innerPath?: string;
+  startLine?: number;
+  description?: string;
+  evidence?: string;
+  impact?: string;
+  remediation?: string;
 }
 
 function normSeverity(s: string | undefined): SeverityLevel {
@@ -54,6 +70,89 @@ function ruleIdFor(category: string | undefined): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "general"}`;
+}
+
+/** report_finding's string confidence → a 0..1 number. */
+function confidenceOf(c: string | undefined): number | undefined {
+  switch ((c || "").toLowerCase()) {
+    case "high":
+      return 0.9;
+    case "medium":
+      return 0.6;
+    case "low":
+      return 0.3;
+    default:
+      return undefined;
+  }
+}
+
+/** Builds a RawFinding scoped to the uploaded artifact (e.g. `app.apk!/com/...`). */
+function toRawFinding(artifactName: string, c: CommonFinding): RawFinding {
+  const inner = c.innerPath?.replace(/^\/+/, "");
+  const filePath = inner ? `${artifactName}!/${inner}` : artifactName;
+  return {
+    scanner: "SAST_LLM",
+    severity: normSeverity(c.severity),
+    title: c.title.slice(0, 200),
+    description: c.description || c.impact || "",
+    filePath,
+    startLine: typeof c.startLine === "number" && c.startLine > 0 ? c.startLine : undefined,
+    snippet: c.evidence,
+    ruleId: ruleIdFor(c.category),
+    cweId: c.cweId,
+    confidence:
+      typeof c.confidence === "number" ? Math.max(0, Math.min(1, c.confidence)) : undefined,
+    metadata: {
+      scanner: AGENT_SCANNER_KEY,
+      category: c.category,
+      weaknessClass: c.cweId,
+      evidence: c.evidence,
+      impact: c.impact,
+      remediation: c.remediation,
+    },
+  };
+}
+
+/** report_finding (streamed) → CommonFinding. */
+function reportedToCommon(f: ReportedFinding): CommonFinding {
+  const parts = [
+    f.vulnerability || "",
+    f.attack ? `\n\nAttack: ${f.attack}` : "",
+    f.fix ? `\n\nFix: ${f.fix}` : "",
+  ];
+  return {
+    title: (f.title || "").slice(0, 200),
+    severity: f.severity,
+    confidence: confidenceOf(f.confidence),
+    cweId: f.cwe || undefined,
+    innerPath: f.file,
+    startLine: typeof f.line === "number" ? f.line : undefined,
+    description: parts.join("").trim(),
+    evidence: f.vulnerability,
+    impact: f.attack,
+    remediation: f.fix,
+  };
+}
+
+/** Final-JSON finding → CommonFinding. */
+function finalToCommon(f: AgentFinding): CommonFinding {
+  return {
+    title: (f.title || "").slice(0, 200),
+    severity: f.severity,
+    confidence: f.confidence,
+    category: f.category,
+    cweId: f.cweId || f.cwe,
+    innerPath: f.filePath,
+    description: f.description || f.impact,
+    evidence: f.evidence,
+    impact: f.impact,
+    remediation: f.remediation,
+  };
+}
+
+/** A loose identity key for counting distinct findings across the two paths. */
+function findingKey(f: RawFinding): string {
+  return `${(f.filePath || "").toLowerCase()}|${f.title.toLowerCase()}`;
 }
 
 export const mobileAgentScanner: ScannerPlugin = {
@@ -76,6 +175,12 @@ export const mobileAgentScanner: ScannerPlugin = {
 
     const sink = makeReasoningSink(ctx, AGENT_SCANNER_KEY);
 
+    // Findings the model streams via report_finding, inserted into the Findings
+    // tab the moment they arrive (same incremental path as SAST_LLM). The
+    // final-JSON array is parsed below as a safety net; the shared
+    // FindingDeduplicator drops anything already streamed, so nothing double-counts.
+    const liveFindings: RawFinding[] = [];
+
     let run;
     try {
       run = await runAgentScan(path.join(ctx.workDir, uploaded), name, cfg, {
@@ -87,6 +192,17 @@ export const mobileAgentScanner: ScannerPlugin = {
             sandboxId,
             note: sandboxId ? `running in sandbox ${sandboxId}` : "running in sandbox",
           });
+        },
+        onFinding: async (reported) => {
+          if (!reported?.title) return;
+          const rf = toRawFinding(name, reportedToCommon(reported));
+          liveFindings.push(rf);
+          try {
+            // Incremental insert → dedup → persist, so it shows live.
+            await ctx.onBatchFindings?.(AGENT_SCANNER_KEY, [rf]);
+          } catch {
+            /* best-effort live insert; it is also returned at the end as a safety net */
+          }
         },
       });
     } catch (err) {
@@ -105,52 +221,30 @@ export const mobileAgentScanner: ScannerPlugin = {
     // AI_REASONING artifact). Best-effort: never fail the scan over storage.
     await sink.finalize();
 
+    // Safety net: any finding in the final JSON that the model did not stream
+    // via report_finding. The deduplicator drops ones already streamed.
     const parsed = parseLlmJsonResponse<{ findings: AgentFinding[] }>(
       run.content,
       { findings: [] },
     );
-    const findings = Array.isArray(parsed.findings) ? parsed.findings : [];
-
-    const mapped = findings
+    const finalFindings = (Array.isArray(parsed.findings) ? parsed.findings : [])
       .filter((f) => f && f.title)
-      .map<RawFinding>((f) => {
-        const cwe = f.cweId || f.cwe;
-        // Show the evidence against the artifact it came from, e.g. `app.jar!/com/...`.
-        const inner = f.filePath?.replace(/^\/+/, "");
-        const filePath = inner ? `${name}!/${inner}` : name;
-        return {
-          scanner: "SAST_LLM",
-          severity: normSeverity(f.severity),
-          title: f.title!.slice(0, 200),
-          description: f.description || f.impact || "",
-          filePath,
-          snippet: f.evidence,
-          ruleId: ruleIdFor(f.category),
-          cweId: cwe,
-          confidence:
-            typeof f.confidence === "number"
-              ? Math.max(0, Math.min(1, f.confidence))
-              : undefined,
-          metadata: {
-            scanner: AGENT_SCANNER_KEY,
-            category: f.category,
-            weaknessClass: cwe,
-            evidence: f.evidence,
-            impact: f.impact,
-            remediation: f.remediation,
-          },
-        };
-      });
+      .map((f) => toRawFinding(name, finalToCommon(f)));
+
+    // Return streamed + final; FindingDeduplicator (shared across onBatchFindings
+    // and onScannerComplete) keeps each root cause once.
+    const all = [...liveFindings, ...finalFindings];
+    const distinct = new Set(all.map(findingKey)).size;
 
     await ctx.onAgentStatus?.({
       status: "DONE",
       outcome: run.finished ? "completed" : "incomplete",
-      findingsCount: mapped.length,
+      findingsCount: distinct,
       note: run.finished
         ? undefined
         : "stopped at the step/time limit; reported what it found so far",
     });
 
-    return mapped;
+    return all;
   },
 };

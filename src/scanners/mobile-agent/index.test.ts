@@ -41,6 +41,7 @@ let workDir: string;
 const onReasoning = vi.fn();
 const onProgress = vi.fn();
 const onAgentStatus = vi.fn();
+const onBatchFindings = vi.fn();
 
 function ctx(uploadedArtifact?: string): ScanContext {
   return {
@@ -60,6 +61,7 @@ function ctx(uploadedArtifact?: string): ScanContext {
     onReasoning,
     onProgress,
     onAgentStatus,
+    onBatchFindings,
   };
 }
 
@@ -74,6 +76,7 @@ beforeEach(() => {
   onReasoning.mockReset();
   onProgress.mockReset();
   onAgentStatus.mockReset();
+  onBatchFindings.mockReset();
   warn.mockReset();
   error.mockReset();
 });
@@ -173,6 +176,91 @@ describe("mobileAgentScanner", () => {
     expect(onAgentStatus).toHaveBeenCalledWith(
       expect.objectContaining({ status: "DONE", outcome: "completed", findingsCount: 1 }),
     );
+  });
+
+  it("streams report_finding findings into onBatchFindings immediately (live Findings tab)", async () => {
+    agentScanConfig.mockReturnValue(CFG);
+    runAgentScan.mockImplementation(
+      async (
+        _p: string,
+        _n: string,
+        _c: unknown,
+        opts: { onFinding?: (f: unknown) => Promise<void> | void },
+      ) => {
+        await opts.onFinding?.({
+          title: "Cleartext HTTP",
+          severity: "HIGH",
+          file: "com/example/Net.java",
+          line: 42,
+          vulnerability: "Uses http:// for login",
+          attack: "MITM can read credentials",
+          fix: "Use https and enable network-security-config",
+          confidence: "high",
+          cwe: "CWE-319",
+        });
+        // nothing in the final JSON — it was all streamed
+        return run(JSON.stringify({ findings: [] }));
+      },
+    );
+
+    const out = await mobileAgentScanner.scan(ctx("app.apk"));
+    // inserted live, before the scan returned
+    expect(onBatchFindings).toHaveBeenCalledTimes(1);
+    const [scannerName, batch] = onBatchFindings.mock.calls[0];
+    expect(scannerName).toBe("agent-scan");
+    expect(batch).toHaveLength(1);
+    const f = batch[0];
+    expect(f.scanner).toBe("SAST_LLM");
+    expect(f.severity).toBe("HIGH");
+    expect(f.filePath).toBe("app.apk!/com/example/Net.java");
+    expect(f.startLine).toBe(42);
+    expect(f.cweId).toBe("CWE-319");
+    expect(f.confidence).toBe(0.9);
+    expect(f.description).toContain("Attack: MITM");
+    expect(f.description).toContain("Fix: Use https");
+    // and it is also returned so the dedup/complete path sees it
+    expect(out).toHaveLength(1);
+    expect(out[0].title).toBe("Cleartext HTTP");
+  });
+
+  it("returns streamed + final-JSON findings; the distinct count de-dupes overlap", async () => {
+    agentScanConfig.mockReturnValue(CFG);
+    runAgentScan.mockImplementation(
+      async (
+        _p: string,
+        _n: string,
+        _c: unknown,
+        opts: { onFinding?: (f: unknown) => Promise<void> | void },
+      ) => {
+        await opts.onFinding?.({
+          title: "Hardcoded key",
+          severity: "HIGH",
+          file: "com/example/Crypto.java",
+          vulnerability: "Static AES key",
+          fix: "Derive at runtime",
+          confidence: "medium",
+        });
+        // final JSON repeats the streamed one (same file+title) and adds a new one
+        return run(
+          JSON.stringify({
+            findings: [
+              { title: "Hardcoded key", severity: "HIGH", filePath: "com/example/Crypto.java" },
+              { title: "Debuggable enabled", severity: "LOW", filePath: "AndroidManifest.xml" },
+            ],
+          }),
+        );
+      },
+    );
+
+    const out = await mobileAgentScanner.scan(ctx("app.apk"));
+    // returns everything (downstream FindingDeduplicator drops the repeat)
+    expect(out).toHaveLength(3);
+    // but the reported status count is de-duped by file+title
+    expect(onAgentStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "DONE", outcome: "completed", findingsCount: 2 }),
+    );
+    // the streamed one was inserted live
+    expect(onBatchFindings).toHaveBeenCalledTimes(1);
   });
 
   it("falls back filePath to the artifact name, normalizes severity, clamps confidence", async () => {

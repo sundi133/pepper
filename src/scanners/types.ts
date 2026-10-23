@@ -39,6 +39,12 @@ export interface ScanContext {
     containerRegistryRegion?: string;
   };
   scanId?: string;
+  /**
+   * Per-upload opt-in for the mobile agent deep scan (scanners/mobile-agent).
+   * The scanner also requires the instance-level mode + keys; this is the
+   * user's "run it this time" choice. Absent/false on every non-mobile scan.
+   */
+  mobileAgentScan?: boolean;
   signal?: AbortSignal;
   waitIfPaused?: () => Promise<void>;
   onProgress?: (message: string) => void;

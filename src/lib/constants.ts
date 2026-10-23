@@ -369,6 +369,31 @@ export const BENCHMARK_MODE = process.env.BENCHMARK_MODE === "true";
 export const BENCHMARK_PROMPT_SUFFIX =
   "\n\nBENCHMARK MODE (maximize recall; benchmarking against known-vulnerable apps): report EVERY issue the visible code supports, including lower-confidence ones. Do NOT withhold a finding because code looks like a test/fixture/mock, is only reachable from a demo/dev path, appears unreachable, or because the app is a security-training / deliberately-vulnerable / benchmark app. When unsure, report it with a lower confidence rather than dropping it.";
 
+/**
+ * Agent "deep scan" for uploaded mobile apps (default off). When on, an
+ * additional scanner drives an E2B cloud sandbox with glm-5.3 (function
+ * calling): the model installs its own tools (jadx/apktool/androguard),
+ * decompiles/extracts the uploaded .apk/.aab/.ipa, inspects the first-party
+ * code, and reports. Strictly additive — it self-gates to no-op unless this
+ * flag is set, both E2B_API_KEY and OPENROUTER_API_KEY are present, AND the
+ * scan has an uploaded mobile artifact; non-mobile and existing mobile
+ * scanning are untouched.
+ */
+export const ENABLE_MOBILE_AGENT_SCAN =
+  process.env.ENABLE_MOBILE_AGENT_SCAN === "true";
+
+/** Max agent steps (model turns) before the deep scan stops. */
+export const MOBILE_AGENT_MAX_STEPS = parseInt(
+  process.env.MOBILE_AGENT_MAX_STEPS || "50",
+  10,
+);
+
+/** How long the E2B sandbox is kept alive, in minutes (also bounds the agent). */
+export const MOBILE_AGENT_TIMEOUT_MINUTES = parseInt(
+  process.env.MOBILE_AGENT_TIMEOUT_MINUTES || "30",
+  10,
+);
+
 /** Findings per validation LLM request. */
 export const EXPLOIT_VALIDATION_BATCH = parseInt(
   process.env.EXPLOIT_VALIDATION_BATCH || "10",

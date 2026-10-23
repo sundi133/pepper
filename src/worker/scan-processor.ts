@@ -934,6 +934,29 @@ Schema:
         // shows on the scan page. Best-effort: never fail the scan over it.
         try {
           await setAgentScanProgress(scanId, entry);
+          // A deep scan that FAILED mid-run (e.g. the model/OpenRouter refused)
+          // must not read as a clean pass. Promote it to the scan's "Incomplete
+          // scan" note — the same vehicle an AI-provider refusal uses — so it
+          // shows the amber banner on the scan page and flows into PR/MCP
+          // summaries. Scoped to the agent path (only on outcome "failed");
+          // never flips the scan status or the quality gate.
+          if (entry.status === "DONE" && entry.outcome === "failed") {
+            const reason =
+              typeof entry.note === "string" && entry.note.trim()
+                ? entry.note.trim()
+                : "the agentic reviewer could not complete";
+            const note = `Agent deep scan failed: ${reason}`;
+            const existing = await prisma.scan.findUnique({
+              where: { id: scanId },
+              select: { errorMessage: true },
+            });
+            const prev = existing?.errorMessage?.trim();
+            const combined = (prev ? `${prev}\n\n${note}` : note).slice(0, 2000);
+            await prisma.scan.update({
+              where: { id: scanId },
+              data: { errorMessage: combined },
+            });
+          }
         } catch (err) {
           log.warn({ err }, "Could not record agent deep scan status");
         }

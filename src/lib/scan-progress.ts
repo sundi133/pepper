@@ -36,6 +36,81 @@ export function agentScanKeptCount(
   return null;
 }
 
+/** Scan.scannerProgress.AGENT_SCAN — the agent deep scan's status/outcome. */
+export interface AgentScanRecord {
+  status?: string;
+  outcome?: "completed" | "incomplete" | "failed" | "skipped";
+  sandboxId?: string;
+  /** Raw count the agent reported (pre-dedup); shown only as a secondary note. */
+  reported?: number;
+  note?: string;
+}
+
+/** The view the agent-scan summary card renders, or null when there is nothing to show. */
+export interface AgentScanSummaryView {
+  outcome: AgentScanRecord["outcome"];
+  heading: string;
+  /** "warning" = a failed run (never a clean result); "info" = ran / did not run. */
+  tone: "info" | "warning";
+  failed: boolean;
+  /** The agent ran to a usable end (completed or stopped early with findings). */
+  completed: boolean;
+  kept: number;
+  reported?: number;
+  dedupedAway: number;
+  sandboxId?: string;
+  note?: string;
+}
+
+/**
+ * Decides the agent-deep-scan summary view from `Scan.scannerProgress`. Pure and
+ * client-safe so both the scan page and tests share one source of truth. Crucially,
+ * a FAILED run is represented distinctly (tone "warning", a heading that says
+ * failed) from a run that completed with zero findings (tone "info") — a failed
+ * deep scan must never read as a clean result. Returns null until the agent run
+ * has finished (status DONE) or when there is no agent run at all.
+ */
+export function agentScanSummaryView(
+  scannerProgress: Record<string, unknown> | null | undefined,
+): AgentScanSummaryView | null {
+  const progress =
+    scannerProgress && typeof scannerProgress === "object" ? scannerProgress : undefined;
+  const record = progress?.AGENT_SCAN as AgentScanRecord | undefined;
+  if (!record || record.status !== "DONE") return null;
+
+  // The kept/persisted count (post-dedup) matches the Findings tab exactly; the
+  // agent's own "reported" number is pre-dedup and shown only as context.
+  const kept = agentScanKeptCount(progress) ?? record.reported ?? 0;
+  const reported = record.reported;
+  const dedupedAway = typeof reported === "number" && reported > kept ? reported - kept : 0;
+  const failed = record.outcome === "failed";
+  const completed = record.outcome === "completed" || record.outcome === "incomplete";
+
+  let heading: string;
+  if (record.outcome === "completed") {
+    heading = `Agent deep scan: ${kept} finding${kept === 1 ? "" : "s"}`;
+  } else if (record.outcome === "incomplete") {
+    heading = `Agent deep scan stopped early: ${kept} finding${kept === 1 ? "" : "s"}`;
+  } else if (record.outcome === "skipped") {
+    heading = "Agent deep scan did not run";
+  } else {
+    heading = "Agent deep scan failed";
+  }
+
+  return {
+    outcome: record.outcome,
+    heading,
+    tone: failed ? "warning" : "info",
+    failed,
+    completed,
+    kept,
+    reported,
+    dedupedAway,
+    sandboxId: record.sandboxId,
+    note: record.note,
+  };
+}
+
 /**
  * The live model-reasoning tails the worker writes under
  * `scannerProgress.__reasoning__`, or null when there are none. Each value is a

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getActiveOrgId } from "@/lib/auth-guard";
 import { prisma } from "@/lib/prisma";
 import { findingFingerprint } from "@/lib/fix-verification";
 import { compareFindingSets, type CompareFinding } from "@/lib/scan-compare";
@@ -132,7 +132,7 @@ function publicFinding(f: CompareFinding) {
 export async function GET(req: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
 
   const url = new URL(req.url);

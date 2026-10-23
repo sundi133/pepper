@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getActiveOrgId } from "@/lib/auth-guard";
 import { REPORT_HTML_CSP, reportFileSlug } from "@/lib/reports/report-html";
 import { buildCustomReportMarkdown, buildCustomReportPdf, type ReportMeta } from "@/lib/custom-reports/render";
 
@@ -17,7 +17,7 @@ export async function GET(
 ) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
 
   const format = new URL(req.url).searchParams.get("format") || "html";

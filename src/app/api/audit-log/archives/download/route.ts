@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Readable } from "node:stream";
-import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
+import { requireAuth, getActiveOrgId, requireRole } from "@/lib/auth-guard";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import { isOrgArchiveKey } from "@/lib/audit-retention";
 import { minioClient, BUCKET } from "@/lib/minio";
@@ -9,7 +9,7 @@ import { minioClient, BUCKET } from "@/lib/minio";
 export async function GET(req: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isRiskDecisionStatus, requireRiskDecisionRole } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
+import { requireAuth, getActiveOrgId, requireRole } from "@/lib/auth-guard";
 import { z } from "zod";
 import { generateSuppressionRule } from "@/lib/suppression-rules";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
@@ -22,7 +22,7 @@ const bulkUpdateSchema = z.object({
 export async function PATCH(req: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }

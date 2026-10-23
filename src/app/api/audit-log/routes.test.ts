@@ -6,6 +6,7 @@ const RANK: Record<string, number> = { VIEWER: 0, DEVELOPER: 1, SECURITY: 2, ADM
 vi.mock("@/lib/auth-guard", () => ({
   requireAuth: vi.fn(async () => ({ session: { user: { id: "u1" } } })),
   getDefaultOrgId: vi.fn(() => "org1"),
+  getActiveOrgId: vi.fn(async () => "org1"),
   requireRole: vi.fn(async (_org: string, min: string) =>
     RANK[role] >= RANK[min] ? { session: {}, membership: { role } } : { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) },
   ),

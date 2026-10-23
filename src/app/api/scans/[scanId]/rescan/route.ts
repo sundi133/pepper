@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
+import { requireAuth, getActiveOrgId, requireRole } from "@/lib/auth-guard";
 import { parseRescanBody } from "@/lib/scan-types";
 import { ipFromHeaders } from "@/lib/audit-log";
 import { rescanScan } from "@/lib/scan-rescan";
@@ -18,7 +18,7 @@ export async function POST(
   }
   const requestedScanType = body.scanType;
 
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }

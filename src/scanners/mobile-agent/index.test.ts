@@ -174,7 +174,7 @@ describe("mobileAgentScanner", () => {
       expect.objectContaining({ status: "RUNNING", sandboxId: "sbx_123" }),
     );
     expect(onAgentStatus).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "DONE", outcome: "completed", findingsCount: 1 }),
+      expect.objectContaining({ status: "DONE", outcome: "completed", reported: 1 }),
     );
   });
 
@@ -257,7 +257,7 @@ describe("mobileAgentScanner", () => {
     expect(out).toHaveLength(3);
     // but the reported status count is de-duped by file+title
     expect(onAgentStatus).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "DONE", outcome: "completed", findingsCount: 2 }),
+      expect.objectContaining({ status: "DONE", outcome: "completed", reported: 2 }),
     );
     // the streamed one was inserted live
     expect(onBatchFindings).toHaveBeenCalledTimes(1);

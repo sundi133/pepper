@@ -12,6 +12,31 @@ export type ScannerProgressMap = Record<
 export const REASONING_PROGRESS_KEY = "__reasoning__";
 
 /**
+ * The agent deep scan's per-scanner progress key (scanners/mobile-agent's
+ * ScannerPlugin.name). Kept as a literal here so this shared, client-safe module
+ * does not import the server-only scanner (which pulls in the E2B SDK).
+ */
+export const AGENT_SCAN_PROGRESS_KEY = "agent-scan";
+
+/**
+ * The deduped, PERSISTED agent-deep-scan finding count — the number the worker
+ * wrote for the agent scanner after the shared FindingDeduplicator ran, so it
+ * matches the Findings tab exactly. null when the agent scanner has no recorded
+ * count yet. Use this for the banner rather than the agent's own pre-dedup
+ * "reported" number.
+ */
+export function agentScanKeptCount(
+  scannerProgress: Record<string, unknown> | null | undefined,
+): number | null {
+  const entry = scannerProgress?.[AGENT_SCAN_PROGRESS_KEY];
+  if (entry && typeof entry === "object") {
+    const n = (entry as { findingsCount?: unknown }).findingsCount;
+    if (typeof n === "number") return n;
+  }
+  return null;
+}
+
+/**
  * The live model-reasoning tails the worker writes under
  * `scannerProgress.__reasoning__`, or null when there are none. Each value is a
  * rolling tail of that scanner's reasoning; the full trace is the AI_REASONING

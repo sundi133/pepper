@@ -5,14 +5,14 @@ import * as path from "path";
 import type { ScanContext } from "../types";
 
 // Mock the agent loop and config so no E2B sandbox or network happens.
-const { runAgentScan, agentScanConfigFromEnv, warn, error } = vi.hoisted(() => ({
+const { runAgentScan, agentScanConfig, warn, error } = vi.hoisted(() => ({
   runAgentScan: vi.fn(),
-  agentScanConfigFromEnv: vi.fn(),
+  agentScanConfig: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
 }));
 vi.mock("./agent", () => ({ runAgentScan }));
-vi.mock("./config", () => ({ agentScanConfigFromEnv }));
+vi.mock("./config", () => ({ agentScanConfig }));
 vi.mock("@/lib/logger", () => ({ logger: { warn, error, info: vi.fn() } }));
 vi.mock("@/lib/llm-gateway", () => ({
   parseLlmJsonResponse: (raw: string, fallback: unknown) => {
@@ -31,6 +31,7 @@ const CFG = {
   e2bApiKey: "e2b-test",
   model: "z-ai/glm-5.3",
   baseUrl: "https://openrouter.ai/api/v1",
+  keySource: "org" as const,
   maxSteps: 50,
   sandboxTimeoutMs: 1_800_000,
   cmdTimeoutMs: 240_000,
@@ -69,7 +70,7 @@ function run(content: string, reasoning = "", finished = true) {
 beforeEach(() => {
   workDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-scan-test-"));
   runAgentScan.mockReset();
-  agentScanConfigFromEnv.mockReset();
+  agentScanConfig.mockReset();
   onReasoning.mockReset();
   onProgress.mockReset();
   onAgentStatus.mockReset();
@@ -85,19 +86,19 @@ describe("mobileAgentScanner", () => {
   it("no-ops when there is no uploaded artifact (source/repo scan)", async () => {
     const out = await mobileAgentScanner.scan(ctx(undefined));
     expect(out).toEqual([]);
-    expect(agentScanConfigFromEnv).not.toHaveBeenCalled();
+    expect(agentScanConfig).not.toHaveBeenCalled();
     expect(runAgentScan).not.toHaveBeenCalled();
   });
 
   it("no-ops when the uploaded artifact is not a binary (e.g. a source zip)", async () => {
     const out = await mobileAgentScanner.scan(ctx("project.zip"));
     expect(out).toEqual([]);
-    expect(agentScanConfigFromEnv).not.toHaveBeenCalled();
+    expect(agentScanConfig).not.toHaveBeenCalled();
     expect(runAgentScan).not.toHaveBeenCalled();
   });
 
   it("no-ops when a binary is uploaded but the agent is not configured", async () => {
-    agentScanConfigFromEnv.mockReturnValue(null);
+    agentScanConfig.mockReturnValue(null);
     const out = await mobileAgentScanner.scan(ctx("app.apk"));
     expect(out).toEqual([]);
     expect(runAgentScan).not.toHaveBeenCalled();
@@ -106,18 +107,22 @@ describe("mobileAgentScanner", () => {
   it.each(["app.apk", "bundle.aab", "MyApp.ipa", "service.jar", "app.war", "lib.dll", "tool.exe", "classes.dex"])(
     "runs for binary upload %s",
     async (artifact) => {
-      agentScanConfigFromEnv.mockReturnValue(CFG);
+      agentScanConfig.mockReturnValue(CFG);
       runAgentScan.mockResolvedValue(run(JSON.stringify({ findings: [] })));
       const out = await mobileAgentScanner.scan(ctx(artifact));
       expect(out).toEqual([]);
       expect(runAgentScan).toHaveBeenCalledOnce();
       expect(runAgentScan.mock.calls[0][0]).toBe(path.join(workDir, artifact));
       expect(runAgentScan.mock.calls[0][1]).toBe(artifact);
+      // key resolution is org-aware: the scanner hands config the org settings
+      expect(agentScanConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ llmProvider: "openai" }),
+      );
     },
   );
 
   it("maps agent findings onto RawFinding, scopes filePath to the artifact, reports status", async () => {
-    agentScanConfigFromEnv.mockReturnValue(CFG);
+    agentScanConfig.mockReturnValue(CFG);
     runAgentScan.mockImplementation(
       async (
         _p: string,
@@ -171,7 +176,7 @@ describe("mobileAgentScanner", () => {
   });
 
   it("falls back filePath to the artifact name, normalizes severity, clamps confidence", async () => {
-    agentScanConfigFromEnv.mockReturnValue(CFG);
+    agentScanConfig.mockReturnValue(CFG);
     runAgentScan.mockResolvedValue(
       run(JSON.stringify({ findings: [{ title: "Odd", severity: "spicy", confidence: 9 }] })),
     );
@@ -182,7 +187,7 @@ describe("mobileAgentScanner", () => {
   });
 
   it("marks the status incomplete when the agent stopped at the step/time limit", async () => {
-    agentScanConfigFromEnv.mockReturnValue(CFG);
+    agentScanConfig.mockReturnValue(CFG);
     runAgentScan.mockResolvedValue(
       run(JSON.stringify({ findings: [{ title: "Partial" }] }), "", false),
     );
@@ -193,7 +198,7 @@ describe("mobileAgentScanner", () => {
   });
 
   it("drops findings without a title", async () => {
-    agentScanConfigFromEnv.mockReturnValue(CFG);
+    agentScanConfig.mockReturnValue(CFG);
     runAgentScan.mockResolvedValue(
       run(JSON.stringify({ findings: [{ severity: "HIGH" }, { title: "Keep" }] })),
     );
@@ -203,7 +208,7 @@ describe("mobileAgentScanner", () => {
   });
 
   it("returns [] and reports a failed status when the agent run throws", async () => {
-    agentScanConfigFromEnv.mockReturnValue(CFG);
+    agentScanConfig.mockReturnValue(CFG);
     runAgentScan.mockRejectedValue(new Error("e2b exploded"));
     const out = await mobileAgentScanner.scan(ctx("app.apk"));
     expect(out).toEqual([]);

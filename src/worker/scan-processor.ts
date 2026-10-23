@@ -62,7 +62,7 @@ import { uploadedArtifactName } from "@/lib/compiled-scan/upload";
 import { maxUploadBytes } from "@/lib/upload-limits";
 import { mobilePlatformOf } from "@/lib/mobile-platform";
 import { isAgentArtifact, agentOwnsUpload } from "@/scanners/mobile-agent/artifact";
-import { isAgentScanConfigured } from "@/scanners/mobile-agent/config";
+import { isAgentScanConfigured, agentScanUnavailableReason } from "@/scanners/mobile-agent/config";
 
 // prisma is imported from @/lib/prisma
 
@@ -764,7 +764,8 @@ Schema:
       uploadedArtifact,
       scanType,
       enableLlmSast: orgSettings.enableLlmSast,
-      configured: isAgentScanConfigured(),
+      // Org LLM Config OpenRouter key wins; env is the fallback.
+      configured: isAgentScanConfigured(orgSettings),
     });
     if (agentScanOnly) {
       log.info({ artifact: uploadedArtifact }, "Agent deep scan owns this binary upload; skipping local decompile");
@@ -841,15 +842,19 @@ Schema:
     }
 
     // A binary upload that the agent would have owned (LLM SAST on), but the
-    // agent is not configured on this instance: it fell back to the normal
-    // pipeline above. Surface why the deep scan did not run, so a missing key is
-    // not a silent no-op.
-    if (agentScanBinary && agentSastScan && !isAgentScanConfigured()) {
-      await setAgentScanProgress(scanId, {
-        status: "DONE",
-        outcome: "skipped",
-        note: "agent not configured — set ENABLE_AGENT_SCAN with E2B_API_KEY and OPENROUTER_API_KEY",
-      });
+    // agent is ENABLED yet misconfigured for this org (missing E2B or OpenRouter
+    // key): it fell back to the normal pipeline above. Surface exactly which key
+    // is missing so a silent misconfiguration becomes visible. (When the feature
+    // is simply off, the reason is null and we stay quiet.)
+    if (agentScanBinary && agentSastScan && !agentScanOnly) {
+      const reason = agentScanUnavailableReason(orgSettings);
+      if (reason) {
+        await setAgentScanProgress(scanId, {
+          status: "DONE",
+          outcome: "skipped",
+          note: reason,
+        });
+      }
     }
 
     const ctx: ScanContext = {

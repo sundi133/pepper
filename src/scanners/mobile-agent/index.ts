@@ -19,7 +19,7 @@ import { RawFinding, ScanContext, ScannerPlugin, SeverityLevel } from "../types"
 import { parseLlmJsonResponse } from "@/lib/llm-gateway";
 import { logger } from "@/lib/logger";
 import { makeReasoningSink } from "../shared/reasoning-sink";
-import { agentScanConfigFromEnv } from "./config";
+import { agentScanConfig } from "./config";
 import { isAgentArtifact } from "./artifact";
 import { runAgentScan } from "./agent";
 
@@ -64,11 +64,14 @@ export const mobileAgentScanner: ScannerPlugin = {
     // source archive or repo checkout, so source/repo scans are untouched.
     if (!uploaded || !isAgentArtifact(uploaded)) return [];
 
-    const cfg = agentScanConfigFromEnv();
+    // Prefer the org's own OpenRouter key (LLM Config); env is only a fallback.
+    const cfg = agentScanConfig(ctx.orgSettings);
     if (!cfg) return []; // mode off or keys missing — the normal pipeline handles the binary
 
     const name = path.basename(uploaded);
-    ctx.onProgress?.(`Agent deep scan: ${name} -> ${cfg.model} (E2B sandbox)`);
+    ctx.onProgress?.(
+      `Agent deep scan: ${name} -> ${cfg.model} (E2B sandbox, ${cfg.keySource} OpenRouter key)`,
+    );
     await ctx.onAgentStatus?.({ status: "RUNNING", note: "starting the E2B sandbox" });
 
     const sink = makeReasoningSink(ctx, AGENT_SCANNER_KEY);

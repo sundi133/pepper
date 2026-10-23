@@ -24,6 +24,32 @@ const FAILURE_RULE_IDS = new Set([
 const PLACEHOLDER_TEXT =
   /(?:example|sample|dummy|fake|mock|placeholder|changeme|change-me|your[_-]?(?:key|secret|token|password)|<[^>]+>|\$\{|process\.env|os\.environ|getenv|localhost|127\.0\.0\.1|xxx+|test[_-]?key)/i;
 
+// Discriminator for the agent "deep scan" scanner (src/scanners/mobile-agent).
+// Its findings are emitted as scanner:"SAST_LLM" but review a DECOMPILED binary
+// artifact (.ipa/.apk/...), not source lines — so they legitimately carry no
+// startLine and often no formulaic "Fix:". We identify them by
+// metadata.scanner === AGENT_SCANNER_KEY (the primary signal); the `!/` artifact
+// marker in filePath is a secondary, corroborating signal only. Kept as a
+// literal (mirrors AGENT_SCANNER_KEY in mobile-agent/index.ts) so this shared
+// gate module does not pull in the heavy E2B agent runtime.
+const AGENT_SCANNER_KEY = "agent-scan";
+// Agent confidence maps high→0.9, medium→0.6, low→0.3 (confidenceOf in
+// mobile-agent/index.ts). A 0.5 floor keeps medium+high and still drops
+// low/noise, without inflating the agent's honest confidence values.
+const AGENT_MIN_CONFIDENCE = 0.5;
+
+/**
+ * A finding from the agent "deep scan" of an uploaded binary artifact. The
+ * carve-outs below are scoped strictly to these findings so the real
+ * source-code SAST_LLM path keeps its full line-number and confidence gates.
+ */
+function isAgentFinding(f: RawFinding): boolean {
+  return (
+    (f.metadata as Record<string, unknown> | undefined)?.scanner ===
+    AGENT_SCANNER_KEY
+  );
+}
+
 
 function confidenceFloor(scanner: ScannerType): number {
   switch (scanner) {
@@ -73,12 +99,15 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
     if (f.severity === "INFO") return false;
     if (FAILURE_RULE_IDS.has(f.ruleId || "")) return false;
     const unjudgedLogic = isUnjudgedLogicFinding(f);
+    const agent = isAgentFinding(f);
 
     // SCA findings are database-confirmed from OSV (confidence=1.0) and are
     // not LLM-generated — skip the LLM confidence floor so triaged findings
     // whose confidence was adjusted by the AI triage are never silently dropped.
     if (f.scanner !== "SCA" && !unjudgedLogic) {
-      const floor = confidenceFloor(f.scanner);
+      // Agent deep-scan findings use a lower floor (binary review maps
+      // medium→0.6); source SAST_LLM keeps the 0.75 LLM floor.
+      const floor = agent ? AGENT_MIN_CONFIDENCE : confidenceFloor(f.scanner);
       if ((f.confidence ?? 0) < floor) return false;
     }
 
@@ -86,7 +115,10 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
     // SAST_LLM findings with a valid CWE are exempt — business logic, race
     // condition, and trust boundary findings often describe the flaw without a
     // formulaic "Fix:" section.
-    if (!hasRemediation(f)) {
+    // Agent deep-scan findings describe a decompiled binary and may lack a
+    // formulaic "Fix:"; the agent carries its own remediation in metadata when
+    // present, so they are exempt from the remediation requirement.
+    if (!hasRemediation(f) && !agent) {
       const hasCwe = Boolean(f.cweId);
       const isHighConfidence = (f.confidence ?? 0) >= 0.78;
       // Rule-based SAST findings carry the rule's guidance; a CWE is enough.
@@ -117,8 +149,10 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
 
     // Missing line number: still required for SAST_LLM and SECRETS_LLM (these
     // analyze specific code locations). ZERO_DAY and IAC scanners can report
-    // cross-file or config-level findings without a precise line.
+    // cross-file or config-level findings without a precise line; agent
+    // deep-scan findings review a decompiled binary and are exempt too.
     if (
+      !agent &&
       ["SAST_LLM", "SECRETS_LLM", "SAST_PATTERN"].includes(f.scanner) &&
       f.filePath &&
       (!f.startLine || f.startLine < 1)

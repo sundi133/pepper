@@ -5,16 +5,14 @@ import * as path from "path";
 import type { ScanContext } from "../types";
 
 // Mock the agent loop and config so no E2B sandbox or network happens.
-const { runMobileAgent, mobileAgentConfigFromEnv, warn, error } = vi.hoisted(
-  () => ({
-    runMobileAgent: vi.fn(),
-    mobileAgentConfigFromEnv: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
-);
-vi.mock("./agent", () => ({ runMobileAgent }));
-vi.mock("./config", () => ({ mobileAgentConfigFromEnv }));
+const { runAgentScan, agentScanConfigFromEnv, warn, error } = vi.hoisted(() => ({
+  runAgentScan: vi.fn(),
+  agentScanConfigFromEnv: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+vi.mock("./agent", () => ({ runAgentScan }));
+vi.mock("./config", () => ({ agentScanConfigFromEnv }));
 vi.mock("@/lib/logger", () => ({ logger: { warn, error, info: vi.fn() } }));
 vi.mock("@/lib/llm-gateway", () => ({
   parseLlmJsonResponse: (raw: string, fallback: unknown) => {
@@ -41,13 +39,14 @@ const CFG = {
 let workDir: string;
 const onReasoning = vi.fn();
 const onProgress = vi.fn();
+const onAgentStatus = vi.fn();
 
-function ctx(fileList: string[], mobileAgentScan = true): ScanContext {
+function ctx(uploadedArtifact?: string): ScanContext {
   return {
     workDir,
-    fileList,
+    fileList: [],
     scanType: "FULL",
-    mobileAgentScan,
+    uploadedArtifact,
     orgSettings: {
       llmProvider: "openai",
       llmBaseUrl: "",
@@ -59,25 +58,21 @@ function ctx(fileList: string[], mobileAgentScan = true): ScanContext {
     },
     onReasoning,
     onProgress,
+    onAgentStatus,
   };
 }
 
-function run(content: string, reasoning = "") {
-  return { content, reasoning, steps: 2, finished: true };
-}
-
-function writeFile(rel: string, content: string) {
-  const full = path.join(workDir, rel);
-  fs.mkdirSync(path.dirname(full), { recursive: true });
-  fs.writeFileSync(full, content);
+function run(content: string, reasoning = "", finished = true) {
+  return { content, reasoning, steps: 2, finished };
 }
 
 beforeEach(() => {
-  workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mobile-agent-test-"));
-  runMobileAgent.mockReset();
-  mobileAgentConfigFromEnv.mockReset();
+  workDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-scan-test-"));
+  runAgentScan.mockReset();
+  agentScanConfigFromEnv.mockReset();
   onReasoning.mockReset();
   onProgress.mockReset();
+  onAgentStatus.mockReset();
   warn.mockReset();
   error.mockReset();
 });
@@ -87,137 +82,134 @@ afterEach(() => {
 });
 
 describe("mobileAgentScanner", () => {
-  it("no-ops when the per-upload toggle is off, even on a mobile upload", async () => {
-    writeFile("app.apk", "PK\u0003\u0004 fake");
-    const out = await mobileAgentScanner.scan(ctx(["app.apk"], false));
+  it("no-ops when there is no uploaded artifact (source/repo scan)", async () => {
+    const out = await mobileAgentScanner.scan(ctx(undefined));
     expect(out).toEqual([]);
-    expect(mobileAgentConfigFromEnv).not.toHaveBeenCalled();
-    expect(runMobileAgent).not.toHaveBeenCalled();
+    expect(agentScanConfigFromEnv).not.toHaveBeenCalled();
+    expect(runAgentScan).not.toHaveBeenCalled();
   });
 
-  it("no-ops when the scan has no mobile artifact (non-mobile scan)", async () => {
-    writeFile("src/app.ts", "const x = 1;");
-    const out = await mobileAgentScanner.scan(ctx(["src/app.ts"]));
+  it("no-ops when the uploaded artifact is not a binary (e.g. a source zip)", async () => {
+    const out = await mobileAgentScanner.scan(ctx("project.zip"));
     expect(out).toEqual([]);
-    expect(mobileAgentConfigFromEnv).not.toHaveBeenCalled();
-    expect(runMobileAgent).not.toHaveBeenCalled();
+    expect(agentScanConfigFromEnv).not.toHaveBeenCalled();
+    expect(runAgentScan).not.toHaveBeenCalled();
   });
 
-  it("no-ops when a mobile artifact exists but the mode is off / keys missing", async () => {
-    writeFile("app.apk", "PK\u0003\u0004 fake");
-    mobileAgentConfigFromEnv.mockReturnValue(null);
-    const out = await mobileAgentScanner.scan(ctx(["app.apk"]));
+  it("no-ops when a binary is uploaded but the agent is not configured", async () => {
+    agentScanConfigFromEnv.mockReturnValue(null);
+    const out = await mobileAgentScanner.scan(ctx("app.apk"));
     expect(out).toEqual([]);
-    expect(runMobileAgent).not.toHaveBeenCalled();
+    expect(runAgentScan).not.toHaveBeenCalled();
   });
 
-  it("detects the artifact from the workDir root even when it is not in fileList", async () => {
-    // An uploaded compiled artifact is often filtered out of the source list.
-    writeFile("app.apk", "PK\u0003\u0004 fake");
-    mobileAgentConfigFromEnv.mockReturnValue(CFG);
-    runMobileAgent.mockResolvedValue(run(JSON.stringify({ findings: [] })));
-    const out = await mobileAgentScanner.scan(ctx([]));
-    expect(out).toEqual([]);
-    expect(runMobileAgent).toHaveBeenCalledOnce();
-    expect(runMobileAgent.mock.calls[0][0]).toBe(path.join(workDir, "app.apk"));
-    expect(runMobileAgent.mock.calls[0][1]).toBe("app.apk");
-  });
+  it.each(["app.apk", "bundle.aab", "MyApp.ipa", "service.jar", "app.war", "lib.dll", "tool.exe", "classes.dex"])(
+    "runs for binary upload %s",
+    async (artifact) => {
+      agentScanConfigFromEnv.mockReturnValue(CFG);
+      runAgentScan.mockResolvedValue(run(JSON.stringify({ findings: [] })));
+      const out = await mobileAgentScanner.scan(ctx(artifact));
+      expect(out).toEqual([]);
+      expect(runAgentScan).toHaveBeenCalledOnce();
+      expect(runAgentScan.mock.calls[0][0]).toBe(path.join(workDir, artifact));
+      expect(runAgentScan.mock.calls[0][1]).toBe(artifact);
+    },
+  );
 
-  it("maps agent findings onto RawFinding and scopes filePath to the app", async () => {
-    writeFile("app.apk", "PK\u0003\u0004 fake");
-    mobileAgentConfigFromEnv.mockReturnValue(CFG);
-    runMobileAgent.mockImplementation(
+  it("maps agent findings onto RawFinding, scopes filePath to the artifact, reports status", async () => {
+    agentScanConfigFromEnv.mockReturnValue(CFG);
+    runAgentScan.mockImplementation(
       async (
         _p: string,
         _n: string,
         _c: unknown,
-        opts: { onReasoning?: (d: string) => void },
+        opts: { onReasoning?: (d: string) => void; onSandbox?: (id?: string) => void },
       ) => {
-        opts.onReasoning?.("I installed jadx and decompiled the apk.");
+        opts.onSandbox?.("sbx_123");
+        opts.onReasoning?.("decompiled the jar with vineflower.");
         return run(
           JSON.stringify({
             findings: [
               {
-                title: "Exported activity without permission",
+                title: "Hardcoded AES key",
                 severity: "high",
                 confidence: 0.8,
-                category: "MASVS-PLATFORM",
-                cweId: "CWE-926",
-                filePath: "com/example/MainActivity.java",
-                evidence: 'android:exported="true"',
-                impact: "Any app can launch this component.",
-                remediation: "Set android:exported=false or require a permission.",
+                category: "CWE-321",
+                cweId: "CWE-321",
+                filePath: "com/example/Crypto.java",
+                evidence: 'SecretKeySpec("hardcoded")',
+                impact: "Key recoverable from the artifact.",
+                remediation: "Derive keys at runtime from a secure store.",
               },
             ],
           }),
-          "I installed jadx and decompiled the apk.",
+          "decompiled the jar with vineflower.",
         );
       },
     );
 
-    const out = await mobileAgentScanner.scan(ctx(["app.apk"]));
+    const out = await mobileAgentScanner.scan(ctx("service.jar"));
     expect(out).toHaveLength(1);
     const f = out[0];
     expect(f.scanner).toBe("SAST_LLM");
     expect(f.severity).toBe("HIGH");
-    expect(f.cweId).toBe("CWE-926");
-    expect(f.ruleId).toBe("mobile-agent/masvs-platform");
+    expect(f.cweId).toBe("CWE-321");
+    expect(f.ruleId).toBe("agent/cwe-321");
     expect(f.confidence).toBe(0.8);
-    expect(f.filePath).toBe("app.apk!/com/example/MainActivity.java");
-    expect(f.metadata?.remediation).toContain("exported=false");
-    expect(f.metadata?.scanner).toBe("mobile-agent");
-    // reasoning trace was streamed and persisted via the reasoning sink
-    expect(onReasoning).toHaveBeenCalledWith(
-      "mobile-agent",
-      "I installed jadx and decompiled the apk.",
+    expect(f.filePath).toBe("service.jar!/com/example/Crypto.java");
+    expect(f.metadata?.remediation).toContain("secure store");
+    expect(f.metadata?.scanner).toBe("agent-scan");
+    // reasoning persisted via the sink
+    expect(onReasoning).toHaveBeenCalledWith("agent-scan", expect.stringContaining("vineflower"));
+    // visible status: running (with sandbox id) then completed
+    expect(onAgentStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "RUNNING", sandboxId: "sbx_123" }),
+    );
+    expect(onAgentStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "DONE", outcome: "completed", findingsCount: 1 }),
     );
   });
 
   it("falls back filePath to the artifact name, normalizes severity, clamps confidence", async () => {
-    writeFile("bundle.aab", "PK\u0003\u0004 fake");
-    mobileAgentConfigFromEnv.mockReturnValue(CFG);
-    runMobileAgent.mockResolvedValue(
+    agentScanConfigFromEnv.mockReturnValue(CFG);
+    runAgentScan.mockResolvedValue(
       run(JSON.stringify({ findings: [{ title: "Odd", severity: "spicy", confidence: 9 }] })),
     );
-    const out = await mobileAgentScanner.scan(ctx(["bundle.aab"]));
+    const out = await mobileAgentScanner.scan(ctx("app.apk"));
     expect(out[0].severity).toBe("MEDIUM");
     expect(out[0].confidence).toBe(1);
-    expect(out[0].filePath).toBe("bundle.aab");
+    expect(out[0].filePath).toBe("app.apk");
   });
 
-  it("accepts an iOS .ipa upload", async () => {
-    writeFile("MyApp.ipa", "PK\u0003\u0004 fake");
-    mobileAgentConfigFromEnv.mockReturnValue(CFG);
-    runMobileAgent.mockResolvedValue(
-      run(
-        JSON.stringify({
-          findings: [{ title: "ATS disabled", severity: "high", cwe: "CWE-319" }],
-        }),
-      ),
+  it("marks the status incomplete when the agent stopped at the step/time limit", async () => {
+    agentScanConfigFromEnv.mockReturnValue(CFG);
+    runAgentScan.mockResolvedValue(
+      run(JSON.stringify({ findings: [{ title: "Partial" }] }), "", false),
     );
-    const out = await mobileAgentScanner.scan(ctx(["MyApp.ipa"]));
-    expect(out).toHaveLength(1);
-    expect(out[0].severity).toBe("HIGH");
-    expect(out[0].cweId).toBe("CWE-319");
+    await mobileAgentScanner.scan(ctx("app.apk"));
+    expect(onAgentStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "DONE", outcome: "incomplete" }),
+    );
   });
 
   it("drops findings without a title", async () => {
-    writeFile("app.apk", "PK\u0003\u0004 fake");
-    mobileAgentConfigFromEnv.mockReturnValue(CFG);
-    runMobileAgent.mockResolvedValue(
+    agentScanConfigFromEnv.mockReturnValue(CFG);
+    runAgentScan.mockResolvedValue(
       run(JSON.stringify({ findings: [{ severity: "HIGH" }, { title: "Keep" }] })),
     );
-    const out = await mobileAgentScanner.scan(ctx(["app.apk"]));
+    const out = await mobileAgentScanner.scan(ctx("app.apk"));
     expect(out).toHaveLength(1);
     expect(out[0].title).toBe("Keep");
   });
 
-  it("returns [] and logs when the agent run throws", async () => {
-    writeFile("app.apk", "PK\u0003\u0004 fake");
-    mobileAgentConfigFromEnv.mockReturnValue(CFG);
-    runMobileAgent.mockRejectedValue(new Error("e2b exploded"));
-    const out = await mobileAgentScanner.scan(ctx(["app.apk"]));
+  it("returns [] and reports a failed status when the agent run throws", async () => {
+    agentScanConfigFromEnv.mockReturnValue(CFG);
+    runAgentScan.mockRejectedValue(new Error("e2b exploded"));
+    const out = await mobileAgentScanner.scan(ctx("app.apk"));
     expect(out).toEqual([]);
     expect(error).toHaveBeenCalled();
+    expect(onAgentStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "DONE", outcome: "failed" }),
+    );
   });
 });

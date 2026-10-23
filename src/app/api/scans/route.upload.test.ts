@@ -73,58 +73,27 @@ describe("POST /api/scans uploads", () => {
   });
 });
 
-describe("POST /api/scans GPT-6 Astra mobile review", () => {
-  it("always requests the review for an uploaded mobile app", async () => {
+describe("POST /api/scans mobile/binary uploads carry no review opt-in flags", () => {
+  // The agent deep scan runs automatically for binary uploads on a configured
+  // worker (decided in the worker, not here), and the gpt-6-astra opt-in is
+  // gone — so the create request no longer carries aiMobileReview/mobileAgentScan.
+  it("does not set aiMobileReview or mobileAgentScan for an Android app upload", async () => {
     const res = await upload("app-release.apk", "application/vnd.android.package-archive");
     expect(res.status).toBe(201);
-    expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: true });
+    const job = queueAdd.mock.calls[0][1] as Record<string, unknown>;
+    expect(job.sourceRef).toBe("scans/s1/compiled/app-release.apk");
+    expect(job.aiMobileReview).toBeUndefined();
+    expect(job.mobileAgentScan).toBeUndefined();
   });
 
-  it("passes the review request for an Android app to the worker", async () => {
-    const res = await upload("app-release.apk", "application/vnd.android.package-archive", { aiMobileReview: true });
-    expect(res.status).toBe(201);
-    expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: true, sourceRef: "scans/s1/compiled/app-release.apk" });
-  });
-
-  it("accepts an iOS app with the review and stores it under its own name", async () => {
-    const res = await upload("MyApp.ipa", "application/octet-stream", { aiMobileReview: true });
-    expect(res.status).toBe(201);
-    expect(uploadObject.mock.calls[0][0]).toBe("scans/s1/compiled/MyApp.ipa");
-    expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: true, sourceRef: "scans/s1/compiled/MyApp.ipa" });
-  });
-
-  it("accepts an iOS app and runs the review (always on)", async () => {
-    const res = await upload("MyApp.ipa", "application/octet-stream");
-    expect(res.status).toBe(201);
-    expect(uploadObject.mock.calls[0][0]).toBe("scans/s1/compiled/MyApp.ipa");
-    expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: true, sourceRef: "scans/s1/compiled/MyApp.ipa" });
-  });
-
-  it("ignores the request for files that are not mobile apps", async () => {
-    const res = await upload("service.jar", "application/java-archive", { aiMobileReview: true });
-    expect(res.status).toBe(201);
-    expect(queueAdd.mock.calls[0][1]).toMatchObject({ aiMobileReview: false });
-  });
-});
-
-describe("POST /api/scans mobile agent deep scan (per-upload opt-in)", () => {
-  it("passes the agent deep-scan request for a mobile app when the box is checked", async () => {
-    const res = await upload("app-release.apk", "application/vnd.android.package-archive", {
+  it("ignores any client-sent review flags (they are not part of the job)", async () => {
+    const res = await upload("MyApp.ipa", "application/octet-stream", {
+      aiMobileReview: true,
       mobileAgentScan: true,
     });
     expect(res.status).toBe(201);
-    expect(queueAdd.mock.calls[0][1]).toMatchObject({ mobileAgentScan: true });
-  });
-
-  it("does NOT request the agent deep scan when the box is left unchecked (unlike GPT-6 Astra)", async () => {
-    const res = await upload("app-release.apk", "application/vnd.android.package-archive");
-    expect(res.status).toBe(201);
-    expect(queueAdd.mock.calls[0][1]).toMatchObject({ mobileAgentScan: false });
-  });
-
-  it("ignores the agent deep-scan request for files that are not mobile apps", async () => {
-    const res = await upload("service.jar", "application/java-archive", { mobileAgentScan: true });
-    expect(res.status).toBe(201);
-    expect(queueAdd.mock.calls[0][1]).toMatchObject({ mobileAgentScan: false });
+    const job = queueAdd.mock.calls[0][1] as Record<string, unknown>;
+    expect(job.aiMobileReview).toBeUndefined();
+    expect(job.mobileAgentScan).toBeUndefined();
   });
 });

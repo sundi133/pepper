@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Github, Upload, AlertTriangle, Scan, FolderArchive } from "lucide-react";
+import { Github, Upload, AlertTriangle, Scan, FolderArchive, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { mutate } from "swr";
 import {
@@ -29,7 +29,7 @@ import type { ScanJobData } from "@/lib/queue";
 import { MANUAL_SCAN_TYPE_OPTIONS } from "@/lib/scan-types";
 import { UPLOADABLE_ARTIFACT_EXTENSIONS } from "@/lib/compiled-scan/upload";
 import { maxUploadBytes, maxUploadMb } from "@/lib/upload-limits";
-import { MOBILE_PLATFORM_LABELS, mobilePlatformOf } from "@/lib/mobile-platform";
+import { isAgentArtifact } from "@/scanners/mobile-agent/artifact";
 
 type SourceTab = "repository" | "upload" | "svn";
 
@@ -85,8 +85,6 @@ export function NewSecurityScanForm({
   const [svnUsername, setSvnUsername] = useState("");
   const [svnPassword, setSvnPassword] = useState("");
   const [legalConfirm, setLegalConfirm] = useState(false);
-  const [aiMobileReview, setAiMobileReview] = useState(false);
-  const [mobileAgentScan, setMobileAgentScan] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<CreateScanFieldErrors>({});
   const [touched, setTouched] = useState<{ project?: boolean; source?: boolean }>(
     {},
@@ -114,10 +112,10 @@ export function NewSecurityScanForm({
 
   const sourceMode =
     tab === "svn" ? "svn" : tab === "upload" ? "upload" : "git";
-  // An uploaded .apk / .aab / .ipa can also go to the GPT-6 Astra review;
-  // for an .ipa it is the only scan, so it is always on.
-  const uploadPlatform = sourceMode === "upload" ? mobilePlatformOf(file?.name) : null;
-  const aiMobileReviewOn = uploadPlatform === "ios" || (uploadPlatform !== null && aiMobileReview);
+  // A compiled/binary upload (.apk/.aab/.ipa/.dex/.jar/.war/.ear/.dll/.exe) is
+  // reviewed by the agent deep scan automatically when the instance is
+  // configured for it — no opt-in. Shown as an informational note only.
+  const uploadIsBinary = sourceMode === "upload" && isAgentArtifact(file?.name);
 
   function runValidation(): CreateScanFieldErrors {
     return validateCreateScanFields({
@@ -177,8 +175,6 @@ export function NewSecurityScanForm({
       if (!isExistingProjectSelection(projectId) && newProjectName.trim()) {
         data.newProjectName = newProjectName.trim();
       }
-      if (aiMobileReviewOn) data.aiMobileReview = true;
-      if (uploadPlatform !== null && mobileAgentScan) data.mobileAgentScan = true;
       formData.append("data", JSON.stringify(data));
       if (sourceMode === "upload" && file) formData.append("file", file);
 
@@ -518,50 +514,18 @@ export function NewSecurityScanForm({
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Source as .zip / .tar.gz, or a single .jar, .war, .ear, .apk, .aab, .dll or .exe:
-                  compiled code is decompiled and scanned. iOS apps (.ipa) are reviewed by GPT-6 Astra.
-                  Up to {maxUploadMb()} MB.
+                  Source as .zip / .tar.gz, or a single .jar, .war, .ear, .apk, .aab, .ipa, .dex, .dll or .exe:
+                  compiled code is decompiled and scanned. Up to {maxUploadMb()} MB.
                 </p>
-                {uploadPlatform && (
+                {uploadIsBinary && (
                   <div className="mt-2 flex items-start gap-2 rounded-md border border-border bg-muted/40 p-2.5">
-                    <Checkbox
-                      id="nss-ai-mobile-review"
-                      checked={aiMobileReviewOn}
-                      disabled={uploadPlatform === "ios"}
-                      onCheckedChange={(c) => setAiMobileReview(c === true)}
-                      className="mt-0.5"
-                    />
-                    <Label
-                      htmlFor="nss-ai-mobile-review"
-                      className="cursor-pointer text-sm font-normal leading-snug text-foreground"
-                    >
-                      Also review this {MOBILE_PLATFORM_LABELS[uploadPlatform]} app with GPT-6 Astra
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        Sends the app to OpenAI using your organization&apos;s OpenAI key from LLM Config;
-                        usage is billed to that key.
-                        {uploadPlatform === "ios" ? " Required for .ipa files: iOS apps can't be decompiled." : ""}
-                      </span>
-                    </Label>
-                  </div>
-                )}
-                {uploadPlatform && (
-                  <div className="mt-2 flex items-start gap-2 rounded-md border border-border bg-muted/40 p-2.5">
-                    <Checkbox
-                      id="nss-mobile-agent-scan"
-                      checked={mobileAgentScan}
-                      onCheckedChange={(c) => setMobileAgentScan(c === true)}
-                      className="mt-0.5"
-                    />
-                    <Label
-                      htmlFor="nss-mobile-agent-scan"
-                      className="cursor-pointer text-sm font-normal leading-snug text-foreground"
-                    >
-                      Also run the agent deep scan on this {MOBILE_PLATFORM_LABELS[uploadPlatform]} app
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        glm-5.3 drives an E2B cloud sandbox to install tools, decompile and inspect the app.
-                        Runs only when enabled on this instance (E2B + OpenRouter keys); otherwise it is skipped.
-                      </span>
-                    </Label>
+                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" aria-hidden />
+                    <p className="text-xs leading-snug text-muted-foreground">
+                      When the agent deep scan is enabled on this instance, this binary is reviewed by
+                      glm-5.3 in an E2B cloud sandbox — it installs the right decompiler, decompiles and
+                      inspects the app, and is the sole reviewer for the upload. If it is not enabled, the
+                      binary falls back to the standard decompile-and-scan pipeline.
+                    </p>
                   </div>
                 )}
               </div>

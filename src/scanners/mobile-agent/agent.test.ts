@@ -22,10 +22,10 @@ vi.mock("openai", () => ({
 vi.mock("e2b", () => ({ Sandbox: { create: sandboxCreate } }));
 vi.mock("@/lib/logger", () => ({ logger: { warn, error: vi.fn(), info: vi.fn() } }));
 
-import { runMobileAgent } from "./agent";
-import type { MobileAgentConfig } from "./config";
+import { runAgentScan } from "./agent";
+import type { AgentScanConfig } from "./config";
 
-const CFG: MobileAgentConfig = {
+const CFG: AgentScanConfig = {
   openRouterApiKey: "sk-or-test",
   e2bApiKey: "e2b-test",
   model: "z-ai/glm-5.3",
@@ -82,6 +82,7 @@ beforeEach(() => {
   warn.mockReset();
 
   sandboxCreate.mockResolvedValue({
+    sandboxId: "sbx_test",
     commands: { run },
     files: { write, read },
     kill,
@@ -104,9 +105,13 @@ describe("runMobileAgent", () => {
       );
 
     const notes: string[] = [];
-    const result = await runMobileAgent(artifactPath, "app.apk", CFG, {
+    const sandboxes: (string | undefined)[] = [];
+    const result = await runAgentScan(artifactPath, "app.apk", CFG, {
       onReasoning: (d) => notes.push(d),
+      onSandbox: (id) => sandboxes.push(id),
     });
+    // the sandbox id is surfaced for visible status
+    expect(sandboxes).toEqual(["sbx_test"]);
 
     // The sandbox was created with the E2B key and torn down.
     expect(sandboxCreate).toHaveBeenCalledWith(
@@ -138,7 +143,7 @@ describe("runMobileAgent", () => {
       .mockResolvedValueOnce(toolCallResponse("apktool d app.apk"))
       .mockResolvedValueOnce(finalResponse([]));
 
-    const result = await runMobileAgent(artifactPath, "app.apk", CFG, {});
+    const result = await runAgentScan(artifactPath, "app.apk", CFG, {});
 
     expect(result.finished).toBe(true);
     // The tool result given to the model carried exit=1 and stderr.
@@ -158,7 +163,7 @@ describe("runMobileAgent", () => {
     create.mockResolvedValueOnce(toolCallResponse("ls -la"));
     create.mockResolvedValueOnce(finalResponse([{ title: "Late finding", severity: "LOW" }]));
 
-    const result = await runMobileAgent(artifactPath, "app.apk", { ...CFG, maxSteps: 1 }, {});
+    const result = await runAgentScan(artifactPath, "app.apk", { ...CFG, maxSteps: 1 }, {});
 
     expect(result.finished).toBe(false);
     expect(JSON.parse(result.content).findings[0].title).toBe("Late finding");
@@ -170,7 +175,7 @@ describe("runMobileAgent", () => {
 
   it("always kills the sandbox even when the model call throws", async () => {
     create.mockRejectedValueOnce(new Error("openrouter 500"));
-    await expect(runMobileAgent(artifactPath, "app.apk", CFG, {})).rejects.toThrow(
+    await expect(runAgentScan(artifactPath, "app.apk", CFG, {})).rejects.toThrow(
       "openrouter 500",
     );
     expect(kill).toHaveBeenCalledOnce();
@@ -184,7 +189,7 @@ describe("runMobileAgent", () => {
     });
     create.mockResolvedValue(toolCallResponse("sleep 1"));
 
-    const result = await runMobileAgent(artifactPath, "app.apk", { ...CFG, maxSteps: 5 }, {
+    const result = await runAgentScan(artifactPath, "app.apk", { ...CFG, maxSteps: 5 }, {
       signal: controller.signal,
     });
 

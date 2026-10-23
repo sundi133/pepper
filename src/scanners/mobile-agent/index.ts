@@ -1,28 +1,29 @@
 /**
- * Mobile agent "deep scan" scanner (opt-in, additive). When enabled, and when
- * the scan has an uploaded mobile app (.apk/.aab/.ipa), glm-5.3 drives an E2B
- * cloud sandbox to install tools, decompile/extract the app, inspect the
- * first-party code, and report — rather than reviewing pre-decompiled text like
- * the mobile-llm scanner. Its reasoning streams to the live "Model thinking"
- * panel and its findings flow into the normal pipeline.
+ * Agent "deep scan" scanner. For an uploaded compiled/binary artifact
+ * (.apk/.aab/.ipa/.dex/.jar/.war/.ear/.dll/.exe) on a configured instance, it
+ * is the SOLE reviewer: glm-5.3 drives an E2B cloud sandbox to install the
+ * right decompiler, decompile/extract the artifact, inspect the first-party
+ * code, and report. Its reasoning streams to the live "Model thinking" panel
+ * and its findings flow into the normal pipeline.
  *
- * Self-gating (returns [] — a no-op — unless ALL hold), so non-mobile scans and
- * mobile scans with the mode off are completely untouched:
- *   (a) the scan has an uploaded .apk/.aab/.ipa artifact on disk, AND
- *   (b) ENABLE_MOBILE_AGENT_SCAN is set and E2B_API_KEY + OPENROUTER_API_KEY
- *       are present (mobileAgentConfigFromEnv()).
+ * Self-gating (returns [] — a no-op — unless ALL hold), so source/repo scans
+ * and unconfigured instances are untouched:
+ *   (a) the scan source is a single uploaded binary artifact (ctx.uploadedArtifact),
+ *   (b) that artifact is an agent-handled type (isAgentArtifact), AND
+ *   (c) ENABLE_AGENT_SCAN is set with E2B_API_KEY + OPENROUTER_API_KEY.
+ * The processor skips the local decompile + rule scanners only when the agent
+ * is configured for the upload; otherwise those run and the agent no-ops here.
  */
-import * as fs from "fs";
 import * as path from "path";
 import { RawFinding, ScanContext, ScannerPlugin, SeverityLevel } from "../types";
 import { parseLlmJsonResponse } from "@/lib/llm-gateway";
 import { logger } from "@/lib/logger";
-import { mobilePlatformOf } from "@/lib/mobile-platform";
 import { makeReasoningSink } from "../shared/reasoning-sink";
-import { mobileAgentConfigFromEnv } from "./config";
-import { runMobileAgent } from "./agent";
+import { agentScanConfigFromEnv } from "./config";
+import { isAgentArtifact } from "./artifact";
+import { runAgentScan } from "./agent";
 
-const SCANNER_KEY = "mobile-agent";
+export const AGENT_SCANNER_KEY = "agent-scan";
 
 interface AgentFinding {
   title?: string;
@@ -47,80 +48,53 @@ function normSeverity(s: string | undefined): SeverityLevel {
     : "MEDIUM";
 }
 
-/**
- * The uploaded mobile artifact on disk, as { rel (workDir-relative), name }.
- * Looks in the scan's file list first, then the workDir root (an uploaded
- * compiled artifact can be filtered out of the source file list). Returns null
- * when the scan has no .apk/.aab/.ipa — the scanner then no-ops.
- */
-function findMobileArtifact(
-  ctx: ScanContext,
-): { rel: string; name: string } | null {
-  const onDisk = (rel: string): boolean => {
-    try {
-      return fs.statSync(path.join(ctx.workDir, rel)).isFile();
-    } catch {
-      return false;
-    }
-  };
-
-  const fromList = ctx.fileList.find(
-    (f) => mobilePlatformOf(f) !== null && onDisk(f),
-  );
-  if (fromList) return { rel: fromList, name: path.basename(fromList) };
-
-  let entries: string[] = [];
-  try {
-    entries = fs.readdirSync(ctx.workDir);
-  } catch {
-    entries = [];
-  }
-  for (const e of entries) {
-    if (mobilePlatformOf(e) !== null && onDisk(e)) return { rel: e, name: e };
-  }
-  return null;
-}
-
-/** Normalizes a MASVS/category string into a stable ruleId slug. */
+/** Normalizes a category string into a stable ruleId slug. */
 function ruleIdFor(category: string | undefined): string {
-  return `mobile-agent/${(category || "general")
+  return `agent/${(category || "general")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "general"}`;
 }
 
 export const mobileAgentScanner: ScannerPlugin = {
-  name: SCANNER_KEY,
+  name: AGENT_SCANNER_KEY,
   async scan(ctx: ScanContext): Promise<RawFinding[]> {
-    // Per-upload opt-in: the user asked for the deep scan on this upload.
-    if (ctx.mobileAgentScan !== true) return [];
+    const uploaded = ctx.uploadedArtifact;
+    // Only a single uploaded binary artifact — never a file found inside a
+    // source archive or repo checkout, so source/repo scans are untouched.
+    if (!uploaded || !isAgentArtifact(uploaded)) return [];
 
-    const artifact = findMobileArtifact(ctx);
-    if (!artifact) return []; // not a mobile upload — no-op
+    const cfg = agentScanConfigFromEnv();
+    if (!cfg) return []; // mode off or keys missing — the normal pipeline handles the binary
 
-    const cfg = mobileAgentConfigFromEnv();
-    if (!cfg) return []; // mode off or keys missing — no-op (never logs on non-mobile scans)
+    const name = path.basename(uploaded);
+    ctx.onProgress?.(`Agent deep scan: ${name} -> ${cfg.model} (E2B sandbox)`);
+    await ctx.onAgentStatus?.({ status: "RUNNING", note: "starting the E2B sandbox" });
 
-    ctx.onProgress?.(
-      `Mobile agent deep scan: ${artifact.name} -> ${cfg.model} (E2B sandbox)`,
-    );
-
-    const sink = makeReasoningSink(ctx, SCANNER_KEY);
+    const sink = makeReasoningSink(ctx, AGENT_SCANNER_KEY);
 
     let run;
     try {
-      run = await runMobileAgent(
-        path.join(ctx.workDir, artifact.rel),
-        artifact.name,
-        cfg,
-        { signal: ctx.signal, onReasoning: sink.onReasoning },
-      );
+      run = await runAgentScan(path.join(ctx.workDir, uploaded), name, cfg, {
+        signal: ctx.signal,
+        onReasoning: sink.onReasoning,
+        onSandbox: (sandboxId) => {
+          void ctx.onAgentStatus?.({
+            status: "RUNNING",
+            sandboxId,
+            note: sandboxId ? `running in sandbox ${sandboxId}` : "running in sandbox",
+          });
+        },
+      });
     } catch (err) {
-      logger.error(
-        { err: err instanceof Error ? err.message : String(err) },
-        "[mobile-agent] deep scan failed",
-      );
+      const reason = err instanceof Error ? err.message : String(err);
+      logger.error({ err: reason }, "[agent-scan] deep scan failed");
       await sink.finalize();
+      await ctx.onAgentStatus?.({
+        status: "DONE",
+        outcome: "failed",
+        note: reason.slice(0, 500),
+      });
       return [];
     }
 
@@ -134,13 +108,13 @@ export const mobileAgentScanner: ScannerPlugin = {
     );
     const findings = Array.isArray(parsed.findings) ? parsed.findings : [];
 
-    return findings
+    const mapped = findings
       .filter((f) => f && f.title)
       .map<RawFinding>((f) => {
         const cwe = f.cweId || f.cwe;
-        // Show the evidence against the app it came from, e.g. `app.apk!/com/...`.
+        // Show the evidence against the artifact it came from, e.g. `app.jar!/com/...`.
         const inner = f.filePath?.replace(/^\/+/, "");
-        const filePath = inner ? `${artifact.name}!/${inner}` : artifact.name;
+        const filePath = inner ? `${name}!/${inner}` : name;
         return {
           scanner: "SAST_LLM",
           severity: normSeverity(f.severity),
@@ -155,7 +129,7 @@ export const mobileAgentScanner: ScannerPlugin = {
               ? Math.max(0, Math.min(1, f.confidence))
               : undefined,
           metadata: {
-            scanner: SCANNER_KEY,
+            scanner: AGENT_SCANNER_KEY,
             category: f.category,
             weaknessClass: cwe,
             evidence: f.evidence,
@@ -164,5 +138,16 @@ export const mobileAgentScanner: ScannerPlugin = {
           },
         };
       });
+
+    await ctx.onAgentStatus?.({
+      status: "DONE",
+      outcome: run.finished ? "completed" : "incomplete",
+      findingsCount: mapped.length,
+      note: run.finished
+        ? undefined
+        : "stopped at the step/time limit; reported what it found so far",
+    });
+
+    return mapped;
   },
 };

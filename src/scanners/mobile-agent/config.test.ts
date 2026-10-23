@@ -7,23 +7,30 @@ const SAVED = { ...process.env };
 async function loadConfig() {
   vi.resetModules();
   const mod = await import("./config");
-  return mod.mobileAgentConfigFromEnv;
+  return mod.agentScanConfigFromEnv;
 }
 
 beforeEach(() => {
-  delete process.env.ENABLE_MOBILE_AGENT_SCAN;
-  delete process.env.OPENROUTER_API_KEY;
-  delete process.env.E2B_API_KEY;
-  delete process.env.OPENROUTER_MOBILE_MODEL;
-  delete process.env.MOBILE_AGENT_MAX_STEPS;
-  delete process.env.MOBILE_AGENT_TIMEOUT_MINUTES;
+  for (const k of [
+    "ENABLE_AGENT_SCAN",
+    "ENABLE_MOBILE_AGENT_SCAN",
+    "OPENROUTER_API_KEY",
+    "E2B_API_KEY",
+    "OPENROUTER_MOBILE_MODEL",
+    "AGENT_SCAN_MAX_STEPS",
+    "MOBILE_AGENT_MAX_STEPS",
+    "AGENT_SCAN_TIMEOUT_MINUTES",
+    "MOBILE_AGENT_TIMEOUT_MINUTES",
+  ]) {
+    delete process.env[k];
+  }
 });
 
 afterEach(() => {
   process.env = { ...SAVED };
 });
 
-describe("mobileAgentConfigFromEnv", () => {
+describe("agentScanConfigFromEnv", () => {
   it("returns null when the mode is off (even with both keys)", async () => {
     process.env.OPENROUTER_API_KEY = "sk-or";
     process.env.E2B_API_KEY = "e2b";
@@ -32,14 +39,14 @@ describe("mobileAgentConfigFromEnv", () => {
   });
 
   it("returns null when enabled but a key is missing", async () => {
-    process.env.ENABLE_MOBILE_AGENT_SCAN = "true";
+    process.env.ENABLE_AGENT_SCAN = "true";
     process.env.OPENROUTER_API_KEY = "sk-or"; // no E2B_API_KEY
     const cfg = await loadConfig();
     expect(cfg()).toBeNull();
   });
 
   it("returns config when enabled with both keys", async () => {
-    process.env.ENABLE_MOBILE_AGENT_SCAN = "true";
+    process.env.ENABLE_AGENT_SCAN = "true";
     process.env.OPENROUTER_API_KEY = "sk-or";
     process.env.E2B_API_KEY = "e2b";
     const cfg = await loadConfig();
@@ -53,13 +60,21 @@ describe("mobileAgentConfigFromEnv", () => {
     expect(c!.cmdTimeoutMs).toBe(10 * 60_000);
   });
 
-  it("honors overrides for model and step/timeout tuning", async () => {
+  it("still honors the deprecated ENABLE_MOBILE_AGENT_SCAN alias", async () => {
     process.env.ENABLE_MOBILE_AGENT_SCAN = "true";
     process.env.OPENROUTER_API_KEY = "sk-or";
     process.env.E2B_API_KEY = "e2b";
+    const cfg = await loadConfig();
+    expect(cfg()).not.toBeNull();
+  });
+
+  it("honors overrides for model and step/timeout tuning (new + legacy env names)", async () => {
+    process.env.ENABLE_AGENT_SCAN = "true";
+    process.env.OPENROUTER_API_KEY = "sk-or";
+    process.env.E2B_API_KEY = "e2b";
     process.env.OPENROUTER_MOBILE_MODEL = "z-ai/glm-5.3-air";
-    process.env.MOBILE_AGENT_MAX_STEPS = "12";
-    process.env.MOBILE_AGENT_TIMEOUT_MINUTES = "5";
+    process.env.MOBILE_AGENT_MAX_STEPS = "12"; // legacy name still works
+    process.env.AGENT_SCAN_TIMEOUT_MINUTES = "5";
     const cfg = await loadConfig();
     const c = cfg();
     expect(c!.model).toBe("z-ai/glm-5.3-air");

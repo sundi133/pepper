@@ -40,11 +40,12 @@ export interface ScanContext {
   };
   scanId?: string;
   /**
-   * Per-upload opt-in for the mobile agent deep scan (scanners/mobile-agent).
-   * The scanner also requires the instance-level mode + keys; this is the
-   * user's "run it this time" choice. Absent/false on every non-mobile scan.
+   * The single uploaded compiled/binary artifact's workDir-relative name, when
+   * the scan source is one uploaded artifact. The agent deep scan keys off this
+   * (never files found inside a source archive or repo), so it only ever runs
+   * for a binary upload. Undefined for source-archive, repo and git scans.
    */
-  mobileAgentScan?: boolean;
+  uploadedArtifact?: string;
   signal?: AbortSignal;
   waitIfPaused?: () => Promise<void>;
   onProgress?: (message: string) => void;
@@ -75,6 +76,19 @@ export interface ScanContext {
    * onProgress and stores the whole trace here).
    */
   onReasoning?: (scannerName: string, reasoning: string) => Promise<void>;
+  /**
+   * Visible status for the agent deep scan (scanners/mobile-agent): running (+
+   * sandbox id), completed, incomplete or failed. Persisted by the processor to
+   * scannerProgress.AGENT_SCAN so it survives the ephemeral sandbox and shows on
+   * the scan page. Only the agent scanner calls it.
+   */
+  onAgentStatus?: (entry: {
+    status: "RUNNING" | "DONE";
+    outcome?: "completed" | "incomplete" | "failed" | "skipped";
+    sandboxId?: string;
+    findingsCount?: number;
+    note?: string;
+  }) => Promise<void>;
 }
 
 /** @see scanners/shared/finding-metadata.ts */

@@ -15,8 +15,8 @@ import * as fs from "fs";
 import OpenAI from "openai";
 import { Sandbox } from "e2b";
 import { logger } from "@/lib/logger";
-import { mobileAgentSystemPrompt } from "./prompt";
-import type { MobileAgentConfig } from "./config";
+import { agentScanSystemPrompt } from "./prompt";
+import type { AgentScanConfig } from "./config";
 
 /** Chars of command output fed back to the model. */
 const MAX_OUTPUT = 6000;
@@ -25,13 +25,15 @@ const MAX_FILE = 12000;
 /** Home of the E2B sandbox's default user; the artifact is uploaded here. */
 const SANDBOX_HOME = "/home/user";
 
-export interface MobileAgentOptions {
+export interface AgentScanOptions {
   signal?: AbortSignal;
   /** Streamed reasoning + a short `$ <command>` note per tool call (buffered by the caller's sink). */
   onReasoning?: (delta: string) => void;
+  /** Called once the sandbox exists, with its id, for visible scan status. */
+  onSandbox?: (sandboxId: string | undefined) => void;
 }
 
-export interface MobileAgentRun {
+export interface AgentScanRun {
   /** The model's final answer — a findings-JSON string for the caller to parse. */
   content: string;
   /** The full reasoning + command trace, for storage / developer display. */
@@ -76,6 +78,7 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 
 /** Minimal slice of the E2B Sandbox this loop uses (keeps the loop testable). */
 interface SandboxLike {
+  sandboxId?: string;
   commands: { run: (cmd: string, opts?: { timeoutMs?: number }) => Promise<CommandResultLike> };
   files: {
     write: (path: string, data: unknown) => Promise<unknown>;
@@ -173,17 +176,18 @@ function extractReasoning(msg: unknown): string {
  * archive) in a fresh E2B sandbox named after `artifactName`. The sandbox is
  * always torn down.
  */
-export async function runMobileAgent(
+export async function runAgentScan(
   localArtifactPath: string,
   artifactName: string,
-  cfg: MobileAgentConfig,
-  opts: MobileAgentOptions = {},
-): Promise<MobileAgentRun> {
+  cfg: AgentScanConfig,
+  opts: AgentScanOptions = {},
+): Promise<AgentScanRun> {
   const client = new OpenAI({ apiKey: cfg.openRouterApiKey, baseURL: cfg.baseUrl });
   const sandbox = (await Sandbox.create({
     apiKey: cfg.e2bApiKey,
     timeoutMs: cfg.sandboxTimeoutMs,
   })) as unknown as SandboxLike;
+  opts.onSandbox?.(sandbox.sandboxId);
 
   const remotePath = `${SANDBOX_HOME}/${artifactName}`;
   const emit = (s: string) => {
@@ -197,7 +201,7 @@ export async function runMobileAgent(
     await sandbox.files.write(remotePath, blob);
 
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      { role: "system", content: mobileAgentSystemPrompt(remotePath) },
+      { role: "system", content: agentScanSystemPrompt(remotePath) },
       { role: "user", content: `Review ${remotePath} and report the security findings as JSON.` },
     ];
 
@@ -293,8 +297,15 @@ export async function runMobileAgent(
     } catch (err) {
       logger.warn(
         { err: err instanceof Error ? err.message : String(err) },
-        "[mobile-agent] failed to kill E2B sandbox",
+        "[agent-scan] failed to kill E2B sandbox",
       );
     }
   }
 }
+
+/** @deprecated renamed to {@link runAgentScan}. */
+export const runMobileAgent = runAgentScan;
+/** @deprecated renamed to {@link AgentScanOptions}. */
+export type MobileAgentOptions = AgentScanOptions;
+/** @deprecated renamed to {@link AgentScanRun}. */
+export type MobileAgentRun = AgentScanRun;

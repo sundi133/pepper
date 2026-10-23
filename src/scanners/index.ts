@@ -69,9 +69,11 @@ export function getScanners(
     // (uploaded .apk) and OPENROUTER_API_KEY is set, so non-mobile scans are
     // unaffected.
     scanners.push(mobileLlmScanner);
-    // Mobile agent deep scan (opt-in): no-ops unless ENABLE_MOBILE_AGENT_SCAN is
-    // set with E2B + OpenRouter keys AND the scan has an uploaded mobile app, so
-    // non-mobile scans — and mobile scans with the mode off — are untouched.
+    // Agent deep scan: no-ops unless ENABLE_AGENT_SCAN is set with E2B +
+    // OpenRouter keys AND the scan source is a single uploaded binary artifact
+    // (.apk/.aab/.ipa/.dex/.jar/.war/.ear/.dll/.exe). When it runs it is the
+    // sole reviewer for that upload (the worker skips the local decompile).
+    // Source/repo scans have no uploaded artifact, so they are untouched.
     scanners.push(mobileAgentScanner);
   }
 

@@ -730,17 +730,24 @@ export default function ScanDetailPage() {
                       Model thinking
                     </div>
                     <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">
-                      Live reasoning as each AI scanner works. It streams in real
-                      time and can jump between files (they are reviewed in
-                      parallel); the full per-finding reasoning is saved to the
-                      scan&apos;s AI report.
+                      The latest thought is at the bottom (it streams like a log).
+                      Each AI scanner reviews files in parallel, so the text can
+                      jump between files; the clean, per-finding reasoning is in
+                      the scan&apos;s AI report.
                     </p>
                     {Object.entries(tails).map(([name, text]) => (
                       <div key={name} className="space-y-1">
                         <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
                           {name}
                         </div>
-                        <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-slate-50 p-2 font-mono text-[11px] leading-relaxed text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                        <pre
+                          // Keep the newest line in view: scroll to the bottom on
+                          // each update so the reader always sees current thinking.
+                          ref={(el) => {
+                            if (el) el.scrollTop = el.scrollHeight;
+                          }}
+                          className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-slate-50 p-2 font-mono text-[11px] leading-relaxed text-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                        >
                           {text}
                         </pre>
                       </div>

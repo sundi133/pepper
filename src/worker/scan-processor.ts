@@ -716,14 +716,16 @@ Schema:
       const reasoningMatch = msg.match(/^\[(\S+) reasoning\] ([\s\S]*)$/);
       if (reasoningMatch) {
         const [, scanner, chunk] = reasoningMatch;
+        // Keep a short rolling window — a compact "what it's thinking now"
+        // ticker, not a full transcript (the whole trace goes to the report).
         reasoningTails[scanner] = ((reasoningTails[scanner] || "") + chunk).slice(
-          -4000,
+          -1500,
         );
         // Display copy: when the tail is truncated, start it at a clean word
         // boundary (with a leading ellipsis) so it never begins mid-word.
         const display: Record<string, string> = {};
         for (const [s, t] of Object.entries(reasoningTails)) {
-          const cut = t.length >= 4000 ? t.search(/\s/) : -1;
+          const cut = t.length >= 1500 ? t.search(/\s/) : -1;
           display[s] = cut > 0 ? "… " + t.slice(cut).replace(/^\s+/, "") : t;
         }
         await prisma.$executeRaw`

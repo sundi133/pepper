@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getActiveOrgId } from "@/lib/auth-guard";
 import { loadAllFrameworks } from "@/lib/compliance/pdf-parser";
 import { FindingForMapping } from "@/lib/compliance/llm-mapper";
 import {
@@ -38,7 +38,7 @@ export async function GET(
   if ("error" in auth) return auth.error;
 
   const { scanId } = await params;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return new Response("No organization", { status: 403 });
 
   const url = new URL(req.url);

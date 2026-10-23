@@ -23,6 +23,7 @@ const PUBLIC_WRITES: Record<string, string> = {
 
 /** Session-authenticated writes that are safe for every member (incl. VIEWER). */
 const MEMBER_WRITES: Record<string, string> = {
+  "org/active POST": "selects the active org; membership-checked, every member may switch to an org they belong to",
   "notifications/[id] PATCH": "the caller's own notification",
   "notifications/[id] DELETE": "the caller's own notification",
   "notifications/mark-all-read POST": "the caller's own notifications",

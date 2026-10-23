@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, requireRole, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, requireRole, getActiveOrgId } from "@/lib/auth-guard";
 import Anthropic from "@anthropic-ai/sdk";
 import { createLlmClient } from "@/lib/llm-gateway";
 import { z } from "zod";
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   if ("error" in auth) return auth.error;
   // Admin-only like the LLM settings it tests; it also makes the server call
   // an arbitrary URL, which must not be open to every member.
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
   const roleAuth = await requireRole(orgId, "ADMIN");
   if ("error" in roleAuth) return roleAuth.error;

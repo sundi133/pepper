@@ -19,10 +19,11 @@ import { Input } from "@/components/ui/input";
 import { LogOut, Search, User, Bell, Shield } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { MobileNav } from "@/components/layout/mobile-nav";
+import { OrgSwitcher } from "@/components/layout/org-switcher";
 
 const unreadFetcher = (url: string) => fetch(url).then((r) => r.json());
 
-export function Topbar() {
+export function Topbar({ activeOrgId }: { activeOrgId?: string | null }) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const { data: unreadData, mutate: mutateUnread } = useSWR<{
@@ -53,6 +54,8 @@ export function Topbar() {
   return (
     <header className="sticky top-0 z-40 flex h-14 w-full shrink-0 items-center gap-3 border-b border-border/80 bg-background/90 px-3 shadow-sm shadow-primary/5 backdrop-blur-lg supports-[backdrop-filter]:bg-background/85 sm:px-6 lg:h-16 lg:px-8">
       <MobileNav />
+
+      <OrgSwitcher activeOrgId={activeOrgId} />
 
       <div className="relative min-w-0 flex-1 max-w-md lg:max-w-lg">
         <Search

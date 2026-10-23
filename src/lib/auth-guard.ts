@@ -1,6 +1,6 @@
 import { getServerSession, type Session } from "next-auth";
 import { cache } from "react";
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
 import { authOptions } from "./auth";
 import { ROLE_HIERARCHY } from "./constants";
 import { verifyApiKey } from "./api-key";
@@ -150,4 +150,48 @@ export function getDefaultOrgId(
   session: Awaited<ReturnType<typeof getSession>>,
 ): string | null {
   return session?.user?.memberships?.[0]?.organizationId ?? null;
+}
+
+/** Name of the httpOnly cookie that holds the user's selected active organisation. */
+export const ACTIVE_ORG_COOKIE = "active_org";
+
+/**
+ * The organisation the user is currently working in, for request-scoped routes.
+ *
+ * A multi-org user selects an active org through the org switcher, which stores
+ * the chosen id in the `active_org` cookie. Here we honour that selection, but
+ * only after confirming the user is still a member of that org — the cookie is
+ * attacker-controllable, so trusting it blindly would let someone read or write
+ * another org's settings by forging the value (IDOR). When the cookie is unset,
+ * malformed, or names an org the user does not belong to, we fall back to
+ * `getDefaultOrgId` (the first membership), which is the pre-switcher behaviour,
+ * so single-org users and non-switching sessions are completely unaffected.
+ *
+ * Callers must STILL apply their own membership/role checks against the returned
+ * id (e.g. `requireRole`): this resolves which org is current, it does not grant
+ * access to it.
+ *
+ * Outside a request context (no cookie store, e.g. the worker) this falls back
+ * to the default org; scans resolve their org from `project.organizationId`, not
+ * from here, so background processing is unaffected.
+ */
+export async function getActiveOrgId(
+  session: Awaited<ReturnType<typeof getSession>>,
+): Promise<string | null> {
+  const memberships = session?.user?.memberships;
+  if (!memberships || memberships.length === 0) return null;
+
+  let selected: string | undefined;
+  try {
+    selected = (await cookies()).get(ACTIVE_ORG_COOKIE)?.value;
+  } catch {
+    // No request context (e.g. called from the worker) — use the default.
+    selected = undefined;
+  }
+
+  if (selected && memberships.some((m) => m.organizationId === selected)) {
+    return selected;
+  }
+
+  return getDefaultOrgId(session);
 }

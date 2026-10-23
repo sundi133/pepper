@@ -5,6 +5,7 @@ const requireRole = vi.fn();
 vi.mock("@/lib/auth-guard", () => ({
   requireAuth: vi.fn(async () => ({ session: { user: { id: "u1" } } })),
   getDefaultOrgId: vi.fn(() => "o1"),
+  getActiveOrgId: vi.fn(async () => "o1"),
   requireRole: (...a: unknown[]) => requireRole(...a),
 }));
 const db = {

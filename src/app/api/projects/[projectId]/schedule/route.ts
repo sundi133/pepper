@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, requireRole, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, requireRole, getActiveOrgId } from "@/lib/auth-guard";
 import { computeNextRun } from "@/lib/schedule-utils";
 import { z } from "zod";
 
@@ -33,7 +33,7 @@ async function authorizeProject(
 ): Promise<{ error: NextResponse } | { ok: true }> {
   const auth = await requireAuth();
   if ("error" in auth) return { error: auth.error as NextResponse };
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) {
     return { error: NextResponse.json({ error: "No organization" }, { status: 403 }) };
   }

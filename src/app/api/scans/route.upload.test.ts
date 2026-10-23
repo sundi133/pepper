@@ -10,6 +10,7 @@ const { uploadObject, queueAdd, scanUpdate } = vi.hoisted(() => ({
 vi.mock("@/lib/auth-guard", () => ({
   requireAuth: vi.fn(async () => ({ session: { user: { id: "u1" } } })),
   getDefaultOrgId: vi.fn(() => "o1"),
+  getActiveOrgId: vi.fn(async () => "o1"),
   requireRole: vi.fn(async () => ({})),
 }));
 vi.mock("@/lib/prisma", () => ({

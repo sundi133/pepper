@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, getActiveOrgId } from "@/lib/auth-guard";
 import {
   TERMINAL_RUN_STATUSES,
   type RemediationRunStatus,
@@ -25,7 +25,7 @@ export async function GET(
 ) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return new Response("No organization", { status: 403 });
 
   const { runId } = await params;

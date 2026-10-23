@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getDefaultOrgId, requireRole } from "@/lib/auth-guard";
+import { requireAuth, getActiveOrgId, requireRole } from "@/lib/auth-guard";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import { normalizeTemplateBody } from "@/lib/custom-reports/template";
 import { isDuplicateName, templateUpdateSchema } from "@/lib/custom-reports/template-schema";
@@ -11,7 +11,7 @@ type Params = { params: Promise<{ templateId: string }> };
 export async function GET(_req: NextRequest, { params }: Params) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
 
   const { templateId } = await params;
@@ -24,7 +24,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
   const roleAuth = await requireRole(orgId, "SECURITY");
   if ("error" in roleAuth) return roleAuth.error;
@@ -82,7 +82,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(req: NextRequest, { params }: Params) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 403 });
   const roleAuth = await requireRole(orgId, "SECURITY");
   if ("error" in roleAuth) return roleAuth.error;

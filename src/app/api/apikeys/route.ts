@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, requireRole, getDefaultOrgId } from "@/lib/auth-guard";
+import { requireAuth, requireRole, getActiveOrgId } from "@/lib/auth-guard";
 import { createApiKey, listApiKeys } from "@/lib/api-key";
 import { writeAuditLog, ipFromHeaders } from "@/lib/audit-log";
 import { prisma } from "@/lib/prisma";
@@ -8,7 +8,7 @@ import { logger } from "@/lib/logger";
 export async function GET() {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
-  const orgId = getDefaultOrgId(auth.session);
+  const orgId = await getActiveOrgId(auth.session);
   if (!orgId) {
     return NextResponse.json({ error: "No organization" }, { status: 403 });
   }
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     if ("error" in auth) return auth.error;
 
     const userId = auth.session.user.id;
-    let orgId = getDefaultOrgId(auth.session);
+    let orgId = await getActiveOrgId(auth.session);
 
     if (orgId) {
       // Check if org exists

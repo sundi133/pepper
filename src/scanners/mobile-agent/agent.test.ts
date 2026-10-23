@@ -57,6 +57,29 @@ function toolCallResponse(command: string, reasoning = "") {
   };
 }
 
+/** A response with one web_search tool call. */
+function webSearchResponse(query: string) {
+  return {
+    choices: [
+      {
+        message: {
+          content: "",
+          reasoning: "",
+          tool_calls: [
+            {
+              id: "call_ws",
+              type: "function",
+              function: { name: "web_search", arguments: JSON.stringify({ query }) },
+            },
+          ],
+        },
+      },
+    ],
+  };
+}
+
+const WS_CFG = { apiKey: "ws-key", provider: "tavily" as const };
+
 /** A final response (no tool calls) carrying the findings JSON. */
 function finalResponse(findings: unknown[], reasoning = "") {
   return {
@@ -124,8 +147,12 @@ describe("runMobileAgent", () => {
     expect(write).toHaveBeenCalledOnce();
     expect(write.mock.calls[0][0]).toBe("/home/user/app.apk");
 
-    // The command the model asked for ran in the sandbox.
-    expect(run).toHaveBeenCalledWith("jadx --version", { timeoutMs: CFG.cmdTimeoutMs });
+    // The command the model asked for ran in the sandbox, with the network
+    // request deadline matched to the command timeout (long decompiles).
+    expect(run).toHaveBeenCalledWith("jadx --version", {
+      timeoutMs: CFG.cmdTimeoutMs,
+      requestTimeoutMs: CFG.cmdTimeoutMs,
+    });
 
     // Result + reasoning (model thinking and the `$ command` note) came back.
     expect(result.finished).toBe(true);
@@ -197,5 +224,99 @@ describe("runMobileAgent", () => {
     expect(result.finished).toBe(false);
     expect(result.content).toBe("");
     expect(kill).toHaveBeenCalledOnce();
+  });
+
+  const toolNames = (call: unknown): string[] =>
+    ((call as { tools?: Array<{ function: { name: string } }> }).tools ?? []).map(
+      (t) => t.function.name,
+    );
+
+  it("offers run_command + read_file + report_finding (and no web_search) when no provider is configured", async () => {
+    run.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    create.mockResolvedValueOnce(finalResponse([]));
+    await runAgentScan(artifactPath, "app.apk", CFG, {});
+    expect(toolNames(create.mock.calls[0][0])).toEqual([
+      "run_command",
+      "read_file",
+      "report_finding",
+    ]);
+  });
+
+  it("offers a web_search tool when a provider key is configured", async () => {
+    create.mockResolvedValueOnce(finalResponse([]));
+    await runAgentScan(artifactPath, "app.apk", { ...CFG, webSearch: WS_CFG }, {});
+    expect(toolNames(create.mock.calls[0][0])).toContain("web_search");
+  });
+
+  it("invokes onFinding when the model calls report_finding", async () => {
+    const reported: unknown[] = [];
+    create
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              content: "",
+              reasoning: "",
+              tool_calls: [
+                {
+                  id: "call_rf",
+                  type: "function",
+                  function: {
+                    name: "report_finding",
+                    arguments: JSON.stringify({
+                      title: "SQL injection",
+                      severity: "HIGH",
+                      file: "com/example/Dao.java",
+                      vulnerability: "concatenated query",
+                      fix: "use parameterized queries",
+                      confidence: "high",
+                    }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce(finalResponse([]));
+    await runAgentScan(artifactPath, "app.apk", CFG, {
+      onFinding: (f) => {
+        reported.push(f);
+      },
+    });
+    expect(reported).toHaveLength(1);
+    expect((reported[0] as { title: string }).title).toBe("SQL injection");
+    // the model got an ack it can continue from
+    const toolMsg = create.mock.calls[1][0].messages.find(
+      (m: { role: string }) => m.role === "tool",
+    );
+    expect(toolMsg.content).toBe("finding recorded");
+  });
+
+  it("runs a web_search tool call via the provider fetch and feeds results back", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [{ title: "CVE-2021-44228 (Log4Shell)", url: "https://x", content: "RCE in log4j" }],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      create
+        .mockResolvedValueOnce(webSearchResponse("log4j 2.14 CVE"))
+        .mockResolvedValueOnce(finalResponse([]));
+      await runAgentScan(artifactPath, "app.apk", { ...CFG, webSearch: WS_CFG }, {});
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://api.tavily.com/search",
+        expect.objectContaining({ method: "POST" }),
+      );
+      const toolMsg = create.mock.calls[1][0].messages.find(
+        (m: { role: string }) => m.role === "tool",
+      );
+      expect(toolMsg.content).toContain("CVE-2021-44228");
+      expect(kill).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

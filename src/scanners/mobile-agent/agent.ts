@@ -16,7 +16,7 @@ import OpenAI from "openai";
 import { Sandbox } from "e2b";
 import { logger } from "@/lib/logger";
 import { agentScanSystemPrompt } from "./prompt";
-import type { AgentScanConfig } from "./config";
+import type { AgentScanConfig, WebSearchConfig } from "./config";
 
 /** Chars of command output fed back to the model. */
 const MAX_OUTPUT = 6000;
@@ -25,12 +25,27 @@ const MAX_FILE = 12000;
 /** Home of the E2B sandbox's default user; the artifact is uploaded here. */
 const SANDBOX_HOME = "/home/user";
 
+/** A finding the model streams mid-run via the report_finding tool. */
+export interface ReportedFinding {
+  title?: string;
+  severity?: string;
+  file?: string;
+  line?: number | null;
+  vulnerability?: string;
+  attack?: string;
+  fix?: string;
+  confidence?: string;
+  cwe?: string | null;
+}
+
 export interface AgentScanOptions {
   signal?: AbortSignal;
   /** Streamed reasoning + a short `$ <command>` note per tool call (buffered by the caller's sink). */
   onReasoning?: (delta: string) => void;
   /** Called once the sandbox exists, with its id, for visible scan status. */
   onSandbox?: (sandboxId: string | undefined) => void;
+  /** Called each time the model reports a confirmed finding (report_finding tool), for live insertion. */
+  onFinding?: (finding: ReportedFinding) => void | Promise<void>;
 }
 
 export interface AgentScanRun {
@@ -44,7 +59,7 @@ export interface AgentScanRun {
   finished: boolean;
 }
 
-const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+const BASE_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
@@ -74,12 +89,55 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "report_finding",
+      description:
+        "Report ONE confirmed security finding as soon as you have verified it — do not wait until the end. Each call is surfaced in the Findings tab immediately.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          severity: { type: "string", enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+          file: { type: "string", description: "path inside the artifact, e.g. com/example/Login.java" },
+          line: { type: ["integer", "null"] },
+          vulnerability: { type: "string", description: "what the weakness is, grounded in the evidence" },
+          attack: { type: "string", description: "how it is exploited / the risk (no payloads)" },
+          fix: { type: "string", description: "the concrete remediation" },
+          confidence: { type: "string", enum: ["high", "medium", "low"] },
+          cwe: { type: ["string", "null"] },
+        },
+        required: ["title", "severity", "file", "vulnerability", "fix"],
+      },
+    },
+  },
 ];
+
+/** Offered only when a web search provider key is configured (self-gated). */
+const WEB_SEARCH_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "web_search",
+    description:
+      "Search the web for security advisories, CVEs and vendor docs to verify a finding. Returns the top results (title, url, snippet).",
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+    },
+  },
+};
 
 /** Minimal slice of the E2B Sandbox this loop uses (keeps the loop testable). */
 interface SandboxLike {
   sandboxId?: string;
-  commands: { run: (cmd: string, opts?: { timeoutMs?: number }) => Promise<CommandResultLike> };
+  commands: {
+    run: (
+      cmd: string,
+      opts?: { timeoutMs?: number; requestTimeoutMs?: number },
+    ) => Promise<CommandResultLike>;
+  };
   files: {
     write: (path: string, data: unknown) => Promise<unknown>;
     read: (path: string) => Promise<unknown>;
@@ -110,7 +168,9 @@ async function runCommand(
   timeoutMs: number,
 ): Promise<string> {
   try {
-    const r = await sandbox.commands.run(command, { timeoutMs });
+    // Match the network request deadline to the command timeout, or E2B's
+    // default ~60s request timeout would kill a long decompile (jadx) mid-run.
+    const r = await sandbox.commands.run(command, { timeoutMs, requestTimeoutMs: timeoutMs });
     return formatCommandResult(r.exitCode, r.stdout, r.stderr);
   } catch (err) {
     // CommandExitError carries the result; surface it instead of failing the loop.
@@ -133,22 +193,85 @@ async function readFile(sandbox: SandboxLike, path: string, cap: number): Promis
   }
 }
 
+/** Max chars of web search results fed back to the model. */
+const MAX_WEB_SEARCH = 4000;
+
+interface WebResult {
+  title?: string;
+  url?: string;
+  snippet?: string;
+}
+
+/** Runs a web search via the configured provider (Tavily or Brave). Worker-side fetch. */
+async function webSearch(
+  cfg: WebSearchConfig,
+  query: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  try {
+    let results: WebResult[] = [];
+    if (cfg.provider === "brave") {
+      const res = await fetch(
+        `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+        { headers: { Accept: "application/json", "X-Subscription-Token": cfg.apiKey }, signal },
+      );
+      if (!res.ok) return `ERROR: web search failed (HTTP ${res.status})`;
+      const data = (await res.json()) as { web?: { results?: Array<Record<string, unknown>> } };
+      results = (data.web?.results ?? []).slice(0, 5).map((r) => ({
+        title: r.title as string,
+        url: r.url as string,
+        snippet: (r.description as string) || "",
+      }));
+    } else {
+      // Tavily (default)
+      const res = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: cfg.apiKey, query, max_results: 5 }),
+        signal,
+      });
+      if (!res.ok) return `ERROR: web search failed (HTTP ${res.status})`;
+      const data = (await res.json()) as { results?: Array<Record<string, unknown>> };
+      results = (data.results ?? []).slice(0, 5).map((r) => ({
+        title: r.title as string,
+        url: r.url as string,
+        snippet: (r.content as string) || "",
+      }));
+    }
+    if (results.length === 0) return "(no results)";
+    const text = results
+      .map((r) => `- ${r.title || "(untitled)"}\n  ${r.url || ""}\n  ${(r.snippet || "").slice(0, 300)}`)
+      .join("\n");
+    return truncate(text, MAX_WEB_SEARCH);
+  } catch (err) {
+    const e = err as { name?: string; message?: string };
+    return `ERROR: ${e.name || "Error"}: ${String(e.message || err).slice(0, 300)}`;
+  }
+}
+
 async function dispatchTool(
   sandbox: SandboxLike,
   name: string,
   args: Record<string, unknown>,
-  cmdTimeoutMs: number,
+  cfg: AgentScanConfig,
+  signal?: AbortSignal,
 ): Promise<string> {
   if (name === "run_command") {
     const command = typeof args.command === "string" ? args.command : "";
     if (!command) return "ERROR: no command provided";
-    return runCommand(sandbox, command, cmdTimeoutMs);
+    return runCommand(sandbox, command, cfg.cmdTimeoutMs);
   }
   if (name === "read_file") {
     const path = typeof args.path === "string" ? args.path : "";
     if (!path) return "ERROR: no path provided";
     const cap = typeof args.max_bytes === "number" && args.max_bytes > 0 ? args.max_bytes : MAX_FILE;
     return readFile(sandbox, path, cap);
+  }
+  if (name === "web_search") {
+    if (!cfg.webSearch) return "ERROR: web_search is not available";
+    const query = typeof args.query === "string" ? args.query : "";
+    if (!query) return "ERROR: no query provided";
+    return webSearch(cfg.webSearch, query, signal);
   }
   return `unknown tool ${name}`;
 }
@@ -208,10 +331,13 @@ export async function runAgentScan(
     let reasoningAll = "";
     let steps = 0;
 
+    // Offer web_search only when a provider key is configured (self-gated).
+    const tools = cfg.webSearch ? [...BASE_TOOLS, WEB_SEARCH_TOOL] : BASE_TOOLS;
+
     // reasoning passthrough is an OpenRouter extension, not in the OpenAI types.
     const baseParams = {
       model: cfg.model,
-      tools: TOOLS,
+      tools,
       tool_choice: "auto" as const,
       reasoning: { enabled: true, effort: "high" },
     };
@@ -255,13 +381,31 @@ export async function runAgentScan(
         } catch {
           args = {};
         }
-        const note =
-          tc.function.name === "run_command"
-            ? `\n$ ${String(args.command ?? "").slice(0, 300)}\n`
-            : `\n(read ${String(args.path ?? "")})\n`;
+        // report_finding streams one confirmed finding for immediate insertion.
+        if (tc.function.name === "report_finding") {
+          const note = `\n(reported: ${String(args.title ?? "").slice(0, 120)})\n`;
+          reasoningAll += note;
+          emit(note);
+          try {
+            await opts.onFinding?.(args as ReportedFinding);
+          } catch {
+            /* live insertion is best-effort; the final JSON is the safety net */
+          }
+          messages.push({ role: "tool", tool_call_id: tc.id, content: "finding recorded" });
+          continue;
+        }
+
+        let note: string;
+        if (tc.function.name === "run_command") {
+          note = `\n$ ${String(args.command ?? "").slice(0, 300)}\n`;
+        } else if (tc.function.name === "web_search") {
+          note = `\n(web_search "${String(args.query ?? "").slice(0, 200)}")\n`;
+        } else {
+          note = `\n(read ${String(args.path ?? "")})\n`;
+        }
         reasoningAll += note;
         emit(note);
-        const result = await dispatchTool(sandbox, tc.function.name, args, cfg.cmdTimeoutMs);
+        const result = await dispatchTool(sandbox, tc.function.name, args, cfg, opts.signal);
         messages.push({ role: "tool", tool_call_id: tc.id, content: result });
       }
     }

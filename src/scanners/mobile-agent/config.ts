@@ -22,6 +22,13 @@ export interface AgentKeySource {
   llmApiKey?: string;
 }
 
+export type WebSearchProvider = "tavily" | "brave";
+
+export interface WebSearchConfig {
+  apiKey: string;
+  provider: WebSearchProvider;
+}
+
 export interface AgentScanConfig {
   /** OpenRouter key the glm-5.3 function-calling loop authenticates with (org key or env). */
   openRouterApiKey: string;
@@ -31,12 +38,27 @@ export interface AgentScanConfig {
   baseUrl: string;
   /** Where the OpenRouter key came from, for status/diagnostics. */
   keySource: "org" | "env";
+  /**
+   * Optional web search for advisory lookups. Present only when
+   * WEB_SEARCH_API_KEY is set; when absent the agent is offered no web_search
+   * tool (no behavior change, no regression).
+   */
+  webSearch?: WebSearchConfig;
   /** Max model turns before the loop stops. */
   maxSteps: number;
   /** How long the E2B VM is kept alive (ms). */
   sandboxTimeoutMs: number;
   /** Per-command timeout inside the VM (ms). */
   cmdTimeoutMs: number;
+}
+
+/** Reads the optional web search config from the env (WEB_SEARCH_API_KEY / WEB_SEARCH_PROVIDER). */
+export function webSearchConfigFromEnv(): WebSearchConfig | undefined {
+  const apiKey = process.env.WEB_SEARCH_API_KEY?.trim();
+  if (!apiKey) return undefined;
+  const provider: WebSearchProvider =
+    process.env.WEB_SEARCH_PROVIDER?.trim().toLowerCase() === "brave" ? "brave" : "tavily";
+  return { apiKey, provider };
 }
 
 /** Max per-command timeout — long enough for an install/decompile, bounded so one command can't hog the VM lease. */
@@ -92,6 +114,7 @@ export function agentScanConfig(org?: AgentKeySource): AgentScanConfig | null {
     model: process.env.OPENROUTER_MOBILE_MODEL?.trim() || "z-ai/glm-5.3",
     baseUrl: or.baseUrl,
     keySource: or.keySource,
+    webSearch: webSearchConfigFromEnv(),
     maxSteps:
       Number.isFinite(AGENT_SCAN_MAX_STEPS) && AGENT_SCAN_MAX_STEPS > 0
         ? AGENT_SCAN_MAX_STEPS

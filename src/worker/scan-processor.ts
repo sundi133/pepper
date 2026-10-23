@@ -992,7 +992,13 @@ Schema:
                 scanner: superseded.scanner,
                 // Stored under its artifact path when it is in decompiled code.
                 filePath: decompiledPaths.mapFinding(superseded).filePath,
-                startLine: superseded.startLine,
+                // Coerce to null, not undefined: Prisma DROPS an `undefined`
+                // filter, so for artifact-level findings with no line (agent
+                // iOS/binary review) `startLine: undefined` would match — and
+                // delete — EVERY finding sharing the filePath. Match on title too
+                // so siblings on the same artifact path aren't collaterally wiped.
+                startLine: superseded.startLine ?? null,
+                title: superseded.title,
               },
             });
           } catch (err) {

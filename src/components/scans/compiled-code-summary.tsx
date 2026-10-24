@@ -40,7 +40,13 @@ export function CompiledCodeSummary({ scannerProgress }: { scannerProgress: unkn
   if (!record || record.status !== "DONE") return null;
   const artifacts = record.artifacts ?? [];
   // Dependencies are skipped by design; list what a reader may want to act on.
-  const notes = (record.skipped ?? []).filter((s) => s.reason !== "dependency");
+  // The agent deep scan handoff is also dropped: when the agent owns a binary
+  // upload the local decompile does nothing, and the "Agent deep scan" panel
+  // below already explains it — this panel would just show a confusing
+  // "0 artifacts decompiled … handled by the agent deep scan".
+  const notes = (record.skipped ?? []).filter(
+    (s) => s.reason !== "dependency" && !/agent deep scan/i.test(s.detail ?? ""),
+  );
   const dependencySkips = record.skippedByReason?.dependency ?? 0;
   if (artifacts.length === 0 && notes.length === 0) return null;
 

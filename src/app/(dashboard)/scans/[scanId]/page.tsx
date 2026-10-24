@@ -12,7 +12,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -1077,14 +1076,14 @@ export default function ScanDetailPage() {
 
       {/* AI reasoning shown inline instead of a raw download. */}
       <Dialog open={reasoningOpen} onOpenChange={setReasoningOpen}>
-        <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>AI reasoning</DialogTitle>
           </DialogHeader>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             How the AI scanners reached their findings — the full trace per scanner.
           </p>
-          <ScrollArea className="mt-2 flex-1 rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+          <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
             {reasoningLoading ? (
               <p className="text-sm text-slate-500">Loading…</p>
             ) : reasoningError ? (
@@ -1094,7 +1093,7 @@ export default function ScanDetailPage() {
                 {reasoningText || "No reasoning trace was recorded for this scan."}
               </pre>
             )}
-          </ScrollArea>
+          </div>
           <DialogFooter>
             <Button
               variant="outline"

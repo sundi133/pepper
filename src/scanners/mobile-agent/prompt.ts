@@ -25,7 +25,7 @@ export const AGENT_SCAN_JSON_CONTRACT = `When your investigation is complete, ST
     }
   ]
 }
-If there are no well-supported issues, return {"findings": []}. Report few, well-supported findings rather than a long noisy list. Cite the CVE/advisory id in the evidence or title whenever a finding is a known-vulnerable dependency.`;
+If there are no well-supported issues, return {"findings": []}. Be EXHAUSTIVE: report every well-supported issue you find — do not omit a real finding to keep the list short, and do not stop at the first few. Do not pad with speculation either; every finding must point to concrete evidence in the artifact. Cite the CVE/advisory id in the evidence or title whenever a finding is a known-vulnerable dependency.`;
 
 export function agentScanSystemPrompt(artifactPath: string): string {
   return (

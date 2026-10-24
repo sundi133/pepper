@@ -5,6 +5,14 @@ import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
 import { useScanPolling, useFindings } from "@/hooks/use-scan-polling";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -119,6 +127,27 @@ export default function ScanDetailPage() {
   const [resuming, setResuming] = useState(false);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const [now, setNow] = useState(Date.now());
+  // Inline AI reasoning viewer (shown in a dialog instead of only downloading).
+  const [reasoningOpen, setReasoningOpen] = useState(false);
+  const [reasoningText, setReasoningText] = useState<string>("");
+  const [reasoningLoading, setReasoningLoading] = useState(false);
+  const [reasoningError, setReasoningError] = useState<string>("");
+
+  const openReasoning = async () => {
+    setReasoningOpen(true);
+    if (reasoningText || reasoningLoading) return; // already loaded / loading
+    setReasoningLoading(true);
+    setReasoningError("");
+    try {
+      const res = await fetch(`/api/scans/${scanId}/artifacts/ai-reasoning`);
+      if (!res.ok) throw new Error(`Could not load the reasoning trace (${res.status})`);
+      setReasoningText(await res.text());
+    } catch (e) {
+      setReasoningError(e instanceof Error ? e.message : "Could not load the reasoning trace");
+    } finally {
+      setReasoningLoading(false);
+    }
+  };
   const [activeSection, setActiveSection] = useState<string>("");
   // Section ids (SAST, SECRETS, …) the user wants in the PDF export. An empty
   // array means "all sections" (the existing behavior).
@@ -622,12 +651,7 @@ export default function ScanDetailPage() {
                       <Button
                         variant="ghost"
                         className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
-                        onClick={() =>
-                          window.open(
-                            `/api/scans/${scanId}/artifacts/ai-reasoning`,
-                            "_blank",
-                          )
-                        }
+                        onClick={openReasoning}
                       >AI reasoning</Button>
                     )}
                   </>
@@ -1050,6 +1074,40 @@ export default function ScanDetailPage() {
         canDeleteAny={!!canManageScan}
         userId={session?.user?.id}
       />
+
+      {/* AI reasoning shown inline instead of a raw download. */}
+      <Dialog open={reasoningOpen} onOpenChange={setReasoningOpen}>
+        <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>AI reasoning</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            How the AI scanners reached their findings — the full trace per scanner.
+          </p>
+          <ScrollArea className="mt-2 flex-1 rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+            {reasoningLoading ? (
+              <p className="text-sm text-slate-500">Loading…</p>
+            ) : reasoningError ? (
+              <p className="text-sm text-red-600">{reasoningError}</p>
+            ) : (
+              <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-slate-700 dark:text-slate-300">
+                {reasoningText || "No reasoning trace was recorded for this scan."}
+              </pre>
+            )}
+          </ScrollArea>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                window.open(`/api/scans/${scanId}/artifacts/ai-reasoning`, "_blank")
+              }
+            >
+              Download .md
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

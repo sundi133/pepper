@@ -30,16 +30,15 @@ async function main() {
   });
   console.log(`Organization: ${org.name} (${org.id})`);
 
-  // Create org settings
+  // Create org settings — INITIAL values only. The update block is intentionally
+  // empty: a re-seed (e.g. the deploy/release command running on every redeploy)
+  // must NOT overwrite the org's live LLM config. Otherwise the admin's saved
+  // provider/model/key get reset to the seed defaults (google/gemini-2.5-flash +
+  // the env LLM_API_KEY) on every deploy — the "my glm-5.3 config keeps
+  // reverting to gemini after a redeploy" bug.
   await prisma.orgSettings.upsert({
     where: { organizationId: org.id },
-    update: {
-      llmProvider,
-      llmBaseUrl,
-      llmModel,
-      ...(llmApiKey ? { llmApiKey } : {}),
-      ...(githubPrToken ? { githubPrToken } : {}),
-    },
+    update: {},
     create: {
       organizationId: org.id,
       llmProvider,

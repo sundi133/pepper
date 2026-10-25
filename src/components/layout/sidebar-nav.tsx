@@ -20,6 +20,7 @@ import {
   History,
   FileSignature,
   ShieldOff,
+  ShieldAlert,
   FileText,
   type LucideIcon,
 } from "lucide-react";
@@ -54,6 +55,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { name: "Repositories", href: "/projects", icon: FolderOpen },
       { name: "Scans", href: "/scans", icon: ListChecks },
+      { name: "Vulnerabilities", href: "/vulnerabilities", icon: ShieldAlert },
       { name: "Security Trends", href: "/trends", icon: TrendingUp },
     ],
   },

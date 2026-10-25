@@ -60,3 +60,37 @@ export function scanFindingsWhere(params: {
   }
   return where;
 }
+
+/**
+ * Where-clause for the Vulnerabilities workspace: findings across a set of
+ * scans (typically the latest completed scan per project in an org), with the
+ * same severity/scanner/status/false-positive rules as the per-scan view plus a
+ * cross-field search.
+ */
+export function orgFindingsWhere(params: {
+  scanIds: string[];
+  severity?: string[] | null;
+  scanner?: string[] | null;
+  status?: string[] | null;
+  includeFalsePositives?: boolean;
+  q?: string | null;
+}): Record<string, unknown> {
+  const { scanIds, severity, scanner, status, q } = params;
+  const where: Record<string, unknown> = { scanId: { in: scanIds } };
+  if (severity && severity.length) where.severity = { in: severity };
+  else where.severity = { notIn: ["INFO"] };
+  if (scanner && scanner.length) where.scanner = { in: scanner };
+  if (status && status.length) where.status = { in: status };
+  else if (!params.includeFalsePositives) where.status = { not: "FALSE_POSITIVE" };
+  if (q) {
+    const contains = { contains: q, mode: "insensitive" as const };
+    where.OR = [
+      { title: contains },
+      { filePath: contains },
+      { cweId: contains },
+      { cveId: contains },
+      { description: contains },
+    ];
+  }
+  return where;
+}

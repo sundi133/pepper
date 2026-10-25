@@ -35,41 +35,56 @@ type NavGroup = { label?: string; items: NavItem[] };
  * non-primary entries, mixing security policy with credentials, an audit record
  * and the documentation link.
  */
+/**
+ * "New scan" is an action, not a destination, so it renders as a prominent
+ * button above the navigation rather than as a nav link.
+ */
+export const newScanAction: NavItem = {
+  name: "New scan",
+  href: "/scans/new",
+  icon: PlusCircle,
+};
+
 export const navGroups: NavGroup[] = [
   {
-    items: [{ name: "Dashboard", href: "/dashboard", icon: LayoutDashboard }],
+    items: [{ name: "Overview", href: "/dashboard", icon: LayoutDashboard }],
   },
   {
-    label: "Security",
+    label: "Code Security",
     items: [
-      // An action, not a section — the old label was just "Scan", which read as
-      // a peer of Projects while actually opening a create form.
-      { name: "New scan", href: "/scans/new", icon: PlusCircle },
       { name: "Repositories", href: "/projects", icon: FolderOpen },
-      // Previously unreachable: nothing in the UI linked to /scans, so the list
-      // holding retry and delete could only be reached by typing the URL.
       { name: "Scans", href: "/scans", icon: ListChecks },
-      { name: "Trends", href: "/trends", icon: TrendingUp },
+      { name: "Security Trends", href: "/trends", icon: TrendingUp },
     ],
   },
   {
-    label: "Policy",
+    label: "Security Policies",
     items: [
-      { name: "Policies", href: "/settings/policies", icon: ScrollText },
-      { name: "Build Gates", href: "/settings/build-gates", icon: ShieldCheck },
-      { name: "Suppressions", href: "/settings/suppressions", icon: ShieldOff },
+      { name: "Security Policies", href: "/settings/policies", icon: ScrollText },
+      { name: "Quality Gates", href: "/settings/build-gates", icon: ShieldCheck },
+      { name: "Exceptions", href: "/settings/suppressions", icon: ShieldOff },
       { name: "Code Signing", href: "/settings/signing", icon: FileSignature },
+    ],
+  },
+  {
+    label: "Reporting",
+    items: [
       { name: "Report Templates", href: "/settings/report-templates", icon: FileText },
     ],
   },
   {
     label: "Configuration",
     items: [
-      { name: "LLM Config", href: "/settings/llm", icon: Zap },
+      { name: "AI Models", href: "/settings/llm", icon: Zap },
       { name: "Integrations", href: "/settings/integrations", icon: Webhook },
       { name: "API Keys", href: "/settings/apikeys", icon: KeyRound },
-      { name: "Team", href: "/settings/team", icon: Users },
-      { name: "Audit Log", href: "/settings/audit-log", icon: History },
+    ],
+  },
+  {
+    label: "Organization",
+    items: [
+      { name: "Team & Access", href: "/settings/team", icon: Users },
+      { name: "Audit Logs", href: "/settings/audit-log", icon: History },
     ],
   },
 ];
@@ -81,6 +96,7 @@ export const footerNavigation: NavItem[] = [
 
 /** Every href the sidebar knows about, for active-state resolution. */
 export const allNavHrefs: string[] = [
+  newScanAction.href,
   ...navGroups.flatMap((g) => g.items.map((i) => i.href)),
   ...footerNavigation.map((i) => i.href),
 ];
@@ -133,6 +149,17 @@ export function SidebarNav({
 
   return (
     <nav className={cn("flex flex-col gap-5", className)}>
+      {/* Primary action, surfaced as a button rather than a nav destination. */}
+      <Link
+        href={newScanAction.href}
+        onClick={onNavigate}
+        aria-current={activeHref === newScanAction.href ? "page" : undefined}
+        className="flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+      >
+        <newScanAction.icon className="h-5 w-5 shrink-0" aria-hidden />
+        {newScanAction.name}
+      </Link>
+
       {navGroups.map((group, index) => (
         <div key={group.label ?? `group-${index}`}>
           {group.label ? (

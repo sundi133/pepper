@@ -20,7 +20,6 @@ import {
   Package,
   FolderKanban,
   CheckCircle2,
-  ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
@@ -350,7 +349,7 @@ export default function DashboardPage() {
 
       {/* Metrics */}
       <section aria-label="Summary metrics">
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
           <MetricTile
             label="Total repositories"
             value={overview?.projectCount ?? projects.length}
@@ -378,18 +377,6 @@ export default function DashboardPage() {
             label="Vulnerable dependencies"
             value={overview?.dependencyFindingCount ?? 0}
             icon={Package}
-          />
-          <MetricTile
-            label="Fixed this month"
-            value={overview?.resolvedThisMonth ?? 0}
-            sub={
-              (overview?.acceptedRiskCount ?? 0) > 0 ? (
-                <span className="text-muted-foreground">
-                  {overview?.acceptedRiskCount} accepted as risk
-                </span>
-              ) : undefined
-            }
-            icon={ShieldCheck}
           />
         </div>
       </section>

@@ -75,6 +75,8 @@ import {
   ArrowUpRight,
   Sparkles,
   Info,
+  FileSignature,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -208,6 +210,63 @@ export default function ScanDetailPage() {
       setReasoningLoading(false);
     }
   };
+  // Stored artifact types (SBOMs, VEX, SIGNATURE), so the Export menu only
+  // offers files this scan actually has.
+  const [artifactTypes, setArtifactTypes] = useState<string[]>([]);
+  const [verifying, setVerifying] = useState(false);
+  const scanCompleted = scan?.status === "COMPLETED";
+  useEffect(() => {
+    if (!scanCompleted) return;
+    let cancelled = false;
+    fetch(`/api/scans/${scanId}/artifacts`)
+      .then((res) => (res.ok ? res.json() : { artifacts: [] }))
+      .then((j: { artifacts?: Array<{ type: string }> }) => {
+        if (!cancelled) setArtifactTypes((j.artifacts ?? []).map((a) => a.type));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [scanId, scanCompleted]);
+
+  const verifySignatures = async () => {
+    setVerifying(true);
+    try {
+      const res = await fetch(`/api/scans/${scanId}/signature/verify`);
+      const j = (await res.json().catch(() => null)) as {
+        verified?: boolean;
+        error?: string;
+        results?: Array<{
+          label: string;
+          algorithm: string;
+          digestMatches: boolean;
+          signatureValid: boolean | null;
+          signedByCurrentKey: boolean | null;
+        }>;
+      } | null;
+      if (!res.ok || !j?.results) {
+        toast.error(j?.error || "Couldn't verify signatures");
+        return;
+      }
+      const bad = j.results.filter((r) => !r.digestMatches || r.signatureValid === false);
+      if (bad.length > 0) {
+        toast.error(`Verification failed for ${bad.map((r) => r.label).join(", ")}`, {
+          description: "The file was changed after signing, or wasn't signed by your current key.",
+        });
+      } else if (j.results.some((r) => r.algorithm === "cosign")) {
+        toast.success(`${j.results.length} files unchanged since signing`, {
+          description: "Keyless signatures: confirm the certificate with cosign verify-blob.",
+        });
+      } else {
+        toast.success(`All ${j.results.length} signatures valid`, {
+          description: "Signed by your organization's current key; files unchanged.",
+        });
+      }
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const [activeSection, setActiveSection] = useState<string>("");
   // Section ids (SAST, SECRETS, …) the user wants in the PDF export. An empty
   // array means "all sections" (the existing behavior).
@@ -674,6 +733,51 @@ export default function ScanDetailPage() {
                           <FileText className="mr-2 h-4 w-4" aria-hidden />
                           SBOM (SPDX)
                         </DropdownMenuItem>
+                        {artifactTypes.includes("VEX_OPENVEX") && (
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onClick={() =>
+                              window.open(`/api/scans/${scanId}/artifacts/openvex`, "_blank")
+                            }
+                          >
+                            <FileText className="mr-2 h-4 w-4" aria-hidden />
+                            VEX (OpenVEX)
+                          </DropdownMenuItem>
+                        )}
+                        {artifactTypes.includes("VEX_CYCLONEDX") && (
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onClick={() =>
+                              window.open(`/api/scans/${scanId}/artifacts/cyclonedx-vex`, "_blank")
+                            }
+                          >
+                            <FileText className="mr-2 h-4 w-4" aria-hidden />
+                            VEX (CycloneDX)
+                          </DropdownMenuItem>
+                        )}
+                        {artifactTypes.includes("SIGNATURE") && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel>Signatures</DropdownMenuLabel>
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onClick={() =>
+                                window.open(`/api/scans/${scanId}/artifacts/signature`, "_blank")
+                              }
+                            >
+                              <FileSignature className="mr-2 h-4 w-4" aria-hidden />
+                              Signature file
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              disabled={verifying}
+                              onClick={() => void verifySignatures()}
+                            >
+                              <ShieldCheck className="mr-2 h-4 w-4" aria-hidden />
+                              {verifying ? "Verifying…" : "Verify signatures"}
+                            </DropdownMenuItem>
+                          </>
+                        )}
                         {/* The full AI reasoning trace, when an AI scanner produced
                             one (the live tails persist under __reasoning__). */}
                         {reasoningTails(

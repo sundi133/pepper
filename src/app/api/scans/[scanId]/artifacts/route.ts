@@ -9,6 +9,8 @@ const TYPE_TO_PATH: Record<string, string> = {
   CONTAINER_REPORT: "container",
   SARIF: "sarif",
   SIGNATURE: "signature",
+  VEX_OPENVEX: "openvex",
+  VEX_CYCLONEDX: "cyclonedx-vex",
   AI_REASONING: "ai-reasoning",
 };
 

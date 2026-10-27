@@ -10,6 +10,8 @@ type ArtifactKind =
   | "CONTAINER_REPORT"
   | "SARIF"
   | "SIGNATURE"
+  | "VEX_OPENVEX"
+  | "VEX_CYCLONEDX"
   | "AI_REASONING";
 
 const TYPE_MAP: Record<
@@ -55,6 +57,16 @@ const TYPE_MAP: Record<
     type: "SIGNATURE",
     contentType: "application/json",
     filename: "signature.json",
+  },
+  openvex: {
+    type: "VEX_OPENVEX",
+    contentType: "application/json",
+    filename: "openvex.json",
+  },
+  "cyclonedx-vex": {
+    type: "VEX_CYCLONEDX",
+    contentType: "application/vnd.cyclonedx+json",
+    filename: "cyclonedx-vex.json",
   },
   "ai-reasoning": {
     type: "AI_REASONING",

@@ -38,10 +38,10 @@ import {
 } from "@/lib/vex-generator";
 import {
   signWithCosignKeyless,
-  signWithRsaKey,
-  digestOf,
+  signWithKey,
   type SignatureBundle,
 } from "@/lib/code-signing";
+import { writeAuditLog } from "@/lib/audit-log";
 import { decryptSecret } from "@/lib/token-encryption";
 import { computeRiskScore } from "@/lib/risk-score";
 import { validateExploitability } from "@/scanners/shared/exploit-validation";
@@ -1213,31 +1213,42 @@ Schema:
                 ? ([["cyclonedx-vex", cycloneVex]] as Array<[string, string]>)
                 : []),
             ];
+            // The configured mode is the only one used: falling back from
+            // keyless to the stored key (or the reverse) would sign with an
+            // identity verifiers weren't told to trust.
+            const identity = signingSettings.codeSigningIdentity || undefined;
+            const failures: Record<string, string> = {};
             for (const [label, body] of signable) {
-              let bundle: SignatureBundle | null = null;
-              if (
-                signingSettings.codeSigningMode === "keyless" ||
-                !signingSettings.codeSigningKeyEnc
-              ) {
-                bundle = await signWithCosignKeyless(
-                  digestOf(body),
-                  signingSettings.codeSigningIdentity || undefined,
-                );
-              }
-              if (!bundle && signingSettings.codeSigningKeyEnc) {
-                try {
+              try {
+                if (signingSettings.codeSigningMode === "key") {
+                  if (!signingSettings.codeSigningKeyEnc) {
+                    throw new Error("Key mode is enabled but no signing key is stored");
+                  }
                   const pem = decryptSecret(signingSettings.codeSigningKeyEnc);
-                  bundle = signWithRsaKey(
-                    body,
-                    pem,
-                    undefined,
-                    signingSettings.codeSigningIdentity || undefined,
-                  );
-                } catch {
-                  /* fall through */
+                  bundles[label] = signWithKey(body, pem, identity);
+                } else {
+                  bundles[label] = await signWithCosignKeyless(body, identity);
                 }
+              } catch (e) {
+                failures[label] = e instanceof Error ? e.message : String(e);
               }
-              if (bundle) bundles[label] = bundle;
+            }
+            if (Object.keys(failures).length > 0) {
+              log.warn({ failures }, "Code signing failed for some artifacts");
+              // Signing is opt-in evidence; a missing signature has to be
+              // visible (audit log + the Code signing page), not just a log line.
+              await writeAuditLog({
+                organizationId: orgSettings.orgId || null,
+                userId: null,
+                action: "scan.signing_failed",
+                resource: "scan",
+                resourceId: scanId,
+                details: {
+                  mode: signingSettings.codeSigningMode,
+                  failures,
+                  signed: Object.keys(bundles),
+                },
+              });
             }
             if (Object.keys(bundles).length > 0) {
               const sigKey = `signatures/${scanId}/signatures.json`;

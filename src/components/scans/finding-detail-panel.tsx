@@ -1790,7 +1790,9 @@ function FindingReportSections({ finding, sourceContext }: { finding: Finding; s
     return <SecretFindingReport finding={finding} sourceContext={sourceContext} />;
   }
 
-  const isSast = finding.scanner === "SAST_LLM";
+  // Zero-day findings come from the same AI code review as SAST and carry the
+  // same report shape, so they get the same AI-detailed report.
+  const isSast = finding.scanner === "SAST_LLM" || finding.scanner === "ZERO_DAY";
   if (isSast) {
     return <SastFindingReport finding={finding} sourceContext={sourceContext} />;
   }

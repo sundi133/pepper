@@ -61,6 +61,7 @@ import { decompiledOriginOf } from "@/lib/compiled-scan/finding-origin";
 import { uploadedArtifactName } from "@/lib/compiled-scan/upload";
 import { maxUploadBytes } from "@/lib/upload-limits";
 import { mobilePlatformOf } from "@/lib/mobile-platform";
+import { generateFindingDetails } from "@/lib/generate-finding-details";
 import { SCAN_STATS_KEY } from "@/lib/scan-progress";
 import { isAgentArtifact, agentOwnsUpload } from "@/scanners/mobile-agent/artifact";
 import { isAgentScanConfigured, agentScanUnavailableReason } from "@/scanners/mobile-agent/config";
@@ -1323,6 +1324,12 @@ Schema:
 
     log.info({ gateResult }, "Scan completed successfully");
 
+    // 9d. Generate AI finding details for all findings so the UI shows full
+    // content immediately when a finding is opened, instead of generating on
+    // demand. Fire-and-forget with a concurrency cap so the scan is marked
+    // COMPLETED right away while details populate in the background.
+    void generateFindingDetailsForScan(scanId, orgSettings, log);
+
     // Lines scanned is shown next to the file count; it lives in the
     // reserved __stats__ entry of scannerProgress.
     try {
@@ -1775,6 +1782,118 @@ async function runExploitValidation(
   } catch (err) {
     log.warn({ err }, "Exploit validation failed — findings left untouched");
   }
+}
+
+/**
+ * Generate AI details (`metadata.generatedDetails`) for every OPEN finding in
+ * the scan that lacks them, so the UI renders complete content immediately
+ * when a finding is opened instead of calling the LLM on demand.
+ *
+ * Runs fire-and-forget from the scan-completion path with a concurrency cap to
+ * avoid overwhelming the LLM provider. A finding that fails here is simply left
+ * without generated details; the frontend falls back to on-demand generation.
+ */
+async function generateFindingDetailsForScan(
+  scanId: string,
+  orgSettings: ScanJobData["orgSettings"],
+  log: ReturnType<typeof createScanLogger>,
+): Promise<void> {
+  const llmApiKey = orgSettings.llmApiKey?.trim();
+  if (!llmApiKey && orgSettings.llmProvider !== "ollama") return;
+
+  const config = {
+    provider: orgSettings.llmProvider ?? "openai",
+    baseUrl: orgSettings.llmBaseUrl ?? "",
+    apiKey: llmApiKey ?? "",
+    model: orgSettings.llmModel ?? "gpt-4o-mini",
+  };
+
+  const findings = await prisma.finding.findMany({
+    where: { scanId, status: "OPEN" },
+    select: {
+      id: true,
+      title: true,
+      cweId: true,
+      severity: true,
+      filePath: true,
+      startLine: true,
+      endLine: true,
+      description: true,
+      metadata: true,
+    },
+    take: 2000,
+  });
+
+  const pending = findings.filter((f) => {
+    const meta =
+      f.metadata && typeof f.metadata === "object" && !Array.isArray(f.metadata)
+        ? (f.metadata as Record<string, unknown>)
+        : {};
+    return !meta?.generatedDetails;
+  });
+
+  if (pending.length === 0) return;
+
+  log.info(
+    { pending: pending.length, total: findings.length },
+    "Generating AI details for findings at scan completion",
+  );
+
+  const CONCURRENCY = 5;
+  const queue = [...pending];
+  let completed = 0;
+
+  async function worker(): Promise<void> {
+    while (queue.length > 0) {
+      const f = queue.shift();
+      if (!f) return;
+      try {
+        const details = await generateFindingDetails(
+          {
+            id: f.id,
+            title: f.title,
+            cweId: f.cweId,
+            severity: f.severity,
+            filePath: f.filePath,
+            startLine: f.startLine,
+            endLine: f.endLine,
+            description: f.description,
+          },
+          config,
+        );
+        if (details) {
+          const meta =
+            f.metadata && typeof f.metadata === "object" && !Array.isArray(f.metadata)
+              ? (f.metadata as Record<string, unknown>)
+              : {};
+          await prisma.finding.update({
+            where: { id: f.id },
+            data: {
+              metadata: {
+                ...meta,
+                generatedDetails: details,
+              } as object,
+            },
+          });
+        }
+      } catch (err) {
+        log.warn({ err, findingId: f.id }, "Failed to generate finding details");
+      } finally {
+        completed += 1;
+        if (completed % 25 === 0) {
+          log.info({ completed, total: pending.length }, "Finding details generation progress");
+        }
+      }
+    }
+  }
+
+  const workers: Promise<void>[] = [];
+  for (let i = 0; i < Math.min(CONCURRENCY, pending.length); i++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+
+  log.info({ generated: completed, total: pending.length }, "Finding details generation complete");
 }
 
 /**

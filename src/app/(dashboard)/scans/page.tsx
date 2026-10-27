@@ -1,5 +1,6 @@
 "use client";
 
+import { scanModeLabel } from "@/lib/scan-types";
 import { useSession } from "next-auth/react";
 import { useScans } from "@/hooks/use-scan-polling";
 import {
@@ -203,7 +204,7 @@ export default function ScansPage() {
                       </Link>
                     </TableCell>
                     <TableCell className="text-sm">
-                      {scan.scanType as string}
+                      {scanModeLabel(scan.scanType as string, scan.scanModules as string[] | undefined)}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {(scan.branch as string) || "-"}

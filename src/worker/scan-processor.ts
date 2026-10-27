@@ -64,6 +64,7 @@ import { mobilePlatformOf } from "@/lib/mobile-platform";
 import { generateFindingDetails } from "@/lib/generate-finding-details";
 import { SCAN_STATS_KEY } from "@/lib/scan-progress";
 import { isAgentArtifact, agentOwnsUpload } from "@/scanners/mobile-agent/artifact";
+import { scanIncludesModule } from "@/lib/scan-types";
 import { isAgentScanConfigured, agentScanUnavailableReason } from "@/scanners/mobile-agent/config";
 
 // prisma is imported from @/lib/prisma
@@ -92,10 +93,11 @@ export async function processScanJob(job: Job<ScanJobData>) {
     orgSettings,
     buildGate,
   } = job.data;
+  const scanModules = job.data.scanModules ?? [];
   const log = createScanLogger(scanId);
   const abortController = new AbortController();
 
-  log.info({ scanId, scanType, sourceType }, "Starting scan");
+  log.info({ scanId, scanType, scanModules, sourceType }, "Starting scan");
 
   const markRunning = await prisma.scan.updateMany({
     where: { id: scanId, status: { notIn: ["CANCELLED", "STOPPED"] } },
@@ -760,11 +762,12 @@ Schema:
     const agentScanBinary =
       !!uploadedArtifact && isAgentArtifact(uploadedArtifact);
     const agentSastScan =
-      ["FULL", "SAST_ONLY", "INCREMENTAL"].includes(scanType) &&
+      scanIncludesModule(scanType, scanModules, "SAST") &&
       orgSettings.enableLlmSast === true;
     const agentScanOnly = agentOwnsUpload({
       uploadedArtifact,
       scanType,
+      scanModules,
       enableLlmSast: orgSettings.enableLlmSast,
       // Org LLM Config OpenRouter key wins; env is the fallback.
       configured: isAgentScanConfigured(orgSettings),
@@ -788,7 +791,13 @@ Schema:
         status: "RUNNING",
         note: "starting the E2B sandbox",
       });
-    } else if (compiledConfig.enabled && COMPILED_SCAN_TYPES.has(scanType)) {
+    } else if (
+      compiledConfig.enabled &&
+      COMPILED_SCAN_TYPES.has(scanType) &&
+      // Decompiled source only feeds SAST and secrets.
+      (scanIncludesModule(scanType, scanModules, "SAST") ||
+        scanIncludesModule(scanType, scanModules, "SECRETS"))
+    ) {
       let decompileStarted = false;
       try {
         const outcome = await runCompiledScan({
@@ -865,6 +874,7 @@ Schema:
       scaFileList,
       decompiledFileList: decompiledFiles,
       scanType,
+      scanModules,
       scanId,
       uploadedArtifact: uploadedArtifact ?? undefined,
       orgSettings,

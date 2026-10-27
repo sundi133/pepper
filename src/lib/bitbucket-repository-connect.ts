@@ -26,6 +26,7 @@ export async function connectBitbucketRepositoryRecord(params: {
   /** Queue an initial scan (import / manual connect). Reconnects skip unless true. */
   queueInitialScan?: boolean;
   scanType?: ScanJobData["scanType"];
+  scanModules?: string[];
 }): Promise<ConnectBitbucketRepoRecord> {
   const fullName = `${params.workspace}/${params.slug}`;
   const repoUuid = normalizeBitbucketUuid(params.bitbucketRepoUuid);
@@ -63,6 +64,7 @@ export async function connectBitbucketRepositoryRecord(params: {
         branch: params.branch?.trim() || params.defaultBranch,
         useOrgBitbucketToken: true,
         scanType: params.scanType,
+        scanModules: params.scanModules,
       });
       scanId = queued.scanId;
     }
@@ -101,6 +103,7 @@ export async function connectBitbucketRepositoryRecord(params: {
       branch: params.branch?.trim() || params.defaultBranch,
       useOrgBitbucketToken: true,
       scanType: params.scanType,
+      scanModules: params.scanModules,
     });
     scanId = queued.scanId;
   }

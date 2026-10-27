@@ -11,7 +11,12 @@ import { useScanHubIntegrations } from "./use-scan-hub-integrations";
 
 export function ScanHub() {
   const [scanType, setScanType] = useState<ScanJobData["scanType"]>("FULL");
-  const hub = useScanHubIntegrations(scanType);
+  const [scanModules, setScanModules] = useState<string[]>([]);
+  const hub = useScanHubIntegrations(scanType, scanModules);
+  const changeScanMode = (type: ScanJobData["scanType"], modules: string[] = []) => {
+    setScanType(type);
+    setScanModules(modules);
+  };
   const { projects } = useProjects();
 
   return (
@@ -27,7 +32,8 @@ export function ScanHub() {
         hub={hub}
         projects={projects}
         scanType={scanType}
-        onScanTypeChange={setScanType}
+        scanModules={scanModules}
+        onScanTypeChange={changeScanMode}
       />
 
       <RepositoryInventory
@@ -41,6 +47,7 @@ export function ScanHub() {
         onRefresh={() => void hub.refreshAll()}
         stats={hub.stats}
         scanType={scanType}
+        scanModules={scanModules}
       />
 
       <ImportRepoDialog
@@ -87,7 +94,7 @@ export function ScanHub() {
             ? `All visible GitHub repositories are already connected (${hub.connected.length} in Pepper).`
             : "No repositories found on your GitHub account."
         }
-        emptyHint="Use Repository URL in Add Source to connect a repo not listed here."
+        emptyHint="To scan another repository, use Upload or the New Scan dialog."
       />
 
       <ImportRepoDialog
@@ -128,7 +135,7 @@ export function ScanHub() {
             ? `No repositories found in workspace ${hub.bitbucketStatus.workspace}.`
             : "No repositories available to import."
         }
-        emptyHint="Use Repository URL in Add Source for repos outside this workspace."
+        emptyHint="Only repositories in this Bitbucket workspace are listed. For others, use Upload or the New Scan dialog."
       />
 
       <ImportRepoDialog
@@ -167,7 +174,7 @@ export function ScanHub() {
             ? `No repositories in ${hub.azureStatus.azureOrganization}.`
             : "No repositories available to import."
         }
-        emptyHint="Use Repository URL in Add Source for other repos your PAT can access."
+        emptyHint="Only repositories your Azure DevOps PAT can access are listed. For others, use Upload or the New Scan dialog."
       />
     </div>
   );

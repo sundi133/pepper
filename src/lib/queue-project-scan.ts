@@ -3,12 +3,15 @@ import { scanQueue, type ScanJobData } from "@/lib/queue";
 import { cancelActiveScansForProject } from "@/lib/active-project-scans";
 import { createScanQueuedNotification } from "@/lib/scan-notifications";
 import { buildOrgSettingsForJob } from "@/lib/org-settings-job";
+import { normalizeScanSelection } from "@/lib/scan-types";
 
 export async function queueProjectScan(params: {
   projectId: string;
   organizationId: string;
   userId: string;
   scanType?: ScanJobData["scanType"];
+  /** Combine scanner groups on one scan; see normalizeScanSelection. */
+  scanModules?: string[];
   branch?: string;
   useOrgGithubToken?: boolean;
   useOrgBitbucketToken?: boolean;
@@ -33,11 +36,13 @@ export async function queueProjectScan(params: {
   });
 
   const branch = params.branch?.trim() || project.defaultBranch || "main";
+  const selection = normalizeScanSelection(params.scanType ?? "FULL", params.scanModules);
 
   const scan = await prisma.scan.create({
     data: {
       projectId: params.projectId,
-      scanType: params.scanType ?? "FULL",
+      scanType: selection.scanType,
+      scanModules: selection.scanModules,
       branch,
       sourceType: "GIT_CLONE",
       sourceRef: project.repoUrl.trim(),
@@ -51,7 +56,8 @@ export async function queueProjectScan(params: {
     projectId: params.projectId,
     sourceType: "GIT_CLONE",
     sourceRef: project.repoUrl.trim(),
-    scanType: params.scanType ?? "FULL",
+    scanType: selection.scanType,
+    scanModules: selection.scanModules,
     repoUrl: project.repoUrl.trim(),
     repoUrlDisplay: project.repoUrl.trim(),
     branch,

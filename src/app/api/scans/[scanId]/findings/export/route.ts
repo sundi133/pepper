@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { scanModeLabel } from "@/lib/scan-types";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveOrgId } from "@/lib/auth-guard";
 import {
@@ -71,6 +72,7 @@ export async function GET(
       id: true,
       status: true,
       scanType: true,
+      scanModules: true,
       branch: true,
       commitSha: true,
       sourceType: true,
@@ -214,6 +216,7 @@ function buildHtmlReport({
     id: string;
     status: string;
     scanType: string;
+    scanModules?: string[];
     branch: string | null;
     commitSha: string | null;
     sourceType: string;
@@ -385,7 +388,7 @@ function buildHtmlReport({
       </div>
       <div class="project-hero">
         <h1>${escapeHtml(projectName)}</h1>
-        <span class="badge badge-scanner">${escapeHtml(scan.scanType)} Scan</span>
+        <span class="badge badge-scanner">${escapeHtml(scanModeLabel(scan.scanType, scan.scanModules))}</span>
       </div>
       <div class="meta-row">
         ${

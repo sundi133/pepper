@@ -18,6 +18,7 @@ export async function connectGithubRepositories(params: {
   repoIds: number[];
   branchesByRepoId?: Map<number, string>;
   scanType?: ScanJobData["scanType"];
+  scanModules?: string[];
 }): Promise<ConnectGithubRepoResult> {
   const token = await getOrgGithubAccessTokenOrThrow(params.organizationId);
 
@@ -69,6 +70,7 @@ export async function connectGithubRepositories(params: {
       connectedViaGithub: true,
       branch: selectedBranch || repo.defaultBranch,
       scanType: params.scanType,
+      scanModules: params.scanModules,
     });
 
     connected.push({

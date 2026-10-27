@@ -32,6 +32,7 @@ export async function GET(
           id: true,
           status: true,
           scanType: true,
+          scanModules: true,
           branch: true,
           gateResult: true,
           createdAt: true,

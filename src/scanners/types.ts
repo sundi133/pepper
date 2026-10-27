@@ -23,6 +23,8 @@ export interface ScanContext {
    */
   decompiledFileList?: string[];
   scanType: string;
+  /** Scanner groups combined by the user; empty/absent = what scanType implies. */
+  scanModules?: string[];
   orgSettings: {
     llmProvider: string;
     llmBaseUrl: string;

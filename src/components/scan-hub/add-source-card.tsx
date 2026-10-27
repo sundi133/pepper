@@ -1,35 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertCircle,
   CheckCircle2,
-  Cloud,
-  FolderArchive,
-  Github,
-  GitBranch,
   Import,
-  Link2,
-  Loader2,
   Settings,
-  Shield,
   Unplug,
   Upload,
   UploadCloud,
 } from "lucide-react";
-import {
-  detectRepoProviderFromInput,
-  PROVIDER_HINT_LABEL,
-} from "@/lib/detect-repo-provider";
 import { cn } from "@/lib/utils";
+import {
+  AzureDevOpsLogo,
+  BitbucketLogo,
+  GithubLogo,
+  SubversionLogo,
+} from "@/components/icons/source-logos";
 import type { ScanJobData } from "@/lib/queue";
 import { NewSecurityScanForm } from "@/components/scans/new-security-scan-form";
 import type { ScanProject } from "@/components/scans/types";
@@ -39,7 +28,6 @@ import type { useScanHubIntegrations } from "./use-scan-hub-integrations";
 
 export type SourcePill =
   | RepoProvider
-  | "url"
   | "svn"
   | "upload";
 
@@ -49,74 +37,26 @@ type AddSourceCardProps = {
   hub: Hub;
   projects: ScanProject[];
   scanType: ScanJobData["scanType"];
-  onScanTypeChange: (value: ScanJobData["scanType"]) => void;
+  scanModules: string[];
+  onScanTypeChange: (value: ScanJobData["scanType"], modules?: string[]) => void;
 };
 
 const SOURCE_OPTIONS: Array<{ id: SourcePill; label: string; icon: React.ReactNode; description: string }> = [
-  { id: "github", label: "GitHub", icon: <Github className="h-4 w-4" />, description: "Import from GitHub" },
-  { id: "bitbucket", label: "Bitbucket", icon: <GitBranch className="h-4 w-4" />, description: "Import from Bitbucket" },
-  { id: "azure", label: "Azure DevOps", icon: <Cloud className="h-4 w-4" />, description: "Import from Azure DevOps" },
-  { id: "url", label: "Repository URL", icon: <Link2 className="h-4 w-4" />, description: "Connect any Git URL" },
-  { id: "svn", label: "SVN", icon: <FolderArchive className="h-4 w-4" />, description: "Scan an SVN repository" },
-  { id: "upload", label: "Upload", icon: <Upload className="h-4 w-4" />, description: "Upload source archive" },
+  { id: "github", label: "GitHub", icon: <GithubLogo className="h-6 w-6 text-slate-900 dark:text-slate-100" />, description: "Import from GitHub" },
+  { id: "bitbucket", label: "Bitbucket", icon: <BitbucketLogo className="h-6 w-6" />, description: "Import from Bitbucket" },
+  { id: "azure", label: "Azure DevOps", icon: <AzureDevOpsLogo className="h-6 w-6" />, description: "Import from Azure DevOps" },
+  { id: "svn", label: "SVN", icon: <SubversionLogo className="h-6 w-6" />, description: "Scan an SVN repository" },
+  { id: "upload", label: "Upload", icon: <Upload className="h-6 w-6" />, description: "Upload source archive" },
 ];
 
 export function AddSourceCard({
   hub,
   projects,
   scanType,
+  scanModules,
   onScanTypeChange,
 }: AddSourceCardProps) {
-  const router = useRouter();
   const [activePill, setActivePill] = useState<SourcePill>("github");
-  const [smartUrl, setSmartUrl] = useState("");
-  const [smartBranch, setSmartBranch] = useState("");
-  const [smartPrNumber, setSmartPrNumber] = useState("");
-  const [smartBaseSha, setSmartBaseSha] = useState("");
-  const [smartConnecting, setSmartConnecting] = useState(false);
-  const [urlLegalConfirm, setUrlLegalConfirm] = useState(false);
-
-  const providerHint = useMemo(
-    () =>
-      detectRepoProviderFromInput(
-        smartUrl,
-        hub.azureStatus?.azureOrganization,
-      ),
-    [smartUrl, hub.azureStatus?.azureOrganization],
-  );
-
-  async function handleSmartConnect() {
-    setSmartConnecting(true);
-    try {
-      const outcome = await hub.connectSmartRepoUrl(smartUrl, smartBranch, scanType);
-      if (outcome === "adhoc") {
-        if (!urlLegalConfirm) {
-          toast.error("Confirm you have permission to scan this code.");
-          return;
-        }
-        const prNum = smartPrNumber.trim() ? parseInt(smartPrNumber.trim(), 10) : undefined;
-        const scanId = await hub.createAdHocGitScan(
-          smartUrl,
-          smartBranch,
-          scanType,
-          Number.isFinite(prNum) ? prNum : undefined,
-          smartBaseSha.trim() || undefined,
-        );
-        toast.success("Scan queued");
-        setSmartUrl("");
-        setSmartBranch("");
-        setSmartPrNumber("");
-        setSmartBaseSha("");
-        router.push(`/scans/${scanId}`);
-        return;
-      }
-      setSmartUrl("");
-      setSmartBranch("");
-    } finally {
-      setSmartConnecting(false);
-    }
-  }
-
   function selectPill(pill: SourcePill) {
     setActivePill(pill);
     if (pill === "github" || pill === "bitbucket" || pill === "azure") {
@@ -170,7 +110,7 @@ export function AddSourceCard({
           })}
         </div>
 
-        <ScanTypeSelector value={scanType} onChange={onScanTypeChange} />
+        <ScanTypeSelector value={scanType} modules={scanModules} onChange={onScanTypeChange} />
 
         <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50/50 p-5 dark:border-slate-700 dark:bg-slate-900/50">
           {isIntegration && activePill === "github" && (
@@ -232,102 +172,8 @@ export function AddSourceCard({
 
           {isIntegration && (
             <p className="mt-3 text-xs text-slate-400">
-              Browse & import queues an <strong>All</strong> scanners scan on first connect. Use Repository URL, SVN, or Upload to run specific scanners.
+              Browse & import queues a scan with the scanners selected above.
             </p>
-          )}
-
-          {activePill === "url" && (
-            <div className="max-w-lg space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="smart-repo-url" className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Repository URL
-                </Label>
-                <Input
-                  id="smart-repo-url"
-                  className="h-9 border-slate-300 bg-white dark:border-slate-600"
-                  placeholder="owner/repo or full URL"
-                  value={smartUrl}
-                  onChange={(e) => setSmartUrl(e.target.value)}
-                  spellCheck={false}
-                />
-                {providerHint && (
-                  <Badge variant="secondary" className="text-[10px] mt-1">
-                    {PROVIDER_HINT_LABEL[providerHint]}
-                  </Badge>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="smart-branch" className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Branch <span className="font-normal text-slate-400">(optional)</span>
-                </Label>
-                <Input
-                  id="smart-branch"
-                  className="h-9 border-slate-300 bg-white dark:border-slate-600"
-                  placeholder="main"
-                  value={smartBranch}
-                  onChange={(e) => setSmartBranch(e.target.value)}
-                />
-              </div>
-              {scanType === "INCREMENTAL" && (
-                <>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="smart-pr-number" className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                      PR number <span className="font-normal text-slate-400">(optional)</span>
-                    </Label>
-                    <Input
-                      id="smart-pr-number"
-                      type="number"
-                      min={1}
-                      className="h-9 border-slate-300 bg-white dark:border-slate-600"
-                      placeholder="e.g. 42"
-                      value={smartPrNumber}
-                      onChange={(e) => setSmartPrNumber(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="smart-base-sha" className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                      Base branch / commit SHA <span className="font-normal text-slate-400">(optional)</span>
-                    </Label>
-                    <Input
-                      id="smart-base-sha"
-                      className="h-9 border-slate-300 bg-white font-mono text-xs dark:border-slate-600"
-                      placeholder="main or abc1234"
-                      value={smartBaseSha}
-                      onChange={(e) => setSmartBaseSha(e.target.value)}
-                      spellCheck={false}
-                    />
-                    <p className="text-[11px] text-slate-400">
-                      Only files changed relative to this branch or SHA will be scanned.
-                    </p>
-                  </div>
-                </>
-              )}
-              {(providerHint === "generic" || providerHint === null) && smartUrl.trim() && (
-                <div className="flex items-start gap-2">
-                  <Checkbox
-                    id="url-legal"
-                    checked={urlLegalConfirm}
-                    onCheckedChange={(c) => setUrlLegalConfirm(c === true)}
-                  />
-                  <Label htmlFor="url-legal" className="text-xs font-normal leading-snug text-slate-600 dark:text-slate-400">
-                    I have permission to scan this code
-                  </Label>
-                </div>
-              )}
-              <Button
-                size="sm"
-                className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                onClick={() => void handleSmartConnect()}
-                disabled={smartConnecting || !smartUrl.trim()}
-              >
-                {smartConnecting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Shield className="mr-2 h-4 w-4" />
-                )}
-                Connect & scan
-              </Button>
-            </div>
           )}
 
           {activePill === "svn" && (
@@ -338,6 +184,7 @@ export function AddSourceCard({
               embedded
               showOuterCard={false}
               scanType={scanType}
+              scanModules={scanModules}
               onScanTypeChange={onScanTypeChange}
               hideScanTypeSelector
             />
@@ -351,6 +198,7 @@ export function AddSourceCard({
               embedded
               showOuterCard={false}
               scanType={scanType}
+              scanModules={scanModules}
               onScanTypeChange={onScanTypeChange}
               hideScanTypeSelector
             />

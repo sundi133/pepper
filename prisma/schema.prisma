@@ -226,6 +226,9 @@ model Scan {
   id         String     @id @default(cuid())
   status     ScanStatus @default(QUEUED)
   scanType   ScanType   @default(FULL)
+  /// Scanner groups (SAST, SCA, SECRETS, IAC, ZERO_DAY, CONTAINER, K8S) when the
+  /// user combined several. Empty = everything scanType implies.
+  scanModules String[]  @default([])
   branch     String?
   commitSha  String?
   prNumber   Int?

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { SCAN_MODULE_IDS, type ScanModuleId } from "@/lib/scan-types";
 import { requireAuth, getActiveOrgId, requireRole } from "@/lib/auth-guard";
 import { connectBitbucketRepositories } from "@/lib/connect-bitbucket-repositories";
 import {
@@ -20,8 +21,10 @@ const bodySchema = z.object({
       "IAC_ONLY",
       "ZERO_DAY_ONLY",
       "CONTAINER_ONLY",
+      "K8S_ONLY",
     ])
     .optional(),
+  scanModules: z.array(z.enum(SCAN_MODULE_IDS as [ScanModuleId, ...ScanModuleId[]])).max(7).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -56,6 +59,7 @@ export async function POST(req: NextRequest) {
       repoUuids: body.repoUuids,
       workspace,
       scanType: body.scanType,
+      scanModules: body.scanModules,
     });
     await Promise.all(
       result.connected.map((r) =>

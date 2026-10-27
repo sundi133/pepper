@@ -27,6 +27,7 @@ export async function connectManualBitbucketRepository(params: {
   repoInput: string;
   branch?: string;
   scanType?: ScanJobData["scanType"];
+  scanModules?: string[];
 }) {
   const parsed = parseBitbucketRepoInput(params.repoInput);
   if (!parsed) {
@@ -98,6 +99,7 @@ export async function connectManualBitbucketRepository(params: {
     branch: params.branch,
     queueInitialScan: !existing,
     scanType: params.scanType,
+    scanModules: params.scanModules,
   });
 
   return record;

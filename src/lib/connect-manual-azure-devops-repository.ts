@@ -28,6 +28,7 @@ export async function connectManualAzureDevOpsRepository(params: {
   repoInput: string;
   branch?: string;
   scanType?: ScanJobData["scanType"];
+  scanModules?: string[];
 }) {
   const auth = await getOrgAzureDevOpsAuthOrThrow(params.organizationId);
   const parsed = parseAzureDevOpsRepoInput(
@@ -99,6 +100,7 @@ export async function connectManualAzureDevOpsRepository(params: {
     branch: params.branch,
     queueInitialScan: !existing,
     scanType: params.scanType,
+    scanModules: params.scanModules,
   });
 
   return record;

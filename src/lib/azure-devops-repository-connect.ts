@@ -25,6 +25,7 @@ export async function connectAzureDevOpsRepositoryRecord(params: {
   branch?: string;
   queueInitialScan?: boolean;
   scanType?: ScanJobData["scanType"];
+  scanModules?: string[];
 }): Promise<ConnectAzureDevOpsRepoRecord> {
   const fullName = `${params.azureProjectName}/${params.azureRepoName}`;
   const cloneUrl =
@@ -66,6 +67,7 @@ export async function connectAzureDevOpsRepositoryRecord(params: {
         branch: params.branch?.trim() || params.defaultBranch,
         useOrgAzureDevOpsToken: true,
         scanType: params.scanType,
+        scanModules: params.scanModules,
       });
       scanId = queued.scanId;
     }
@@ -105,6 +107,7 @@ export async function connectAzureDevOpsRepositoryRecord(params: {
       branch: params.branch?.trim() || params.defaultBranch,
       useOrgAzureDevOpsToken: true,
       scanType: params.scanType,
+      scanModules: params.scanModules,
     });
     scanId = queued.scanId;
   }

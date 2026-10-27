@@ -1,5 +1,6 @@
 "use client";
 
+import { scanModeLabel } from "@/lib/scan-types";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -240,7 +241,7 @@ export default function ProjectDetailPage() {
                     href={`/scans/${scan.id as string}`}
                     className="font-semibold text-foreground hover:text-primary hover:underline truncate"
                   >
-                    {scan.scanType as string}
+                    {scanModeLabel(scan.scanType as string, scan.scanModules as string[] | undefined)}
                   </Link>
                   <ScanStatusBadge status={scan.status as string} />
                 </div>

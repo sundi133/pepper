@@ -45,7 +45,9 @@ type AzureAvailableRepo = {
   alreadyConnected: boolean;
 };
 
-export function useScanHubIntegrations(scanType?: string) {
+export function useScanHubIntegrations(scanType?: string, scanModules: string[] = []) {
+  // Sent beside scanType when the user combined several scanners.
+  const modulesBody = scanModules.length > 0 ? { scanModules } : {};
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -473,6 +475,7 @@ export function useScanHubIntegrations(scanType?: string) {
               available.find((repo) => repo.id === repoId)?.defaultBranch,
           })),
           ...(scanType && { scanType }),
+          ...modulesBody,
         }),
       });
       const json = (await res.json()) as {
@@ -625,6 +628,7 @@ export function useScanHubIntegrations(scanType?: string) {
           body: JSON.stringify({
             repoUuids: toImport.map((r) => r.uuid),
             ...(scanType && { scanType }),
+            ...modulesBody,
           }),
         },
       );
@@ -721,6 +725,7 @@ export function useScanHubIntegrations(scanType?: string) {
           body: JSON.stringify({
             repoIds: toImport.map((r) => r.id),
             ...(scanType && { scanType }),
+            ...modulesBody,
           }),
         },
       );
@@ -837,6 +842,7 @@ export function useScanHubIntegrations(scanType?: string) {
               repoUrl: trimmed,
               branch: branch.trim() || undefined,
               ...(scanTypeOverride && { scanType: scanTypeOverride }),
+              ...modulesBody,
             }),
           },
         );
@@ -878,6 +884,7 @@ export function useScanHubIntegrations(scanType?: string) {
               repoUrl: trimmed,
               branch: branch.trim() || undefined,
               ...(scanTypeOverride && { scanType: scanTypeOverride }),
+              ...modulesBody,
             }),
           },
         );
@@ -923,6 +930,7 @@ export function useScanHubIntegrations(scanType?: string) {
               repoUrl: trimmed,
               branch: branch.trim() || undefined,
               ...(scanTypeOverride && { scanType: scanTypeOverride }),
+              ...modulesBody,
             }),
           },
         );
@@ -970,6 +978,7 @@ export function useScanHubIntegrations(scanType?: string) {
       "data",
       JSON.stringify({
         scanType,
+        ...modulesBody,
         repoUrl: url,
         branch: branch.trim() || undefined,
         prNumber: prNumber || undefined,

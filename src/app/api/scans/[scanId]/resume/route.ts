@@ -66,6 +66,7 @@ export async function POST(
       sourceType: sourceType as ScanJobData["sourceType"],
       sourceRef: scan.sourceRef,
       scanType: scan.scanType as ScanJobData["scanType"],
+      scanModules: scan.scanModules,
       baseSha: scan.baseSha || undefined,
       commitSha: scan.commitSha || undefined,
       prNumber: scan.prNumber ?? undefined,

@@ -33,6 +33,7 @@ export async function POST(
     userId: auth.session.user.id,
     scanId,
     scanType: requestedScanType,
+    scanModules: body.scanModules,
     ipAddress: ipFromHeaders(req.headers),
   });
   if (!result.ok) {

@@ -27,6 +27,7 @@ import { attachLicenses } from "./sca/license-findings";
 import { ENABLE_DEPS_DEV } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { countLines } from "./shared/line-count";
+import { scanIncludesModule, type ScanModuleId } from "@/lib/scan-types";
 
 /** Scanners that also review source decompiled from compiled artifacts. */
 export const COMPILED_CODE_SCANNERS = new Set([
@@ -44,20 +45,21 @@ export function getScanners(
     enableLlmSast: boolean;
     enableLlmSecrets: boolean;
   },
+  /** Scanner groups the user combined; empty/absent = what scanType implies. */
+  scanModules?: readonly string[],
 ): ScannerPlugin[] {
   const scanners: ScannerPlugin[] = [];
 
   // INCREMENTAL: PR/MR webhooks — changed files only, plus the rest of any
   // IaC stack they touch (see incremental-scan-files).
-  const includeSast = ["FULL", "SAST_ONLY", "INCREMENTAL"].includes(scanType);
-  const includeSca = ["FULL", "SCA_ONLY", "INCREMENTAL"].includes(scanType);
-  const includeSecrets = ["FULL", "SECRETS_ONLY", "INCREMENTAL"].includes(
-    scanType,
-  );
-  const includeIac = ["FULL", "IAC_ONLY", "INCREMENTAL"].includes(scanType);
-  const includeZeroDay = ["FULL", "ZERO_DAY_ONLY", "INCREMENTAL"].includes(scanType);
-  const includeContainer = ["FULL", "CONTAINER_ONLY", "INCREMENTAL"].includes(scanType);
-  const includeK8s = ["FULL", "K8S_ONLY", "INCREMENTAL"].includes(scanType);
+  const includes = (m: ScanModuleId) => scanIncludesModule(scanType, scanModules, m);
+  const includeSast = includes("SAST");
+  const includeSca = includes("SCA");
+  const includeSecrets = includes("SECRETS");
+  const includeIac = includes("IAC");
+  const includeZeroDay = includes("ZERO_DAY");
+  const includeContainer = includes("CONTAINER");
+  const includeK8s = includes("K8S");
 
   if (includeSast) {
     // Rule-based SAST (OpenGrep) is deterministic and offline: always run it.
@@ -166,7 +168,7 @@ export class FindingDeduplicator {
 }
 
 export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
-  const scanners = getScanners(ctx.scanType, ctx.orgSettings);
+  const scanners = getScanners(ctx.scanType, ctx.orgSettings, ctx.scanModules);
 
   await ctx.waitIfPaused?.();
   ctx.onProgress?.(

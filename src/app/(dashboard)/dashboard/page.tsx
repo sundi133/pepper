@@ -1,5 +1,6 @@
 "use client";
 
+import { scanModeLabel } from "@/lib/scan-types";
 import { useMemo, type ComponentType, type ReactNode } from "react";
 import { useSession } from "next-auth/react";
 import { useProjects } from "@/hooks/use-scan-polling";
@@ -62,6 +63,7 @@ type DashboardOverview = {
     id: string;
     status: string;
     scanType: string;
+    scanModules?: string[];
     createdAt: string;
     projectName: string;
   }>;
@@ -199,10 +201,11 @@ function getScoreColor(score: number): { bg: string; border: string; text: strin
 function activityDescription(a: {
   status: string;
   scanType: string;
+  scanModules?: string[];
   projectName: string;
 }) {
   const verb = SCAN_STATUS_USER[a.status] || "updated";
-  const type = a.scanType.replace(/_/g, " ").toLowerCase();
+  const type = scanModeLabel(a.scanType, a.scanModules);
   if (a.status === "RUNNING" || a.status === "QUEUED") {
     return `Security scan ${verb} for ${a.projectName} (${type})`;
   }

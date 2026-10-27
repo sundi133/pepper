@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Github, Upload, AlertTriangle, Scan, FolderArchive, Sparkles } from "lucide-react";
+import {
+  Github,
+  Upload,
+  AlertTriangle,
+  Scan,
+  FolderArchive,
+  Sparkles,
+  FileArchive,
+  Info,
+  KeyRound,
+  Link2,
+  X,
+  FolderGit2,
+} from "lucide-react";
+import { SubversionLogo } from "@/components/icons/source-logos";
 import { toast } from "sonner";
 import { mutate } from "swr";
 import {
@@ -26,10 +40,11 @@ import {
 import type { ScanProject } from "./types";
 import { cn } from "@/lib/utils";
 import type { ScanJobData } from "@/lib/queue";
-import { MANUAL_SCAN_TYPE_OPTIONS } from "@/lib/scan-types";
+import { ScanTypeSelector } from "@/components/scan-hub/scan-type-selector";
 import { UPLOADABLE_ARTIFACT_EXTENSIONS } from "@/lib/compiled-scan/upload";
 import { maxUploadBytes, maxUploadMb } from "@/lib/upload-limits";
 import { isAgentArtifact } from "@/scanners/mobile-agent/artifact";
+import { projectNameFromUploadFilename } from "@/lib/project-name-from-source";
 
 type SourceTab = "repository" | "upload" | "svn";
 
@@ -45,7 +60,9 @@ interface NewSecurityScanFormProps {
   showOuterCard?: boolean;
   /** Controlled scan type (e.g. from Scan hub Add Source). */
   scanType?: ScanJobData["scanType"];
-  onScanTypeChange?: (value: ScanJobData["scanType"]) => void;
+  /** Controlled scanner combination, paired with scanType. */
+  scanModules?: string[];
+  onScanTypeChange?: (value: ScanJobData["scanType"], modules?: string[]) => void;
   /** Hide built-in scan type UI when parent renders ScanTypeSelector. */
   hideScanTypeSelector?: boolean;
 }
@@ -59,6 +76,7 @@ export function NewSecurityScanForm({
   defaultTab,
   showOuterCard = true,
   scanType: controlledScanType,
+  scanModules: controlledScanModules,
   onScanTypeChange,
   hideScanTypeSelector = false,
 }: NewSecurityScanFormProps) {
@@ -71,11 +89,14 @@ export function NewSecurityScanForm({
   const [newProjectName, setNewProjectName] = useState("");
   const [internalScanType, setInternalScanType] =
     useState<ScanJobData["scanType"]>("FULL");
+  const [internalScanModules, setInternalScanModules] = useState<string[]>([]);
   const scanType = controlledScanType ?? internalScanType;
-  const setScanType = onScanTypeChange ?? setInternalScanType;
-  const scanTypeHelp =
-    MANUAL_SCAN_TYPE_OPTIONS.find((o) => o.value === scanType)?.description ??
-    "";
+  const scanModules = controlledScanModules ?? internalScanModules;
+  const setScanSelection = (value: ScanJobData["scanType"], modules: string[] = []) => {
+    if (onScanTypeChange) return onScanTypeChange(value, modules);
+    setInternalScanType(value);
+    setInternalScanModules(modules);
+  };
   const [repoUrl, setRepoUrl] = useState("");
   const [branch, setBranch] = useState("");
   const [repoToken, setRepoToken] = useState("");
@@ -85,6 +106,8 @@ export function NewSecurityScanForm({
   const [svnUsername, setSvnUsername] = useState("");
   const [svnPassword, setSvnPassword] = useState("");
   const [legalConfirm, setLegalConfirm] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [fieldErrors, setFieldErrors] = useState<CreateScanFieldErrors>({});
   const [touched, setTouched] = useState<{ project?: boolean; source?: boolean }>(
     {},
@@ -117,6 +140,32 @@ export function NewSecurityScanForm({
   // configured for it — no opt-in. Shown as an informational note only.
   const uploadIsBinary = sourceMode === "upload" && isAgentArtifact(file?.name);
 
+  const uploadExtensions = [".zip", ".tar", ".tar.gz", ".tgz", ...UPLOADABLE_ARTIFACT_EXTENSIONS];
+
+  /** Validate and accept a file from the picker or a drop; false if rejected. */
+  function acceptFile(selected: File | null): boolean {
+    if (selected && selected.size > maxUploadBytes()) {
+      toast.error(`File too large. Maximum allowed size is ${maxUploadMb()} MB.`);
+      return false;
+    }
+    if (
+      selected &&
+      !uploadExtensions.some((ext) => selected.name.toLowerCase().endsWith(ext))
+    ) {
+      toast.error(`Invalid file type. Allowed: ${uploadExtensions.join(", ")}`);
+      return false;
+    }
+    setFile(selected);
+    setTouched((t) => ({ ...t, source: true }));
+    setFieldErrors((err) => ({ ...err, source: undefined }));
+    return true;
+  }
+
+  function clearFile() {
+    setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
   function runValidation(): CreateScanFieldErrors {
     return validateCreateScanFields({
       projectId,
@@ -137,6 +186,12 @@ export function NewSecurityScanForm({
 
   function switchTab(next: SourceTab) {
     setTab(next);
+    // The repository picker is hidden for uploads (the repository comes from
+    // the file name); don't keep a choice the user can no longer see.
+    if (next === "upload") {
+      setProjectId(CREATE_PROJECT_ON_SCAN_VALUE);
+      setNewProjectName("");
+    }
     setFieldErrors((e) => ({ ...e, source: undefined }));
   }
 
@@ -160,6 +215,7 @@ export function NewSecurityScanForm({
       const formData = new FormData();
       const data: Record<string, unknown> = {
         scanType,
+        ...(scanModules.length > 0 && { scanModules }),
         repoUrl: sourceMode === "git" ? repoUrl : undefined,
         branch: sourceMode === "git" ? branch || undefined : undefined,
         repoToken:
@@ -174,6 +230,11 @@ export function NewSecurityScanForm({
       }
       if (!isExistingProjectSelection(projectId) && newProjectName.trim()) {
         data.newProjectName = newProjectName.trim();
+      }
+      // Re-uploading the same app updates its repository (and keeps the scan
+      // history for comparisons) instead of creating a duplicate each time.
+      if (sourceMode === "upload" && file && !data.projectId && !data.newProjectName) {
+        data.projectName = projectNameFromUploadFilename(file.name);
       }
       formData.append("data", JSON.stringify(data));
       if (sourceMode === "upload" && file) formData.append("file", file);
@@ -262,7 +323,11 @@ export function NewSecurityScanForm({
           )}
         >
           {/* Left column: project + source */}
-          <div className="space-y-4">
+          <div className="space-y-5">
+            {/* Uploads go to the repository named after the file (created on first upload). */}
+            {tab !== "upload" && (
+            <div className="space-y-4 rounded-lg border border-border bg-card/60 p-4">
+              <SectionTitle icon={<FolderGit2 className="h-4 w-4" />} title="Where results go" />
             <div className="space-y-1.5">
               <Label htmlFor="nss-project" className="text-sm text-foreground">
                 Repository
@@ -315,6 +380,8 @@ export function NewSecurityScanForm({
                   onChange={(e) => setNewProjectName(e.target.value)}
                 />
               </div>
+            )}
+            </div>
             )}
 
             {tab === "repository" && (
@@ -385,140 +452,199 @@ export function NewSecurityScanForm({
             )}
 
             {tab === "svn" && (
-              <div className="space-y-4">
+              <div className="space-y-4 rounded-lg border border-border bg-card/60 p-4">
+                <SectionTitle
+                  icon={<SubversionLogo className="h-4 w-5" />}
+                  title="Subversion source"
+                />
                 <div className="space-y-1.5">
                   <Label htmlFor="nss-svn-url" className="text-sm text-foreground">
-                    SVN URL *
+                    Repository URL <span className="text-destructive">*</span>
                   </Label>
-                  <Input
-                    id="nss-svn-url"
-                    className="h-9 bg-card"
-                    placeholder="https://svn.example.com/repo/trunk"
-                    value={svnUrl}
-                    aria-invalid={showSourceError()}
-                    onBlur={() => {
-                      setTouched((t) => ({ ...t, source: true }));
-                      setFieldErrors(
-                        validateCreateScanFields({
-                          projectId,
-                          sourceMode: "svn",
-                          file,
-                          repoUrl,
-                          svnUrl,
-                        }),
-                      );
-                    }}
-                    onChange={(e) => {
-                      setSvnUrl(e.target.value);
-                      setFieldErrors((err) => ({ ...err, source: undefined }));
-                    }}
-                  />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="nss-svn-rev" className="text-sm text-foreground">
-                      Revision
-                    </Label>
+                  <div className="relative">
+                    <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
                     <Input
-                      id="nss-svn-rev"
-                      className="h-9 bg-card"
-                      placeholder="HEAD"
-                      value={svnRevision}
-                      onChange={(e) => setSvnRevision(e.target.value)}
+                      id="nss-svn-url"
+                      className="h-10 bg-background pl-9 font-mono text-[13px]"
+                      placeholder="https://svn.example.com/repo/trunk"
+                      value={svnUrl}
+                      aria-invalid={showSourceError()}
+                      onBlur={() => {
+                        setTouched((t) => ({ ...t, source: true }));
+                        setFieldErrors(
+                          validateCreateScanFields({
+                            projectId,
+                            sourceMode: "svn",
+                            file,
+                            repoUrl,
+                            svnUrl,
+                          }),
+                        );
+                      }}
+                      onChange={(e) => {
+                        setSvnUrl(e.target.value);
+                        setFieldErrors((err) => ({ ...err, source: undefined }));
+                      }}
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="nss-svn-user" className="text-sm text-foreground">
-                      Username
-                    </Label>
-                    <Input
-                      id="nss-svn-user"
-                      className="h-9 bg-card"
-                      placeholder="Optional"
-                      value={svnUsername}
-                      onChange={(e) => setSvnUsername(e.target.value)}
-                    />
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Point at trunk, a branch or a tag, e.g. <code className="rounded bg-muted px-1">…/repo/branches/release</code>.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="nss-svn-pass" className="text-sm text-foreground">
-                    Password
+                  <Label htmlFor="nss-svn-rev" className="text-sm text-foreground">
+                    Revision <span className="font-normal text-muted-foreground">(optional)</span>
                   </Label>
                   <Input
-                    id="nss-svn-pass"
-                    type="password"
-                    className="h-9 bg-card"
-                    placeholder="Optional"
-                    value={svnPassword}
-                    onChange={(e) => setSvnPassword(e.target.value)}
+                    id="nss-svn-rev"
+                    className="h-10 bg-background font-mono text-[13px] sm:max-w-[12rem]"
+                    placeholder="HEAD"
+                    value={svnRevision}
+                    onChange={(e) => setSvnRevision(e.target.value)}
                   />
+                  <p className="text-xs text-muted-foreground">A number, HEAD, or a date like {"{2026-01-31}"}.</p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Requires <code className="rounded bg-muted px-1">svn</code> on the scan worker.
+
+                <fieldset className="space-y-3 rounded-md border border-dashed border-border p-3">
+                  <legend className="flex items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
+                    <KeyRound className="h-3.5 w-3.5" aria-hidden />
+                    Credentials (optional, for private repositories)
+                  </legend>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="nss-svn-user" className="text-sm text-foreground">
+                        Username
+                      </Label>
+                      <Input
+                        id="nss-svn-user"
+                        className="h-10 bg-background"
+                        autoComplete="username"
+                        value={svnUsername}
+                        onChange={(e) => setSvnUsername(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="nss-svn-pass" className="text-sm text-foreground">
+                        Password
+                      </Label>
+                      <Input
+                        id="nss-svn-pass"
+                        type="password"
+                        className="h-10 bg-background"
+                        autoComplete="current-password"
+                        value={svnPassword}
+                        onChange={(e) => setSvnPassword(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </fieldset>
+
+                <p className="flex items-start gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span>
+                    The scan worker checks out the code with the{" "}
+                    <code className="rounded bg-muted px-1">svn</code> client, so it must be installed there.
+                  </span>
                 </p>
               </div>
             )}
 
             {tab === "upload" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="nss-archive" className="text-sm text-foreground">
-                  Archive or compiled artifact *
-                </Label>
-                <Input
+              <div className="space-y-4 rounded-lg border border-border bg-card/60 p-4">
+                <SectionTitle icon={<Upload className="h-4 w-4" />} title="Source archive or app" />
+                <input
+                  ref={fileInputRef}
                   id="nss-archive"
                   type="file"
-                  accept={[".zip", ".tar", ".tar.gz", ".tgz", ...UPLOADABLE_ARTIFACT_EXTENSIONS].join(",")}
-                  className="h-9 cursor-pointer bg-card pt-1.5 file:mr-2 file:text-sm"
-                  aria-invalid={showSourceError()}
-                  onBlur={() => {
-                    setTouched((t) => ({ ...t, source: true }));
-                    setFieldErrors(
-                      validateCreateScanFields({
-                        projectId,
-                        sourceMode: "upload",
-                        file,
-                        repoUrl,
-                        svnUrl,
-                      }),
-                    );
-                  }}
+                  className="sr-only"
+                  accept={uploadExtensions.join(",")}
                   onChange={(e) => {
-                    const selected = e.target.files?.[0] || null;
-                    if (selected && selected.size > maxUploadBytes()) {
-                      toast.error(`File too large. Maximum allowed size is ${maxUploadMb()} MB.`);
-                      e.target.value = "";
-                      setFile(null);
-                      return;
-                    }
-                    const ALLOWED_EXTS = [".zip", ".tar", ".tar.gz", ".tgz", ...UPLOADABLE_ARTIFACT_EXTENSIONS];
-                    if (
-                      selected &&
-                      !ALLOWED_EXTS.some((ext) =>
-                        selected.name.toLowerCase().endsWith(ext),
-                      )
-                    ) {
-                      toast.error(
-                        `Invalid file type. Allowed: ${ALLOWED_EXTS.join(", ")}`,
-                      );
-                      e.target.value = "";
-                      setFile(null);
-                      return;
-                    }
-                    setFile(selected);
-                    setFieldErrors((err) => ({ ...err, source: undefined }));
+                    if (!acceptFile(e.target.files?.[0] || null)) e.target.value = "";
                   }}
                 />
-                {file && (
-                  <p className="text-xs text-muted-foreground">
-                    {(file.size / 1024 / 1024).toFixed(1)} MB selected
-                  </p>
+                {file ? (
+                  <div className="flex items-center gap-3 rounded-lg border border-indigo-200 bg-indigo-50/60 p-3 dark:border-indigo-900/60 dark:bg-indigo-950/30">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-300">
+                      <FileArchive className="h-5 w-5" aria-hidden />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">{file.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(file.size / 1024 / 1024).toFixed(1)} MB
+                        {uploadIsBinary ? " · compiled app, will be decompiled" : " · source archive"}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {(() => {
+                          const name = projectNameFromUploadFilename(file.name);
+                          return projects.some((p) => p.name === name)
+                            ? `Updates repository “${name}” (keeps its scan history)`
+                            : `Creates repository “${name}”`;
+                        })()}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={clearFile}
+                      aria-label="Remove file"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <label
+                    htmlFor="nss-archive"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOver(true);
+                    }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOver(false);
+                      acceptFile(e.dataTransfer.files?.[0] || null);
+                    }}
+                    className={cn(
+                      "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-8 text-center transition-colors",
+                      dragOver
+                        ? "border-indigo-400 bg-indigo-50/70 dark:bg-indigo-950/30"
+                        : "border-border bg-background hover:border-indigo-300 hover:bg-muted/40",
+                      showSourceError() && "border-destructive/60",
+                    )}
+                  >
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300">
+                      <Upload className="h-5 w-5" aria-hidden />
+                    </div>
+                    <p className="text-sm font-medium text-foreground">
+                      Drop a file here, or <span className="text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400">browse</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">Up to {maxUploadMb()} MB</p>
+                  </label>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  Source as .zip / .tar.gz, or a single .jar, .war, .ear, .apk, .aab, .ipa, .dex, .dll or .exe:
-                  compiled code is decompiled and scanned. Up to {maxUploadMb()} MB.
-                </p>
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground">Accepted</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: "Source", exts: ".zip .tar .tar.gz .tgz" },
+                      { label: "Java", exts: ".jar .war .ear" },
+                      { label: "Mobile", exts: ".apk .aab .ipa .dex" },
+                      { label: ".NET", exts: ".dll .exe" },
+                    ].map((g) => (
+                      <span
+                        key={g.label}
+                        className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground"
+                      >
+                        <span className="font-semibold text-foreground">{g.label}</span>
+                        {g.exts}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Compiled code is decompiled, then scanned like source.</p>
+                </div>
                 {uploadIsBinary && (
-                  <div className="mt-2 flex items-start gap-2 rounded-md border border-border bg-muted/40 p-2.5">
+                  <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 p-2.5">
                     <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" aria-hidden />
                     <p className="text-xs leading-snug text-muted-foreground">
                       When the agent deep scan is enabled on this instance, this binary is reviewed by
@@ -548,27 +674,12 @@ export function NewSecurityScanForm({
             {!hideScanTypeSelector && (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-sm text-foreground">Scanners</Label>
-                <Select
+                <ScanTypeSelector
                   value={scanType}
-                  onValueChange={(v) =>
-                    setScanType(v as ScanJobData["scanType"])
-                  }
-                >
-                  <SelectTrigger className="h-9 bg-card">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MANUAL_SCAN_TYPE_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {scanTypeHelp ? (
-                  <p className="text-xs text-muted-foreground">{scanTypeHelp}</p>
-                ) : null}
+                  modules={scanModules}
+                  onChange={setScanSelection}
+                  compact
+                />
               </div>
 
               <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground space-y-2">
@@ -585,7 +696,7 @@ export function NewSecurityScanForm({
             </div>
             )}
 
-            <div className="space-y-4">
+            <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
               <div className="flex items-start gap-2">
                 <Checkbox
                   id="nss-legal"
@@ -597,7 +708,7 @@ export function NewSecurityScanForm({
                   htmlFor="nss-legal"
                   className="cursor-pointer text-sm font-normal leading-snug text-foreground"
                 >
-                  I have permission to scan this code
+                  I own this code or have permission to scan it
                 </Label>
               </div>
 
@@ -644,6 +755,17 @@ export function NewSecurityScanForm({
       ) : (
         inner
       )}
+    </div>
+  );
+}
+
+function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
+  return (
+    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        {icon}
+      </span>
+      {title}
     </div>
   );
 }

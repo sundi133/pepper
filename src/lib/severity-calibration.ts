@@ -279,6 +279,13 @@ export function calibrateSeverity(
     severity = clampSeverity(severity, "MEDIUM");
   }
 
+  // The class/CWE baseline is a ceiling, not a replacement: it pulls down
+  // inflated model labels but must never raise a severity the scanner or model
+  // assigned from the actual code. Raising it turned LOW findings into
+  // MEDIUM/HIGH, so the badge contradicted the write-up and the LOW filter
+  // was always empty.
+  severity = clampSeverity(severity, llmSeverity);
+
   if (/hardcoded|credential|secret/i.test(weaknessClass) || input.cweId === "CWE-798") {
     severity = confidence >= 0.8 ? "CRITICAL" : "HIGH";
   }
@@ -307,6 +314,13 @@ export function calibrateSeverity(
       weaknessClass,
       input.cweId,
     );
+  }
+
+  // A severity the organization set on its own policy is a decision, not an
+  // estimate: report it exactly, after every baseline and cap.
+  const configuredPolicySeverity = meta.policySeverity as string | undefined;
+  if (configuredPolicySeverity) {
+    severity = parseSeverity(configuredPolicySeverity);
   }
 
   const justification =

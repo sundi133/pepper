@@ -47,6 +47,42 @@ describe("severity-calibration", () => {
     expect(r.severity).toBe("MEDIUM");
   });
 
+  it("never raises a LOW model label from the CWE baseline", () => {
+    const r = calibrateSeverity({
+      llmSeverity: "LOW",
+      cweId: "CWE-639",
+      title: "Order number exposed in URL",
+      confidence: 0.85,
+      weaknessClass: "IDOR",
+    });
+    expect(r.severity).toBe("LOW");
+    expect(r.adjusted).toBe(false);
+  });
+
+  it("never raises a MEDIUM model label from the weakness baseline", () => {
+    const r = calibrateSeverity({
+      llmSeverity: "MEDIUM",
+      title: "Race condition in stock restoration",
+      confidence: 0.85,
+      weaknessClass: "Business Logic",
+    });
+    expect(r.severity).toBe("MEDIUM");
+  });
+
+  it("reports the severity configured on a custom policy", () => {
+    for (const policySeverity of ["LOW", "CRITICAL"]) {
+      const r = calibrateSeverity({
+        llmSeverity: "HIGH",
+        cweId: "CWE-862",
+        title: "Policy: All API endpoints must have rate limiting — no limiter",
+        confidence: 0.6,
+        weaknessClass: "Policy Violation",
+        metadata: { policySeverity },
+      });
+      expect(r.severity).toBe(policySeverity);
+    }
+  });
+
   it("applySeverityCalibration writes metadata", () => {
     const f = applySeverityCalibration({
       scanner: "SAST_LLM",

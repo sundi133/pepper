@@ -135,6 +135,9 @@ function sanitizePolicyText(text: string, maxLen: number): string {
   return truncated;
 }
 
+/** The parts of a policy needed to attribute a finding back to it. */
+type PolicyRef = { name: string; severity: string };
+
 function buildPolicyPromptSection(policies: SecurityPolicy[]): string {
   if (policies.length === 0) return "";
 
@@ -595,7 +598,7 @@ export async function runLlmSastScanner(
     chunks,
     maxConcurrency,
     prompt: finalPrompt,
-    policyNames: inlinePolicies.map((p) => p.name),
+    policies: inlinePolicies.map(({ name, severity }) => ({ name, severity })),
     repoContextBlock,
     maxResponseTokens,
     errorLogMsg: "LLM SAST chunk analysis rejected",
@@ -650,7 +653,7 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
       chunks,
       maxConcurrency,
       prompt: policyPrompt,
-      policyNames: policyBatch.map((p) => p.name),
+      policies: policyBatch.map(({ name, severity }) => ({ name, severity })),
       repoContextBlock,
       maxResponseTokens,
       errorLogMsg: "LLM SAST additional policy analysis rejected",
@@ -962,7 +965,7 @@ interface RunChunkBatchesOptions {
   chunks: Chunk[];
   maxConcurrency: number;
   prompt: string;
-  policyNames: string[];
+  policies: PolicyRef[];
   repoContextBlock: string;
   maxResponseTokens: number;
   errorLogMsg: string;
@@ -989,7 +992,7 @@ async function runChunkBatches(opts: RunChunkBatchesOptions): Promise<void> {
     chunks,
     maxConcurrency,
     prompt,
-    policyNames,
+    policies,
     repoContextBlock,
     maxResponseTokens,
     errorLogMsg,
@@ -1015,7 +1018,7 @@ async function runChunkBatches(opts: RunChunkBatchesOptions): Promise<void> {
           chunk,
           maxResponseTokens,
           prompt,
-          policyNames,
+          policies,
           repoContextBlock,
           fileContentMap.get(chunk.filePath),
           onReasoning,
@@ -1038,7 +1041,7 @@ async function runChunkBatches(opts: RunChunkBatchesOptions): Promise<void> {
             chunk,
             maxResponseTokens,
             prompt,
-            policyNames,
+            policies,
             repoContextBlock,
             fileContentMap.get(chunk.filePath),
             onReasoning,
@@ -1082,7 +1085,7 @@ async function analyzeChunk(
   chunk: Chunk,
   maxResponseTokens: number,
   systemPrompt: string = SYSTEM_PROMPT,
-  policyNames: string[] = [],
+  policies: PolicyRef[] = [],
   repoContextBlock = "",
   fileContent?: string,
   onReasoning?: (delta: string) => void,
@@ -1247,8 +1250,8 @@ async function analyzeChunk(
         const titleLower = f.title.toLowerCase();
         const isPolicy =
           titleLower.includes("policy") || titleLower.includes("policy:");
-        const matchedPolicy = policyNames.find((name) =>
-          titleLower.includes(name.toLowerCase()),
+        const matchedPolicy = policies.find((p) =>
+          titleLower.includes(p.name.toLowerCase()),
         );
 
         const passPhase =
@@ -1260,7 +1263,14 @@ async function analyzeChunk(
             f.recommendation ||
             (f.metadata?.remediation as string | undefined),
           ...(matchedPolicy
-            ? { policyName: matchedPolicy, type: "policy-violation" }
+            ? {
+                policyName: matchedPolicy.name,
+                // The org configured this severity on the policy; calibration
+                // must report it as-is rather than the model's guess.
+                policySeverity: matchedPolicy.severity,
+                weaknessClass: "Policy Violation",
+                type: "policy-violation",
+              }
             : {}),
         };
 
@@ -1285,7 +1295,7 @@ async function analyzeChunk(
         cweId: f.cweId,
         confidence: f.confidence ?? pass1Floor,
         ruleId: isPolicy
-          ? `POLICY-${matchedPolicy || "CUSTOM"}`
+          ? `POLICY-${matchedPolicy?.name || "CUSTOM"}`
           : f.cweId || "CWE-UNKNOWN",
         metadata: {
           ...meta,

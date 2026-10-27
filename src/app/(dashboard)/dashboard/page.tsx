@@ -17,11 +17,9 @@ import {
   AlertTriangle,
   KeyRound,
   Package,
-  Zap,
-  Users,
   FolderKanban,
   CheckCircle2,
-  ChevronRight,
+  ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
@@ -35,6 +33,18 @@ type DashboardOverview = {
   secretsFindingCount: number;
   dependencyFindingCount: number;
   resolvedThisMonth: number;
+  newFindingCount?: number;
+  acceptedRiskCount?: number;
+  scannerCounts?: Record<string, number>;
+  topRisks?: Array<{
+    id: string;
+    title: string;
+    severity: string;
+    scanner: string;
+    location: string | null;
+    scanId: string;
+    projectName: string;
+  }>;
   lastScanAt: string | null;
   lastScanStatus: string | null;
   recentProjects: Array<{
@@ -77,6 +87,26 @@ const SEVERITY_HEX: Record<string, string> = {
   LOW: "#3b82f6",
   INFO: "#14b8a6",
 };
+
+/** What a customer should do about each severity, in plain words. */
+const SEVERITY_ACTION: Record<string, string> = {
+  CRITICAL: "Fix immediately",
+  HIGH: "Fix this sprint",
+  MEDIUM: "Plan a fix",
+  LOW: "Fix when convenient",
+  INFO: "For awareness",
+};
+
+/** Scanners grouped into categories a non-specialist recognises. */
+const CATEGORIES: Array<{ label: string; scanners: string[] }> = [
+  { label: "Code vulnerabilities", scanners: ["SAST_PATTERN", "SAST_LLM"] },
+  { label: "Business logic flaws", scanners: ["ZERO_DAY"] },
+  { label: "Exposed secrets", scanners: ["SECRETS_PATTERN", "SECRETS_LLM"] },
+  { label: "Vulnerable dependencies", scanners: ["SCA"] },
+  { label: "Malicious packages", scanners: ["MALICIOUS_PKG"] },
+  { label: "Cloud & infrastructure config", scanners: ["IAC", "K8S"] },
+  { label: "Container images", scanners: ["CONTAINER"] },
+];
 
 const SCAN_STATUS_USER: Record<string, string> = {
   QUEUED: "queued",
@@ -142,12 +172,21 @@ function securityScore(chart: { name: string; count: number }[]) {
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
-function scoreSubtitle(score: number, critical: number) {
-  if (critical > 0 && score < 50)
-    return "Critical: immediate attention required.";
-  if (score < 70) return "Elevated risk: review high-severity items.";
-  if (score < 90) return "Good posture with room to tighten controls.";
-  return "Strong security posture across findings.";
+function scoreGrade(score: number) {
+  if (score >= 90) return "A";
+  if (score >= 80) return "B";
+  if (score >= 70) return "C";
+  if (score >= 50) return "D";
+  return "F";
+}
+
+function scoreSubtitle(score: number, critical: number, high: number) {
+  if (critical > 0)
+    return `${critical} critical ${critical === 1 ? "issue needs" : "issues need"} fixing right away.`;
+  if (high > 0)
+    return `No critical issues. ${high} high-severity ${high === 1 ? "issue" : "issues"} to fix next.`;
+  if (score < 90) return "No critical or high issues. Work down the medium ones to tighten up.";
+  return "Strong security posture. Keep scanning to stay ahead of new issues.";
 }
 
 function getScoreColor(score: number): { bg: string; border: string; text: string } {
@@ -192,7 +231,17 @@ export default function DashboardPage() {
   const vulnTotal = totalFindings(severityChart);
   const criticalCount =
     severityChart.find((s) => s.name === "CRITICAL")?.count ?? 0;
+  const highCount = severityChart.find((s) => s.name === "HIGH")?.count ?? 0;
   const score = securityScore(severityChart);
+  const scoreColor = getScoreColor(score);
+  const scannerCounts = overview?.scannerCounts ?? {};
+  const categories = CATEGORIES.map((c) => ({
+    label: c.label,
+    count: c.scanners.reduce((n, s) => n + (scannerCounts[s] ?? 0), 0),
+  }))
+    .filter((c) => c.count > 0)
+    .sort((a, b) => b.count - a.count);
+  const maxCategory = categories[0]?.count ?? 0;
 
   const displayName = greetingName(session?.user?.name || session?.user?.email);
   const orgName =
@@ -230,50 +279,44 @@ export default function DashboardPage() {
       <section aria-labelledby="security-score-heading">
         <Card className="overflow-hidden border-border/60 bg-card/80 shadow-sm">
           <CardContent className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
-            <div
-              className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-2 shadow-inner sm:h-28 sm:w-28"
-              style={{
-                backgroundColor: getScoreColor(score).bg,
-                borderColor: getScoreColor(score).border,
-              }}
-            >
-              <div className="flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold tabular-nums sm:text-3xl" style={{ color: getScoreColor(score).text }}>
-                  {vulnTotal}
-                </span>
-                <span className="text-[10px] font-semibold" style={{ color: getScoreColor(score).text }}>
-                  issues
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              <p
-                id="security-score-heading"
-                className="text-sm font-medium text-muted-foreground"
+            <div className="flex items-center gap-4">
+              <div
+                className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-2 shadow-inner sm:h-28 sm:w-28"
+                style={{ backgroundColor: scoreColor.bg, borderColor: scoreColor.border }}
+                role="img"
+                aria-label={`Security score ${score} out of 100, grade ${scoreGrade(score)}`}
               >
-                Security score
-              </p>
-              <p className="max-w-xl text-base font-medium leading-snug text-foreground sm:text-lg">
-                {scoreSubtitle(score, criticalCount)}
-              </p>
-            </div>
-            <div className="grid w-full grid-cols-1 divide-y divide-border/50 overflow-hidden rounded-lg border border-border/40 bg-background/40 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-              <div className="px-3 py-3 sm:px-4">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Last scan
+                <div className="flex flex-col items-center justify-center" style={{ color: scoreColor.text }}>
+                  <span className="text-2xl font-bold tabular-nums sm:text-3xl">{score}</span>
+                  <span className="text-[10px] font-semibold">/ 100</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <p id="security-score-heading" className="text-sm font-medium text-muted-foreground">
+                  Security score · Grade {scoreGrade(score)}
                 </p>
-                <p className="mt-1 truncate text-sm font-semibold text-foreground">
-                  {lastScanLabel}
+                <p className="max-w-xl text-base font-medium leading-snug text-foreground sm:text-lg">
+                  {scoreSubtitle(score, criticalCount, highCount)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Based on open issues in each repository&apos;s latest scan.
+                </p>
+              </div>
+            </div>
+            <div className="grid w-full grid-cols-1 divide-y divide-border/50 overflow-hidden rounded-lg border border-border/40 bg-background/40 sm:grid-cols-3 sm:divide-x sm:divide-y-0 lg:max-w-xl">
+              <div className="px-3 py-3 sm:px-4">
+                <p className="text-xs font-medium text-muted-foreground">Last scan</p>
+                <p className="mt-1 truncate text-sm font-semibold text-foreground">{lastScanLabel}</p>
+              </div>
+              <div className="px-3 py-3 sm:px-4">
+                <p className="text-xs font-medium text-muted-foreground">Critical open</p>
+                <p className="mt-1 text-sm font-semibold">
+                  <span className={criticalCount > 0 ? "text-destructive" : "text-foreground"}>{criticalCount}</span>
                 </p>
               </div>
               <div className="px-3 py-3 sm:px-4">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Critical issues
-                </p>
-                <p className="mt-1 text-sm font-semibold">
-                  <span className="text-destructive">{criticalCount}</span>
-                  <span className="ml-1 font-normal text-muted-foreground">found</span>
-                </p>
+                <p className="text-xs font-medium text-muted-foreground">New since previous scan</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{overview?.newFindingCount ?? 0}</p>
               </div>
             </div>
           </CardContent>
@@ -282,14 +325,14 @@ export default function DashboardPage() {
 
       {/* Metrics */}
       <section aria-label="Summary metrics">
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 lg:grid-cols-5">
           <MetricTile
             label="Total repositories"
             value={overview?.projectCount ?? projects.length}
             icon={FolderKanban}
           />
           <MetricTile
-            label="Vulnerabilities"
+            label="Open issues"
             value={vulnTotal}
             sub={
               criticalCount > 0 ? (
@@ -302,24 +345,26 @@ export default function DashboardPage() {
             iconClassName="text-destructive"
           />
           <MetricTile
-            label="Secrets exposed"
+            label="Exposed secrets"
             value={overview?.secretsFindingCount ?? 0}
             icon={KeyRound}
           />
           <MetricTile
-            label="Dependency issues"
+            label="Vulnerable dependencies"
             value={overview?.dependencyFindingCount ?? 0}
             icon={Package}
           />
           <MetricTile
-            label="Monitored repos"
-            value={overview?.monitoredSchedules ?? 0}
-            icon={Zap}
-          />
-          <MetricTile
-            label="Team members"
-            value={overview?.memberCount ?? 0}
-            icon={Users}
+            label="Fixed this month"
+            value={overview?.resolvedThisMonth ?? 0}
+            sub={
+              (overview?.acceptedRiskCount ?? 0) > 0 ? (
+                <span className="text-muted-foreground">
+                  {overview?.acceptedRiskCount} accepted as risk
+                </span>
+              ) : undefined
+            }
+            icon={ShieldCheck}
           />
         </div>
       </section>
@@ -329,10 +374,10 @@ export default function DashboardPage() {
         <Card className="flex min-h-0 flex-col border-border/60 bg-card/80">
           <CardHeader className="space-y-1 pb-2 sm:pb-4">
             <CardTitle className="text-lg sm:text-xl">
-              Vulnerabilities by severity
+              Open issues by severity
             </CardTitle>
             <CardDescription className="text-xs sm:text-sm">
-              All findings in your organization
+              What needs fixing, and how soon
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col gap-4 pt-0 md:flex-row md:items-center md:gap-6">
@@ -375,7 +420,7 @@ export default function DashboardPage() {
                 <span className="text-2xl font-bold tabular-nums text-foreground sm:text-3xl">
                   {vulnTotal}
                 </span>
-                <span className="text-xs text-muted-foreground">total</span>
+                <span className="text-xs text-muted-foreground">open</span>
               </div>
             </div>
             <ul className="min-w-0 flex-1 space-y-2 sm:space-y-2.5">
@@ -392,8 +437,11 @@ export default function DashboardPage() {
                         className="h-2.5 w-2.5 shrink-0 rounded-full"
                         style={{ backgroundColor: SEVERITY_HEX[s.name] }}
                       />
-                      <span className="capitalize text-muted-foreground">
+                      <span className="capitalize text-foreground">
                         {s.name.toLowerCase()}
+                      </span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {SEVERITY_ACTION[s.name]}
                       </span>
                     </span>
                     <span className="shrink-0 tabular-nums text-foreground">
@@ -409,60 +457,84 @@ export default function DashboardPage() {
 
         <Card className="flex min-h-0 flex-col border-border/60 bg-card/80">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-lg sm:text-xl">Top vulnerabilities by type</CardTitle>
+            <CardTitle className="text-lg sm:text-xl">Open issues by category</CardTitle>
             <CardDescription className="text-xs sm:text-sm">
-              Vulnerability breakdown by severity level
+              Where your risk comes from
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col">
-            {severityChart.filter((s) => s.count > 0).length === 0 ? (
+            {categories.length === 0 ? (
               <div className="flex flex-1 flex-col justify-center rounded-lg bg-muted/15 px-3 py-6 text-center sm:py-8">
-                <p className="text-sm text-muted-foreground">
-                  No vulnerabilities detected
-                </p>
+                <p className="text-sm text-muted-foreground">No open issues</p>
               </div>
             ) : (
               <ul className="space-y-3">
-                {severityChart
-                  .filter((s) => s.count > 0)
-                  .map((s) => {
-                    const pct =
-                      vulnTotal > 0 ? Math.round((s.count / vulnTotal) * 100) : 0;
-                    return (
-                      <li key={s.name} className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center gap-2 text-sm font-medium">
-                            <span
-                              className="h-2.5 w-2.5 shrink-0 rounded-full"
-                              style={{
-                                backgroundColor: SEVERITY_HEX[s.name],
-                              }}
-                            />
-                            <span className="capitalize text-foreground">
-                              {s.name.toLowerCase()}
-                            </span>
-                          </span>
-                          <span className="text-sm font-semibold text-foreground">
-                            {s.count}
-                          </span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-muted/30">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${pct}%`,
-                              backgroundColor: SEVERITY_HEX[s.name],
-                            }}
-                          />
-                        </div>
-                      </li>
-                    );
-                  })}
+                {categories.map((c) => (
+                  <li key={c.label} className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-medium text-foreground">{c.label}</span>
+                      <span className="text-sm font-semibold tabular-nums text-foreground">{c.count}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted/30">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all"
+                        style={{ width: `${maxCategory > 0 ? (c.count / maxCategory) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
               </ul>
             )}
           </CardContent>
         </Card>
       </section>
+
+      {/* Highest-risk open issues */}
+      {(overview?.topRisks?.length ?? 0) > 0 && (
+        <section aria-labelledby="fix-first-heading">
+          <Card className="border-border/60 bg-card/80">
+            <CardHeader className="flex flex-col gap-3 space-y-0 pb-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <div className="min-w-0 space-y-1">
+                <CardTitle id="fix-first-heading" className="text-lg sm:text-xl">
+                  Fix these first
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
+                  Your highest-risk open issues across all repositories
+                </CardDescription>
+              </div>
+              <Link
+                href="/vulnerabilities"
+                className="shrink-0 text-sm font-medium text-primary hover:underline sm:pt-1"
+              >
+                View all
+              </Link>
+            </CardHeader>
+            <CardContent className="space-y-1">
+              {overview?.topRisks?.map((f) => (
+                <Link
+                  key={f.id}
+                  href={`/scans/${f.scanId}#scan-findings`}
+                  className="flex flex-col gap-1.5 rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/20 sm:flex-row sm:items-center sm:gap-3 sm:px-3"
+                >
+                  <span
+                    className="w-fit shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase text-white"
+                    style={{ backgroundColor: SEVERITY_HEX[f.severity] }}
+                  >
+                    {f.severity.toLowerCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">{f.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {f.projectName}
+                      {f.location ? ` · ${f.location}` : ""}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+        </section>
+      )}
 
       {/* Projects + activity */}
       <section className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:items-stretch">

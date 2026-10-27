@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { FindingStatus } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveOrgId } from "@/lib/auth-guard";
 import { latestCompletedScanIds } from "@/lib/latest-scans";
@@ -14,6 +15,9 @@ export async function GET() {
   // Totals come from each repository's latest completed scan: earlier scans
   // are kept as history and would otherwise count the same issues again.
   const currentScan = { scanId: { in: await latestCompletedScanIds(orgId) } };
+  // Risk figures count only issues still waiting on a fix. Resolved, accepted
+  // and false-positive findings stay in the scan for audit but are not risk.
+  const openRisk = { ...currentScan, status: { in: ["OPEN", "IN_PROGRESS"] as FindingStatus[] } };
 
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
@@ -30,11 +34,15 @@ export async function GET() {
     lastScan,
     recentProjects,
     recentScansForFeed,
+    scannerBreakdown,
+    newFindingCount,
+    acceptedRiskCount,
+    topRiskFindings,
   ] = await Promise.all([
     prisma.finding.groupBy({
       by: ["severity"],
       _count: true,
-      where: currentScan,
+      where: openRisk,
     }),
     prisma.project.count({ where: { organizationId: orgId } }),
     prisma.orgMember.count({ where: { organizationId: orgId } }),
@@ -43,13 +51,13 @@ export async function GET() {
     }),
     prisma.finding.count({
       where: {
-        ...currentScan,
+        ...openRisk,
         scanner: { in: ["SECRETS_PATTERN", "SECRETS_LLM"] },
       },
     }),
     prisma.finding.count({
       where: {
-        ...currentScan,
+        ...openRisk,
         scanner: { in: ["SCA", "MALICIOUS_PKG"] },
       },
     }),
@@ -107,6 +115,28 @@ export async function GET() {
         project: { select: { name: true } },
       },
     }),
+    prisma.finding.groupBy({
+      by: ["scanner"],
+      _count: true,
+      where: openRisk,
+    }),
+    prisma.finding.count({ where: { ...openRisk, isNew: true } }),
+    prisma.finding.count({ where: { ...currentScan, status: "ACCEPTED_RISK" } }),
+    prisma.finding.findMany({
+      where: { ...openRisk, severity: { in: ["CRITICAL", "HIGH"] } },
+      orderBy: [{ riskScore: { sort: "desc", nulls: "last" } }, { severity: "asc" }],
+      take: 5,
+      select: {
+        id: true,
+        title: true,
+        severity: true,
+        scanner: true,
+        filePath: true,
+        startLine: true,
+        scanId: true,
+        scan: { select: { project: { select: { name: true } } } },
+      },
+    }),
   ]);
 
   const severity = severityBreakdown.map((s) => ({
@@ -121,6 +151,22 @@ export async function GET() {
     secretsFindingCount,
     dependencyFindingCount,
     resolvedThisMonth,
+    newFindingCount,
+    acceptedRiskCount,
+    scannerCounts: Object.fromEntries(
+      scannerBreakdown.map((r) => [r.scanner, r._count]),
+    ) as Record<string, number>,
+    topRisks: topRiskFindings.map((f) => ({
+      id: f.id,
+      title: f.title,
+      severity: f.severity,
+      scanner: f.scanner,
+      location: f.filePath
+        ? `${f.filePath}${f.startLine ? `:${f.startLine}` : ""}`
+        : null,
+      scanId: f.scanId,
+      projectName: f.scan.project.name,
+    })),
     lastScanAt: lastScan?.completedAt ?? lastScan?.createdAt ?? null,
     lastScanStatus: lastScan?.status ?? null,
     recentProjects: recentProjects.map((p) => {

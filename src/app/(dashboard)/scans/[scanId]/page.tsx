@@ -1,5 +1,6 @@
 "use client";
 
+import { scanModulesFromProgress } from "@/lib/scan-progress";
 import { scanModeLabel } from "@/lib/scan-types";
 import { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
@@ -422,7 +423,7 @@ export default function ScanDetailPage() {
       ? [{ label: project.name, href: `/projects/${projectIdForCrumb}` }]
       : []),
     {
-      label: scanModeLabel(scan.scanType, scan.scanModules as string[] | undefined),
+      label: scanModeLabel(scan.scanType, scanModulesFromProgress(scan.scannerProgress)),
     },
   ];
 
@@ -527,7 +528,7 @@ export default function ScanDetailPage() {
                 {scan.project?.name || "Scan"}
               </h1>
               <Badge variant="secondary" className="rounded-md border-slate-200 bg-slate-100 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                {scanModeLabel(scan.scanType, scan.scanModules as string[] | undefined)}
+                {scanModeLabel(scan.scanType, scanModulesFromProgress(scan.scannerProgress))}
               </Badge>
               <ScanStatusBadge status={scan.status} />
               {scan.status === "COMPLETED" && (

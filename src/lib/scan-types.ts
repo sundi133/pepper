@@ -3,7 +3,8 @@ import type { ScanJobData } from "@/lib/queue";
 /**
  * Scanner groups a user can combine on one scan. Each maps to the existing
  * single-module scan type `<id>_ONLY`; a scan running some but not all of them
- * is stored as FULL (or INCREMENTAL) plus `Scan.scanModules`.
+ * is stored as FULL (or INCREMENTAL) plus the module list, kept under the
+ * reserved `__modules__` key of `Scan.scannerProgress` (see lib/scan-progress).
  */
 export const SCAN_MODULES = [
   {

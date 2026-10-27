@@ -62,7 +62,7 @@ import { uploadedArtifactName } from "@/lib/compiled-scan/upload";
 import { maxUploadBytes } from "@/lib/upload-limits";
 import { mobilePlatformOf } from "@/lib/mobile-platform";
 import { generateFindingDetails } from "@/lib/generate-finding-details";
-import { SCAN_STATS_KEY } from "@/lib/scan-progress";
+import { SCAN_STATS_KEY, progressWithScanModules } from "@/lib/scan-progress";
 import { isAgentArtifact, agentOwnsUpload } from "@/scanners/mobile-agent/artifact";
 import { scanIncludesModule } from "@/lib/scan-types";
 import { isAgentScanConfigured, agentScanUnavailableReason } from "@/scanners/mobile-agent/config";
@@ -105,7 +105,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
       status: "RUNNING",
       startedAt: new Date(),
       jobId: job.id,
-      scannerProgress: {},
+      // Fresh progress, keeping the scanner combination the scan was created with.
+      scannerProgress: progressWithScanModules(scanModules),
     },
   });
   if (markRunning.count === 0) {

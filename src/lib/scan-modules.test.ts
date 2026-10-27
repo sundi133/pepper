@@ -7,6 +7,13 @@ import {
   scanModeLabel,
 } from "./scan-types";
 import { getScanners } from "@/scanners";
+import {
+  SCAN_MODULES_KEY,
+  computeScanProgress,
+  isScannerProgressKey,
+  progressWithScanModules,
+  scanModulesFromProgress,
+} from "./scan-progress";
 
 const llmOn = { enableLlmSast: true, enableLlmSecrets: true };
 
@@ -77,5 +84,30 @@ describe("parseRescanBody scanModules", () => {
       scanModules: ["SAST", "SCA"],
     });
     expect(parseRescanBody(JSON.stringify({ scanModules: ["NOPE"] })).ok).toBe(false);
+  });
+});
+
+describe("scanner combination stored on scannerProgress", () => {
+  it("round-trips through the reserved key", () => {
+    const progress = progressWithScanModules(["SAST", "SECRETS"]);
+    expect(progress).toEqual({ [SCAN_MODULES_KEY]: ["SAST", "SECRETS"] });
+    expect(scanModulesFromProgress(progress)).toEqual(["SAST", "SECRETS"]);
+  });
+
+  it("is empty for scans without a combination", () => {
+    expect(progressWithScanModules([])).toEqual({});
+    expect(scanModulesFromProgress(null)).toEqual([]);
+    expect(scanModulesFromProgress({ SAST_LLM: { status: "DONE" } })).toEqual([]);
+  });
+
+  it("is not treated as a scanner in progress", () => {
+    expect(isScannerProgressKey(SCAN_MODULES_KEY)).toBe(false);
+    const progress = {
+      ...progressWithScanModules(["SAST", "SCA"]),
+      SAST_LLM: { status: "DONE" },
+    } as unknown as Parameters<typeof computeScanProgress>[0];
+    expect(computeScanProgress(progress, "RUNNING")).toBe(
+      computeScanProgress({ SAST_LLM: { status: "DONE" } }, "RUNNING"),
+    );
   });
 });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { progressWithScanModules, scanModulesFromProgress } from "@/lib/scan-progress";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveOrgId, requireRole } from "@/lib/auth-guard";
 import { scanQueue, ScanJobData } from "@/lib/queue";
@@ -66,7 +67,7 @@ export async function POST(
       sourceType: sourceType as ScanJobData["sourceType"],
       sourceRef: scan.sourceRef,
       scanType: scan.scanType as ScanJobData["scanType"],
-      scanModules: scan.scanModules,
+      scanModules: scanModulesFromProgress(scan.scannerProgress),
       baseSha: scan.baseSha || undefined,
       commitSha: scan.commitSha || undefined,
       prNumber: scan.prNumber ?? undefined,
@@ -106,7 +107,8 @@ export async function POST(
           infoCount: 0,
           filesScanned: 0,
           depsScanned: 0,
-          scannerProgress: {},
+          // Keep the scanner combination; drop the stale per-scanner progress.
+          scannerProgress: progressWithScanModules(scanModulesFromProgress(scan.scannerProgress)),
         },
       }),
     ]);

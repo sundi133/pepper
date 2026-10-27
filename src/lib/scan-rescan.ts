@@ -1,4 +1,5 @@
 import { normalizeScanSelection } from "@/lib/scan-types";
+import { progressWithScanModules, scanModulesFromProgress } from "@/lib/scan-progress";
 import { execFileSync } from "child_process";
 import { prisma } from "@/lib/prisma";
 import { scanQueue, ScanJobData } from "@/lib/queue";
@@ -84,7 +85,10 @@ export async function rescanScan(params: {
   // A new type replaces the whole selection; otherwise keep the original's modules.
   const { scanType, scanModules } = params.scanType
     ? normalizeScanSelection(params.scanType, params.scanModules)
-    : { scanType: originalScan.scanType, scanModules: originalScan.scanModules };
+    : {
+        scanType: originalScan.scanType,
+        scanModules: scanModulesFromProgress(originalScan.scannerProgress),
+      };
   const branch =
     sourceType === "GIT_CLONE"
       ? resolveGitDefaultBranch(originalScan.sourceRef) ||
@@ -109,7 +113,7 @@ export async function rescanScan(params: {
     data: {
       projectId: originalScan.projectId,
       scanType,
-      scanModules,
+      scannerProgress: progressWithScanModules(scanModules),
       branch,
       baseSha: originalScan.baseSha,
       sourceType,

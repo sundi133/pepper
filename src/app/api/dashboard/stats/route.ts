@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { scanModulesFromProgress } from "@/lib/scan-progress";
 import type { FindingStatus } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveOrgId } from "@/lib/auth-guard";
@@ -111,7 +112,7 @@ export async function GET() {
         id: true,
         status: true,
         scanType: true,
-        scanModules: true,
+        scannerProgress: true,
         createdAt: true,
         project: { select: { name: true } },
       },
@@ -188,7 +189,7 @@ export async function GET() {
       id: s.id,
       status: s.status,
       scanType: s.scanType,
-      scanModules: s.scanModules,
+      scanModules: scanModulesFromProgress(s.scannerProgress),
       createdAt: s.createdAt.toISOString(),
       projectName: s.project.name,
     })),

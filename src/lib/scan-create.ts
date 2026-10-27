@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { progressWithScanModules } from "@/lib/scan-progress";
 import { prisma } from "@/lib/prisma";
 import { scanQueue, ScanJobData } from "@/lib/queue";
 import { uploadObject, ensureBucket } from "@/lib/minio";
@@ -171,7 +172,7 @@ export async function queueNewScan(params: {
     data: {
       projectId: effectiveProjectId,
       scanType: selection.scanType,
-      scanModules: selection.scanModules,
+      scannerProgress: progressWithScanModules(selection.scanModules),
       branch: scanParams.branch,
       commitSha: scanParams.commitSha,
       baseSha: scanParams.baseSha,

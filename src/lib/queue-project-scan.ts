@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { progressWithScanModules } from "@/lib/scan-progress";
 import { scanQueue, type ScanJobData } from "@/lib/queue";
 import { cancelActiveScansForProject } from "@/lib/active-project-scans";
 import { createScanQueuedNotification } from "@/lib/scan-notifications";
@@ -42,7 +43,7 @@ export async function queueProjectScan(params: {
     data: {
       projectId: params.projectId,
       scanType: selection.scanType,
-      scanModules: selection.scanModules,
+      scannerProgress: progressWithScanModules(selection.scanModules),
       branch,
       sourceType: "GIT_CLONE",
       sourceRef: project.repoUrl.trim(),

@@ -11,7 +11,7 @@ type Version = {
   completedAt: Date;
   commitSha: string | null;
   scanType: string;
-  totals: { critical: number; high: number; medium: number; low: number; info: number };
+  totals: { critical: number; high: number; medium: number; low: number };
   findings: CompareFinding[] | null;
 };
 
@@ -34,7 +34,6 @@ async function loadVersion(projectId: string, scanId: string): Promise<Version |
         highCount: true,
         mediumCount: true,
         lowCount: true,
-        infoCount: true,
       },
     }),
   ]);
@@ -88,7 +87,6 @@ async function loadVersion(projectId: string, scanId: string): Promise<Version |
         high: snapshot.highCount,
         medium: snapshot.mediumCount,
         low: snapshot.lowCount,
-        info: snapshot.infoCount,
       },
       findings,
     };
@@ -103,7 +101,6 @@ async function loadVersion(projectId: string, scanId: string): Promise<Version |
       high: live!.highCount,
       medium: live!.mediumCount,
       low: live!.lowCount,
-      info: live!.infoCount,
     },
     findings,
   };

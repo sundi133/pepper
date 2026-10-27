@@ -101,9 +101,9 @@ RULES:
     );
 
     // Parse JSON response
-    let details: Record<string, any> = {};
+    let details: Record<string, unknown> = {};
     try {
-      details = parseLlmJsonResponse<Record<string, any>>(responseText, {});
+      details = parseLlmJsonResponse<Record<string, unknown>>(responseText, {});
       if (!details || Object.keys(details).length === 0) {
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (jsonMatch) {

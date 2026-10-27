@@ -35,7 +35,6 @@ export async function GET() {
           highCount: true,
           mediumCount: true,
           lowCount: true,
-          infoCount: true,
           filesScanned: true,
           completedAt: true,
           createdAt: true,
@@ -51,8 +50,7 @@ export async function GET() {
       ? scan.criticalCount +
         scan.highCount +
         scan.mediumCount +
-        scan.lowCount +
-        scan.infoCount
+        scan.lowCount
       : 0;
     const scanStatus = deriveRepoScanStatus(scan);
 

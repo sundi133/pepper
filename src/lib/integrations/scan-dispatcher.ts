@@ -60,7 +60,6 @@ export async function dispatchScanCompleteIntegrations(scanId: string) {
       highCount: true,
       mediumCount: true,
       lowCount: true,
-      infoCount: true,
       gateResult: true,
       project: { select: { id: true, name: true, organizationId: true } },
     },
@@ -79,7 +78,6 @@ export async function dispatchScanCompleteIntegrations(scanId: string) {
       high: scan.highCount,
       medium: scan.mediumCount,
       low: scan.lowCount,
-      info: scan.infoCount,
     },
     gateResult: scan.gateResult as "PASSED" | "FAILED" | "PENDING",
   };
@@ -210,7 +208,6 @@ export async function dispatchScanCompleteIntegrations(scanId: string) {
       highCount: scan.highCount,
       mediumCount: scan.mediumCount,
       lowCount: scan.lowCount,
-      infoCount: scan.infoCount,
       gateResult: scan.gateResult,
     };
 

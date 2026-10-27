@@ -1,3 +1,5 @@
+import * as path from "path";
+
 /** The minimal finding shape this gate needs; RawFinding satisfies it. */
 export interface EvidenceCandidate {
   startLine?: number;
@@ -113,10 +115,15 @@ export function extractEvidenceAnchors(finding: EvidenceCandidate): string[] {
  * Returns ok=true whenever the check cannot make a determination (no file
  * content, no identifiers cited, or at least one identifier present) so the
  * finding stays for the validation passes rather than being silently removed.
+ *
+ * `relatedCode` is cross-file code the model was also shown (a helper it
+ * calls, a caller): a sink cited from there is real evidence even though it is
+ * not in this file. The cited line is still checked against this file only.
  */
 export function verifyFindingEvidence(
   finding: EvidenceCandidate,
   fileContent: string | undefined,
+  relatedCode = "",
 ): EvidenceVerification {
   const anchors = extractEvidenceAnchors(finding);
 
@@ -139,13 +146,15 @@ export function verifyFindingEvidence(
     return { ok: true, anchors, matched: [] };
   }
 
+  const seen = (a: string) => fileContent.includes(a) || relatedCode.includes(a);
+
   // Authorization and business-logic findings describe a missing control,
   // not a named sink: never dropped for their wording.
   if (isAuthorizationOrLogicFinding(finding)) {
-    return { ok: true, anchors, matched: anchors.filter((a) => fileContent.includes(a)) };
+    return { ok: true, anchors, matched: anchors.filter(seen) };
   }
 
-  const matched = anchors.filter((a) => fileContent.includes(a));
+  const matched = anchors.filter(seen);
   if (matched.length === 0) {
     return {
       ok: false,
@@ -156,4 +165,78 @@ export function verifyFindingEvidence(
   }
 
   return { ok: true, anchors, matched };
+}
+
+// ─── Hard exclusions ────────────────────────────────────────────────────
+
+/**
+ * Deterministic drops for AI SAST findings that cannot be real in the file
+ * they were reported against, applied after the model answers and before
+ * evidence verification. Modelled on the hard-exclusion stage of
+ * anthropics/claude-code-security-review, narrowed to Pepper's policy: rate
+ * limiting, open redirect, CSRF and ReDoS stay reportable here because the SAST
+ * prompt asks for them under specific conditions.
+ */
+
+export interface ExclusionCandidate {
+  title?: string;
+  description?: string;
+  cweId?: string | null;
+}
+
+const DOC_EXTENSIONS = new Set([".md", ".markdown", ".rst", ".txt", ".adoc"]);
+
+/** Languages where a memory-corruption bug is possible in ordinary code. */
+const MEMORY_UNSAFE_EXTENSIONS = new Set([
+  ".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".hh", ".m", ".mm", ".rs", ".zig",
+]);
+
+const MEMORY_SAFETY_CWES = new Set([
+  "CWE-119", "CWE-120", "CWE-121", "CWE-122", "CWE-124", "CWE-125", "CWE-126",
+  "CWE-127", "CWE-415", "CWE-416", "CWE-476", "CWE-787", "CWE-788", "CWE-805",
+]);
+
+const MEMORY_SAFETY_TEXT =
+  /\b(?:buffer (?:overflow|overrun|underflow)|heap (?:overflow|corruption)|stack[- ]based (?:buffer )?overflow|out[- ]of[- ]bounds (?:read|write|access)|use[- ]after[- ]free|double[- ]free|memory corruption|null pointer dereference|dangling pointer)\b/i;
+
+const SSRF_TEXT = /\b(?:ssrf|server[- ]side request forgery)\b/i;
+const STATIC_CLIENT_EXTENSIONS = new Set([".html", ".htm"]);
+
+const RESOURCE_LEAK_TEXT =
+  /\b(?:(?:resource|memory|file|connection|socket|handle|thread)\s+leak|unclosed\s+(?:resource|file|connection|stream|socket))\b/i;
+const LEAK_CWES = new Set(["CWE-401", "CWE-404", "CWE-772", "CWE-775"]);
+
+function normalizeCwe(cwe: string | null | undefined): string {
+  return (cwe || "").toUpperCase().replace(/^CWE[-\s]*/, "CWE-");
+}
+
+/** Why a finding is excluded outright, or null when it is kept. */
+export function hardExclusionReason(
+  finding: ExclusionCandidate,
+  filePath: string,
+): string | null {
+  const ext = path.extname(filePath).toLowerCase();
+  const text = `${finding.title ?? ""} ${finding.description ?? ""}`;
+  const cwe = normalizeCwe(finding.cweId);
+
+  if (DOC_EXTENSIONS.has(ext)) {
+    return "finding in a documentation file";
+  }
+
+  if (
+    !MEMORY_UNSAFE_EXTENSIONS.has(ext) &&
+    (MEMORY_SAFETY_CWES.has(cwe) || MEMORY_SAFETY_TEXT.test(finding.title ?? ""))
+  ) {
+    return `memory-safety finding in memory-safe ${ext || "extensionless"} code`;
+  }
+
+  if (STATIC_CLIENT_EXTENSIONS.has(ext) && (cwe === "CWE-918" || SSRF_TEXT.test(finding.title ?? ""))) {
+    return "SSRF finding in client-side HTML, which cannot issue server-side requests";
+  }
+
+  if (LEAK_CWES.has(cwe) || (RESOURCE_LEAK_TEXT.test(finding.title ?? "") && !/\b(?:secret|credential|token|password|pii|sensitive)\b/i.test(text))) {
+    return "resource-management finding, not a security vulnerability";
+  }
+
+  return null;
 }

@@ -61,7 +61,7 @@ describe("renderPrSummary - completed scan", () => {
     commitSha: "abcdef1234567890",
     branch: "feature/x",
     gateResult: "PASSED" as const,
-    counts: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+    counts: { critical: 0, high: 0, medium: 0, low: 0 },
     topFindings: [],
     reviewUrl: "https://pepper.example.com/scans/scan_1",
     status: "COMPLETED" as const,
@@ -82,7 +82,7 @@ describe("renderPrSummary - completed scan", () => {
     const body = renderPrSummary(
       {
         ...base,
-        counts: { critical: 2, high: 5, medium: 3, low: 1, info: 0 },
+        counts: { critical: 2, high: 5, medium: 3, low: 1 },
         gateResult: "FAILED",
       },
       marker,
@@ -97,7 +97,7 @@ describe("renderPrSummary - completed scan", () => {
     const body = renderPrSummary(
       {
         ...base,
-        counts: { critical: 0, high: 1, medium: 0, low: 0, info: 0 },
+        counts: { critical: 0, high: 1, medium: 0, low: 0 },
       },
       marker,
     );
@@ -108,7 +108,7 @@ describe("renderPrSummary - completed scan", () => {
     const body = renderPrSummary(
       {
         ...base,
-        counts: { critical: 1, high: 0, medium: 0, low: 0, info: 0 },
+        counts: { critical: 1, high: 0, medium: 0, low: 0 },
         topFindings: [
           {
             severity: "CRITICAL",
@@ -137,7 +137,7 @@ describe("renderPrSummary - completed scan", () => {
     const body = renderPrSummary(
       {
         ...base,
-        counts: { critical: 1, high: 0, medium: 0, low: 0, info: 0 },
+        counts: { critical: 1, high: 0, medium: 0, low: 0 },
         topFindings: [
           {
             severity: "HIGH",
@@ -166,7 +166,7 @@ describe("renderPrSummary - failed scan", () => {
         commitSha: "deadbeef",
         branch: "main",
         gateResult: "PENDING",
-        counts: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+        counts: { critical: 0, high: 0, medium: 0, low: 0 },
         topFindings: [],
         reviewUrl: "https://pepper.example.com/scans/scan_2",
         status: "FAILED",
@@ -187,7 +187,7 @@ describe("renderPrSummary - failed scan", () => {
         commitSha: null,
         branch: null,
         gateResult: "PENDING",
-        counts: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+        counts: { critical: 0, high: 0, medium: 0, low: 0 },
         topFindings: [],
         reviewUrl: null,
         status: "FAILED",

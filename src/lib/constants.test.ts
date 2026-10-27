@@ -25,8 +25,8 @@ describe("FILE_EXTENSIONS", () => {
     }
   });
 
-  it("does not scan plain static .html as a server template", () => {
-    expect(FILE_EXTENSIONS[".html"]).toBeUndefined();
+  it("treats .html as a template; plain static pages are skipped by isPlainStaticHtml", () => {
+    expect(FILE_EXTENSIONS[".html"]).toBe("template");
   });
 });
 

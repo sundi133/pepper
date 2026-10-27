@@ -98,7 +98,44 @@ const WEAKNESS_BASELINE: Record<string, SeverityLevel> = {
   "trust boundary": "HIGH",
   "parameter tampering": "MEDIUM",
   "mass assignment": "HIGH",
+  csrf: "MEDIUM",
+  "cross-site request forgery": "MEDIUM",
 };
+
+/**
+ * Keys tried longest first so the most specific class wins ("missing
+ * security header" before "security"), each matched as whole words so a short
+ * key never fires inside another word ("rce" in "force", "resource", "source").
+ */
+const WEAKNESS_KEYS = Object.keys(WEAKNESS_BASELINE)
+  .sort((a, b) => b.length - a.length)
+  .map((key) => ({
+    key,
+    re: new RegExp(`(?:^|[^a-z0-9])${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[^a-z0-9]|$)`),
+  }));
+
+/** An actual secret literal in source, not a finding that merely mentions a token or password. */
+const HARDCODED_CREDENTIAL =
+  /\bhard-?coded\b|\bembedded\s+(?:secret|credential|key|password|token)\b|\bplaintext\s+(?:password|secret|credential|api\s*key)\b|\bsecret\s+(?:exposure|literal)\b|\bleaked\s+(?:key|secret|token|credential)\b/i;
+
+function isHardcodedCredential(weaknessClass: string, cweId?: string | null): boolean {
+  return normalizeCwe(cweId) === "CWE-798" || HARDCODED_CREDENTIAL.test(weaknessClass);
+}
+
+function normalizeCwe(cweId?: string | null): string {
+  if (!cweId) return "";
+  const normalized = cweId.toUpperCase().replace(/^CWE[-\s]*/i, "CWE-");
+  return normalized.startsWith("CWE-") ? normalized : `CWE-${normalized}`;
+}
+
+function shift(level: SeverityLevel, by: number): SeverityLevel {
+  const idx = Math.max(0, Math.min(ORDER.length - 1, RANK[level] + by));
+  return ORDER[idx];
+}
+
+/** A leading "CRITICAL:" / "HIGH (model rated …):" label on a justification. */
+const SEVERITY_LABEL_PREFIX =
+  /^\s*(?:CRITICAL|HIGH|MEDIUM|LOW|INFO)\b(?:\s*\([^)]*\))?\s*[:—–-]\s*/i;
 
 
 export const SEVERITY_CALIBRATION_PROMPT = `
@@ -106,9 +143,10 @@ export const SEVERITY_CALIBRATION_PROMPT = `
 
 Assign severity using a TWO-STEP method. The "severity" field MUST align with weakness class and CWE — do NOT label everything CRITICAL.
 
-**Step 1 — Classify weaknessClass** (pick one): Command Injection | SQL Injection | XSS | SSRF | Path Traversal | IDOR | Auth Bypass | Hardcoded Credential | Weak Crypto | Deserialization | SSTI | Security Misconfiguration | Information Disclosure | Business Logic | Policy Violation | Other
+**Step 1 — Classify weaknessClass** (pick one): Command Injection | SQL Injection | XSS | SSRF | Path Traversal | IDOR | Auth Bypass | CSRF | Hardcoded Credential | Weak Crypto | Deserialization | SSTI | Security Misconfiguration | Information Disclosure | Business Logic | Policy Violation | Other
+Use "Hardcoded Credential" ONLY for a secret value written in the source. A missing/weak CSRF token, a weak password policy, or a JWT that does not expire is NOT a hardcoded credential.
 
-**Step 2 — Map to severity using this matrix:**
+**Step 2 — Map to severity using this matrix.** The matrix gives the default for the class. Move ONE level up or down from it only for reasons visible in the code: who the attacker is (anonymous vs logged-in vs admin-only), what they reach (one user's data vs all tenants, read vs write vs code execution), and preconditions. State that reason in severityJustification. A severity more than one level away from the class default is corrected automatically, and Policy Violation findings take the severity configured for the policy.
 
 | Class | Default severity | Raise to CRITICAL only when |
 |-------|------------------|-----------------------------|
@@ -136,6 +174,7 @@ Assign severity using a TWO-STEP method. The "severity" field MUST align with we
 
 **metadata required for severity audit:**
 - "weaknessClass": exact class from step 1
+- "attackerAccess": "anonymous" | "authenticated" | "privileged" (admin/operator only) | "local" | null when not visible
 - "severityJustification": one sentence citing class + evidence (e.g. "CRITICAL: CWE-78, user code param passed to subprocess.check_output line 42")
 - Do NOT put a different severity in title/description than the "severity" field
 `;
@@ -159,10 +198,8 @@ function clampSeverity(
 }
 
 function baselineFromCwe(cweId?: string | null): SeverityLevel | undefined {
-  if (!cweId) return undefined;
-  const normalized = cweId.toUpperCase().replace(/^CWE[-\s]*/i, "CWE-");
-  const key = normalized.startsWith("CWE-") ? normalized : `CWE-${normalized}`;
-  return CWE_BASELINE[key];
+  const key = normalizeCwe(cweId);
+  return key ? CWE_BASELINE[key] : undefined;
 }
 
 function baselineFromWeakness(
@@ -170,10 +207,8 @@ function baselineFromWeakness(
   title?: string,
 ): SeverityLevel | undefined {
   const text = `${weaknessClass || ""} ${title || ""}`.toLowerCase();
-  for (const [key, sev] of Object.entries(WEAKNESS_BASELINE)) {
-    if (text.includes(key)) return sev;
-  }
-  return undefined;
+  const hit = WEAKNESS_KEYS.find(({ re }) => re.test(text));
+  return hit ? WEAKNESS_BASELINE[hit.key] : undefined;
 }
 
 function baselineFromScanner(scanner?: string): SeverityLevel | undefined {
@@ -190,43 +225,46 @@ function isContextLimited(meta: Record<string, unknown>): boolean {
   return !hasRoute && !hasParam;
 }
 
+/** Confidence, context, access and test-path caps; each one that applies is recorded. */
 function applyCaps(
   level: SeverityLevel,
   confidence: number,
   contextLimited: boolean,
   testPath: boolean,
   weaknessClass: string,
-  cweId?: string | null,
+  cweId: string | null | undefined,
+  attackerAccess: string | undefined,
+  reasons: string[],
 ): SeverityLevel {
   let severity = level;
-  if (confidence < 0.75) severity = clampSeverity(severity, "HIGH");
-  if (confidence < 0.7) severity = clampSeverity(severity, "MEDIUM");
+  const cap = (max: SeverityLevel, why: string) => {
+    if (RANK[severity] > RANK[max]) {
+      severity = max;
+      reasons.push(why);
+    }
+  };
+  if (confidence < 0.7) cap("MEDIUM", `confidence ${confidence.toFixed(2)}`);
+  else if (confidence < 0.75) cap("HIGH", `confidence ${confidence.toFixed(2)}`);
   if (
     contextLimited &&
     !isHighImpactWeakness(weaknessClass, cweId || undefined) &&
     /injection|rce|command|sql|xss|ssrf/i.test(weaknessClass)
   ) {
-    severity = clampSeverity(severity, "HIGH");
+    cap("HIGH", "route and parameter not confirmed");
   }
-  if (testPath) {
-    const down: SeverityLevel[] = [
-      "INFO",
-      "LOW",
-      "MEDIUM",
-      "HIGH",
-      "CRITICAL",
-    ];
-    const idx = down.indexOf(severity);
-    severity = idx > 0 ? down[idx - 1] : severity;
+  if (attackerAccess === "privileged") cap("HIGH", "requires admin/operator access");
+  if (attackerAccess === "local") cap("MEDIUM", "requires local access");
+  if (testPath && severity !== "INFO") {
+    severity = shift(severity, -1);
+    reasons.push("test/fixture path");
   }
   return severity;
 }
 
 function isHighImpactWeakness(weakness?: string, cweId?: string): boolean {
   const w = (weakness || "").toLowerCase();
-  if (/hardcoded|credential|secret/.test(w)) return true;
-  if (cweId === "CWE-798") return true;
-  if (/command injection|rce|sql injection|auth bypass|deserial/.test(w)) {
+  if (isHardcodedCredential(w, cweId)) return true;
+  if (/command injection|\brce\b|sql injection|auth bypass|deserial/.test(w)) {
     return true;
   }
   return false;
@@ -243,6 +281,19 @@ export interface CalibrateSeverityInput {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Final severity for a finding.
+ *
+ * The reported severity (the model's, or a rule's) is the starting point, not
+ * a suggestion to overwrite: it carries context the class table cannot see
+ * (admin-only route, read vs write, one user vs every tenant). The CWE /
+ * weakness-class baseline only keeps it within one level of the class
+ * default, which stops both "everything is CRITICAL" and an exploitable
+ * injection labelled LOW. Fixed rules follow: misconfiguration-type classes
+ * top out at MEDIUM, a hardcoded secret is CRITICAL when confident, a policy
+ * violation uses the policy's configured severity, then the confidence,
+ * context, access and test-path caps.
+ */
 export function calibrateSeverity(
   input: CalibrateSeverityInput,
 ): {
@@ -260,90 +311,99 @@ export function calibrateSeverity(
 
   const fromCwe = baselineFromCwe(input.cweId);
   const fromWeakness = baselineFromWeakness(weaknessClass, input.title);
-  const fromScanner = baselineFromScanner(input.scanner);
+  const baseline: SeverityLevel | undefined =
+    fromCwe && fromWeakness
+      ? RANK[fromCwe] >= RANK[fromWeakness] ? fromCwe : fromWeakness
+      : fromCwe || fromWeakness || baselineFromScanner(input.scanner);
 
-  let baseline: SeverityLevel =
-    fromCwe || fromWeakness || fromScanner || llmSeverity;
-
-  if (fromCwe && fromWeakness) {
-    baseline =
-      RANK[fromCwe] >= RANK[fromWeakness] ? fromCwe : fromWeakness;
-  }
-
-  let severity: SeverityLevel = baseline;
+  const reasons: string[] = [];
+  let severity: SeverityLevel = llmSeverity;
   const confidence = input.confidence ?? 0.8;
-  const testPath = isTestLikePath(input.filePath);
-  const contextLimited = isContextLimited(meta);
 
-  if (/misconfig|header|verbose|rate limit|info disclosure/i.test(weaknessClass)) {
-    severity = clampSeverity(severity, "MEDIUM");
+  if (baseline) {
+    const lo = shift(baseline, -1);
+    const hi = shift(baseline, 1);
+    const label = normalizeCwe(input.cweId) || weaknessClass;
+    if (RANK[severity] > RANK[hi]) {
+      severity = hi;
+      reasons.push(`${label} defaults to ${baseline}`);
+    } else if (RANK[severity] < RANK[lo]) {
+      severity = lo;
+      reasons.push(`${label} defaults to ${baseline}`);
+    }
   }
 
-  if (/hardcoded|credential|secret/i.test(weaknessClass) || input.cweId === "CWE-798") {
-    severity = confidence >= 0.8 ? "CRITICAL" : "HIGH";
+  if (/misconfig|header|verbose|rate limit|info(?:rmation)? disclosure/i.test(weaknessClass)) {
+    const before = severity;
+    severity = clampSeverity(severity, "MEDIUM");
+    if (severity !== before) reasons.push(`${weaknessClass} tops out at MEDIUM`);
+  }
+
+  if (isHardcodedCredential(weaknessClass, input.cweId)) {
+    const forced: SeverityLevel = confidence >= 0.8 ? "CRITICAL" : "HIGH";
+    if (forced !== severity) reasons.push(`hardcoded credential at confidence ${confidence.toFixed(2)}`);
+    severity = forced;
   }
 
   const policySev = (meta.policySeverity as string) || (meta.severity as string);
-  if (weaknessClass.toLowerCase().includes("policy") && policySev) {
-    severity = parseSeverity(policySev);
+  const isPolicy = meta.type === "policy-violation" || /policy/i.test(weaknessClass);
+  if (isPolicy && policySev) {
+    const configured = parseSeverity(policySev);
+    if (configured !== severity) reasons.push("severity configured for the policy");
+    severity = configured;
   }
 
   severity = applyCaps(
     severity,
     confidence,
-    contextLimited,
-    testPath,
+    isContextLimited(meta),
+    isTestLikePath(input.filePath),
     weaknessClass,
     input.cweId,
+    typeof meta.attackerAccess === "string" ? meta.attackerAccess.toLowerCase() : undefined,
+    reasons,
   );
 
-  const hasStructuredBaseline = Boolean(fromCwe || fromWeakness || fromScanner);
-  if (!hasStructuredBaseline) {
-    severity = applyCaps(
-      llmSeverity,
-      confidence,
-      contextLimited,
-      testPath,
-      weaknessClass,
-      input.cweId,
-    );
-  }
-
-  const justification =
-    (meta.severityJustification as string)?.trim() ||
-    buildJustification({
-      severity,
-      weaknessClass,
-      cweId: input.cweId,
-      confidence,
-      contextLimited,
-      testPath: Boolean(testPath),
-      llmSeverity,
-      adjusted: llmSeverity !== severity,
-    });
+  const adjusted = llmSeverity !== severity;
+  // The model's own sentence keeps its evidence, but its severity label is
+  // replaced so the text never contradicts the stored severity.
+  const modelText = ((meta.severityJustification as string) || "")
+    .trim()
+    .replace(SEVERITY_LABEL_PREFIX, "");
+  const justification = adjusted
+    ? `${severity} (model rated ${llmSeverity}; ${reasons.join("; ") || "calibrated"})${modelText ? `: ${modelText}` : ""}`
+    : modelText
+      ? `${severity}: ${modelText}`
+      : buildJustification({
+          severity,
+          weaknessClass,
+          cweId: input.cweId,
+          confidence,
+          contextLimited: isContextLimited(meta),
+          testPath: Boolean(isTestLikePath(input.filePath)),
+        });
 
   return {
     severity,
     justification,
     llmSeverity,
-    adjusted: llmSeverity !== severity,
+    adjusted,
     weaknessClass,
   };
 }
 
 function inferWeaknessClass(input: CalibrateSeverityInput): string {
   const text = `${input.title || ""} ${input.cweId || ""}`.toLowerCase();
-  if (input.cweId === "CWE-798" || /hardcoded|secret|credential|api.?key|password|token/i.test(text)) {
-    return "Hardcoded Credential";
-  }
-  if (/command|rce|exec|subprocess|os\.system/i.test(text)) return "Command Injection";
-  if (/sql injection|sqli/i.test(text)) return "SQL Injection";
-  if (/xss|cross-site/i.test(text)) return "XSS";
-  if (/ssrf/i.test(text)) return "SSRF";
-  if (/idor|access control|authorization/i.test(text)) return "IDOR";
-  if (/path traversal/i.test(text)) return "Path Traversal";
-  if (/deserial/i.test(text)) return "Deserialization";
-  if (/policy/i.test(text)) return "Policy Violation";
+  if (isHardcodedCredential(text, input.cweId)) return "Hardcoded Credential";
+  if (/\bcsrf\b|cross-site request forgery|cwe-352/.test(text)) return "CSRF";
+  if (/command injection|\brce\b|remote code execution|os\.system|subprocess/.test(text)) return "Command Injection";
+  if (/sql injection|\bsqli\b/.test(text)) return "SQL Injection";
+  if (/\bxss\b|cross-site scripting/.test(text)) return "XSS";
+  if (/\bssrf\b|server-side request forgery/.test(text)) return "SSRF";
+  if (/\bidor\b|access control|authori[sz]ation/.test(text)) return "IDOR";
+  if (/path traversal/.test(text)) return "Path Traversal";
+  if (/deserial/.test(text)) return "Deserialization";
+  if (/\bpolicy\b/.test(text)) return "Policy Violation";
   return "Other";
 }
 
@@ -354,8 +414,6 @@ function buildJustification(params: {
   confidence: number;
   contextLimited: boolean;
   testPath: boolean;
-  llmSeverity: SeverityLevel;
-  adjusted: boolean;
 }): string {
   const parts = [
     `${params.severity}: ${params.weaknessClass}`,
@@ -363,9 +421,6 @@ function buildJustification(params: {
     params.contextLimited ? "exploit path partially confirmed" : "evidence in cited code",
     params.confidence < 0.8 ? `confidence ${params.confidence.toFixed(2)}` : null,
     params.testPath ? "test/fixture path (severity reduced)" : null,
-    params.adjusted
-      ? `adjusted from model label ${params.llmSeverity}`
-      : null,
   ].filter(Boolean);
   return parts.join("; ");
 }

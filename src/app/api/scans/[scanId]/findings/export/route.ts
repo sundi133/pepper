@@ -84,7 +84,6 @@ export async function GET(
       highCount: true,
       mediumCount: true,
       lowCount: true,
-      infoCount: true,
       project: { select: { name: true, repoUrl: true } },
     },
   });
@@ -227,7 +226,6 @@ function buildHtmlReport({
     highCount?: number | null;
     mediumCount?: number | null;
     lowCount?: number | null;
-    infoCount?: number | null;
     project: { name: string; repoUrl: string | null } | null;
   };
   findings: ReportFinding[];

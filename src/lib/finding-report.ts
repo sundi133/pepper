@@ -19,12 +19,25 @@ export interface FindingReportInput {
 export interface StoredFindingReport {
   vulnerabilityName: string;
   summary: string;
+  /** Affected endpoint/parameter/file details written by the AI. */
+  details?: string;
   stepsToReproduce: string[];
   impact: string;
   remediation: string[];
+  references?: string[];
 }
 
-export const CURRENT_REPORT_VERSION = 9;
+/** AI-written report fields saved by /api/findings/[findingId]/generate-details. */
+export interface GeneratedFindingDetails {
+  summary: string;
+  vulnerabilityDetails: string;
+  stepsToReproduce: string[];
+  impact: string;
+  remediation: string[];
+  references: string[];
+}
+
+export const CURRENT_REPORT_VERSION = 11;
 
 export function enrichFindingWithReport<T extends FindingReportInput>(
   finding: T,
@@ -41,24 +54,7 @@ export function enrichFindingWithReport<T extends FindingReportInput>(
   )
     return finding;
 
-  let report: StoredFindingReport;
-  if (
-    metadata.generatedDetails &&
-    typeof metadata.generatedDetails === "object" &&
-    !metadata.reportSections
-  ) {
-    const gen = metadata.generatedDetails as Record<string, unknown>;
-    report = {
-      vulnerabilityName:
-        readString(gen.vulnerabilityName, gen.title) || buildVulnerabilityName(finding),
-      summary: readString(gen.summary, gen.vulnerabilityDetails) || finding.description,
-      stepsToReproduce: readStringArray(gen.stepsToReproduce),
-      impact: readString(gen.impact) || buildImpact(finding),
-      remediation: readStringArray(gen.remediation),
-    };
-  } else {
-    report = buildStoredFindingReport(finding);
-  }
+  const report = buildStoredFindingReport(finding);
 
   return {
     ...finding,
@@ -93,20 +89,24 @@ export function buildStoredFindingReport(
   const description = sanitizeReportText(
     readString(metadata.summary) || stripGeneratedSections(finding.description),
   );
-  const metadataSteps = readStringArray(metadata.stepsToReproduce)
+  // Scan-time fields may be a list or a markdown string; read both shapes.
+  const metadataSteps = readSteps(metadata.stepsToReproduce)
     .map(sanitizeReportText)
     .filter(isSafeReportText);
-  const metadataRemediation = readStringArray(metadata.remediation)
+  const metadataRemediation = readBullets(metadata.remediation)
     .map(sanitizeReportText)
     .filter(Boolean);
   const recommendation = extractRecommendation(finding.description);
   const structured = parseStructuredSummaryFields(finding.description);
+  // AI-written fields win; the deterministic templates below are only a fallback
+  // for findings the LLM has not described (no key configured, or not generated yet).
+  const generated = readGeneratedDetails(finding.metadata);
 
   return {
     vulnerabilityName:
       readString(metadata.vulnerabilityName, metadata.accurateVulnerabilityName) ||
       buildVulnerabilityName(finding),
-    summary: buildReportSummary({
+    summary: generated?.summary || buildReportSummary({
       finding,
       location,
       parameter,
@@ -115,16 +115,113 @@ export function buildStoredFindingReport(
       structured,
       metadata,
     }),
-    stepsToReproduce:
-      metadataSteps.length > 0
+    details: generated?.vulnerabilityDetails || undefined,
+    stepsToReproduce: generated?.stepsToReproduce.length
+      ? generated.stepsToReproduce
+      : metadataSteps.length > 0
         ? metadataSteps
         : buildSteps({ finding, route, method, parameter, payload, sink, location }),
-    impact: sanitizeReportText(readString(metadata.impact) || buildImpact(finding)),
-    remediation:
-      metadataRemediation.length > 0
+    impact:
+      generated?.impact ||
+      sanitizeReportText(readString(metadata.impact) || buildImpact(finding)),
+    remediation: generated?.remediation.length
+      ? generated.remediation
+      : metadataRemediation.length > 0
         ? metadataRemediation
         : buildRemediation(finding, recommendation),
+    references: generated?.references.length ? generated.references : undefined,
   };
+}
+
+/**
+ * True only when the scan left no AI analysis of its own, so the detail view
+ * should generate one when opened. AI SAST findings already carry impact,
+ * steps and remediation from the scan; regenerating them on every first open
+ * only made the user wait for a second model call.
+ */
+export function needsGeneratedDetails(finding: FindingReportInput): boolean {
+  const metadata = normalizeMetadata(finding.metadata);
+  if (metadata.generatedDetails) return false;
+  const hasImpact = Boolean(readText(metadata.impact));
+  const hasSteps = readSteps(metadata.stepsToReproduce).length > 0;
+  const hasFix = readBullets(metadata.remediation).length > 0;
+  const structured = /\bWhy it is exploitable:/i.test(finding.description || "");
+  return !(hasImpact && (hasSteps || hasFix || structured));
+}
+
+/** Overlay freshly generated details so a finding's report reflects them before refetch. */
+export function withGeneratedDetails<T extends FindingReportInput>(
+  finding: T,
+  generatedDetails: unknown,
+): T {
+  if (!generatedDetails || typeof generatedDetails !== "object") return finding;
+  return {
+    ...finding,
+    metadata: { ...normalizeMetadata(finding.metadata), generatedDetails },
+  };
+}
+
+/** Normalize stored AI output. Returns undefined when nothing usable was generated. */
+export function readGeneratedDetails(
+  metadata: unknown,
+): GeneratedFindingDetails | undefined {
+  const raw = normalizeMetadata(metadata).generatedDetails;
+  if (!raw || typeof raw !== "object") return undefined;
+  const gen = raw as Record<string, unknown>;
+  const details: GeneratedFindingDetails = {
+    summary: readText(gen.summary),
+    vulnerabilityDetails: readText(gen.vulnerabilityDetails),
+    stepsToReproduce: readSteps(gen.stepsToReproduce),
+    impact: readText(gen.impact),
+    remediation: readBullets(gen.remediation),
+    references: readBullets(gen.references),
+  };
+  const hasContent =
+    details.summary ||
+    details.vulnerabilityDetails ||
+    details.impact ||
+    details.stepsToReproduce.length > 0 ||
+    details.remediation.length > 0 ||
+    details.references.length > 0;
+  return hasContent ? details : undefined;
+}
+
+function readText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/** Bullet list stored as an array or as a markdown string. */
+function readBullets(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return readStringArray(value).map((item) => item.trim()).filter(Boolean);
+  }
+  if (typeof value !== "string") return [];
+  return value
+    .split("\n")
+    .map((line) => line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").trim())
+    .filter(Boolean);
+}
+
+/**
+ * Numbered steps stored as an array or as markdown. A fenced code block under a
+ * numbered line belongs to that step, so it stays inside the step's string.
+ */
+function readSteps(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return readStringArray(value).map((item) => item.trim()).filter(Boolean);
+  }
+  if (typeof value !== "string") return [];
+  const steps: string[] = [];
+  for (const line of value.split("\n")) {
+    const numbered = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (numbered) {
+      steps.push(numbered[1].trim());
+    } else if (line.trim()) {
+      if (steps.length === 0) steps.push(line.trim());
+      else steps[steps.length - 1] += `\n${line.trim()}`;
+    }
+  }
+  return steps.filter(Boolean);
 }
 
 /** Plain-text security report (no Markdown). */
@@ -140,6 +237,10 @@ export function renderReportPlainText(report: StoredFindingReport): string {
     "",
     stripReportMarkdown(report.summary),
   ];
+
+  if (report.details) {
+    sections.push("", "Affected Details", "", stripReportMarkdown(report.details));
+  }
 
   if (report.stepsToReproduce.length > 0) {
     sections.push(
@@ -161,6 +262,14 @@ export function renderReportPlainText(report: StoredFindingReport): string {
       "",
       "Remediation",
       ...report.remediation.map((step) => stripReportMarkdown(step)),
+    );
+  }
+
+  if (report.references && report.references.length > 0) {
+    sections.push(
+      "",
+      "References",
+      ...report.references.map((ref) => stripReportMarkdown(ref)),
     );
   }
 

@@ -20,7 +20,6 @@ type ScanData = {
   highCount: number;
   mediumCount: number;
   lowCount: number;
-  infoCount: number;
   project: { name: string; repoUrl: string | null } | null;
 };
 

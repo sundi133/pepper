@@ -202,7 +202,6 @@ export function calculateExploitabilityScore(
   // Infer attack characteristics from metadata if available
   const route = metadata?.route as string | undefined;
   const sink = metadata?.sink as string | undefined;
-  const parameter = metadata?.parameter as string | undefined;
 
   let attackVector: "network" | "adjacent" | "local" | "physical" = "network";
   let attackComplexity: "low" | "high" = "low";
@@ -230,6 +229,22 @@ export function calculateExploitabilityScore(
   if (/idor|authorization|access control/i.test(metadata?.sink as string || "")) {
     privilegesRequired = "low";
     scope = "changed";
+  }
+
+  // The model's reading of who can reach the code beats the sink-name guesses.
+  switch (String(metadata?.attackerAccess ?? "").toLowerCase()) {
+    case "anonymous":
+      privilegesRequired = "none";
+      break;
+    case "authenticated":
+      privilegesRequired = "low";
+      break;
+    case "privileged":
+      privilegesRequired = "high";
+      break;
+    case "local":
+      attackVector = "local";
+      break;
   }
 
   return {

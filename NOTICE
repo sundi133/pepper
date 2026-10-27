@@ -8,10 +8,6 @@ The worker image redistributes the following tools unmodified. Each runs as a
 separate program (invoked as a child process); none is linked into Pepper.
 Versions and SHA-256 checksums are pinned in Dockerfile.worker.
 
-OpenGrep 1.30.0 (rule-based SAST)
-  https://github.com/opengrep/opengrep
-  License: LGPL-2.1
-
 Trivy 0.72.0 (container / IaC scanning)
   https://github.com/aquasecurity/trivy
   License: Apache-2.0

@@ -5,7 +5,7 @@ import {
   ScanResult,
   SuppressedVulnerability,
 } from "./types";
-import { sastLlmScanner, sastPatternScanner } from "./sast";
+import { sastLlmScanner } from "./sast";
 import { mobileLlmScanner } from "./mobile";
 import { mobileAgentScanner } from "./mobile-agent";
 import { scaScanner, parseDependencies } from "./sca";
@@ -29,7 +29,6 @@ import { logger } from "@/lib/logger";
 
 /** Scanners that also review source decompiled from compiled artifacts. */
 export const COMPILED_CODE_SCANNERS = new Set([
-  "SAST_PATTERN",
   "SAST_LLM",
   "SECRETS_PATTERN",
   "SECRETS_LLM",
@@ -57,11 +56,6 @@ export function getScanners(
   const includeZeroDay = ["FULL", "ZERO_DAY_ONLY", "INCREMENTAL"].includes(scanType);
   const includeContainer = ["FULL", "CONTAINER_ONLY", "INCREMENTAL"].includes(scanType);
   const includeK8s = ["FULL", "K8S_ONLY", "INCREMENTAL"].includes(scanType);
-
-  if (includeSast) {
-    // Rule-based SAST (OpenGrep) is deterministic and offline: always run it.
-    scanners.push(sastPatternScanner);
-  }
 
   if (includeSast && orgSettings.enableLlmSast) {
     scanners.push(sastLlmScanner);
@@ -203,40 +197,31 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
   const ctxFor = (scanner: ScannerPlugin) =>
     COMPILED_CODE_SCANNERS.has(scanner.name) ? sourceCtx : wrappedCtx;
 
-  const hasLlmSast = scanners.some((s) => s.name === "SAST_LLM");
-  let resolveLlmSastDone: () => void = () => {};
-  const llmSastDonePromise = hasLlmSast
-    ? new Promise<void>((resolve) => {
-        resolveLlmSastDone = resolve;
-      })
-    : Promise.resolve();
-
   const allScanners = Promise.allSettled(
     scanners.map(async (scanner) => {
+      await ctx.waitIfPaused?.();
+      let rawFindings: RawFinding[];
       try {
-        await ctx.waitIfPaused?.();
-        const rawFindings = await scanner.scan(ctxFor(scanner));
-        await ctx.waitIfPaused?.();
+        rawFindings = await scanner.scan(ctxFor(scanner));
+      } catch (err) {
+        // A scanner that throws used to vanish here (allSettled swallowed it)
+        // and the scan still looked clean. Record why, then let it settle.
+        if (!ctx.signal?.aborted) {
+          const message = err instanceof Error ? err.message : String(err);
+          logger.error({ scanner: scanner.name, err: message }, "Scanner failed");
+          await ctx.onScannerFailed?.(scanner.name, message);
+        }
+        throw err;
+      }
+      await ctx.waitIfPaused?.();
 
-        // Give first priority to AI: if this is a pattern/regex scanner,
-        // wait for LLM SAST to finish so LLM findings are registered first.
-        // Pattern findings then only fill gaps not covered by AI.
-        if (scanner.name === "SAST_PATTERN" && hasLlmSast) {
-          await llmSastDonePromise;
-        }
-
-        const deduped = deduplicator.dedupe(rawFindings);
-        const replacements = deduplicator.drainReplacements();
-        if (replacements.length > 0 && ctx.onFindingsReplaced) {
-          await ctx.onFindingsReplaced(replacements);
-        }
-        if (ctx.onScannerComplete) {
-          await ctx.onScannerComplete(scanner.name, deduped);
-        }
-      } finally {
-        if (scanner.name === "SAST_LLM") {
-          resolveLlmSastDone();
-        }
+      const deduped = deduplicator.dedupe(rawFindings);
+      const replacements = deduplicator.drainReplacements();
+      if (replacements.length > 0 && ctx.onFindingsReplaced) {
+        await ctx.onFindingsReplaced(replacements);
+      }
+      if (ctx.onScannerComplete) {
+        await ctx.onScannerComplete(scanner.name, deduped);
       }
     }),
   );

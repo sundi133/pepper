@@ -118,14 +118,12 @@ function severityCounts(s: {
   highCount: number;
   mediumCount: number;
   lowCount: number;
-  infoCount: number;
 }) {
   return {
     critical: s.criticalCount,
     high: s.highCount,
     medium: s.mediumCount,
     low: s.lowCount,
-    info: s.infoCount,
   };
 }
 
@@ -293,7 +291,6 @@ async function listRepositories(ctx: PepperMcpContext, args: { search?: string; 
             highCount: true,
             mediumCount: true,
             lowCount: true,
-            infoCount: true,
           },
         });
   const completedByProject = new Map(latestCompleted.map((s) => [s.projectId, s]));
@@ -407,7 +404,7 @@ async function getScan(ctx: PepperMcpContext, args: { scanId: string }) {
       : {},
     // Excludes findings marked false positive, like the scan page.
     severityCounts: counts,
-    totalFindings: counts.critical + counts.high + counts.medium + counts.low + counts.info,
+    totalFindings: counts.critical + counts.high + counts.medium + counts.low,
     newFindings: scan.newFindingCount,
     autoResolvedFindings: scan.autoResolvedCount,
     filesScanned: scan.filesScanned,
@@ -719,7 +716,7 @@ async function updateFindingStatus(
 
   const scan = await prisma.scan.findUnique({
     where: { id: updated.finding.scanId },
-    select: { criticalCount: true, highCount: true, mediumCount: true, lowCount: true, infoCount: true },
+    select: { criticalCount: true, highCount: true, mediumCount: true, lowCount: true },
   });
   return {
     id: updated.finding.id,

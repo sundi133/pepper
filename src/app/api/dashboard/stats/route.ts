@@ -23,7 +23,6 @@ export async function GET() {
     severityBreakdown,
     projectCount,
     memberCount,
-    monitoredSchedules,
     secretsFindingCount,
     dependencyFindingCount,
     resolvedThisMonth,
@@ -38,9 +37,6 @@ export async function GET() {
     }),
     prisma.project.count({ where: { organizationId: orgId } }),
     prisma.orgMember.count({ where: { organizationId: orgId } }),
-    prisma.scanSchedule.count({
-      where: { enabled: true, project: { organizationId: orgId } },
-    }),
     prisma.finding.count({
       where: {
         ...currentScan,
@@ -89,7 +85,6 @@ export async function GET() {
             highCount: true,
             mediumCount: true,
             lowCount: true,
-            infoCount: true,
             completedAt: true,
           },
         },
@@ -117,7 +112,6 @@ export async function GET() {
   const overview = {
     projectCount,
     memberCount,
-    monitoredSchedules,
     secretsFindingCount,
     dependencyFindingCount,
     resolvedThisMonth,
@@ -134,7 +128,6 @@ export async function GET() {
         highCount: s?.highCount ?? 0,
         mediumCount: s?.mediumCount ?? 0,
         lowCount: s?.lowCount ?? 0,
-        infoCount: s?.infoCount ?? 0,
       };
     }),
     activities: recentScansForFeed.map((s) => ({

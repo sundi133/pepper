@@ -141,7 +141,7 @@ export function CicdSetupWizard() {
             <div className="space-y-2 text-sm">
               <p className="text-muted-foreground">Push the workflow file to your repository:</p>
               <code className="block bg-muted p-2 rounded text-xs overflow-x-auto">
-                git add .github/workflows/pepper.yml && git commit -m "Add Pepper security scan" && git push
+                git add .github/workflows/pepper.yml && git commit -m &quot;Add Pepper security scan&quot; && git push
               </code>
             </div>
           ),
@@ -197,7 +197,7 @@ export function CicdSetupWizard() {
                   </div>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">Mark both as "Protected" and "Masked"</p>
+              <p className="text-xs text-muted-foreground">Mark both as &quot;Protected&quot; and &quot;Masked&quot;</p>
             </div>
           ),
         },

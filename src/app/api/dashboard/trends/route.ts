@@ -84,7 +84,6 @@ export async function GET(req: NextRequest) {
         highCount: true,
         mediumCount: true,
         lowCount: true,
-        infoCount: true,
         gateResult: true,
       },
     }),
@@ -102,7 +101,6 @@ export async function GET(req: NextRequest) {
     high: s.highCount,
     medium: s.mediumCount,
     low: s.lowCount,
-    info: s.infoCount,
   }));
   const seen = new Set(points.map((p) => p.scanId));
   for (const s of liveScans) {
@@ -118,7 +116,6 @@ export async function GET(req: NextRequest) {
       high: s.highCount,
       medium: s.mediumCount,
       low: s.lowCount,
-      info: s.infoCount,
     });
   }
 
@@ -173,7 +170,6 @@ export async function GET(req: NextRequest) {
           high: p.high,
           medium: p.medium,
           low: p.low,
-          info: p.info,
         })),
     };
   } else {

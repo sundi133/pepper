@@ -153,7 +153,6 @@ export async function postScanAzurePrSummary(scanId: string): Promise<void> {
       highCount: true,
       mediumCount: true,
       lowCount: true,
-      infoCount: true,
       project: {
         select: {
           id: true,
@@ -232,7 +231,6 @@ export async function postScanAzurePrSummary(scanId: string): Promise<void> {
         high: scan.highCount,
         medium: scan.mediumCount,
         low: scan.lowCount,
-        info: scan.infoCount,
       },
       topFindings: topFindings.slice(0, 10),
       reviewUrl,

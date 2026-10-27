@@ -77,25 +77,128 @@ const ROUTE_PATTERNS: Array<{
     method: (m) => m[0].match(/\.(\w+)/i)?.[1]?.toUpperCase() || "GET",
     path: (m) => m[1],
   },
+  // Flask / FastAPI / Sanic / Quart blueprints: @app.route("/x"), @router.post("/x")
+  {
+    re: /@\w+\.(route|get|post|put|patch|delete|api_route|websocket)\s*\(\s*['"]([^'"]+)['"]/gi,
+    method: (m) => (/^route|api_route$/i.test(m[1]) ? "ANY" : m[1].toUpperCase()),
+    path: (m) => m[2],
+  },
+  // Spring MVC/WebFlux: @GetMapping("/x"), @RequestMapping(value = "/x")
+  {
+    re: /@(Get|Post|Put|Patch|Delete|Request)Mapping\s*\(\s*(?:(?:value|path)\s*=\s*)?\{?\s*"([^"]+)"/g,
+    method: (m) => (m[1] === "Request" ? "ANY" : m[1].toUpperCase()),
+    path: (m) => m[2],
+  },
+  // JAX-RS / Micronaut / Quarkus: @Path("/x")
+  {
+    re: /@Path\s*\(\s*"([^"]+)"/g,
+    method: () => "ANY",
+    path: (m) => m[1],
+  },
+  // ASP.NET Core attributes: [HttpGet("x")], [Route("x")]
+  {
+    re: /\[(Http(?:Get|Post|Put|Patch|Delete)|Route)\s*\(\s*"([^"]*)"/g,
+    method: (m) => (m[1] === "Route" ? "ANY" : m[1].replace("Http", "").toUpperCase()),
+    path: (m) => m[2],
+  },
+  // ASP.NET minimal APIs: app.MapGet("/x", …)
+  {
+    re: /\.Map(Get|Post|Put|Patch|Delete|Methods)\s*\(\s*"([^"]+)"/g,
+    method: (m) => (m[1] === "Methods" ? "ANY" : m[1].toUpperCase()),
+    path: (m) => m[2],
+  },
+  // Laravel / Slim / Lumen: Route::get('/x', …)
+  {
+    re: /Route::(get|post|put|patch|delete|any|match|resource)\s*\(\s*['"]([^'"]+)['"]/gi,
+    method: (m) => (/^(any|match|resource)$/i.test(m[1]) ? "ANY" : m[1].toUpperCase()),
+    path: (m) => m[2],
+  },
+  // PHP 8 attributes (Symfony): #[Route('/x')]
+  {
+    re: /#\[Route\s*\(\s*['"]([^'"]+)['"]/g,
+    method: () => "ANY",
+    path: (m) => m[1],
+  },
+  // Rust Actix / Rocket attributes: #[get("/x")]
+  {
+    re: /#\[(get|post|put|patch|delete)\s*\(\s*"([^"]+)"/gi,
+    method: (m) => m[1].toUpperCase(),
+    path: (m) => m[2],
+  },
+  // Rails / Sinatra / Phoenix / Ktor / Roda DSL at line start: get "/x", post '/x' do
+  {
+    re: /^\s*(get|post|put|patch|delete)\s*\(?\s*['"]([^'"]+)['"]/gim,
+    method: (m) => m[1].toUpperCase(),
+    path: (m) => m[2],
+  },
+  // Go net/http and gorilla/mux: http.HandleFunc("/x", …), r.Handle("/x", …)
+  {
+    re: /\.Handle(?:Func)?\s*\(\s*"([^"]+)"/g,
+    method: () => "ANY",
+    path: (m) => m[1],
+  },
+  // Django legacy url() / re_path()
+  {
+    re: /\b(?:url|re_path)\s*\(\s*r?['"]([^'"]+)['"]/g,
+    method: () => "ANY",
+    path: (m) => m[1],
+  },
 ];
 
 const SINK_PATTERNS: Array<{ kind: string; re: RegExp }> = [
-  { kind: "sql", re: /\b(?:query|execute|raw)\s*\(/i },
-  { kind: "exec", re: /\b(?:exec|spawn|system|popen|subprocess)\s*\(/i },
-  { kind: "eval", re: /\b(?:eval|Function\s*\(|pickle\.loads|yaml\.load\s*\(|vm\.runIn(?:Context|NewContext|ThisContext))\s*\(/i },
-  { kind: "file", re: /\b(?:readFile|writeFile|open|send_file|read_bytes)\s*\(/i },
-  { kind: "http", re: /\b(?:fetch|axios|request|http\.get|urllib)\s*\(/i },
-  { kind: "deserialize", re: /\b(?:deserialize|unserialize|JSON\.parse|marshal\.loads)\s*\(/i },
-  { kind: "dom-xss", re: /\.(?:innerHTML|outerHTML|insertAdjacentHTML)\s*[=(]|dangerouslySetInnerHTML\s*=\s*\{/i },
-  { kind: "template", re: /\b(?:render|compile|template)\s*\(|\.render\s*\(/i },
-  { kind: "nosql", re: /\$where\s*:|collection\.find\s*\(\s*\{[^}]*\$where/i },
+  {
+    kind: "sql",
+    re: /\b(?:query|execute|raw|executeQuery|executeUpdate|createQuery|createNativeQuery|FromSqlRaw|ExecuteSqlRaw|SqlCommand|mysqli_query|mysql_query|pg_query|find_by_sql|whereRaw|selectRaw|orderByRaw|DB::raw|DB::(?:select|statement|insert|update|delete|unprepared)|rawQuery|execSQL|Database\.query|queryRaw|queryRawUnsafe|\$queryRawUnsafe|\$executeRawUnsafe)\s*\(/i,
+  },
+  {
+    kind: "exec",
+    re: /\b(?:exec|execSync|spawn|system|popen|subprocess\.\w+|os\.system|shell_exec|passthru|proc_open|Runtime\.getRuntime\(\)\.exec|ProcessBuilder|Process\.Start|exec\.Command|Command::new|os\.execute|Invoke-Expression|IEx|:os\.cmd|System\.cmd)\s*\(/i,
+  },
+  {
+    kind: "eval",
+    re: /\b(?:eval|Function\s*\(|pickle\.loads|yaml\.load\s*\(|vm\.runIn(?:Context|NewContext|ThisContext)|instance_eval|class_eval|module_eval|loadstring|Eval\.me|ScriptEngine\w*\.eval|SpelExpressionParser|OgnlUtil|create_function)\s*\(/i,
+  },
+  {
+    kind: "file",
+    re: /\b(?:readFile|writeFile|createReadStream|open|send_file|sendFile|read_bytes|fopen|file_get_contents|file_put_contents|include|require_once|FileInputStream|FileOutputStream|Files\.(?:read\w*|write\w*|newInputStream)|File\.(?:Read\w*|Write\w*|Open\w*)|os\.Open|ioutil\.ReadFile|os\.ReadFile|send_data)\s*\(/i,
+  },
+  {
+    kind: "http",
+    re: /\b(?:fetch|axios(?:\.\w+)?|request|http\.get|https\.get|urllib\.request\.urlopen|urlopen|requests\.(?:get|post|put|request)|httpx\.\w+|http\.(?:Get|Post|NewRequest)|curl_exec|curl_init|RestTemplate\.\w+|WebClient\.\w+|HttpClient\.\w+|Net::HTTP\.\w+|URI\.open|HTTPoison\.\w+)\s*\(/i,
+  },
+  {
+    kind: "deserialize",
+    re: /\b(?:deserialize|unserialize|marshal\.loads|Marshal\.load|ObjectInputStream|readObject|XMLDecoder|BinaryFormatter|NetDataContractSerializer|LosFormatter|TypeNameHandling|jsonpickle\.decode|dill\.loads|:erlang\.binary_to_term)\b/i,
+  },
+  {
+    kind: "xxe",
+    re: /\b(?:DocumentBuilderFactory|SAXParserFactory|XMLInputFactory|XmlReader\.Create|XmlDocument|libxml_disable_entity_loader|etree\.(?:parse|fromstring)|lxml\.etree|simplexml_load_string|Nokogiri::XML)\b/i,
+  },
+  {
+    kind: "redirect",
+    re: /\b(?:res\.redirect|redirect_to|Response\.Redirect|sendRedirect|RedirectResult|redirect\s*\()|header\s*\(\s*['"]Location/i,
+  },
+  {
+    kind: "dom-xss",
+    re: /\.(?:innerHTML|outerHTML|insertAdjacentHTML)\s*[=(]|dangerouslySetInnerHTML\s*=\s*\{|\bv-html\s*=|\{@html\b|\[innerHTML\]\s*=|bypassSecurityTrust\w+\s*\(|document\.write\s*\(/i,
+  },
+  {
+    kind: "template",
+    re: /\b(?:render|compile|template|render_template_string|Template\s*\()\s*\(|\.render\s*\(|\|\s*safe\b|mark_safe\s*\(|\.html_safe\b|\braw\s*\(|\{!!|<%-|Html\.Raw\s*\(|\{\{\{/i,
+  },
+  { kind: "nosql", re: /\$where\s*:|collection\.find\s*\(\s*\{[^}]*\$where|\.aggregate\s*\(\s*\[\s*\{\s*\$(?:function|accumulator)/i },
+  { kind: "ldap", re: /\b(?:ldap_search|DirectorySearcher|search_s|InitialDirContext|ldapjs)\b/i },
+  { kind: "contract", re: /\b(?:delegatecall|selfdestruct|tx\.origin|\.call\{value|\.call\.value)\b/i },
 ];
 
 const AUTH_PATTERNS: Array<{ kind: AuthBoundary["kind"]; re: RegExp }> = [
-  { kind: "auth", re: /\b(?:authenticate|login|jwt|passport|session)\b/i },
-  { kind: "authz", re: /\b(?:authorize|permission|role|acl|policy|guard)\b/i },
-  { kind: "guard", re: /@(?:UseGuards|PreAuthorize|login_required|authenticated)/i },
-  { kind: "middleware", re: /\b(?:middleware|interceptor)\b/i },
+  { kind: "auth", re: /\b(?:authenticate|login|jwt|passport|session|requireAuth|ensureAuthenticated|isAuthenticated|currentUser|current_user|getServerSession|auth\(\))\b/i },
+  { kind: "authz", re: /\b(?:authorize!?|permission|role|acl|policy|guard|can\?|cannot\?|Gate::\w+|abilities|hasRole|hasAuthority|checkPermission)\b/i },
+  {
+    kind: "guard",
+    re: /@(?:UseGuards|PreAuthorize|PostAuthorize|Secured|RolesAllowed|PermitAll|DenyAll|login_required|permission_required|user_passes_test|authenticated|requires_auth|jwt_required)\b|\[(?:Authorize|AllowAnonymous)\b|\bbefore_action\s+:authenticate|\bpermission_classes\s*=|\bcanActivate\b|\bmiddleware\s*\(\s*['"]auth/i,
+  },
+  { kind: "middleware", re: /\b(?:middleware|interceptor|filter_chain|SecurityFilterChain|before_request|plug\s+:)\b/i },
 ];
 
 const TEST_PATH =
@@ -114,28 +217,124 @@ function classifyFileRole(filePath: string): FileRole {
   return "unknown";
 }
 
+/**
+ * Framework signals: an import/package name or a framework-only file or API,
+ * never a bare word ("express" alone matches "expression", "spring" a comment).
+ * `paths` is tested against the file list, `code` against file contents.
+ */
+const FRAMEWORK_SIGNALS: Array<{ name: string; paths?: RegExp; code?: RegExp }> = [
+  // JavaScript / TypeScript back end
+  { name: "Express", code: /(?:require\(\s*|from\s+)['"]express['"]/ },
+  { name: "NestJS", code: /from\s+['"]@nestjs\// },
+  { name: "Fastify", code: /(?:require\(\s*|from\s+)['"]fastify['"]/ },
+  { name: "Koa", code: /(?:require\(\s*|from\s+)['"]koa['"]/ },
+  { name: "Hapi", code: /(?:require\(\s*|from\s+)['"]@hapi\/hapi['"]/ },
+  { name: "Hono", code: /from\s+['"]hono['"]/ },
+  { name: "Next.js", paths: /(?:^|\/)next\.config\.(?:js|mjs|ts)$/, code: /from\s+['"]next\// },
+  { name: "Nuxt", paths: /(?:^|\/)nuxt\.config\.(?:js|ts)$/ },
+  { name: "Remix", code: /from\s+['"]@remix-run\// },
+  { name: "SvelteKit", paths: /(?:^|\/)svelte\.config\.js$/, code: /from\s+['"]@sveltejs\/kit/ },
+  { name: "Astro", paths: /\.astro$/ },
+  // JavaScript / TypeScript front end
+  { name: "React", code: /from\s+['"]react['"]/ },
+  { name: "Angular", code: /from\s+['"]@angular\/core['"]/ },
+  { name: "Vue", paths: /\.vue$/, code: /from\s+['"]vue['"]/ },
+  { name: "Svelte", paths: /\.svelte$/ },
+  // Python
+  { name: "Django", paths: /(?:^|\/)manage\.py$|(?:^|\/)settings\.py$/, code: /from\s+django[.\s]/ },
+  { name: "Flask", code: /from\s+flask\s+import|import\s+flask\b/ },
+  { name: "FastAPI", code: /from\s+fastapi\s+import/ },
+  { name: "Starlette", code: /from\s+starlette[.\s]/ },
+  { name: "Tornado", code: /import\s+tornado\b|from\s+tornado[.\s]/ },
+  { name: "Pyramid", code: /from\s+pyramid[.\s]/ },
+  { name: "aiohttp", code: /from\s+aiohttp\s+import\s+web|aiohttp\.web/ },
+  // JVM
+  { name: "Spring", code: /import\s+org\.springframework\./ },
+  { name: "Jakarta EE / JAX-RS", code: /import\s+(?:javax|jakarta)\.ws\.rs\./ },
+  { name: "Java Servlet", code: /import\s+(?:javax|jakarta)\.servlet\./ },
+  { name: "Struts", code: /import\s+org\.apache\.struts2?\./ },
+  { name: "Micronaut", code: /import\s+io\.micronaut\./ },
+  { name: "Quarkus", code: /import\s+io\.quarkus\./ },
+  { name: "Play", code: /import\s+play\.api\.|import\s+play\.mvc\./ },
+  { name: "Ktor", code: /import\s+io\.ktor\./ },
+  { name: "Grails", paths: /grails-app\// },
+  { name: "Android", paths: /(?:^|\/)AndroidManifest\.xml$/, code: /import\s+android\./ },
+  // .NET
+  { name: "ASP.NET Core", code: /using\s+Microsoft\.AspNetCore\./ },
+  { name: "ASP.NET Web Forms / MVC", paths: /\.(?:aspx|ascx|cshtml)$/, code: /using\s+System\.Web\b/ },
+  { name: "Blazor", paths: /\.razor$/ },
+  // PHP
+  { name: "Laravel", paths: /(?:^|\/)artisan$/, code: /use\s+Illuminate\\/ },
+  { name: "Symfony", code: /use\s+Symfony\\/ },
+  { name: "WordPress", paths: /wp-content\/|wp-config\.php$/ },
+  { name: "Drupal", paths: /\.module$|(?:^|\/)core\/lib\/Drupal/ },
+  { name: "CodeIgniter", code: /CodeIgniter\\|defined\(\s*'BASEPATH'\s*\)/ },
+  { name: "Slim", code: /use\s+Slim\\/ },
+  // Ruby
+  { name: "Rails", paths: /(?:^|\/)config\/routes\.rb$|(?:^|\/)app\/controllers\// },
+  { name: "Sinatra", code: /require\s+['"]sinatra['"]/ },
+  // Go
+  { name: "Gin", code: /"github\.com\/gin-gonic\/gin"/ },
+  { name: "Echo", code: /"github\.com\/labstack\/echo/ },
+  { name: "Fiber", code: /"github\.com\/gofiber\/fiber/ },
+  { name: "Chi", code: /"github\.com\/go-chi\/chi/ },
+  { name: "Gorilla Mux", code: /"github\.com\/gorilla\/mux"/ },
+  // Rust
+  { name: "Actix Web", code: /use\s+actix_web\b/ },
+  { name: "Axum", code: /use\s+axum\b/ },
+  { name: "Rocket", code: /use\s+rocket\b|#\[macro_use\]\s*extern\s+crate\s+rocket/ },
+  // Elixir / mobile / other
+  { name: "Phoenix", code: /use\s+Phoenix\.|use\s+\w+Web,\s*:controller/ },
+  { name: "Flutter", code: /import\s+['"]package:flutter\// },
+  { name: "SwiftUI / iOS", code: /import\s+(?:SwiftUI|UIKit)\b/ },
+  { name: "Salesforce Apex", paths: /\.(?:cls|trigger)$/, code: /\b(?:with|without)\s+sharing\b/ },
+  { name: "Solidity", paths: /\.sol$/ },
+  // Cross-cutting
+  { name: "GraphQL", code: /from\s+['"](?:graphql|@apollo\/server|apollo-server[\w-]*|type-graphql|@nestjs\/graphql)['"]|import\s+graphene|import\s+strawberry/ },
+  { name: "gRPC", paths: /\.proto$/, code: /@grpc\/grpc-js|import\s+grpc\b|google\.golang\.org\/grpc/ },
+  { name: "LLM/AI", code: /from\s+['"](?:openai|@anthropic-ai\/sdk|langchain|@langchain\/[\w-]+|ai)['"]|import\s+(?:openai|anthropic|langchain)\b|from\s+(?:openai|anthropic|langchain)\s+import/ },
+];
+
 function detectFrameworks(fileList: string[], contents: Map<string, string>): string[] {
-  const frameworks = new Set<string>();
-  const all = [...contents.values(), fileList.join("\n")].join("\n").toLowerCase();
-  if (all.includes("next/") || all.includes("next.config")) frameworks.add("Next.js");
-  if (all.includes("express")) frameworks.add("Express");
-  if (all.includes("fastapi")) frameworks.add("FastAPI");
-  if (all.includes("django")) frameworks.add("Django");
-  if (all.includes("spring")) frameworks.add("Spring");
-  if (all.includes("nestjs") || all.includes("@nestjs")) frameworks.add("NestJS");
-  if (all.includes("graphql")) frameworks.add("GraphQL");
-  if (all.includes("grpc")) frameworks.add("gRPC");
-  if (all.includes("langchain") || all.includes("openai")) frameworks.add("LLM/AI");
-  return [...frameworks];
+  const paths = fileList.map((p) => p.split(path.sep).join("/"));
+  const frameworks: string[] = [];
+  for (const signal of FRAMEWORK_SIGNALS) {
+    const byPath = signal.paths && paths.some((p) => signal.paths!.test(p));
+    let byCode = false;
+    if (!byPath && signal.code) {
+      for (const text of contents.values()) {
+        if (signal.code.test(text)) {
+          byCode = true;
+          break;
+        }
+      }
+    }
+    if (byPath || byCode) frameworks.push(signal.name);
+  }
+  return frameworks;
 }
 
 function extractImports(content: string): string[] {
   const imports: string[] = [];
   const patterns = [
+    // JS/TS
     /import\s+.*?from\s+['"]([^'"]+)['"]/g,
     /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-    /^import\s+([^\s]+)/gm,
+    // Python, Java, Kotlin, Scala, Swift, Dart, Haskell
+    /^import\s+([^\s;]+)/gm,
     /^from\s+([^\s]+)\s+import/gm,
+    // Go: import "x" and the lines of an import ( … ) block
+    /^\s*(?:import\s+)?(?:\w+\s+)?"([\w./-]+)"\s*$/gm,
+    // PHP use / include, C# using, Rust use, Elixir alias/import/use
+    /^\s*use\s+([\w\\:.]+)/gm,
+    /^\s*(?:include|require)(?:_once)?\s*\(?\s*['"]([^'"]+)['"]/gm,
+    /^\s*using\s+(?:static\s+)?([\w.]+)\s*;/gm,
+    /^\s*(?:alias|import)\s+([A-Z][\w.]+)/gm,
+    // Ruby, Perl, Lua
+    /^\s*require(?:_relative)?\s+['"]([^'"]+)['"]/gm,
+    /^\s*(?:local\s+\w+\s*=\s*)?require\s*\(?\s*['"]([^'"]+)['"]/gm,
+    // C / C++ local headers
+    /^\s*#\s*include\s+"([^"]+)"/gm,
   ];
   for (const re of patterns) {
     let m: RegExpExecArray | null;

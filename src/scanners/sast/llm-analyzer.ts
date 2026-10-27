@@ -1,12 +1,23 @@
 import {
   createLlmClient,
   analyzeWithLlm,
-  parseLlmJsonResponse,
   parseLlmJsonResponseDetailed,
 } from "@/lib/llm-gateway";
 import { Chunk, RawFinding, ScanContext } from "../types";
-import { chunkFile, wholeFileChunk } from "./chunker";
-import { isAuthorizationOrLogicFinding, verifyFindingEvidence } from "./evidence-verify";
+import {
+  buildSymbolIndex,
+  chunkFile,
+  relatedContextFor,
+  wholeFileChunk,
+  type RelatedContext,
+  type SymbolIndex,
+} from "./chunker";
+import {
+  hardExclusionReason,
+  isAuthorizationOrLogicFinding,
+  verifyFindingEvidence,
+} from "./evidence-verify";
+import { prioritizeFiles } from "../zero-day/file-prioritizer";
 import {
   getOwasp2024Category,
   getOwaspApiCategory,
@@ -33,6 +44,7 @@ import {
   OLLAMA_WHOLE_FILE_TOKEN_BUDGET,
   LLM_EVIDENCE_VERIFICATION,
   LLM_VALIDATION_CONTEXT_CHARS,
+  SAST_RELATED_CONTEXT_CHARS,
   BENCHMARK_MODE,
   BENCHMARK_PROMPT_SUFFIX,
 } from "@/lib/constants";
@@ -49,8 +61,7 @@ import {
   applySeverityCalibration,
   parseSeverity,
 } from "@/lib/severity-calibration";
-import { SAST_EXCLUDED_EXTENSIONS } from "../shared/extension-filters";
-import { scanMissingHardeningHeaders } from "./hardening-headers";
+import { SAST_EXCLUDED_EXTENSIONS, isPlainStaticHtml } from "../shared/extension-filters";
 import { llmExcludedPath } from "@/lib/llm-exclusions";
 import { makeReasoningSink } from "../shared/reasoning-sink";
 
@@ -230,7 +241,10 @@ For each genuine vulnerability found, respond with:
           "Exact expected vulnerable behavior"
         ],
         "impact": "Specific technical and business impact",
-        "findingLayer": "application-code|web-template|manifest-dependencies|container-build|ci-or-deploy-config|null"
+        "findingLayer": "application-code|web-template|manifest-dependencies|container-build|ci-or-deploy-config|null",
+        "weaknessClass": "class from the SEVERITY CALIBRATION matrix",
+        "attackerAccess": "anonymous|authenticated|privileged|local|null",
+        "severityJustification": "one sentence: class default, the one-level move (if any) and the code evidence for it"
       }
     }
   ]
@@ -268,6 +282,36 @@ Focus on exploitable instances of:
 - SAP ABAP: sources selection-screen PARAMETERS/SELECT-OPTIONS, RFC/BAPI function module importing parameters, HTTP handler form fields (if_http_request->get_form_field); sinks dynamic Open SQL (WHERE (lv_where), dynamic table/field names), EXEC SQL / ADBC (cl_sql_statement=>execute_query) with concatenation, CALL 'SYSTEM' / SXPG_COMMAND_EXECUTE, OPEN DATASET with an input filename, GENERATE SUBROUTINE POOL / INSERT REPORT (code injection), CALL TRANSACTION without authority check; guards: AUTHORITY-CHECK with SY-SUBRC checked, cl_abap_dyn_prg=>check_* / escape_quotes, static Open SQL with host variables, CALL TRANSACTION ... WITH AUTHORITY-CHECK.
 - Oracle PL/SQL: sources procedure/function parameters exposed via APEX, REST (ORDS) or definer-rights packages, table data written by users; sinks EXECUTE IMMEDIATE / OPEN ... FOR with concatenated input, DBMS_SQL.PARSE with input, DBMS_SCHEDULER/UTL_FILE/UTL_HTTP with input, AUTHID DEFINER (default) procedures that act on caller-supplied object names (privilege escalation); guards: bind variables (USING :1), DBMS_ASSERT.SIMPLE_SQL_NAME/ENQUOTE_NAME/SQL_OBJECT_NAME, AUTHID CURRENT_USER.
 - Rust: sources req/body/headers/query from Actix/Axum/Rocket/Tide; sinks Command::new with shell strings, unsafe memory blocks with untrusted length/pointer offsets, raw SQL via format!/concatenation; guards: parameterized queries (sqlx/diesel), serde strongly-typed deserialization (serde_json::from_str, parse_struct into a Rust struct is SAFE typed data parsing, NOT CWE-502).
+- Kotlin / Android (Java too): sources Intent extras and data URIs of exported activities/services/receivers/providers, deep links, WebView JavaScript bridges, ContentProvider query arguments; sinks WebView.loadUrl/evaluateJavascript with input, addJavascriptInterface on untrusted content, setJavaScriptEnabled(true) with file access, rawQuery/execSQL concatenation, Runtime.exec, world-readable files/MODE_WORLD_READABLE, PendingIntent without FLAG_IMMUTABLE, implicit intents carrying sensitive data; guards: android:exported="false", permission-protected components, selectionArgs, Uri host allowlists.
+- Swift / Objective-C (iOS, macOS): sources URL scheme / universal-link parameters, pasteboard, WKScriptMessageHandler messages, network responses; sinks WKWebView loadHTMLString/evaluateJavaScript with input, NSKeyedUnarchiver.unarchiveObject (insecure decode), sqlite3_exec with interpolation, NSTask/Process with input, ATS exceptions (NSAllowsArbitraryLoads), secrets in UserDefaults; guards: NSSecureCoding/requiringSecureCoding, parameter binding, Keychain storage.
+- Scala (Play, Akka HTTP, http4s): sources request.queryString/body/headers; sinks Slick sql"" interpolation is bound but #$ splices raw, Anorm SQL with string concatenation, sys.process with input, Twirl @Html(...) raw output; guards: bound interpolation, Twirl auto-escaping.
+- Groovy / Grails: sources params, request; sinks GString interpolation in Sql.execute/rows (safe only when Groovy binds it — "SELECT ... \${x}" passed as a String is unsafe), Eval.me/GroovyShell.evaluate, "cmd".execute(), raw \${} in GSP with encodeAsRaw; guards: Sql with ? parameters, default HTML codec.
+- Elixir / Phoenix: sources conn.params, socket payloads; sinks Ecto fragment/2 or SQL.query with string interpolation, raw/1 and Phoenix.HTML.raw in templates, :os.cmd/System.cmd with input, String.to_atom on input (atom-table DoS), :erlang.binary_to_term without :safe, Code.eval_string; guards: Ecto parameter pinning (^value), HEEx auto-escaping, :safe option.
+- Perl: sources param()/CGI/$ENV/Mojolicious params; sinks two-argument open with input, system/exec/backticks/qx with input, eval of strings, DBI do/prepare with interpolation, unescaped output in templates; guards: three-argument open, placeholders (?), taint mode (-T), HTML::Entities.
+- Lua (OpenResty, nginx, game servers): sources ngx.req.get_uri_args/get_post_args, ngx.var; sinks os.execute/io.popen with input, loadstring/load with input, ngx.location.capture with a user path, string-built SQL; guards: ngx.quote_sql_str, allowlists.
+- Shell / PowerShell / batch: sources positional args, environment, read input, web-hook payloads in CI scripts; sinks eval, unquoted variable expansion in commands, Invoke-Expression/iex, Start-Process with input, curl | sh; guards: quoting ("$var"), set -euo pipefail, -- argument separators, allowlisted values.
+- Solidity / Vyper (smart contracts): sources msg.sender, msg.value, function arguments, external call return data; sinks external calls before state updates (reentrancy), tx.origin for authorization, delegatecall to user-supplied addresses, selfdestruct reachable by anyone, unchecked low-level call return values, missing onlyOwner/role modifiers on privileged functions, block.timestamp/blockhash as randomness, unbounded loops over user-growable arrays; guards: checks-effects-interactions, ReentrancyGuard, OpenZeppelin AccessControl/Ownable, SafeERC20.
+- Salesforce Apex: sources ApexPages.currentPage().getParameters(), @AuraEnabled/@RemoteAction/@RestResource method arguments; sinks Database.query/countQuery with string concatenation (SOQL injection), classes declared without sharing that expose records, DML without CRUD/FLS checks (Security.stripInaccessible, WITH SECURITY_ENFORCED), Visualforce escape="false"; guards: bind variables (:var), String.escapeSingleQuotes, with sharing, WITH USER_MODE.
+- Clojure, Haskell, OCaml, F#, Erlang, Julia, R, Nim, Crystal, Zig, COBOL, Fortran and other languages: apply the same source → flow → sink → guard method with that language's own process-execution, SQL, file, deserialisation, template and network APIs; name the exact API the file uses.
+
+**FRAMEWORK-SPECIFIC SINKS AND GUARDS (check the frameworks named in DETECTED FRAMEWORKS):**
+- React / Next.js: dangerouslySetInnerHTML with request or stored data, href/src set to user URLs (javascript: scheme), server actions and route handlers (app/**/route.ts, pages/api) that mutate data without an auth/ownership check, getServerSideProps leaking secrets to props, NEXT_PUBLIC_ variables holding secrets, middleware matchers that leave routes unprotected.
+- Angular: [innerHTML] binding of untrusted data after DomSanitizer.bypassSecurityTrustHtml/Script/Url/ResourceUrl, ElementRef.nativeElement.innerHTML; route guards (canActivate) missing on admin routes.
+- Vue / Nuxt: v-html with untrusted data, dynamic component/template compilation from user input; Svelte {@html ...}; Astro set:html.
+- Django: mark_safe/|safe/format_html misuse, QuerySet.raw/extra/RawSQL with string formatting, views missing @login_required/permission checks or DRF permission_classes, DEBUG=True or ALLOWED_HOSTS=['*'] in production settings, CSRF exemptions (@csrf_exempt) on state-changing views.
+- Flask / FastAPI: render_template_string with input (SSTI), send_file with a user path, missing Depends(auth) on routers, debug=True in production, CORS allow_origins=["*"] with allow_credentials=True.
+- Spring / Spring Boot: SpEL parsing of user input (SpelExpressionParser), @Query with string concatenation, mass assignment through @ModelAttribute/@RequestBody binding into entities, missing @PreAuthorize on admin endpoints, permitAll() on sensitive paths in SecurityFilterChain, Actuator endpoints exposed without auth, CSRF disabled for cookie-session apps.
+- Struts / OGNL: user input evaluated as OGNL (ActionContext, %{...}), devMode enabled.
+- ASP.NET Core / MVC: Html.Raw with user data, FromSqlRaw/ExecuteSqlRaw with interpolated strings (FromSqlInterpolated is safe), missing [Authorize] or [ValidateAntiForgeryToken] on POST actions, [AllowAnonymous] on sensitive actions, over-posting into entity models.
+- Laravel: {!! !!} raw Blade output, DB::raw/whereRaw/selectRaw/orderByRaw with input, $guarded = [] or $fillable containing role/admin fields (mass assignment), routes outside the auth middleware group, APP_DEBUG=true.
+- Symfony / WordPress / Drupal: Twig |raw, Doctrine DQL/SQL concatenation, WordPress $wpdb->query without $wpdb->prepare, missing current_user_can/check_admin_referer/wp_verify_nonce on admin-ajax and REST callbacks, Drupal db_query with concatenation.
+- Rails: html_safe/raw, where/order/find_by_sql with interpolation, permit! or unpermitted strong parameters, skip_before_action :authenticate_user! / verify_authenticity_token on sensitive controllers, send_file/redirect_to with params.
+- Express / NestJS / Fastify / Koa / Hono: routes registered before auth middleware, guards missing on controllers, body-parser without limits, express.static serving source or dotfiles, trust proxy misconfiguration used for rate limiting.
+- Go (Gin, Echo, Fiber, Chi, net/http): c.Query/c.Param/FormValue into fmt.Sprintf SQL or exec.Command, text/template for HTML (no escaping) instead of html/template, http.ServeFile with user paths, missing auth middleware on route groups.
+- Rust (Actix, Axum, Rocket): format!-built SQL passed to query(), unsafe blocks indexing by request values, missing extractor-based auth guards on handlers.
+- Phoenix: raw/1, Ecto fragment interpolation, missing plug :require_authenticated_user on scopes.
+- GraphQL (Apollo, graphene, gqlgen, Hot Chocolate): resolvers that load objects by id without ownership checks, introspection and unbounded depth/complexity in production, batching without rate limits.
+- LLM / AI SDKs (OpenAI, Anthropic, LangChain): user or document text placed in system/tool instructions, model output passed to eval/exec/SQL/shell or rendered as HTML, tools with write/delete access and no allowlist or human approval, secrets or PII sent in prompts or logged.
 
 **HIGH-SIGNAL SIGNATURE DETECTION (these exact signatures MUST be flagged when they appear in code):**
 - Unrestricted file upload: @UseInterceptors(FileInterceptor('file')), @UploadedFile, multer({ storage }), busboy/formidable upload handlers WITHOUT a server-side extension/MIME allowlist, filename sanitization, or size limit → report CWE-434/CWE-22 (the decorator/interceptor itself is the sink even if the handler body is not in the chunk)
@@ -382,6 +426,33 @@ REPOSITORY-AWARE REVIEW (Pepper also runs SCA, secrets, IaC, and zero-day passes
 ${SEVERITY_CALIBRATION_PROMPT}` +
   (BENCHMARK_MODE ? BENCHMARK_PROMPT_SUFFIX : "");
 
+const NO_RELATED_CONTEXT: RelatedContext = { block: "", code: "" };
+
+/** Follow-up requests for findings left out of a cut-off answer. */
+const MAX_CONTINUATION_ROUNDS = 2;
+
+const normalizeFindingTitle = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+interface ChunkTally {
+  succeeded: number;
+  failed: number;
+  /** The first failure reason, shown when no chunk could be analysed. */
+  firstError?: string;
+}
+
+/** A provider error as one line, with anything key-shaped removed. */
+function describeLlmError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return message
+    .replace(/\b(?:sk|or|pk|rk)-[A-Za-z0-9_*.-]{6,}/g, "[redacted]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 300);
+}
+
+/** The part of a custom policy the analyzer needs per finding. */
+type PolicyRef = Pick<SecurityPolicy, "name" | "severity">;
+
 interface LlmFinding {
   title: string;
   severity: string;
@@ -411,11 +482,6 @@ export async function runLlmSastScanner(
   if (!ctx.orgSettings.enableLlmSast) {
     logger.warn("LLM SAST scanner skipped — enableLlmSast is false");
     return [];
-  }
-
-  const controlFindings = scanMissingHardeningHeaders(ctx);
-  if (controlFindings.length > 0 && ctx.onBatchFindings) {
-    await ctx.onBatchFindings("SAST_LLM", controlFindings);
   }
 
   const client = createLlmClient({
@@ -534,6 +600,7 @@ export async function runLlmSastScanner(
       const content = fs.readFileSync(fullPath, "utf-8");
       if (Buffer.byteLength(content, "utf8") > LLM_MAX_FILE_SIZE_BYTES) continue;
       if (content.trim().length === 0) continue;
+      if (isPlainStaticHtml(filePath, content)) continue;
 
       fileContentMap.set(filePath, content);
 
@@ -553,6 +620,17 @@ export async function runLlmSastScanner(
     }
   }
 
+  // Risk-ranked order: auth, payment, route and data-access files are analysed
+  // first, so a paused, aborted or budget-limited scan has covered what matters.
+  const rank = new Map(
+    prioritizeFiles([...fileContentMap.keys()]).map((f, i) => [f.path, i] as const),
+  );
+  chunks.sort((a, b) => (rank.get(a.filePath) ?? 0) - (rank.get(b.filePath) ?? 0));
+
+  // Cross-file definitions and callers for both passes (see symbol-context.ts).
+  const symbolIndex =
+    SAST_RELATED_CONTEXT_CHARS > 0 ? buildSymbolIndex(fileContentMap) : undefined;
+
   // Count unique files and total lines of code across all chunks
   const totalFiles = new Set(chunks.map((c) => c.filePath)).size;
   const completedFiles = new Set<string>();
@@ -562,7 +640,7 @@ export async function runLlmSastScanner(
   );
 
   // Process chunks with concurrency limit
-  const tally = { succeeded: 0, failed: 0 };
+  const tally: ChunkTally = { succeeded: 0, failed: 0 };
 
   // Track which chunks belong to each file so we know when a file is fully done
   const chunksPerFile = new Map<string, number>();
@@ -591,13 +669,14 @@ export async function runLlmSastScanner(
     chunks,
     maxConcurrency,
     prompt: finalPrompt,
-    policyNames: inlinePolicies.map((p) => p.name),
+    policies: inlinePolicies,
     repoContextBlock,
     maxResponseTokens,
     errorLogMsg: "LLM SAST chunk analysis rejected",
     tally,
     findings,
     fileContentMap,
+    symbolIndex,
     onChunkSuccess: markCovered,
     onChunkDone: (filePath) => {
       completedChunksPerFile.set(
@@ -646,15 +725,25 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
       chunks,
       maxConcurrency,
       prompt: policyPrompt,
-      policyNames: policyBatch.map((p) => p.name),
+      policies: policyBatch,
       repoContextBlock,
       maxResponseTokens,
       errorLogMsg: "LLM SAST additional policy analysis rejected",
       tally,
       findings,
       fileContentMap,
+      symbolIndex,
       onReasoning: reasoning.onReasoning,
     });
+  }
+
+  // Every call failed (bad key, unknown model, provider down): that is a
+  // broken scanner, not a clean codebase, so it fails loudly with the reason.
+  if (chunks.length > 0 && tally.succeeded === 0 && !ctx.signal?.aborted) {
+    await reasoning.finalize();
+    throw new Error(
+      `AI SAST could not analyse any of ${chunks.length} code chunks (${ctx.orgSettings.llmProvider} / ${ctx.orgSettings.llmModel || "no model"}): ${tally.firstError ?? "every model call failed"}`,
+    );
   }
 
   // Pass 2: cross-file validation of pass-1 candidates
@@ -675,6 +764,15 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
       chunkContentMap,
       fileContentMap,
       reasoning.onReasoning,
+      (c) =>
+        symbolIndex && c.filePath
+          ? relatedContextFor(
+              symbolIndex,
+              c.filePath,
+              { startLine: c.startLine, endLine: c.endLine },
+              SAST_RELATED_CONTEXT_CHARS,
+            )
+          : NO_RELATED_CONTEXT,
     );
     validated = [...validated, ...pass2];
     if (pass2.length > 0 && ctx.onBatchFindings) {
@@ -727,7 +825,7 @@ IMPORTANT: This is an additional custom policy pass. Report only violations of t
   // Persist the full reasoning trace (no-op when the model emitted none).
   await reasoning.finalize();
 
-  return [...controlFindings, ...validated];
+  return validated;
 }
 
 /**
@@ -764,6 +862,7 @@ export async function validateCandidatesPass2(
   chunkContentMap: Map<string, string> = new Map(),
   fileContentMap: Map<string, string> = new Map(),
   onReasoning?: (delta: string) => void,
+  relatedContextFor: (candidate: RawFinding) => RelatedContext = () => NO_RELATED_CONTEXT,
 ): Promise<RawFinding[]> {
   // Small batches keep the validator's answer well inside its output budget;
   // reasoning models spend much of that budget before writing any JSON.
@@ -774,6 +873,7 @@ export async function validateCandidatesPass2(
     const batch = candidates.slice(i, i + BATCH);
     const confirmed = new Set<RawFinding>();
     let answered = false;
+    const related = new Map(batch.map((c) => [c, relatedContextFor(c)] as const));
     const payload = batch.map((c, idx) => {
       const chunkKey = `${c.filePath}:${c.startLine}-${c.endLine}`;
       const fileContent = c.filePath ? fileContentMap.get(c.filePath) : undefined;
@@ -794,6 +894,9 @@ export async function validateCandidatesPass2(
         metadata: c.metadata,
         // Include original code so the validator can re-examine it
         codeSnippet,
+        // Definitions it calls and callers of its function in other files: the
+        // actual cross-file code, not only the repository path inventory.
+        relatedCode: related.get(c)?.code || undefined,
       };
     });
 
@@ -802,7 +905,7 @@ export async function validateCandidatesPass2(
         client,
         model,
         `${SYSTEM_PROMPT}\n\n${SAST_PASS2_PROMPT}`,
-        `${repoContextBlock}\n\nCANDIDATES TO VALIDATE:\n${JSON.stringify(payload, null, 2)}`,
+        `${repoContextBlock}\n\nEach candidate's "relatedCode" (when present) holds the definitions its code calls and the call sites of its enclosing function in other files. Use it to confirm or refute a source→sink flow that crosses files, and to find guards defined elsewhere.\n\nCANDIDATES TO VALIDATE:\n${JSON.stringify(payload, null, 2)}`,
         { maxTokens: maxResponseTokens, onReasoning },
       );
       const { value: parsed, status } = parseLlmJsonResponseDetailed<{ findings: LlmFinding[] }>(raw, {
@@ -862,6 +965,18 @@ export async function validateCandidatesPass2(
         if (!src) continue; // orphan finding from LLM — skip
         confirmed.add(src);
 
+        // The validator may restate the sink/parameter. If what it names is not
+        // in the file or its related code, keep its verdict but not its
+        // invented metadata: the candidate's own evidence stands.
+        const srcContent = src.filePath ? fileContentMap.get(src.filePath) : undefined;
+        const trustValidatorMeta =
+          !LLM_EVIDENCE_VERIFICATION ||
+          !srcContent ||
+          verifyFindingEvidence({ ...f, startLine: f.startLine ?? src.startLine }, srcContent, related.get(src)?.code).ok;
+        if (!trustValidatorMeta) {
+          logger.warn({ title: f.title, filePath: src.filePath }, "SAST pass-2 cited evidence not found; keeping candidate metadata");
+        }
+
         const base: RawFinding = applySeverityCalibration({
           scanner: "SAST_LLM",
           severity: parseSeverity(f.severity),
@@ -875,7 +990,7 @@ export async function validateCandidatesPass2(
           ruleId: f.cweId || src?.ruleId || "CWE-UNKNOWN",
           metadata: {
             ...(src?.metadata || {}),
-            ...(f.metadata || {}),
+            ...(trustValidatorMeta ? f.metadata || {} : {}),
             passPhase: 2,
           },
         });
@@ -932,14 +1047,17 @@ interface RunChunkBatchesOptions {
   chunks: Chunk[];
   maxConcurrency: number;
   prompt: string;
-  policyNames: string[];
+  /** Policies in this pass; a matched finding takes the policy's configured severity. */
+  policies: PolicyRef[];
   repoContextBlock: string;
   maxResponseTokens: number;
   errorLogMsg: string;
-  tally: { succeeded: number; failed: number };
+  tally: ChunkTally;
   findings: RawFinding[];
   /** Raw file text keyed by path, for evidence verification. */
   fileContentMap: Map<string, string>;
+  /** Cross-file definitions/callers added to each chunk's prompt. */
+  symbolIndex?: SymbolIndex;
   /** Called after each chunk so callers can track per-file completion. */
   onChunkDone?: (filePath: string) => void;
   /** Called when a chunk was actually analysed, for coverage accounting. */
@@ -950,7 +1068,12 @@ interface RunChunkBatchesOptions {
   onReasoning?: (delta: string) => void;
 }
 
-/** Run chunk analysis in bounded-concurrency batches, collecting findings. */
+/**
+ * Analyse chunks with a pool of `maxConcurrency` workers. Each worker takes the
+ * next chunk as soon as it finishes one, so a single slow chunk no longer holds
+ * up a whole batch. A chunk whose call or answer fails is retried once; if it
+ * still fails it is counted as failed (a coverage hole), never as clean.
+ */
 async function runChunkBatches(opts: RunChunkBatchesOptions): Promise<void> {
   const {
     ctx,
@@ -959,91 +1082,89 @@ async function runChunkBatches(opts: RunChunkBatchesOptions): Promise<void> {
     chunks,
     maxConcurrency,
     prompt,
-    policyNames,
+    policies,
     repoContextBlock,
     maxResponseTokens,
     errorLogMsg,
     tally,
     findings,
     fileContentMap,
+    symbolIndex,
     onChunkDone,
     onChunkSuccess,
     onProgress,
     onReasoning,
   } = opts;
 
-  for (let i = 0; i < chunks.length; i += maxConcurrency) {
-    await ctx.waitIfPaused?.();
-    if (ctx.signal?.aborted) break;
-
-    const batch = chunks.slice(i, i + maxConcurrency);
-    const results = await Promise.allSettled(
-      batch.map((chunk) =>
-        analyzeChunk(
-          client,
-          model,
-          chunk,
-          maxResponseTokens,
-          prompt,
-          policyNames,
-          repoContextBlock,
-          fileContentMap.get(chunk.filePath),
-          onReasoning,
-        ),
-      ),
+  const analyze = (chunk: Chunk) =>
+    analyzeChunk(
+      client,
+      model,
+      chunk,
+      maxResponseTokens,
+      prompt,
+      policies,
+      repoContextBlock,
+      fileContentMap.get(chunk.filePath),
+      onReasoning,
+      symbolIndex
+        ? relatedContextFor(
+            symbolIndex,
+            chunk.filePath,
+            { startLine: chunk.startLine, endLine: chunk.endLine },
+            SAST_RELATED_CONTEXT_CHARS,
+          )
+        : NO_RELATED_CONTEXT,
     );
 
-    const batchFindings: RawFinding[] = [];
-    for (let j = 0; j < results.length; j++) {
-      const chunk = batch[j];
-      let result = results[j];
+  // DB flushes are serialized: workers finish in any order, but the sink
+  // receives one batch at a time, as it did with sequential batches.
+  let flushes: Promise<void> = Promise.resolve();
+  let next = 0;
 
-      // One retry for transient model/network failures: an unanalysed chunk is
-      // a coverage hole, not a clean result.
-      if (result.status === "rejected" && !ctx.signal?.aborted) {
+  const worker = async () => {
+    for (;;) {
+      await ctx.waitIfPaused?.();
+      if (ctx.signal?.aborted) return;
+      const chunk = chunks[next++];
+      if (!chunk) return;
+
+      let result: RawFinding[] | undefined;
+      try {
+        result = await analyze(chunk);
+      } catch (firstErr) {
+        if (ctx.signal?.aborted) return;
+        logger.warn({ err: firstErr, file: chunk.filePath }, "SAST chunk failed; retrying once");
         try {
-          const value = await analyzeChunk(
-            client,
-            model,
-            chunk,
-            maxResponseTokens,
-            prompt,
-            policyNames,
-            repoContextBlock,
-            fileContentMap.get(chunk.filePath),
-            onReasoning,
-          );
-          result = { status: "fulfilled", value };
+          result = await analyze(chunk);
         } catch (err) {
-          logger.warn({ err, file: chunk.filePath }, "SAST chunk retry failed");
-          result = { status: "rejected", reason: err };
+          tally.failed++;
+          tally.firstError ??= describeLlmError(err);
+          logger.error({ err, file: chunk.filePath }, errorLogMsg);
         }
       }
 
       onChunkDone?.(chunk.filePath);
-
-      if (result.status === "fulfilled") {
-        batchFindings.push(...result.value);
-        findings.push(...result.value);
+      if (result) {
+        findings.push(...result);
         tally.succeeded++;
         onChunkSuccess?.(chunk);
-      } else {
-        tally.failed++;
-        logger.error({ err: result.reason, file: chunk.filePath }, errorLogMsg);
+        // Only confirmed findings go to the DB now; passPhase 1 candidates
+        // wait for pass-2 validation.
+        const confirmed = result.filter((f) => f.metadata?.passPhase === 2);
+        if (confirmed.length > 0 && ctx.onBatchFindings) {
+          const sink = ctx.onBatchFindings;
+          flushes = flushes.then(() => sink("SAST_LLM", confirmed));
+        }
       }
+      onProgress?.();
     }
+  };
 
-    // Flush only confirmed findings to DB immediately so they appear in UI.
-    // Tentative candidates (passPhase 1) require Pass 2 cross-file validation first.
-    const confirmedBatchFindings = batchFindings.filter(
-      (f) => f.metadata?.passPhase === 2,
-    );
-    if (confirmedBatchFindings.length > 0 && ctx.onBatchFindings) {
-      await ctx.onBatchFindings("SAST_LLM", confirmedBatchFindings);
-    }
-
-    onProgress?.();
-  }
+  await Promise.all(
+    Array.from({ length: Math.max(1, Math.min(maxConcurrency, chunks.length)) }, worker),
+  );
+  await flushes;
 }
 
 async function analyzeChunk(
@@ -1052,17 +1173,21 @@ async function analyzeChunk(
   chunk: Chunk,
   maxResponseTokens: number,
   systemPrompt: string = SYSTEM_PROMPT,
-  policyNames: string[] = [],
+  policies: PolicyRef[] = [],
   repoContextBlock = "",
   fileContent?: string,
   onReasoning?: (delta: string) => void,
+  related: RelatedContext = NO_RELATED_CONTEXT,
 ): Promise<RawFinding[]> {
   const scopeNote = chunk.wholeFile
     ? "This is the ENTIRE file with line numbers. Read every line before reporting."
     : "This is one chunk of a larger file; code outside it is not shown.";
-  const userContent = `${repoContextBlock}\n--- CURRENT FILE ${chunk.wholeFile ? "(WHOLE FILE)" : "CHUNK"} ---\nFile: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n${scopeNote}\n\n\`\`\`\n${chunk.content}\n\`\`\``;
+  const userContent = `${repoContextBlock}\n--- CURRENT FILE ${chunk.wholeFile ? "(WHOLE FILE)" : "CHUNK"} ---\nFile: ${chunk.filePath} (lines ${chunk.startLine}-${chunk.endLine})\n${scopeNote}\n\n\`\`\`\n${chunk.content}\n\`\`\`${related.block}`;
 
-  try {
+  // Errors propagate: a failed call or an unparseable answer is a chunk the
+  // model did not review, so the caller retries it and counts it as a coverage
+  // hole instead of treating it as "no findings".
+  {
     logger.info(
       {
         filePath: chunk.filePath,
@@ -1080,13 +1205,41 @@ async function analyzeChunk(
       { filePath: chunk.filePath, responseLength: raw.length },
       "LLM response received",
     );
-    const parsed = parseLlmJsonResponse<{ findings: LlmFinding[] }>(raw, {
+    const { value: parsed, status } = parseLlmJsonResponseDetailed<{ findings: LlmFinding[] }>(raw, {
       findings: [],
     });
+    if (status === "failed") {
+      throw new Error(`Unparseable LLM response for ${chunk.filePath}:${chunk.startLine}-${chunk.endLine}`);
+    }
+
+    // A cut-off answer keeps only the findings that were complete; the rest
+    // are simply missing. Ask for the remainder, naming what was already
+    // received, until an answer arrives whole (bounded).
+    const collected = [...(parsed.findings || [])];
+    let answerStatus = status;
+    for (let round = 1; answerStatus === "recovered" && round <= MAX_CONTINUATION_ROUNDS; round++) {
+      logger.warn(
+        { filePath: chunk.filePath, kept: collected.length, round },
+        "SAST answer was cut off; requesting the remaining findings",
+      );
+      const already = collected.map((f) => `- ${f.title} (line ${f.startLine})`).join("\n");
+      const followUp = `${userContent}\n\n--- CONTINUATION ---\nYour previous answer was cut off. These findings are already recorded:\n${already}\nReturn ONLY the remaining findings for this code that are not in that list, in the same JSON format, with short descriptions. If none remain, return {"findings": []}.`;
+      const more = await analyzeWithLlm(client, model, systemPrompt, followUp, { maxTokens: maxResponseTokens });
+      const next = parseLlmJsonResponseDetailed<{ findings: LlmFinding[] }>(more, { findings: [] });
+      if (next.status === "failed") break;
+      const seenTitles = new Set(collected.map((f) => normalizeFindingTitle(f.title)));
+      for (const f of next.value.findings || []) {
+        if (f?.title && !seenTitles.has(normalizeFindingTitle(f.title))) collected.push(f);
+      }
+      answerStatus = next.status;
+    }
+    if (answerStatus === "recovered") {
+      logger.warn({ filePath: chunk.filePath, kept: collected.length }, "SAST answer still cut off after follow-ups; some findings may be missing");
+    }
 
     const pass1Floor = 0.65; // Minimum threshold; findings 0.65-0.74 are pass-1 candidates for pass-2 validation
 
-    const allFindings = (parsed.findings || []).filter(
+    const allFindings = collected.filter(
       (f) => f.title && f.severity,
     );
     const filtered = allFindings
@@ -1130,6 +1283,14 @@ async function analyzeChunk(
             },
             "Rejecting finding with non-SAST layer classification",
           );
+          return false;
+        }
+        return true;
+      })
+      .filter((f) => {
+        const reason = hardExclusionReason(f, chunk.filePath);
+        if (reason) {
+          logger.debug({ filePath: chunk.filePath, title: f.title, reason }, "Hard-excluded SAST finding");
           return false;
         }
         return true;
@@ -1178,7 +1339,7 @@ async function analyzeChunk(
         // invented identifiers (or a line past EOF) is dropped here, before it
         // can reach the report or a ticket.
         if (!LLM_EVIDENCE_VERIFICATION || !fileContent) return true;
-        const verdict = verifyFindingEvidence(f, fileContent);
+        const verdict = verifyFindingEvidence(f, fileContent, related.code);
         if (!verdict.ok) {
           logger.warn(
             {
@@ -1196,9 +1357,8 @@ async function analyzeChunk(
         const titleLower = f.title.toLowerCase();
         const isPolicy =
           titleLower.includes("policy") || titleLower.includes("policy:");
-        const matchedPolicy = policyNames.find((name) =>
-          titleLower.includes(name.toLowerCase()),
-        );
+        const matched = policies.find((p) => titleLower.includes(p.name.toLowerCase()));
+        const matchedPolicy = matched?.name;
 
         const passPhase =
           (f.confidence ?? 0) >= LLM_MIN_CONFIDENCE_DEFAULT ? 2 : 1;
@@ -1209,7 +1369,7 @@ async function analyzeChunk(
             f.recommendation ||
             (f.metadata?.remediation as string | undefined),
           ...(matchedPolicy
-            ? { policyName: matchedPolicy, type: "policy-violation" }
+            ? { policyName: matchedPolicy, policySeverity: matched?.severity, type: "policy-violation" }
             : {}),
         };
 
@@ -1268,17 +1428,6 @@ async function analyzeChunk(
       }
       return base;
     });
-  } catch (err) {
-    logger.error(
-      {
-        err,
-        filePath: chunk.filePath,
-        startLine: chunk.startLine,
-        endLine: chunk.endLine,
-      },
-      "LLM SAST chunk analysis failed",
-    );
-    return [];
   }
 }
 

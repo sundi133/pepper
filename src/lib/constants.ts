@@ -15,8 +15,9 @@ export const SEVERITY_COLORS = {
 } as const;
 
 /** Pattern-only findings: no synthetic LLM-style report blocks. */
-// SAST_PATTERN is rule-based SAST (OpenGrep): its rule message already holds
-// the explanation and fix, so it gets the pattern report. SECRETS_PATTERN
+// SAST_PATTERN findings come from the retired rule-based SAST scanner (OpenGrep)
+// and remain only on older scans; their rule message holds the explanation
+// and fix, so they get the pattern report. SECRETS_PATTERN
 // findings reach the UI and need report enrichment like other scanners.
 export const PATTERN_BASED_SCANNERS = new Set(["SAST_PATTERN"]);
 
@@ -137,6 +138,96 @@ export const FILE_EXTENSIONS: Record<string, string> = {
   ".trg": "plsql",
   ".tps": "plsql",
   ".tpb": "plsql",
+
+  // More C-family and JVM sources
+  ".cc": "cpp",
+  ".cxx": "cpp",
+  ".c++": "cpp",
+  ".hh": "cpp",
+  ".hxx": "cpp",
+  ".ino": "cpp",
+  ".cu": "cuda",
+  ".kts": "kotlin",
+  ".groovy": "groovy",
+  ".gvy": "groovy",
+  ".gsp": "template",
+  ".sc": "scala",
+  ".clj": "clojure",
+  ".cljs": "clojure",
+  ".cljc": "clojure",
+  // .NET beyond C# / VB
+  ".fs": "fsharp",
+  ".fsx": "fsharp",
+  ".vbs": "vbscript",
+  // Scripting languages
+  ".pyw": "python",
+  ".rake": "ruby",
+  ".phtml": "php",
+  ".php3": "php",
+  ".php4": "php",
+  ".php5": "php",
+  ".php7": "php",
+  ".phps": "php",
+  ".inc": "php",
+  ".pl": "perl",
+  ".pm": "perl",
+  ".cgi": "perl",
+  ".lua": "lua",
+  ".r": "r",
+  ".jl": "julia",
+  ".tcl": "tcl",
+  ".coffee": "coffeescript",
+  // Functional and BEAM languages
+  ".ex": "elixir",
+  ".exs": "elixir",
+  ".erl": "erlang",
+  ".hrl": "erlang",
+  ".hs": "haskell",
+  ".ml": "ocaml",
+  ".elm": "elm",
+  // Systems languages
+  ".zig": "zig",
+  ".nim": "nim",
+  ".cr": "crystal",
+  ".d": "d",
+  // Shells
+  ".zsh": "shell",
+  ".ksh": "shell",
+  ".fish": "shell",
+  ".ps1": "powershell",
+  ".psm1": "powershell",
+  ".bat": "batch",
+  ".cmd": "batch",
+  // Smart contracts
+  ".sol": "solidity",
+  ".vy": "vyper",
+  ".move": "move",
+  ".cairo": "cairo",
+  // Salesforce Apex classes and triggers
+  ".cls": "apex",
+  ".trigger": "apex",
+  // Legacy enterprise
+  ".cbl": "cobol",
+  ".cob": "cobol",
+  ".f90": "fortran",
+  // HTML pages and framework templates (Angular, server-rendered views,
+  // Phoenix, Go, Rails, Jekyll/Shopify, Velocity, FreeMarker, Astro, Marko)
+  ".html": "template",
+  ".htm": "template",
+  ".xhtml": "template",
+  ".j2": "template",
+  ".eex": "template",
+  ".heex": "template",
+  ".leex": "template",
+  ".tmpl": "template",
+  ".gohtml": "template",
+  ".haml": "template",
+  ".slim": "template",
+  ".liquid": "template",
+  ".vm": "template",
+  ".ftl": "template",
+  ".astro": "template",
+  ".marko": "template",
 };
 
 export const SKIP_DIRECTORIES = new Set([
@@ -348,6 +439,13 @@ export const LLM_EVIDENCE_VERIFICATION =
 // centered on the finding's lines, so it can see guards outside the chunk.
 export const LLM_VALIDATION_CONTEXT_CHARS = parseInt(
   process.env.LLM_VALIDATION_CONTEXT_CHARS || "6000",
+);
+
+// Characters of cross-file code (definitions the reviewed code calls in other
+// files, and callers of the flagged function) added to SAST pass 1 and pass 2,
+// so source→sink flows that span files can be traced. 0 disables it.
+export const SAST_RELATED_CONTEXT_CHARS = parseInt(
+  process.env.SAST_RELATED_CONTEXT_CHARS || "6000",
 );
 
 // ─── Exploit validation (adversarial pass over AI findings) ──────────────────

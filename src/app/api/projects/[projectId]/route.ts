@@ -40,7 +40,6 @@ export async function GET(
           highCount: true,
           mediumCount: true,
           lowCount: true,
-          infoCount: true,
           filesScanned: true,
         },
       },

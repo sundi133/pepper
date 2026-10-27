@@ -667,7 +667,6 @@ Schema:
           highCount: { increment: counts.HIGH },
           mediumCount: { increment: counts.MEDIUM },
           lowCount: { increment: counts.LOW },
-          infoCount: { increment: counts.INFO },
         },
       });
     }
@@ -897,6 +896,16 @@ Schema:
           SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ [scannerName]: { status: "DONE", findingsCount: totalFindings } })}::jsonb
           WHERE id = ${scanId}
         `;
+      },
+      onScannerFailed: async (scannerName: string, message: string) => {
+        log.error({ scanner: scannerName, error: message }, "Scanner failed");
+        // Shown on the scan page next to the scanner, so a broken provider or
+        // model is visible instead of looking like "no vulnerabilities".
+        await prisma.$executeRaw`
+          UPDATE "Scan"
+          SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ [scannerName]: { status: "FAILED", error: message.slice(0, 500), findingsCount: batchFindingCounts[scannerName] || 0 } })}::jsonb
+          WHERE id = ${scanId}
+        `.catch((err) => log.warn({ err }, "Could not record scanner failure"));
       },
       onReasoning: async (scannerName: string, reasoning: string) => {
         if (!reasoning?.trim()) return;
@@ -1742,7 +1751,6 @@ async function runExploitValidation(
         highCount: counts.HIGH,
         mediumCount: counts.MEDIUM,
         lowCount: counts.LOW,
-        infoCount: counts.INFO,
       },
     });
 

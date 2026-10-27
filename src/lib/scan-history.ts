@@ -11,7 +11,6 @@ export interface SeverityTotals {
   high: number;
   medium: number;
   low: number;
-  info: number;
 }
 
 export interface HistoryPoint extends SeverityTotals {
@@ -44,7 +43,6 @@ export async function recordScanSnapshot(scanId: string): Promise<void> {
       highCount: true,
       mediumCount: true,
       lowCount: true,
-      infoCount: true,
       filesScanned: true,
       gateResult: true,
       project: { select: { organizationId: true } },
@@ -56,7 +54,6 @@ export async function recordScanSnapshot(scanId: string): Promise<void> {
     highCount: s.highCount,
     mediumCount: s.mediumCount,
     lowCount: s.lowCount,
-    infoCount: s.infoCount,
     filesScanned: s.filesScanned,
     gateResult: s.gateResult,
   };
@@ -130,7 +127,7 @@ export function dayKey(d: Date): string {
 }
 
 export function totalOf(t: SeverityTotals): number {
-  return t.critical + t.high + t.medium + t.low + t.info;
+  return t.critical + t.high + t.medium + t.low;
 }
 
 /**
@@ -187,11 +184,10 @@ export function buildRepoSeries(
             high: current.high,
             medium: current.medium,
             low: current.low,
-            info: current.info,
             scans,
             gateFailed,
           }
-        : { date: key, critical: null, high: null, medium: null, low: null, info: null, scans, gateFailed },
+        : { date: key, critical: null, high: null, medium: null, low: null, scans, gateFailed },
     );
   }
   return out;
@@ -228,7 +224,6 @@ function totalsAt(p: HistoryPoint): SeverityTotals & { at: string } {
     high: p.high,
     medium: p.medium,
     low: p.low,
-    info: p.info,
     at: p.completedAt.toISOString(),
   };
 }
@@ -334,10 +329,9 @@ export function buildOrgSeries(
             high: known.reduce((n, d) => n + d.high, 0),
             medium: known.reduce((n, d) => n + d.medium, 0),
             low: known.reduce((n, d) => n + d.low, 0),
-            info: known.reduce((n, d) => n + d.info, 0),
             ...act,
           }
-        : { date: key, critical: null, high: null, medium: null, low: null, info: null, ...act },
+        : { date: key, critical: null, high: null, medium: null, low: null, ...act },
     );
   }
   return out;
@@ -352,6 +346,6 @@ export function seriesComparison(
 } {
   const known = series.filter((d) => d.critical !== null) as DayPoint[];
   const pick = (d: DayPoint | undefined) =>
-    d ? { critical: d.critical, high: d.high, medium: d.medium, low: d.low, info: d.info, at: d.date } : null;
+    d ? { critical: d.critical, high: d.high, medium: d.medium, low: d.low, at: d.date } : null;
   return { baseline: pick(known[0]), current: pick(known[known.length - 1]) };
 }

@@ -65,7 +65,7 @@ async function call(name: string, args: Record<string, unknown>, role?: Role) {
   return { isError: !!res.isError, text, data: data as Record<string, unknown> & { [k: string]: unknown } };
 }
 
-const counts = { criticalCount: 1, highCount: 2, mediumCount: 3, lowCount: 4, infoCount: 5 };
+const counts = { criticalCount: 1, highCount: 2, mediumCount: 3, lowCount: 4 };
 const findingRow = {
   id: "f1",
   scanId: "s1",
@@ -155,7 +155,7 @@ describe("read tools", () => {
     expect(repo.repoUrl).toBe("https://github.com/acme/app.git");
     expect(res.text).not.toContain("ghp_secret");
     expect(repo.latestScan.status).toBe("RUNNING");
-    expect(repo.latestCompletedScan.severityCounts).toEqual({ critical: 1, high: 2, medium: 3, low: 4, info: 5 });
+    expect(repo.latestCompletedScan.severityCounts).toEqual({ critical: 1, high: 2, medium: 3, low: 4 });
     expect(repo.latestCompletedScan.url).toBe("https://pepper.example/scans/s1");
   });
 
@@ -217,7 +217,7 @@ describe("read tools", () => {
       status: "COMPLETED",
       progressPercent: 100,
       gateResult: "FAILED",
-      totalFindings: 15,
+      totalFindings: 10,
       source: "uploaded archive",
       incompleteScan: true,
       incompleteScanNote: "Incomplete scan: AI analysis did not run: the provider refused the request.",

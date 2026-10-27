@@ -8,9 +8,6 @@ import {
 import { isAuthorizationOrLogicFinding } from "../sast/evidence-verify";
 import { isTestLikePath } from "@/lib/test-paths";
 
-// SAST_PATTERN is rule-based SAST (OpenGrep, curated packs). Its findings pass
-// the gates below like any other scanner: LOW-confidence rules fall under the
-// floor, test/fixture code is dropped, and a line number is required.
 // SECRETS_PATTERN findings are fast, high-confidence detections; deduplication
 // with SECRETS_LLM is handled in areRootCauseDuplicates.
 
@@ -119,13 +116,8 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
     if (!hasRemediation(f) && !agent) {
       const hasCwe = Boolean(f.cweId);
       const isHighConfidence = (f.confidence ?? 0) >= 0.78;
-      // Rule-based SAST findings carry the rule's guidance; a CWE is enough.
-      const exemptScanner =
-        f.scanner === "ZERO_DAY" || f.scanner === "SAST_LLM" || f.scanner === "SAST_PATTERN";
-      // A rule's message is its guidance, so any CWE-tagged rule match counts
-      // (the confidence floor above still applies).
-      const ruleBased = f.scanner === "SAST_PATTERN";
-      if (!(exemptScanner && hasCwe && (isHighConfidence || ruleBased || unjudgedLogic))) {
+      const exemptScanner = f.scanner === "ZERO_DAY" || f.scanner === "SAST_LLM";
+      if (!(exemptScanner && hasCwe && (isHighConfidence || unjudgedLogic))) {
         return false;
       }
     }
@@ -151,7 +143,7 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
     // deep-scan findings review a decompiled binary and are exempt too.
     if (
       !agent &&
-      ["SAST_LLM", "SECRETS_LLM", "SAST_PATTERN"].includes(f.scanner) &&
+      ["SAST_LLM", "SECRETS_LLM"].includes(f.scanner) &&
       f.filePath &&
       (!f.startLine || f.startLine < 1)
     ) {
@@ -175,12 +167,6 @@ export function applyQualityGates(findings: RawFinding[]): RawFinding[] {
       ["SAST_LLM", "SECRETS_LLM", "ZERO_DAY"].includes(f.scanner) &&
       (f.confidence ?? 0) < 0.9
     ) {
-      return false;
-    }
-
-    // Rule matches in test / fixture / example code are almost always
-    // deliberate or unreachable.
-    if (f.scanner === "SAST_PATTERN" && isTestLikePath(f.filePath)) {
       return false;
     }
 

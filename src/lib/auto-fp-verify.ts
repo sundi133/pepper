@@ -232,7 +232,6 @@ export async function autoVerifyFalsePositives(
         highCount: counts.HIGH,
         mediumCount: counts.MEDIUM,
         lowCount: counts.LOW,
-        infoCount: counts.INFO,
       },
     });
   }

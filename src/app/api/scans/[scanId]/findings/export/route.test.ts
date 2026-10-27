@@ -23,10 +23,13 @@ vi.mock("@/lib/prisma", () => ({
 
 import { GET } from "./route";
 
-const getExport = (query = "") =>
-  GET(new NextRequest(`http://localhost/api/scans/s1/findings/export${query}`), {
+const getExport = async (query = "") => {
+  const res = await GET(new NextRequest(`http://localhost/api/scans/s1/findings/export${query}`), {
     params: Promise.resolve({ scanId: "s1" }),
   });
+  if (!res) throw new Error("no response");
+  return res;
+};
 
 beforeEach(() => {
   vi.clearAllMocks();

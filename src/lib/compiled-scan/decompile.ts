@@ -288,7 +288,7 @@ export interface TrimResult {
  * Decide which output files stay: retained kinds only, then source before
  * resources, within the remaining budget (which is reduced in place).
  * Everything else is deleted from disk, so a scanner that walks the whole
- * work dir (OpenGrep) never sees it.
+ * work dir never sees it.
  */
 export function trimOutput(outDir: string, filter: PackageFilter, budget: Budget, maxFileBytes: number): TrimResult {
   const files = walkFiles(outDir);

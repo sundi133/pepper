@@ -42,7 +42,7 @@ interface VersionMeta {
   scanId: string;
   completedAt: string;
   commitSha: string | null;
-  totals: { critical: number; high: number; medium: number; low: number; info: number };
+  totals: { critical: number; high: number; medium: number; low: number };
 }
 
 interface CompareResponse {
@@ -71,7 +71,6 @@ const SEVERITY_DOT: Record<string, string> = {
   HIGH: "#ec835a",
   MEDIUM: "#fab219",
   LOW: "#8a8983",
-  INFO: "#b8b7b1",
 };
 
 const TABS = [
@@ -97,7 +96,7 @@ function titleCase(s: string): string {
 function SeverityLabel({ severity }: { severity: string }) {
   return (
     <span className="inline-flex w-20 shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: SEVERITY_DOT[severity] ?? SEVERITY_DOT.INFO }} aria-hidden />
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: SEVERITY_DOT[severity] ?? SEVERITY_DOT.LOW }} aria-hidden />
       {titleCase(severity)}
     </span>
   );

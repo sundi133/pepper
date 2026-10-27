@@ -21,7 +21,7 @@ describe("recountScanSeverities", () => {
     expect(groupBy.mock.calls[0][0].where).toEqual({ scanId: "s1", status: { not: "FALSE_POSITIVE" } });
     expect(update).toHaveBeenCalledWith({
       where: { id: "s1" },
-      data: { criticalCount: 2, highCount: 0, mediumCount: 0, lowCount: 5, infoCount: 0 },
+      data: { criticalCount: 2, highCount: 0, mediumCount: 0, lowCount: 5 },
     });
   });
 });

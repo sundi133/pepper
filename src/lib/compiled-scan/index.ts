@@ -1,7 +1,7 @@
 /**
  * Compiled-code scan: turn the compiled artifacts in a scan (JAR / WAR / EAR /
  * .class, APK / AAB / DEX, .NET DLL / EXE) back into source so the existing
- * source scanners (AI SAST, OpenGrep, secrets) can review it.
+ * source scanners (AI SAST, secrets) can review it.
  *
  * Runs in the worker after the source is checked out and before the scanners.
  * Each artifact is decompiled into its own folder under `__decompiled__/` in

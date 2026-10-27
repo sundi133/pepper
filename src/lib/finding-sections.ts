@@ -13,7 +13,8 @@ export const FINDING_SECTIONS = [
   {
     id: "SAST",
     title: "SAST Findings",
-    // SAST_PATTERN = rule-based SAST (OpenGrep); SAST_LLM = AI analysis.
+    // SAST_LLM = AI analysis; SAST_PATTERN = retired rule-based SAST, kept so
+    // older scans still group their findings here.
     scanners: ["SAST_LLM", "SAST_PATTERN"],
     description: "Static application security findings",
   },

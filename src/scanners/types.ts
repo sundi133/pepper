@@ -53,6 +53,8 @@ export interface ScanContext {
     scannerName: string,
     findings: RawFinding[],
   ) => Promise<void>;
+  /** A scanner threw: record it as failed with the reason instead of dropping it silently. */
+  onScannerFailed?: (scannerName: string, message: string) => Promise<void>;
   /**
    * Report vulnerabilities that triage ruled out. Kept separate from findings
    * so they reach the VEX document without appearing in the findings list.

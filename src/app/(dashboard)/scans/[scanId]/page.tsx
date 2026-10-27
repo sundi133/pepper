@@ -307,8 +307,7 @@ export default function ScanDetailPage() {
     scan.criticalCount +
     scan.highCount +
     scan.mediumCount +
-    scan.lowCount +
-    scan.infoCount;
+    scan.lowCount;
   const visibleFindings = findings as Finding[];
   // Grand total across every category, from the scan-wide per-scanner counts.
   // The table below is filtered to the selected tab, so a "500 of N" here would
@@ -708,6 +707,7 @@ export default function ScanDetailPage() {
                           findingsCount: number;
                           filesCompleted?: number;
                           filesTotal?: number;
+                          error?: string;
                         }
                       >,
                     )
@@ -717,14 +717,22 @@ export default function ScanDetailPage() {
                       <Badge
                         key={name}
                         variant={info.status === "DONE" ? "default" : "secondary"}
+                        title={info.status === "FAILED" ? info.error : undefined}
                         className={cn(
                           "gap-1.5 text-xs font-medium",
                           info.status === "DONE"
                             ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300"
-                            : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300",
+                            : info.status === "FAILED"
+                              ? "bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300"
+                              : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300",
                         )}
                       >
-                        {info.status === "DONE" ? (
+                        {info.status === "FAILED" ? (
+                          <>
+                            <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                            <span>{name} failed</span>
+                          </>
+                        ) : info.status === "DONE" ? (
                           <>
                             <Check className="h-3 w-3 shrink-0" aria-hidden />
                             <span>{name}</span>
@@ -886,7 +894,6 @@ export default function ScanDetailPage() {
                       <SelectItem value="HIGH">High</SelectItem>
                       <SelectItem value="MEDIUM">Medium</SelectItem>
                       <SelectItem value="LOW">Low</SelectItem>
-                      <SelectItem value="INFO">Info</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={scannerFilter} onValueChange={setScannerFilter}>

@@ -29,7 +29,7 @@ import { PageBreadcrumb } from "@/components/layout/page-breadcrumb";
 import { ScanCompare } from "@/components/trends/scan-compare";
 
 type Sev = "critical" | "high" | "medium" | "low";
-type Totals = Record<Sev | "info", number>;
+type Totals = Record<Sev, number>;
 
 interface DayPoint {
   date: string;
@@ -37,7 +37,6 @@ interface DayPoint {
   high: number | null;
   medium: number | null;
   low: number | null;
-  info: number | null;
   scans: number;
   gateFailed: number;
 }

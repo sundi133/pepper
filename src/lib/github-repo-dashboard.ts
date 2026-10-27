@@ -12,7 +12,6 @@ type ScanSnapshot = {
   highCount: number;
   mediumCount: number;
   lowCount: number;
-  infoCount: number;
   filesScanned: number;
   completedAt: Date | null;
   createdAt: Date;
@@ -36,8 +35,7 @@ export function deriveRepoScanStatus(
       scan.criticalCount +
       scan.highCount +
       scan.mediumCount +
-      scan.lowCount +
-      scan.infoCount;
+      scan.lowCount;
     if (scan.gateResult === "FAILED" || scan.criticalCount > 0) {
       return "ISSUES";
     }

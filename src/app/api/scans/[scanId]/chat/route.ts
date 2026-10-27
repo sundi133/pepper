@@ -30,7 +30,6 @@ function buildSystemPrompt(
     highCount: number;
     mediumCount: number;
     lowCount: number;
-    infoCount: number;
     project: { name: string } | null;
   },
   findings: Array<{
@@ -52,7 +51,7 @@ function buildSystemPrompt(
     scan.branch ? `Branch: ${scan.branch}` : null,
     scan.prNumber ? `PR #${scan.prNumber}` : null,
     `Status: ${scan.status}`,
-    `Findings: ${scan.criticalCount} critical, ${scan.highCount} high, ${scan.mediumCount} medium, ${scan.lowCount} low, ${scan.infoCount} info`,
+    `Findings: ${scan.criticalCount} critical, ${scan.highCount} high, ${scan.mediumCount} medium, ${scan.lowCount} low`,
   ]
     .filter(Boolean)
     .join(" | ");
@@ -117,7 +116,6 @@ export async function POST(
       highCount: true,
       mediumCount: true,
       lowCount: true,
-      infoCount: true,
       project: { select: { name: true } },
     },
   });

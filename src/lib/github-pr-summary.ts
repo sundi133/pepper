@@ -12,7 +12,6 @@ export interface SeverityCounts {
   high: number;
   medium: number;
   low: number;
-  info: number;
 }
 
 export interface PrSummaryInput {
@@ -57,7 +56,7 @@ function shortSha(sha: string | null): string {
 
 function totalIssues(counts: SeverityCounts): number {
   return (
-    counts.critical + counts.high + counts.medium + counts.low + counts.info
+    counts.critical + counts.high + counts.medium + counts.low
   );
 }
 
@@ -125,7 +124,6 @@ export function renderPrSummary(
   lines.push(`| 🟠 High | ${input.counts.high} |`);
   lines.push(`| 🟡 Medium | ${input.counts.medium} |`);
   lines.push(`| 🟢 Low | ${input.counts.low} |`);
-  lines.push(`| ⚪ Info | ${input.counts.info} |`);
   lines.push("");
 
   const gateLabel =

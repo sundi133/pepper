@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { sastPatternScanner } from "./sast";
 import { secretsPatternScanner } from "./secrets";
 import { FindingDeduplicator, getScanners } from "./index";
 import { applyQualityGates } from "./shared/quality-gates";
@@ -48,7 +47,7 @@ describe("scanner framework", () => {
 
   it("INCREMENTAL runs SAST, SCA, secrets, zero-day, IaC, K8s and container (webhook PR scans)", () => {
     const names = getScanners("INCREMENTAL", llmOn).map((s) => s.name);
-    for (const n of ["SAST_PATTERN", "SAST_LLM", "SCA", "ZERO_DAY", "IAC_RULES", "IAC", "K8S", "CONTAINER"]) {
+    for (const n of ["SAST_LLM", "SCA", "ZERO_DAY", "IAC_RULES", "IAC", "K8S", "CONTAINER"]) {
       expect(names, n).toContain(n);
     }
   });
@@ -76,7 +75,6 @@ describe("scanner framework", () => {
         vulnDbMode: "offline" as const,
       },
     };
-    expect(await sastPatternScanner.scan(ctx)).toEqual([]);
     expect(await secretsPatternScanner.scan(ctx)).toEqual([]);
   });
 

@@ -17,7 +17,6 @@ import {
   AlertTriangle,
   KeyRound,
   Package,
-  Zap,
   Users,
   FolderKanban,
   CheckCircle2,
@@ -31,7 +30,6 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 type DashboardOverview = {
   projectCount: number;
   memberCount: number;
-  monitoredSchedules: number;
   secretsFindingCount: number;
   dependencyFindingCount: number;
   resolvedThisMonth: number;
@@ -46,7 +44,6 @@ type DashboardOverview = {
     highCount: number;
     mediumCount: number;
     lowCount: number;
-    infoCount: number;
   }>;
   activities: Array<{
     id: string;
@@ -67,7 +64,6 @@ const SEVERITY_ORDER = [
   "HIGH",
   "MEDIUM",
   "LOW",
-  "INFO",
 ] as const;
 
 const SEVERITY_HEX: Record<string, string> = {
@@ -75,7 +71,6 @@ const SEVERITY_HEX: Record<string, string> = {
   HIGH: "#f97316",
   MEDIUM: "#eab308",
   LOW: "#3b82f6",
-  INFO: "#14b8a6",
 };
 
 const SCAN_STATUS_USER: Record<string, string> = {
@@ -137,7 +132,6 @@ function securityScore(chart: { name: string; count: number }[]) {
     else if (name === "HIGH") score -= count * 5;
     else if (name === "MEDIUM") score -= count * 2;
     else if (name === "LOW") score -= count * 0.5;
-    else if (name === "INFO") score -= count * 0.2;
   }
   return Math.max(0, Math.min(100, Math.round(score)));
 }
@@ -204,7 +198,7 @@ export default function DashboardPage() {
 
   const pieData = severityChart.filter((s) => s.count > 0);
   const pieFallback =
-    pieData.length === 0 ? [{ name: "INFO", count: 1, _empty: true }] : pieData;
+    pieData.length === 0 ? [{ name: "LOW", count: 1, _empty: true }] : pieData;
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-5 pb-6 sm:space-y-6">
@@ -319,11 +313,6 @@ export default function DashboardPage() {
             label="Dependency issues"
             value={overview?.dependencyFindingCount ?? 0}
             icon={Package}
-          />
-          <MetricTile
-            label="Monitored repos"
-            value={overview?.monitoredSchedules ?? 0}
-            icon={Zap}
           />
           <MetricTile
             label="Team members"

@@ -109,7 +109,6 @@ export async function GET(req: NextRequest) {
             highCount: true,
             mediumCount: true,
             lowCount: true,
-            infoCount: true,
           },
         });
 
@@ -155,7 +154,6 @@ export async function GET(req: NextRequest) {
     highCount: number;
     mediumCount: number;
     lowCount: number;
-    infoCount: number;
     totalFindings: number;
     secretsCount: number;
     depsCount: number;
@@ -168,8 +166,7 @@ export async function GET(req: NextRequest) {
     const h = lc?.highCount ?? 0;
     const m = lc?.mediumCount ?? 0;
     const l = lc?.lowCount ?? 0;
-    const inf = lc?.infoCount ?? 0;
-    const total = c + h + m + l + inf;
+    const total = c + h + m + l;
 
     const grade = lc ? letterGradeFromCounts(c, h, m, l) : null;
     const secretsCount = lc ? (secretsMap.get(lc.id) ?? 0) : 0;
@@ -192,7 +189,6 @@ export async function GET(req: NextRequest) {
       highCount: h,
       mediumCount: m,
       lowCount: l,
-      infoCount: inf,
       totalFindings: total,
       secretsCount,
       depsCount,

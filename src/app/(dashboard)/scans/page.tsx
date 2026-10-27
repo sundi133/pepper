@@ -225,8 +225,7 @@ export default function ScansPage() {
                           {(scan.criticalCount as number) +
                             (scan.highCount as number) +
                             (scan.mediumCount as number) +
-                            (scan.lowCount as number) +
-                            (scan.infoCount as number)}
+                            (scan.lowCount as number)}
                         </span>
                       )}
                     </TableCell>

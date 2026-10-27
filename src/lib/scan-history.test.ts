@@ -11,7 +11,7 @@ const NOW = new Date("2026-09-27T12:00:00Z");
 const day = (n: number, hour = 10) => new Date(Date.UTC(2026, 8, n, hour));
 
 function pt(d: Date, critical: number, high: number, scanType = "FULL", id = `s${d.getTime()}`): HistoryPoint {
-  return { scanId: id, scanType, completedAt: d, commitSha: null, gateResult: "PASSED", critical, high, medium: 0, low: 0, info: 0 };
+  return { scanId: id, scanType, completedAt: d, commitSha: null, gateResult: "PASSED", critical, high, medium: 0, low: 0 };
 }
 
 describe("buildRepoSeries", () => {

@@ -102,7 +102,6 @@ export async function POST(
           highCount: 0,
           mediumCount: 0,
           lowCount: 0,
-          infoCount: 0,
           filesScanned: 0,
           depsScanned: 0,
           scannerProgress: {},

@@ -253,8 +253,7 @@ export default function ProjectDetailPage() {
                     {(scan.criticalCount as number) +
                       (scan.highCount as number) +
                       (scan.mediumCount as number) +
-                      (scan.lowCount as number) +
-                      (scan.infoCount as number)}
+                      (scan.lowCount as number)}
                   </span>
                   {scan.status === "COMPLETED" ? (
                     <span className="ml-2 inline-flex align-middle">

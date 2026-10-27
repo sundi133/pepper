@@ -21,7 +21,6 @@ export async function recountScanSeverities(scanId: string): Promise<void> {
       highCount: count("HIGH"),
       mediumCount: count("MEDIUM"),
       lowCount: count("LOW"),
-      infoCount: count("INFO"),
     },
   });
 }

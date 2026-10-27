@@ -15,6 +15,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { SCANNER_LABELS, isPatternBasedScanner } from "@/lib/constants";
 import {
   buildStoredFindingReport,
+  withGeneratedDetails,
+  needsGeneratedDetails,
+  type StoredFindingReport,
   findingReportSummaryLead,
   renderReportPlainText,
   stripReportMarkdown,
@@ -269,7 +272,7 @@ function SecretFindingReport({ finding, sourceContext }: { finding: Finding; sou
     const cachedDetails = (metadata?.generatedDetails as typeof generatedDetails | undefined);
     if (cachedDetails) {
       setGeneratedDetails(cachedDetails);
-    } else {
+    } else if (needsGeneratedDetails(finding)) {
       loadGeneratedDetailsForSecret();
     }
   }, [finding.id]);
@@ -296,7 +299,7 @@ function SecretFindingReport({ finding, sourceContext }: { finding: Finding; sou
   const secretType = typeof metadata?.secretType === "string"
     ? metadata.secretType
     : (finding.title.split(":")[0] || "Secret");
-  const report = buildStoredFindingReport(finding);
+  const report = buildStoredFindingReport(withGeneratedDetails(finding, generatedDetails));
   const githubUrl = githubCodeUrl(sourceContext, finding);
 
   // Generated details come from /api/findings/:id/generate-details (or cached
@@ -370,6 +373,24 @@ function SecretFindingReport({ finding, sourceContext }: { finding: Finding; sou
         </div>
       </ReportBlock>
 
+      {generatedDetails && (
+        <ReportBlock title="Summary" icon={<span className="text-lg">📋</span>}>
+          <ReportSummaryText text={report.summary} />
+        </ReportBlock>
+      )}
+
+      {report.details && (
+        <ReportBlock title="Affected Details" icon={<span className="text-lg">🎯</span>}>
+          <ReportRichText text={report.details} />
+        </ReportBlock>
+      )}
+
+      {report.stepsToReproduce.length > 0 && (
+        <ReportBlock title="Steps to Reproduce" icon={<span className="text-lg">🔧</span>}>
+          <ReportPlainList items={report.stepsToReproduce} />
+        </ReportBlock>
+      )}
+
       {/* Risk Section */}
       <ReportBlock title="Risk" icon={<span className="text-lg">🛡️</span>}>
         {loadingDetails ? (
@@ -397,14 +418,14 @@ function SastFindingReport({ finding, sourceContext }: { finding: Finding; sourc
   const [generatedDetails, setGeneratedDetails] = useState<Record<string, unknown> | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
-  const report = buildStoredFindingReport(finding);
+  const report = buildStoredFindingReport(withGeneratedDetails(finding, generatedDetails));
   const metadata = finding.metadata as Record<string, unknown> | undefined;
 
   useEffect(() => {
     const cached = (metadata?.generatedDetails as Record<string, unknown> | undefined);
     if (cached) {
       setGeneratedDetails(cached);
-    } else {
+    } else if (needsGeneratedDetails(finding)) {
       loadGeneratedDetails();
     }
   }, [finding.id]);
@@ -486,6 +507,13 @@ function SastFindingReport({ finding, sourceContext }: { finding: Finding; sourc
             ) : (
               <ReportSummaryText text={gStr("summary") || report.summary} />
             )}
+          </div>
+        )}
+
+        {gStr("vulnerabilityDetails") && (
+          <div>
+            <h3 className="text-base font-bold mb-1.5">Affected Details</h3>
+            <ReportRichText text={gStr("vulnerabilityDetails")} />
           </div>
         )}
 
@@ -572,7 +600,7 @@ function MaliciousPkgFindingReport({ finding, sourceContext }: { finding: Findin
     const cachedDetails = (metadata?.generatedDetails as typeof generatedDetails | undefined);
     if (cachedDetails) {
       setGeneratedDetails(cachedDetails);
-    } else {
+    } else if (needsGeneratedDetails(finding)) {
       loadGeneratedDetailsForMalicious();
     }
   }, [finding.id]);
@@ -595,7 +623,7 @@ function MaliciousPkgFindingReport({ finding, sourceContext }: { finding: Findin
     }
   };
 
-  const report = buildStoredFindingReport(finding);
+  const report = buildStoredFindingReport(withGeneratedDetails(finding, generatedDetails));
   const metadata = finding.metadata as Record<string, unknown> | undefined;
   const vulnData = metadata?.aiAnalysis as { description?: string; impact?: string; remediation?: string[] } | undefined;
   // Prefer the real package name over the rule id, which is what this panel
@@ -655,7 +683,7 @@ function MaliciousPkgFindingReport({ finding, sourceContext }: { finding: Findin
         <div className="space-y-3 col-span-2">
           <div className="surface-card rounded-lg p-3">
             <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
-              <span>🚨</span> What's the Threat?
+              <span>🚨</span> What&apos;s the Threat?
             </h3>
             <div className="space-y-2 text-xs">
               {vulnData?.description ? (
@@ -695,6 +723,7 @@ function MaliciousPkgFindingReport({ finding, sourceContext }: { finding: Findin
 
         {/* RIGHT COLUMN - Risk & Action */}
         <div className="space-y-3">
+          <AiExtraDetailsCard report={report} />
           <div className="surface-card rounded-lg p-3">
             <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
               <span>📊</span> Impact
@@ -757,7 +786,7 @@ function MaliciousPkgFindingReport({ finding, sourceContext }: { finding: Findin
             </ol>
           ) : (
             <ol className="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
-              {report.remediation.slice(0, 4).map((step, i) => (
+              {report.remediation.map((step, i) => (
                 <li key={i} className="leading-tight">
                   {stripReportMarkdown(step).substring(0, 70)}...
                 </li>
@@ -821,7 +850,7 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
     const cachedDetails = (metadata?.generatedDetails as typeof generatedDetails | undefined);
     if (cachedDetails) {
       setGeneratedDetails(cachedDetails);
-    } else {
+    } else if (needsGeneratedDetails(finding)) {
       loadGeneratedDetailsForSca();
     }
   }, [finding.id]);
@@ -844,7 +873,7 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
     }
   };
 
-  const report = buildStoredFindingReport(finding);
+  const report = buildStoredFindingReport(withGeneratedDetails(finding, generatedDetails));
   const metadata = finding.metadata as Record<string, unknown> | undefined;
   const fixVersion = typeof metadata?.fixVersion === "string" ? metadata.fixVersion : undefined;
   const currentVersion = typeof metadata?.currentVersion === "string" ? metadata.currentVersion : undefined;
@@ -922,7 +951,7 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
           {/* What's the issue - DETAILED */}
           <div className="surface-card rounded-lg p-3">
             <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
-              <span>⚠️</span> What's the Issue?
+              <span>⚠️</span> What&apos;s the Issue?
             </h3>
             <div className="space-y-2 text-xs">
               {vulnData?.description ? (
@@ -949,7 +978,7 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
                   {/* Extract Why It's Exploitable */}
                   {report.summary.includes("Why it is exploitable") && (
                     <div>
-                      <p className="text-xs font-semibold text-muted-foreground mb-1">Why It's Exploitable</p>
+                      <p className="text-xs font-semibold text-muted-foreground mb-1">Why It&apos;s Exploitable</p>
                       <p className="text-foreground leading-relaxed whitespace-pre-wrap break-words">
                         {stripReportMarkdown(
                           report.summary
@@ -966,7 +995,7 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
                     <div>
                       <p className="text-xs font-semibold text-muted-foreground mb-1">Attack Vector</p>
                       <ol className="space-y-1 list-decimal pl-5 text-foreground leading-relaxed">
-                        {report.stepsToReproduce.slice(0, 3).map((step, i) => (
+                        {report.stepsToReproduce.map((step, i) => (
                           <li key={i} className="text-xs">
                             {stripReportMarkdown(step)}
                           </li>
@@ -1007,7 +1036,7 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
           {finding.snippet && (
             <div className="surface-card rounded-lg p-3">
               <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
-                <span>🔍</span> Where It's Used
+                <span>🔍</span> Where It&apos;s Used
               </h3>
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">
@@ -1031,6 +1060,8 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
 
         {/* RIGHT COLUMN - Impact & Fix */}
         <div className="space-y-3">
+          <AiExtraDetailsCard report={report} />
+
           {/* Business Impact - DETAILED */}
           <div className="surface-card rounded-lg p-3">
             <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
@@ -1106,7 +1137,7 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
             </ol>
           ) : (
             <ol className="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
-              {report.remediation.slice(0, 3).map((step, i) => (
+              {report.remediation.map((step, i) => (
                 <li key={i} className="leading-tight">
                   {stripReportMarkdown(step).substring(0, 60)}...
                 </li>
@@ -1142,7 +1173,7 @@ function IacFindingReport({
     const cachedDetails = (metadata?.generatedDetails as typeof generatedDetails | undefined);
     if (cachedDetails) {
       setGeneratedDetails(cachedDetails);
-    } else {
+    } else if (needsGeneratedDetails(finding)) {
       loadGeneratedDetailsForIac();
     }
   }, [finding.id]);
@@ -1165,7 +1196,7 @@ function IacFindingReport({
     }
   };
 
-  const report = buildStoredFindingReport(finding);
+  const report = buildStoredFindingReport(withGeneratedDetails(finding, generatedDetails));
   const metadata = finding.metadata as Record<string, unknown> | undefined;
 
   // Get AI-analyzed data from finding metadata (analyzed during scan)
@@ -1228,7 +1259,7 @@ function IacFindingReport({
         <div className="space-y-3 col-span-2">
           <div className="surface-card rounded-lg p-3">
             <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
-              <span>⚠️</span> What's the Problem?
+              <span>⚠️</span> What&apos;s the Problem?
             </h3>
             <div className="space-y-2 text-xs">
               {data?.summary ? (
@@ -1259,6 +1290,7 @@ function IacFindingReport({
 
         {/* RIGHT COLUMN - Impact & Fix */}
         <div className="space-y-3">
+          <AiExtraDetailsCard report={report} />
           <div className="surface-card rounded-lg p-3">
             <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
               <span>📊</span> Impact
@@ -1308,7 +1340,7 @@ function IacFindingReport({
           <div className="surface-card rounded-lg p-3">
             <p className="text-xs font-semibold text-muted-foreground mb-2">Remediation</p>
             <ol className="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
-              {report.remediation.slice(0, 3).map((step, i) => (
+              {report.remediation.map((step, i) => (
                 <li key={i} className="leading-tight">
                   {stripReportMarkdown(step).substring(0, 70)}...
                 </li>
@@ -1322,7 +1354,7 @@ function IacFindingReport({
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground">Validation</p>
             <ol className="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
-              {data.verificationSteps.slice(0, 4).map((step, i) => (
+              {data.verificationSteps.map((step, i) => (
                 <li key={i} className="leading-tight">
                   {stripReportMarkdown(step).substring(0, 80)}...
                 </li>
@@ -1737,52 +1769,9 @@ interface AiSuggestFixResponse {
   optionalUnifiedDiff: string | null;
 }
 
-function K8sFindingReport({ finding }: { finding: Finding; sourceContext?: FindingScanSourceContext }) {
-  const report = buildStoredFindingReport(finding);
-
-  return (
-    <section className="finding-detail-report interactive-card min-w-0 max-w-full space-y-6 overflow-hidden p-4">
-      <FindingMetadataGrid finding={finding} />
-
-      <div className="border-t border-border/40 pt-6">
-        <h2 className="text-lg font-bold text-foreground mb-4">
-          {stripReportMarkdown(report.vulnerabilityName)}
-        </h2>
-
-        <div className="space-y-6">
-          <ReportBlock title="What is wrong" icon="📋">
-            <ReportSummaryText text={report.summary} />
-          </ReportBlock>
-
-          {finding.snippet && (
-            <ReportBlock title="Evidence" icon="🧩">
-              <pre className="overflow-x-auto rounded-md bg-muted px-3 py-2 text-xs whitespace-pre-wrap text-foreground">
-                {finding.snippet}
-              </pre>
-            </ReportBlock>
-          )}
-
-          <ReportBlock title="Impact" icon="⚠️">
-            <ReportRichText text={report.impact} />
-          </ReportBlock>
-
-          <ReportBlock title="Recommended remediation" icon="🔒">
-            <ReportPlainList items={report.remediation} />
-          </ReportBlock>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function FindingReportSections({ finding, sourceContext }: { finding: Finding; sourceContext?: FindingScanSourceContext }) {
   if (isPatternBasedScanner(finding.scanner)) {
     return <PatternMatchReport finding={finding} />;
-  }
-
-  const isK8s = finding.scanner === "K8S";
-  if (isK8s) {
-    return <K8sFindingReport finding={finding} sourceContext={sourceContext} />;
   }
 
   const isSecret = finding.scanner?.startsWith("SECRETS");
@@ -1810,7 +1799,43 @@ function FindingReportSections({ finding, sourceContext }: { finding: Finding; s
     return <IacFindingReport finding={finding} scanId={sourceContext.scanId} sourceContext={sourceContext} />;
   }
 
-  const report = buildStoredFindingReport(finding);
+  return <GenericFindingReport key={finding.id} finding={finding} />;
+}
+
+/**
+ * Every LLM-scanned finding without a dedicated panel. Loads the AI-written
+ * report on first view and shows it in full; the template text is only used,
+ * and labelled as such, when the AI has no output for the finding.
+ */
+function GenericFindingReport({ finding }: { finding: Finding }) {
+  const cachedDetails = (finding.metadata as Record<string, unknown> | undefined)?.generatedDetails;
+  const [fetchedDetails, setFetchedDetails] = useState<unknown>(null);
+  const [failed, setFailed] = useState(false);
+  const generatedDetails = cachedDetails ?? fetchedDetails;
+  // Findings the scan already analysed open instantly; only ones without a
+  // scan-time analysis call the model.
+  const needsGeneration = needsGeneratedDetails(finding);
+  const loadingDetails = !generatedDetails && !failed && needsGeneration;
+
+  useEffect(() => {
+    if (cachedDetails || !needsGeneration) return;
+    let cancelled = false;
+    fetch(`/api/findings/${finding.id}/generate-details`, { method: "POST" })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((details) => {
+        if (!cancelled) setFetchedDetails(details);
+      })
+      .catch((error) => {
+        console.error("Failed to load generated details:", error);
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [finding.id, cachedDetails, needsGeneration]);
+
+  const report = buildStoredFindingReport(withGeneratedDetails(finding, generatedDetails));
+  const aiWritten = Boolean(generatedDetails) || !needsGeneration;
 
   return (
     <section className="finding-detail-report interactive-card min-w-0 max-w-full space-y-6 overflow-hidden p-4">
@@ -1821,12 +1846,36 @@ function FindingReportSections({ finding, sourceContext }: { finding: Finding; s
           {stripReportMarkdown(report.vulnerabilityName)}
         </h2>
 
+        {!aiWritten && (
+          <p className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+            {loadingDetails
+              ? "Generating AI analysis… the scanner output is shown until it is ready."
+              : failed
+                ? "AI analysis could not be generated for this finding. Showing the scanner output instead."
+                : "No AI analysis is available for this finding. Showing the scanner output instead."}
+          </p>
+        )}
+
         <div className="space-y-6">
           <ReportBlock title="Summary" icon="📋">
             <ReportSummaryText text={report.summary} />
           </ReportBlock>
 
-          {finding.scanner !== "K8S" && report.stepsToReproduce.length > 0 && (
+          {finding.snippet && (
+            <ReportBlock title="Evidence" icon="🧩">
+              <pre className="overflow-x-auto rounded-md bg-muted px-3 py-2 text-xs whitespace-pre-wrap text-foreground">
+                {finding.snippet}
+              </pre>
+            </ReportBlock>
+          )}
+
+          {report.details && (
+            <ReportBlock title="Affected Details" icon="🎯">
+              <ReportRichText text={report.details} />
+            </ReportBlock>
+          )}
+
+          {report.stepsToReproduce.length > 0 && (
             <ReportBlock title="Steps to Reproduce" icon="🔧">
               <ReportPlainList items={report.stepsToReproduce} />
             </ReportBlock>
@@ -1839,9 +1888,46 @@ function FindingReportSections({ finding, sourceContext }: { finding: Finding; s
           <ReportBlock title="Remediation" icon="🔒">
             <ReportPlainList items={report.remediation} />
           </ReportBlock>
+
+          {report.references && report.references.length > 0 && (
+            <ReportBlock title="References" icon="🔗">
+              <ReportRichText text={report.references.join("\n")} />
+            </ReportBlock>
+          )}
         </div>
       </div>
     </section>
+  );
+}
+
+/** Affected details and references the AI wrote, for panels with their own layout. */
+function AiExtraDetailsCard({ report }: { report: StoredFindingReport }) {
+  if (!report.details && !(report.references && report.references.length > 0)) {
+    return null;
+  }
+  return (
+    <div className="surface-card rounded-lg p-3 space-y-3">
+      {report.details && (
+        <div>
+          <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
+            <span>🎯</span> Affected Details
+          </h3>
+          <div className="text-xs text-foreground leading-relaxed">
+            <ReportRichText text={report.details} />
+          </div>
+        </div>
+      )}
+      {report.references && report.references.length > 0 && (
+        <div>
+          <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
+            <span>🔗</span> References
+          </h3>
+          <div className="text-xs text-foreground leading-relaxed">
+            <ReportRichText text={report.references.join("\n")} />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

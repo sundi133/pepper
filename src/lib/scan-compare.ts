@@ -12,7 +12,7 @@
  */
 import { findingRuleKey } from "@/lib/fix-verification";
 
-export const COMPARE_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] as const;
+export const COMPARE_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type CompareSeverity = (typeof COMPARE_SEVERITIES)[number];
 
 export interface CompareFinding {

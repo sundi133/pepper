@@ -15,7 +15,6 @@ export interface WebhookScanPayload {
     highCount: number;
     mediumCount: number;
     lowCount: number;
-    infoCount: number;
     gateResult: string | null;
   };
   findings?: WebhookFindingPayload[];
@@ -51,7 +50,6 @@ function buildSlackPayload(data: WebhookScanPayload): unknown {
     scan.highCount > 0 ? `${scan.highCount} high` : null,
     scan.mediumCount > 0 ? `${scan.mediumCount} medium` : null,
     scan.lowCount > 0 ? `${scan.lowCount} low` : null,
-    scan.infoCount > 0 ? `${scan.infoCount} info` : null,
   ]
     .filter(Boolean)
     .join(", ") || "No findings";

@@ -794,7 +794,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
             severity: "CRITICAL",
             title: `Known malicious package: ${dep.name}@${dep.version} (${hit.id})`,
             description: `${hit.summary || hit.details || "This package has been flagged as malicious by the OpenSSF Malicious Packages database."}\n\nAdvisory: ${hit.id}\nPackage: ${dep.name}@${dep.version} (${dep.ecosystem})\n\nRecommendation: Remove this package immediately and audit any systems where it was installed.`,
-            filePath: (dep as any).sourceFile || undefined,
+            filePath: (dep as { sourceFile?: string }).sourceFile || undefined,
             ruleId: hit.id,
             cweId: "CWE-506",
             confidence: 1.0,
@@ -1088,7 +1088,7 @@ export const maliciousPkgScanner: ScannerPlugin = {
               description: f.recommendation
                 ? `${f.description}\n\nRecommendation: ${f.recommendation}`
                 : f.description,
-              filePath: (dep as any).sourceFile || undefined,
+              filePath: (dep as { sourceFile?: string }).sourceFile || undefined,
               ruleId: `MAL-SCRIPT-${f.scriptKey || "INSTALL"}`,
               cweId: "CWE-506",
               confidence:

@@ -26,6 +26,7 @@ const MEMBER_WRITES: Record<string, string> = {
   "org/active POST": "selects the active org; membership-checked, every member may switch to an org they belong to",
   "notifications/[id] PATCH": "the caller's own notification",
   "notifications/[id] DELETE": "the caller's own notification",
+  "notifications DELETE": "the caller's own read notifications (bulk delete scoped to userId)",
   "notifications/mark-all-read POST": "the caller's own notifications",
   "scans/[scanId]/chat POST": "read-only Q&A about a scan",
 };

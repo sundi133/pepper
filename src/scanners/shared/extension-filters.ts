@@ -109,7 +109,8 @@ export const SAST_EXCLUDED_EXTENSIONS = new Set([
   ".3g2",
   ".f4v",
   ".m2ts",
-  ".mts",
+  // ".mts" is also a TypeScript module extension, so it is not listed here:
+  // excluding it silently skipped every .mts source file.
   ".ogv",
 
   // Document files
@@ -346,3 +347,23 @@ export const SAST_EXCLUDED_EXTENSIONS = new Set([
   ".font",
 ]);
 
+
+const HTML_EXTENSIONS = new Set([".html", ".htm", ".xhtml"]);
+
+/**
+ * Template syntax, inline script, event handlers or framework bindings: the
+ * parts of an HTML file that can carry an XSS or injection bug.
+ */
+const DYNAMIC_HTML =
+  /<script\b|\son[a-z]+\s*=|\{\{|\{%|<%|\$\{|\[\(?[a-z]+\)?\]\s*=|\*ng[A-Z]|\bv-(?:html|bind|on|if|for)\b|\bth:[a-z]+|\bx-(?:data|html)\b|\bhx-[a-z]+|<form\b/i;
+
+/**
+ * True for an .html/.htm/.xhtml file with no dynamic content at all (a docs
+ * page, a generated report). Those carry no server or client logic to review,
+ * so the AI scanners skip them instead of spending a model call per page.
+ */
+export function isPlainStaticHtml(filePath: string, content: string): boolean {
+  const dot = filePath.lastIndexOf(".");
+  const ext = dot >= 0 ? filePath.slice(dot).toLowerCase() : "";
+  return HTML_EXTENSIONS.has(ext) && !DYNAMIC_HTML.test(content);
+}

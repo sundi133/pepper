@@ -176,6 +176,11 @@ export function anthropicResponseText(
 // ceiling costs nothing (billing is on tokens actually generated).
 const ANTHROPIC_MIN_MAX_TOKENS = 16000;
 
+// The same headroom for OpenRouter reasoning models: room for the answer plus
+// a separate allowance for thinking, so one cannot crowd out the other.
+const OPENROUTER_REASONING_ANSWER_TOKENS = 12000;
+const OPENROUTER_REASONING_TOKENS = 12000;
+
 // ─── Unified Client Type ──────────────────────────────────────────────
 
 export type LlmClient =
@@ -642,8 +647,17 @@ export async function analyzeWithLlm(
       // When we capture reasoning, run reasoning models (e.g. glm-5.3) at high
       // effort. `reasoning` is an OpenRouter passthrough field; non-reasoning
       // models ignore it, so default behavior is unchanged.
+      // OpenRouter counts reasoning tokens against max_tokens, so high-effort
+      // thinking used to eat most of an 8K budget and cut the JSON answer off
+      // (a 19-finding review came back with 11). Reasoning gets its own
+      // headroom on top of the answer budget, as on the Anthropic path; a
+      // higher ceiling is free because billing is on tokens generated.
       const callParams = options?.onReasoning
-        ? ({ ...params, reasoning: { enabled: true, effort: "high" } } as typeof params)
+        ? ({
+            ...params,
+            max_tokens: Math.max(options?.maxTokens ?? 8192, OPENROUTER_REASONING_ANSWER_TOKENS) + OPENROUTER_REASONING_TOKENS,
+            reasoning: { enabled: true, effort: "high" },
+          } as typeof params)
         : params;
       if (options?.onReasoning) {
         try {

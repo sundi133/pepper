@@ -1,4 +1,5 @@
 import { decryptSecret } from "@/lib/token-encryption";
+import { getLlmConfig } from "@/lib/llm-gateway";
 import { logger } from "@/lib/logger";
 import type { ScanJobData } from "@/lib/queue";
 
@@ -71,12 +72,17 @@ export function buildOrgSettingsForJob(
   }
 
   const dbKey = decryptLlmApiKey(orgSettings?.llmApiKey);
+  // Without an org key, use the same environment fallback as the web app
+  // (getLlmConfig): LLM_* first, then OPENROUTER_API_KEY / OPENROUTER_MODEL.
+  // A separate fallback here used to send scans to OpenAI with no key while
+  // the web app used OpenRouter, so every AI scanner call failed.
+  const env = getLlmConfig(null);
 
   return {
-    llmProvider: dbKey ? (orgSettings?.llmProvider || process.env.LLM_PROVIDER || "openai") : (process.env.LLM_PROVIDER || "openai"),
-    llmBaseUrl: dbKey ? (orgSettings?.llmBaseUrl || process.env.LLM_BASE_URL || "https://api.openai.com/v1") : (process.env.LLM_BASE_URL || "https://api.openai.com/v1"),
-    llmModel: dbKey ? (orgSettings?.llmModel || process.env.LLM_MODEL || "gpt-4o-mini") : (process.env.LLM_MODEL || "gpt-4o-mini"),
-    llmApiKey: dbKey || process.env.LLM_API_KEY,
+    llmProvider: dbKey ? (orgSettings?.llmProvider || env.provider) : env.provider,
+    llmBaseUrl: dbKey ? (orgSettings?.llmBaseUrl || env.baseUrl) : env.baseUrl,
+    llmModel: dbKey ? (orgSettings?.llmModel || env.model) : env.model,
+    llmApiKey: dbKey || env.apiKey || undefined,
     enableLlmSast: orgSettings?.enableLlmSast ?? true,
     enableLlmSecrets: orgSettings?.enableLlmSecrets ?? true,
     osvApiUrl: orgSettings?.osvApiUrl || "https://api.osv.dev",

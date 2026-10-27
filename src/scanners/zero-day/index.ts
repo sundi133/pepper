@@ -23,6 +23,7 @@ import {
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { llmExcludedPath } from "@/lib/llm-exclusions";
+import { isPlainStaticHtml } from "../shared/extension-filters";
 import {
   LOGIC_CONCURRENCY,
   LOGIC_ENDPOINT_MAP,
@@ -164,6 +165,7 @@ async function mainPass(
           "utf-8",
         );
         if (!content.trim()) continue;
+        if (isPlainStaticHtml(filePath, content)) continue;
         fileBundles.push(`### ${filePath}\n\`\`\`\n${content.slice(0, 12000)}\n\`\`\``);
       } catch {
         continue;

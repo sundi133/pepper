@@ -91,7 +91,6 @@ export async function POST(req: NextRequest) {
           highCount: 2,
           mediumCount: 5,
           lowCount: 3,
-          infoCount: 0,
           gateResult: "PASSED",
         },
       });

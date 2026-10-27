@@ -25,7 +25,13 @@ import {
 import Link from "next/link";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+// Throw on an error response: reading `{ error }` as stats rendered every
+// figure as 0 and the score as a perfect 100, which looks like "all clear".
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Could not load dashboard data (${res.status})`);
+  return res.json();
+};
 
 type DashboardOverview = {
   projectCount: number;
@@ -218,7 +224,7 @@ function activityDescription(a: {
 export default function DashboardPage() {
   const { data: session } = useSession();
   const { projects } = useProjects();
-  const { data: stats, mutate: refreshStats } = useSWR<DashboardStats>(
+  const { data: stats, error: statsError, mutate: refreshStats } = useSWR<DashboardStats>(
     "/api/dashboard/stats",
     fetcher,
     { refreshInterval: 30000 },
@@ -277,6 +283,22 @@ export default function DashboardPage() {
         <div className="flex w-full flex-col gap-2 sm:max-w-md sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:max-w-none lg:shrink-0">
         </div>
       </section>
+
+      {statsError && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:flex-row sm:items-center sm:justify-between dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+        >
+          <span className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+            {statsError instanceof Error ? statsError.message : "Could not load dashboard data"}.
+            The figures below are not current.
+          </span>
+          <Button size="sm" variant="outline" onClick={() => void refreshStats()}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* Security score */}
       <section aria-labelledby="security-score-heading">

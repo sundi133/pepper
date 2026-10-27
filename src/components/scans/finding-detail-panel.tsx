@@ -50,7 +50,18 @@ import {
   Braces,
   MousePointerClick,
   Binary,
+  Loader2,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  advisoryUrl,
+  cweUrl,
+  exploitPriority,
+  fixGuidance,
+  impactForWeakness,
+  upgradeRisk,
+  type ExploitPriority,
+} from "@/lib/sca-insights";
 import {
   decompiledOriginOf,
   decompilerLabel,
@@ -780,338 +791,427 @@ function MaliciousPkgFindingReport({ finding, sourceContext }: { finding: Findin
   );
 }
 
-function getScaUpgradeCommand(ecosystem: string, pkg: string, fixVersion: string): string {
-  const eco = (ecosystem || "").toLowerCase();
-  if (eco.includes("pypi") || eco.includes("pip") || eco.includes("python")) {
-    return `pip install "${pkg}>=${fixVersion}"`;
-  }
-  if (eco.includes("go") || eco.includes("golang")) {
-    return `go get ${pkg}@v${fixVersion.replace(/^v/, "")}`;
-  }
-  if (eco.includes("cargo") || eco.includes("crates") || eco.includes("rust")) {
-    return `cargo update -p ${pkg} --precise ${fixVersion}`;
-  }
-  if (eco.includes("maven") || eco.includes("gradle")) {
-    return `Update dependency version to ${fixVersion}`;
-  }
-  if (eco.includes("packagist") || eco.includes("composer") || eco.includes("php")) {
-    return `composer require ${pkg}:^${fixVersion}`;
-  }
-  if (eco.includes("nuget") || eco.includes(".net") || eco.includes("csharp")) {
-    return `dotnet add package ${pkg} --version ${fixVersion}`;
-  }
-  if (eco.includes("rubygems") || eco.includes("gem") || eco.includes("ruby")) {
-    return `bundle update ${pkg}`;
-  }
-  return `npm install ${pkg}@${fixVersion}`;
+type ScaGeneratedDetails = {
+  summary?: string;
+  vulnerabilityDetails?: string;
+  stepsToReproduce?: string[];
+  impact?: string;
+  remediation?: string[];
+};
+
+const PRIORITY_STYLE: Record<ExploitPriority, string> = {
+  "act-now": "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+  prioritize: "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+  schedule: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  track: "border-border bg-muted/40 text-muted-foreground",
+};
+
+function ScaCard({ title, icon, children }: { title: string; icon: string; children: ReactNode }) {
+  return (
+    <div className="surface-card min-w-0 rounded-lg p-3">
+      <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold">
+        <span aria-hidden>{icon}</span> {title}
+      </h3>
+      <div className="space-y-2 text-xs">{children}</div>
+    </div>
+  );
+}
+
+function ScaField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="mt-0.5 break-words text-foreground">{children}</div>
+    </div>
+  );
+}
+
+function CopyableCode({ code }: { code: string }) {
+  return (
+    <div className="relative">
+      <pre className="overflow-x-auto whitespace-pre rounded border border-emerald-500/20 bg-card p-2 pr-9 font-mono text-xs text-emerald-800 dark:text-emerald-300">
+        {code}
+      </pre>
+      <button
+        type="button"
+        aria-label="Copy"
+        className="absolute right-1.5 top-1.5 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+        onClick={() => {
+          void navigator.clipboard.writeText(code);
+          toast.success("Copied");
+        }}
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
 }
 
 function ScaFindingReport({ finding, sourceContext }: { finding: Finding; sourceContext?: FindingScanSourceContext }) {
-  const [generatedDetails, setGeneratedDetails] = useState<{
-    summary: string;
-    vulnerabilityDetails: string;
-    stepsToReproduce: string[];
-    impact: string;
-    remediation: string[];
-  } | null>(null);
-  const [loadingDetails, setLoadingDetails] = useState(false);
+  const metadata = (finding.metadata ?? {}) as Record<string, unknown>;
+  const cachedDetails = (metadata.generatedDetails as ScaGeneratedDetails | undefined) ?? null;
+  // AI details fetched on demand, keyed by finding so a stale response from
+  // the previously opened finding is never shown.
+  const [fetched, setFetched] = useState<{ id: string; details: ScaGeneratedDetails | null } | null>(null);
+  const hasCached = cachedDetails !== null;
 
   useEffect(() => {
-    const metadata = finding.metadata as Record<string, unknown> | undefined;
-    const cachedDetails = (metadata?.generatedDetails as typeof generatedDetails | undefined);
-    if (cachedDetails) {
-      setGeneratedDetails(cachedDetails);
-    } else {
-      loadGeneratedDetailsForSca();
-    }
-  }, [finding.id]);
+    if (hasCached) return;
+    let cancelled = false;
+    fetch(`/api/findings/${finding.id}/generate-details`, { method: "POST" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((details: ScaGeneratedDetails | null) => {
+        if (!cancelled) setFetched({ id: finding.id, details });
+      })
+      .catch((error) => {
+        console.error("Failed to load generated details:", error);
+        if (!cancelled) setFetched({ id: finding.id, details: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [finding.id, hasCached]);
 
-  const loadGeneratedDetailsForSca = async () => {
-    setLoadingDetails(true);
-    try {
-      const response = await fetch(
-        `/api/findings/${finding.id}/generate-details`,
-        { method: "POST" }
-      );
-      if (response.ok) {
-        const details = await response.json();
-        setGeneratedDetails(details);
-      }
-    } catch (error) {
-      console.error("Failed to load generated details:", error);
-    } finally {
-      setLoadingDetails(false);
-    }
-  };
+  const generatedDetails = cachedDetails ?? (fetched?.id === finding.id ? fetched.details : null);
+  const loadingDetails = !hasCached && fetched?.id !== finding.id;
 
   const report = buildStoredFindingReport(finding);
-  const metadata = finding.metadata as Record<string, unknown> | undefined;
-  const fixVersion = typeof metadata?.fixVersion === "string" ? metadata.fixVersion : undefined;
-  const currentVersion = typeof metadata?.currentVersion === "string" ? metadata.currentVersion : undefined;
-  const ecosystem = typeof metadata?.ecosystem === "string" ? metadata.ecosystem : "";
-  // SCA findings carry the package in metadata; the rule id is the advisory id.
-  const packageName =
-    (metadata?.packageName as string | undefined) ||
-    (metadata?.package as string | undefined);
-  const targetPackage = packageName || (metadata?.packageName as string | undefined) || finding.ruleId || "package";
-  const cveId = finding.cveId || (Array.isArray(metadata?.cves) ? metadata.cves[0] : undefined);
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : undefined);
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
 
-  // Get AI-analyzed vulnerability data from finding metadata (analyzed during scan)
-  const vulnData = metadata?.aiAnalysis as { description?: string; impact?: string; remediation?: string[] } | undefined;
+  const packageName = str(metadata.packageName) || str(metadata.package) || finding.ruleId || "Unknown";
+  const installedVersion = str(metadata.packageVersion) || str(metadata.currentVersion);
+  const fixVersion = str(metadata.fixVersion);
+  const ecosystem = str(metadata.ecosystem) || "";
+  const cveId = finding.cveId || (Array.isArray(metadata.cves) ? (metadata.cves[0] as string) : undefined);
+  const advisoryId = str(metadata.osvId) || finding.ruleId || undefined;
+  const aliases = (Array.isArray(metadata.aliases) ? (metadata.aliases as string[]) : []).filter(
+    (a) => a !== advisoryId && a !== cveId,
+  );
+  const references = (Array.isArray(metadata.references) ? (metadata.references as string[]) : []).slice(0, 5);
+  const usage = Array.isArray(metadata.usageLocations)
+    ? (metadata.usageLocations as Array<{ filePath: string; line: number; usage: string }>)
+    : [];
+  const supplyChain = metadata.supplyChainRisk as { directDependency?: boolean } | undefined;
+  const directDependency =
+    typeof supplyChain?.directDependency === "boolean"
+      ? supplyChain.directDependency
+      : typeof metadata.directDependency === "boolean"
+        ? (metadata.directDependency as boolean)
+        : null;
+  const introducedBy = str(metadata.introducedBy);
+  const dependencyPath = str(metadata.dependencyPathText);
+  const cvssScore = num(metadata.cvssScore);
+  const cvssVector = str(metadata.cvssVector);
+  const epssScore = num(metadata.epssScore);
+  const epssPercentile = num(metadata.epssPercentile);
+  const kev = metadata.cisaKevListed === true;
+  const kevRansomware = str(metadata.cisaKevRansomwareUse);
+  const exploitPreconditions = str(metadata.exploitPreconditions);
+  const aiAnalysis = metadata.aiAnalysis as { description?: string; impact?: string; remediation?: string[] } | undefined;
+
+  const verdict = exploitPriority({
+    severity: finding.severity,
+    cvssScore,
+    epssScore,
+    cisaKevListed: kev,
+    imported: usage.length > 0 ? true : metadata.usageLocations === undefined ? null : false,
+    directDependency,
+  });
+  const upgrade = upgradeRisk(installedVersion, fixVersion);
+  const weakness = impactForWeakness(finding.cweId, finding.title);
+  const fix = fixGuidance({ ecosystem, packageName, fixVersion, directDependency, introducedBy });
+  const cweLink = finding.cweId ? cweUrl(finding.cweId) : null;
+  const foundInUrl = sourceContext ? githubCodeUrl(sourceContext, finding) : null;
+
+  // Prefer the AI write-up, then scan-time AI analysis, then the stored report.
+  const issueText =
+    str(generatedDetails?.vulnerabilityDetails) ||
+    str(generatedDetails?.summary) ||
+    str(aiAnalysis?.description) ||
+    stripReportMarkdown(stripGeneratedSections(finding.description) || report.summary);
+  const whyExploitable =
+    exploitPreconditions ||
+    (report.summary.includes("Why it is exploitable")
+      ? stripReportMarkdown(report.summary.split("Why it is exploitable:")[1]?.split("\n\n")[0]?.trim() || "")
+      : undefined);
+  const impactText = str(generatedDetails?.impact) || str(aiAnalysis?.impact) || weakness?.outcome || report.impact;
+  const consequences =
+    (Array.isArray(metadata.impactConsequences) ? (metadata.impactConsequences as string[]) : null) ??
+    weakness?.consequences ??
+    [];
+  // Stored details come from several generations of the AI prompt: steps may
+  // be an array, a single (multi-line) string, or missing.
+  const toSteps = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v.filter((s): s is string => typeof s === "string" && s.trim() !== "")
+      : typeof v === "string"
+        ? v.split(/\n+/).map((s) => s.replace(/^\s*(?:\d+[.)]|[-*•])\s*/, "").trim()).filter(Boolean)
+        : [];
+  const generatedSteps = toSteps(generatedDetails?.remediation);
+  const aiSteps = toSteps(aiAnalysis?.remediation);
+  const steps = (
+    generatedSteps.length ? generatedSteps : aiSteps.length ? aiSteps : toSteps(report.remediation)
+  ).map((s) => stripReportMarkdown(s));
 
   return (
-    <section className="finding-detail-report min-w-0 max-w-full overflow-hidden">
-      <div className="grid grid-cols-4 gap-3 p-4">
-        {/* LEFT COLUMN - Dependency Info */}
-        <div className="space-y-3">
-          <div className="surface-card rounded-lg p-3 space-y-2">
-            <h3 className="font-semibold text-xs flex items-center gap-2">
-              <span>📦</span> Dependency Details
-            </h3>
-            <div className="space-y-2 text-xs">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Package Name</p>
-                <code className="text-sm font-mono text-foreground mt-1 block break-all">{packageName || finding.ruleId || "Unknown"}</code>
-              </div>
-              {currentVersion && (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Current Version</p>
-                  <p className="text-foreground font-semibold mt-1">{currentVersion}</p>
-                </div>
-              )}
-              {fixVersion && (
-                <div className="rounded-lg bg-green-50 dark:bg-green-900/20 p-2">
-                  <p className="text-xs font-medium text-green-800 dark:text-green-300">Fix Available</p>
-                  <p className="text-sm font-semibold text-green-700 dark:text-green-400 mt-1">{fixVersion}</p>
-                </div>
-              )}
-              {finding.filePath && (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Found In</p>
-                  {sourceContext && githubCodeUrl(sourceContext, finding) ? (
-                    <a
-                      href={githubCodeUrl(sourceContext, finding) || "#"}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline text-sm flex items-center gap-1 mt-1 break-all"
-                    >
-                      {finding.filePath}
-                      {finding.startLine && <span className="font-semibold">:{finding.startLine}</span>}
-                      <ExternalLink className="h-3 w-3 shrink-0" />
-                    </a>
-                  ) : (
-                    <code className="text-sm font-mono text-foreground mt-1 block break-all">
-                      {finding.filePath}
-                      {finding.startLine && <span className="font-semibold">:{finding.startLine}</span>}
-                    </code>
-                  )}
-                </div>
-              )}
-              {finding.severity && (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Severity</p>
-                  <Badge className="mt-1 bg-red-100 text-red-800">{finding.severity}</Badge>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* MIDDLE COLUMN - Vulnerability Details */}
-        <div className="space-y-3 col-span-2">
-          {/* What's the issue - DETAILED */}
-          <div className="surface-card rounded-lg p-3">
-            <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
-              <span>⚠️</span> What's the Issue?
-            </h3>
-            <div className="space-y-2 text-xs">
-              {vulnData?.description ? (
-                <div className="text-foreground leading-relaxed">
-                  <ReportRichText text={vulnData.description} />
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {/* Extract detailed issue from report */}
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-1">Vulnerability</p>
-                    <p className="text-foreground leading-relaxed">
-                      {stripReportMarkdown(report.vulnerabilityName || "")}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-1">Description</p>
-                    <p className="text-foreground leading-relaxed whitespace-pre-wrap break-words">
-                      {stripReportMarkdown(stripGeneratedSections(finding.description) || report.summary)}
-                    </p>
-                  </div>
-
-                  {/* Extract Why It's Exploitable */}
-                  {report.summary.includes("Why it is exploitable") && (
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground mb-1">Why It's Exploitable</p>
-                      <p className="text-foreground leading-relaxed whitespace-pre-wrap break-words">
-                        {stripReportMarkdown(
-                          report.summary
-                            .split("Why it is exploitable:")[1]
-                            ?.split("\n\n")[0]
-                            ?.trim() || ""
-                        )}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Attack Vector */}
-                  {report.stepsToReproduce.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground mb-1">Attack Vector</p>
-                      <ol className="space-y-1 list-decimal pl-5 text-foreground leading-relaxed">
-                        {report.stepsToReproduce.slice(0, 3).map((step, i) => (
-                          <li key={i} className="text-xs">
-                            {stripReportMarkdown(step)}
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* CVE & References */}
-              <div className="space-y-2">
-                {cveId && (
-                  <div className="rounded-lg border border-border/60 bg-muted/30 p-2">
-                    <p className="text-xs font-medium text-muted-foreground">CVE Reference</p>
-                    <a
-                      href={getCveUrl(cveId)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline text-sm flex items-center gap-1 mt-1"
-                    >
-                      {cveId}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                )}
-                {finding.ruleId && (
-                  <div className="rounded-lg border border-border/60 bg-muted/30 p-2">
-                    <p className="text-xs font-medium text-muted-foreground">CWE/Reference</p>
-                    <code className="text-xs font-mono text-foreground">{finding.ruleId}</code>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Code Evidence - DETAILED */}
-          {finding.snippet && (
-            <div className="surface-card rounded-lg p-3">
-              <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
-                <span>🔍</span> Where It's Used
-              </h3>
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">
-                  Location:
-                </p>
-                {finding.filePath && (
-                  <div className="rounded-lg bg-muted/30 p-2 border border-border/60">
-                    <p className="text-xs font-mono text-foreground break-all">
-                      {finding.filePath}
-                      {finding.startLine && <span className="font-semibold">:{finding.startLine}</span>}
-                    </p>
-                  </div>
-                )}
-                <pre className="bg-muted/50 p-2 rounded text-xs font-mono overflow-x-auto max-h-32 border border-border/60">
-                  {finding.snippet}
-                </pre>
-              </div>
-            </div>
+    <section className="finding-detail-report min-w-0 max-w-full space-y-3 overflow-hidden p-4">
+      {/* Decision first: how urgent, and why. */}
+      <div className={cn("rounded-lg border p-3", PRIORITY_STYLE[verdict.priority])}>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold">{verdict.label}</span>
+          {kev && (
+            <Badge className="bg-red-600 text-white hover:bg-red-600">
+              Known exploited{kevRansomware === "Known" ? " · ransomware" : ""}
+            </Badge>
+          )}
+          {epssScore !== undefined && (
+            <Badge variant="outline" title="Probability of exploitation in the next 30 days (FIRST EPSS)">
+              EPSS {(epssScore * 100).toFixed(1)}%
+              {epssPercentile !== undefined ? ` · top ${Math.max(1, Math.round((1 - epssPercentile) * 100))}%` : ""}
+            </Badge>
+          )}
+          {cvssScore !== undefined && (
+            <Badge variant="outline" title={cvssVector}>
+              CVSS {cvssScore.toFixed(1)}
+            </Badge>
+          )}
+          {directDependency !== null && (
+            <Badge variant="outline">{directDependency ? "Direct dependency" : "Transitive dependency"}</Badge>
           )}
         </div>
+        {verdict.reasons.length > 0 && (
+          <p className="mt-1.5 text-xs opacity-90">{verdict.reasons.join(" · ")}</p>
+        )}
+      </div>
 
-        {/* RIGHT COLUMN - Impact & Fix */}
+      <div className="grid gap-3 lg:grid-cols-4">
+        {/* Dependency */}
         <div className="space-y-3">
-          {/* Business Impact - DETAILED */}
-          <div className="surface-card rounded-lg p-3">
-            <h3 className="font-semibold text-xs flex items-center gap-2 mb-2">
-              <span>📊</span> Impact
-            </h3>
-            <div className="space-y-2 text-xs text-foreground leading-relaxed">
-              {vulnData?.impact ? (
-                <p>{vulnData.impact}</p>
-              ) : (
+          <ScaCard title="Dependency" icon="📦">
+            <ScaField label="Package">
+              <code className="font-mono text-sm">{packageName}</code>
+              {ecosystem && <span className="ml-1 text-muted-foreground">({ecosystem})</span>}
+            </ScaField>
+            <ScaField label="Version">
+              <span className="font-semibold">{installedVersion || "unknown"}</span>
+              {fixVersion ? (
                 <>
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-1">Risk Summary</p>
-                    <ReportRichText text={report.impact || "This vulnerable dependency poses a security risk to your application and users."} />
-                  </div>
-
-                  {/* Detailed consequences */}
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-1">Potential Consequences</p>
-                    <ul className="space-y-1 list-disc pl-4 text-muted-foreground">
-                      <li className="text-xs">Unauthorized data access or data breach</li>
-                      <li className="text-xs">Application downtime or service disruption</li>
-                      <li className="text-xs">Performance degradation and system slowdown</li>
-                      <li className="text-xs">Legal/compliance violations (GDPR, SOC 2, etc.)</li>
-                      <li className="text-xs">Reputation damage and customer trust loss</li>
-                    </ul>
-                  </div>
+                  {" → "}
+                  <span className="font-semibold text-emerald-700 dark:text-emerald-400">{fixVersion}</span>
                 </>
+              ) : (
+                <span className="ml-1 text-red-600">· no fix yet</span>
               )}
-            </div>
-          </div>
+            </ScaField>
+            {fixVersion && upgrade !== "unknown" && (
+              <ScaField label="Upgrade">
+                {upgrade === "major" ? (
+                  <span className="text-amber-700 dark:text-amber-400">Major version: may include breaking changes</span>
+                ) : (
+                  <span className="text-emerald-700 dark:text-emerald-400">
+                    {upgrade === "patch" ? "Patch" : "Minor"} version: low risk
+                  </span>
+                )}
+              </ScaField>
+            )}
+            {(introducedBy || dependencyPath) && (
+              <ScaField label="Pulled in by">
+                {introducedBy && <code className="font-mono">{introducedBy}</code>}
+                {dependencyPath && (
+                  <p className="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">{dependencyPath}</p>
+                )}
+              </ScaField>
+            )}
+            {finding.filePath && (
+              <ScaField label="Found in">
+                {foundInUrl ? (
+                  <a
+                    href={foundInUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 break-all text-blue-600 hover:underline"
+                  >
+                    {finding.filePath}
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                ) : (
+                  <code className="break-all font-mono">{finding.filePath}</code>
+                )}
+              </ScaField>
+            )}
+            <ScaField label="Severity">
+              <SeverityBadge severity={finding.severity} />
+            </ScaField>
+          </ScaCard>
+        </div>
 
-          {/* Quick Fix */}
-          {fixVersion && (
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-card-foreground">
-              <h3 className="font-semibold text-xs text-emerald-700 dark:text-emerald-400 mb-1 flex items-center gap-1.5">
-                <span>✓</span> Quick Fix Available
-              </h3>
-              <p className="text-xs text-muted-foreground mb-2">Upgrade to version {fixVersion}</p>
-              <code className="text-xs font-mono bg-card px-2 py-1.5 rounded border border-emerald-500/20 block overflow-x-auto text-emerald-800 dark:text-emerald-300">
-                {getScaUpgradeCommand(ecosystem, targetPackage, fixVersion)}
-              </code>
+        {/* Issue + usage */}
+        <div className="min-w-0 space-y-3 lg:col-span-2">
+          <ScaCard title="What's the issue?" icon="⚠️">
+            {loadingDetails && !generatedDetails && (
+              <p className="flex items-center gap-1.5 text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" /> Writing an AI explanation…
+              </p>
+            )}
+            <div className="leading-relaxed text-foreground">
+              <ReportRichText text={issueText} />
             </div>
+            {whyExploitable && (
+              <ScaField label="When it's exploitable">
+                <p className="whitespace-pre-wrap leading-relaxed">{whyExploitable}</p>
+              </ScaField>
+            )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              {advisoryId && (
+                <a
+                  href={advisoryUrl(advisoryId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded border border-border/60 bg-muted/30 px-2 py-1 font-mono text-blue-600 hover:underline"
+                >
+                  {advisoryId} <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+              {cveId && cveId !== advisoryId && (
+                <a
+                  href={getCveUrl(cveId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded border border-border/60 bg-muted/30 px-2 py-1 font-mono text-blue-600 hover:underline"
+                >
+                  {cveId} <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+              {finding.cweId &&
+                (cweLink ? (
+                  <a
+                    href={cweLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded border border-border/60 bg-muted/30 px-2 py-1 font-mono text-blue-600 hover:underline"
+                  >
+                    {finding.cweId} <ExternalLink className="h-3 w-3" />
+                  </a>
+                ) : (
+                  <code className="rounded border border-border/60 bg-muted/30 px-2 py-1">{finding.cweId}</code>
+                ))}
+              {aliases.slice(0, 3).map((a) => (
+                <code key={a} className="rounded border border-border/60 bg-muted/30 px-2 py-1 text-muted-foreground">
+                  {a}
+                </code>
+              ))}
+            </div>
+            {cvssVector && (
+              <ScaField label="CVSS vector">
+                <code className="break-all font-mono text-[11px]">{cvssVector}</code>
+              </ScaField>
+            )}
+          </ScaCard>
+
+          <ScaCard title="Where it's used" icon="🔍">
+            {usage.length > 0 ? (
+              <ul className="space-y-1.5">
+                {usage.slice(0, 6).map((u, i) => (
+                  <li key={`${u.filePath}:${u.line}:${i}`} className="rounded border border-border/60 bg-muted/30 p-1.5">
+                    <p className="break-all font-mono text-[11px] text-muted-foreground">
+                      {u.filePath}:{u.line}
+                    </p>
+                    <code className="block overflow-x-auto whitespace-pre font-mono text-[11px] text-foreground">
+                      {u.usage}
+                    </code>
+                  </li>
+                ))}
+                {usage.length > 6 && (
+                  <li className="text-muted-foreground">…and {usage.length - 6} more places</li>
+                )}
+              </ul>
+            ) : metadata.usageLocations === undefined ? (
+              <p className="text-muted-foreground">
+                No imports of {packageName} were found in the scanned files. It may still be loaded by another
+                package or at runtime.
+              </p>
+            ) : null}
+          </ScaCard>
+        </div>
+
+        {/* Impact */}
+        <div className="space-y-3">
+          <ScaCard title="Impact" icon="📊">
+            {impactText && (
+              <div className="leading-relaxed">
+                <ReportRichText text={impactText} />
+              </div>
+            )}
+            {consequences.length > 0 && (
+              <ul className="list-disc space-y-1 pl-4 text-muted-foreground">
+                {consequences.map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+            )}
+          </ScaCard>
+          {references.length > 0 && (
+            <ScaCard title="References" icon="🔗">
+              <ul className="space-y-1">
+                {references.map((url) => (
+                  <li key={url} className="min-w-0">
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block truncate text-blue-600 hover:underline"
+                      title={url}
+                    >
+                      {url.replace(/^https?:\/\//, "")}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </ScaCard>
           )}
         </div>
       </div>
 
-      {/* Remediation - Full Width DETAILED */}
-      <div className="border-t border-border/40 p-4">
-        <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
-          <span>🔧</span> How to Fix
+      {/* How to fix */}
+      <div className="rounded-lg border border-border/60 p-3">
+        <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+          <span aria-hidden>🔧</span> How to fix
         </h3>
-
-        {/* Fix Instructions */}
-        {fixVersion && (
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 mb-3">
-            <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5">Upgrade Command</p>
-            <pre className="bg-card p-2 rounded border border-emerald-500/20 text-xs font-mono overflow-x-auto text-emerald-800 dark:text-emerald-300">
-              {getScaUpgradeCommand(ecosystem, targetPackage, fixVersion)}
-            </pre>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="space-y-2">
+            {fix.command && (
+              <div>
+                <p className="mb-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                  {directDependency === false ? "Update the parent package" : "Upgrade command"}
+                </p>
+                <CopyableCode code={fix.command} />
+              </div>
+            )}
+            {fix.override && (
+              <div>
+                <p className="mb-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                  Or force the patched version in {fix.override.file}
+                </p>
+                <CopyableCode code={fix.override.snippet} />
+              </div>
+            )}
+            {fix.note && <p className="text-xs text-muted-foreground">{fix.note}</p>}
+            {upgrade === "major" && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                This crosses a major version. Read the package&apos;s changelog and run your tests before merging.
+              </p>
+            )}
           </div>
-        )}
-
-        {/* Remediation steps */}
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground">Steps</p>
-          {vulnData?.remediation && vulnData.remediation.length > 0 ? (
-            <ol className="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
-              {vulnData.remediation.map((step, i) => (
-                <li key={i} className="leading-tight">
-                  {step.split("\n")[0]}
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <ol className="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
-              {report.remediation.slice(0, 3).map((step, i) => (
-                <li key={i} className="leading-tight">
-                  {stripReportMarkdown(step).substring(0, 60)}...
-                </li>
-              ))}
-            </ol>
+          {steps.length > 0 && (
+            <div>
+              <p className="mb-1 text-xs font-semibold text-muted-foreground">Steps</p>
+              <ol className="list-decimal space-y-1 pl-5 text-xs leading-relaxed text-muted-foreground">
+                {steps.map((step, i) => (
+                  <li key={i}>{step}</li>
+                ))}
+              </ol>
+            </div>
           )}
         </div>
       </div>

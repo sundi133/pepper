@@ -15,6 +15,15 @@ import {
   SCA_TRIAGE_BATCH_SIZE_OLLAMA,
 } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import { impactForWeakness } from "@/lib/sca-insights";
+
+/** Weakness-specific impact for the rewritten description (undefined if unknown). */
+function scaImpactText(f: RawFinding): string | undefined {
+  const weakness = impactForWeakness(f.cweId, f.title);
+  if (!weakness) return undefined;
+  const pkg = `${f.metadata?.packageName ?? "the package"}@${f.metadata?.packageVersion ?? "?"}`;
+  return `${weakness.outcome} through ${pkg}: ${weakness.consequences.join("; ").toLowerCase()}.`;
+}
 
 interface TriageEntry {
   osvId: string;
@@ -288,6 +297,7 @@ export async function triageScaFindings(
             {
               whatIsWrong: f.title,
               where: `${f.metadata?.packageName}@${f.metadata?.packageVersion}`,
+              impact: scaImpactText(f),
               whyExploitable:
                 (meta.exploitPreconditions as string) ||
                 "Vulnerable dependency version is in use.",

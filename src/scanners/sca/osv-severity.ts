@@ -99,12 +99,23 @@ function labelToSeverity(label: string | undefined): SeverityLevel | null {
  *   2. GitHub advisory severity (database_specific / affected[].*_specific)
  *   3. MEDIUM when nothing is published (same as before)
  */
-export function osvSeverity(vuln: OsvRecord): { severity: SeverityLevel; cvssScore: number | null } {
+export function osvSeverity(vuln: OsvRecord): {
+  severity: SeverityLevel;
+  cvssScore: number | null;
+  /** The CVSS v3 vector the score came from, when one was published. */
+  cvssVector?: string;
+} {
   for (const s of vuln.severity ?? []) {
     if (s.type !== "CVSS_V3") continue;
     const numeric = Number(s.score);
     const score = Number.isFinite(numeric) ? numeric : cvss3BaseScore(s.score);
-    if (score !== null) return { severity: scoreToSeverity(score), cvssScore: score };
+    if (score !== null) {
+      return {
+        severity: scoreToSeverity(score),
+        cvssScore: score,
+        ...(Number.isFinite(numeric) ? {} : { cvssVector: s.score.trim() }),
+      };
+    }
   }
   const label =
     labelToSeverity(vuln.database_specific?.severity) ??

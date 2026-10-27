@@ -19,10 +19,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CreateScanDialog } from "@/components/scans/create-scan-dialog";
 import {
   FolderOpen,
-  Plus,
   Upload,
   FolderGit2,
   Trash2,
@@ -152,19 +150,6 @@ export default function ProjectsPage() {
           <p className="text-sm text-slate-500 sm:text-base dark:text-slate-400">
             Security posture of each repository, from its latest scan
           </p>
-        </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-          <CreateScanDialog
-            triggerLabel="New Scan"
-            triggerClassName="w-full bg-indigo-600 font-semibold text-white shadow-lg shadow-indigo-500/25 hover:bg-indigo-700 sm:w-auto"
-            onScanCreated={() => refresh()}
-          />
-          <Button variant="outline" className="w-full border-slate-300 sm:w-auto dark:border-slate-700" asChild>
-            <Link href="/projects/new">
-              <Plus className="mr-2 h-4 w-4" />
-              New repository
-            </Link>
-          </Button>
         </div>
       </header>
 

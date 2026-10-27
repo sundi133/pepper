@@ -102,6 +102,7 @@ describe("OpenGrep packs and arguments", () => {
     ]);
     const args = buildOpengrepArgs({ packs, targets: ["."], outputFile: "/tmp/o.json", jobs: 2 });
     expect(args).toContain("--no-rewrite-rule-ids");
+    expect(args).toContain("--taint-intrafile");
     expect(args.join(" ")).toContain("--exclude *.min.js");
     expect(args.join(" ")).toContain("--exclude-rule rules_lgpl_javascript_ssrf_rule-node-ssrf");
     expect(args.slice(-2)).toEqual(["--", "."]);

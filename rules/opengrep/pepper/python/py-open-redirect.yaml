@@ -1,0 +1,112 @@
+rules:
+  - id: pepper.py.open-redirect
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Request input is used as a redirect target. An attacker can craft a
+      link on your domain that sends users to a phishing site, or leak
+      OAuth codes/tokens to an attacker-controlled host.
+      Fix: redirect only to relative paths or allow-listed hosts - check with
+      Django's `url_has_allowed_host_and_scheme()` or by parsing the URL and
+      comparing its netloc, and fall back to a fixed page otherwise.
+    metadata:
+      cwe: "CWE-601: URL Redirection to Untrusted Site ('Open Redirect')"
+      owasp: "A01:2021 - Broken Access Control"
+      category: security
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: MEDIUM
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req|self\.request|flask\.request)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|files|cookies|headers|GET|POST|COOKIES|META|FILES|body|query_params|path_params|get_json|get_data)$
+      - patterns:
+          - pattern-inside: |
+              @$APP.$VERB(...)
+              def $F(..., $P, ...):
+                ...
+          - metavariable-regex:
+              metavariable: $VERB
+              regex: ^(route|get|post|put|patch|delete|api_route)$
+          - pattern-not-inside: |
+              def $F(..., $P = Depends(...), ...):
+                ...
+          - pattern-not-inside: |
+              def $F(..., $P: $T = Depends(...), ...):
+                ...
+          - pattern: $P
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: records loaded by id,
+      # framework URL builders, translations, lengths, booleans and digests.
+      - pattern-either:
+          - pattern: get_object_or_404(...)
+          - pattern: get_list_or_404(...)
+          - pattern: $M.objects.get(...)
+          - pattern: $M.objects.get_or_create(...)
+          - pattern: $M.objects.filter(...).first()
+          - pattern: $M.query.get(...)
+          - pattern: $M.query.get_or_404(...)
+          - pattern: $M.query.filter_by(...).first()
+          - pattern: $M.query.filter_by(...).first_or_404()
+          - pattern: $Q.one()
+          - pattern: $Q.one_or_none()
+          - pattern: $Q.scalar_one()
+          - pattern: $Q.scalar_one_or_none()
+          - patterns:
+              - pattern: $SESSION.get($MODEL, ...)
+              - metavariable-regex:
+                  metavariable: $MODEL
+                  regex: ^[A-Z]\w*$
+          - pattern: url_for(...)
+          - pattern: reverse(...)
+          - pattern: reverse_lazy(...)
+          - pattern: len(...)
+          - pattern: bool(...)
+          - pattern: isinstance(...)
+          - pattern: hashlib.$H(...).hexdigest()
+          - pattern: hmac.new(...).hexdigest()
+          - pattern: uuid.uuid4()
+          - pattern: gettext(...)
+          - pattern: _(...)
+      - pattern-either:
+          - pattern: url_for(...)
+          - pattern: reverse(...)
+          - pattern: int(...)
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern: url_has_allowed_host_and_scheme($P, ...)
+              - pattern: is_safe_url($P, ...)
+          - focus-metavariable: $P
+      - by-side-effect: true
+        patterns:
+          - pattern: $F($P, ...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i)^(\w+\.)*(is_)?(safe|allowed|valid)_?(url|redirect|next|target|host)\w*$
+          - focus-metavariable: $P
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: redirect($U, ...)
+              - pattern: flask.redirect($U, ...)
+              - pattern: HttpResponseRedirect($U, ...)
+              - pattern: HttpResponsePermanentRedirect($U, ...)
+              - pattern: RedirectResponse($U, ...)
+              - pattern: RedirectResponse(url=$U, ...)
+          # A literal leading "/x" path keeps the redirect on-site.
+          - metavariable-regex:
+              metavariable: $U
+              regex: ^(?!f?["']/[^/\\"'{])
+          - focus-metavariable: $U

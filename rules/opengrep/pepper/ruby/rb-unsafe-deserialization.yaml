@@ -1,0 +1,126 @@
+rules:
+  - id: pepper.rb.insecure-deserialization
+    mode: taint
+    languages: [ruby]
+    severity: ERROR
+    message: >-
+      Request data is deserialized with Marshal, unsafe YAML or Oj object
+      mode, which can instantiate arbitrary classes. A crafted payload leads
+      to remote code execution via known gadget chains.
+      Fix: use JSON (`JSON.parse`) or `YAML.safe_load` with an explicit
+      `permitted_classes` list; never Marshal.load untrusted bytes.
+    metadata:
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      owasp: "A08:2021 - Software and Data Integrity Failures"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+        - https://ruby-doc.org/core/Marshal.html
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      # Rails / Grape / Sinatra-class controllers
+      - patterns:
+          - pattern-inside: |
+              class $CTRL < $BASE
+                ...
+              end
+          # (metavariable-regex does not match Ruby class names here; a
+          # metavariable-pattern with pattern-regex does)
+          - metavariable-pattern:
+              metavariable: $CTRL
+              patterns:
+                - pattern-regex: (Controller|API|App|Application|Server|Routes|Endpoint)$
+          - pattern-either:
+              - pattern: params
+              - pattern: cookies
+              - pattern: request.params
+              - pattern: request.query_parameters
+              - pattern: request.request_parameters
+              - pattern: request.path_parameters
+              - pattern: request.headers
+              - pattern: request.body
+              - pattern: request.raw_post
+              - pattern: request.query_string
+              - pattern: request.referer
+              - pattern: request.referrer
+              - pattern: request.cookies
+      # Sinatra classic route blocks
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $VERB $ROUTE do
+                    ...
+                  end
+              - pattern-inside: |
+                  $VERB($ROUTE) do
+                    ...
+                  end
+          - metavariable-regex:
+              metavariable: $VERB
+              regex: ^(get|post|put|patch|delete|options)$
+          - pattern-either:
+              - pattern: params
+              - pattern: cookies
+              - pattern: request.params
+              - pattern: request.query_parameters
+              - pattern: request.request_parameters
+              - pattern: request.path_parameters
+              - pattern: request.headers
+              - pattern: request.body
+              - pattern: request.raw_post
+              - pattern: request.query_string
+              - pattern: request.referer
+              - pattern: request.referrer
+              - pattern: request.cookies
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: records loaded by id,
+      # route helpers (same-site URLs), translations, numbers and booleans.
+      - pattern-either:
+          - patterns:
+              - pattern: $M.$FIND(...)
+              - metavariable-regex:
+                  metavariable: $FIND
+                  regex: ^(find|find_by|find_by!|find_sole_by|find_or_create_by|find_or_create_by!|find_or_initialize_by|exists\?)$
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?!params\b|cookies\b|request\b)
+          - patterns:
+              - pattern-either:
+                  - pattern: $HELPER(...)
+                  - pattern: $RECV.$HELPER(...)
+              - metavariable-regex:
+                  metavariable: $HELPER
+                  regex: ^[a-z]\w*_(path|url)$
+              - metavariable-regex:
+                  metavariable: $HELPER
+                  regex: ^(?!(original|request|base|full|redirect|return|callback|referr?er|back|next|target|destination|image|avatar|source|remote|external|cdn)_)
+          - pattern: I18n.t(...)
+          - pattern: I18n.translate(...)
+          - pattern: t(...)
+          - patterns:
+              - pattern: $X.$PRED
+              - metavariable-regex:
+                  metavariable: $PRED
+                  regex: ^(to_i|to_f|count|size|length|present\?|blank\?|nil\?|empty\?|any\?|none\?|include\?|exists\?)$
+          - pattern: Digest::$H.hexdigest(...)
+          - pattern: SecureRandom.$R(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Marshal.load($D, ...)
+              - pattern: Marshal.restore($D, ...)
+              - pattern: YAML.unsafe_load($D, ...)
+              - pattern: Psych.unsafe_load($D, ...)
+              - pattern: YAML.load($D, ...)
+              - pattern: Psych.load($D, ...)
+              - pattern: Oj.load($D)
+              - pattern: Oj.object_load($D, ...)
+              - pattern: |
+                  Oj.load($D, mode: :object, ...)
+          - focus-metavariable: $D

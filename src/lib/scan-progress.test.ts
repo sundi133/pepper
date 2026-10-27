@@ -3,6 +3,8 @@ import {
   computeScanProgress,
   reasoningTails,
   REASONING_PROGRESS_KEY,
+  SCAN_STATS_KEY,
+  scanLinesScanned,
   agentScanKeptCount,
   agentScanSummaryView,
 } from "./scan-progress";
@@ -149,5 +151,22 @@ describe("computeScanProgress ignores the __reasoning__ entry", () => {
         "RUNNING",
       ),
     ).toBe(10);
+  });
+});
+
+describe("scan stats", () => {
+  it("reads lines scanned from the reserved __stats__ entry", () => {
+    expect(scanLinesScanned({ [SCAN_STATS_KEY]: { linesScanned: 12480 } })).toBe(12480);
+    expect(scanLinesScanned({ [SCAN_STATS_KEY]: { linesScanned: 0 } })).toBeNull();
+    expect(scanLinesScanned({ SAST_LLM: { status: "DONE" } })).toBeNull();
+    expect(scanLinesScanned(null)).toBeNull();
+  });
+
+  it("does not count the stats entry as a scanner in progress", () => {
+    const withStats = computeScanProgress(
+      { SAST_LLM: { status: "RUNNING" }, [SCAN_STATS_KEY]: { linesScanned: 5 } as never },
+      "RUNNING",
+    );
+    expect(withStats).toBe(computeScanProgress({ SAST_LLM: { status: "RUNNING" } }, "RUNNING"));
   });
 });

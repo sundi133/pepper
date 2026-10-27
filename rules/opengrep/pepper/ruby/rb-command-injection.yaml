@@ -1,0 +1,146 @@
+rules:
+  - id: pepper.rb.command-injection
+    mode: taint
+    languages: [ruby]
+    severity: ERROR
+    message: >-
+      Request input reaches a shell command. An attacker can run arbitrary
+      commands on the server.
+      Fix: pass the program and its arguments separately so no shell is used -
+      `system("ping", "-c", "1", host)`, `Open3.capture2("ping", "-c", "1", host)` -
+      or escape with `Shellwords.escape` and validate against an allow-list.
+    metadata:
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html
+        - https://guides.rubyonrails.org/security.html#command-line-injection
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      # Rails / Grape / Sinatra-class controllers
+      - patterns:
+          - pattern-inside: |
+              class $CTRL < $BASE
+                ...
+              end
+          # (metavariable-regex does not match Ruby class names here; a
+          # metavariable-pattern with pattern-regex does)
+          - metavariable-pattern:
+              metavariable: $CTRL
+              patterns:
+                - pattern-regex: (Controller|API|App|Application|Server|Routes|Endpoint)$
+          - pattern-either:
+              - pattern: params
+              - pattern: cookies
+              - pattern: request.params
+              - pattern: request.query_parameters
+              - pattern: request.request_parameters
+              - pattern: request.path_parameters
+              - pattern: request.headers
+              - pattern: request.body
+              - pattern: request.raw_post
+              - pattern: request.query_string
+              - pattern: request.referer
+              - pattern: request.referrer
+              - pattern: request.cookies
+      # Sinatra classic route blocks
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $VERB $ROUTE do
+                    ...
+                  end
+              - pattern-inside: |
+                  $VERB($ROUTE) do
+                    ...
+                  end
+          - metavariable-regex:
+              metavariable: $VERB
+              regex: ^(get|post|put|patch|delete|options)$
+          - pattern-either:
+              - pattern: params
+              - pattern: cookies
+              - pattern: request.params
+              - pattern: request.query_parameters
+              - pattern: request.request_parameters
+              - pattern: request.path_parameters
+              - pattern: request.headers
+              - pattern: request.body
+              - pattern: request.raw_post
+              - pattern: request.query_string
+              - pattern: request.referer
+              - pattern: request.referrer
+              - pattern: request.cookies
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: records loaded by id,
+      # route helpers (same-site URLs), translations, numbers and booleans.
+      - pattern-either:
+          - patterns:
+              - pattern: $M.$FIND(...)
+              - metavariable-regex:
+                  metavariable: $FIND
+                  regex: ^(find|find_by|find_by!|find_sole_by|find_or_create_by|find_or_create_by!|find_or_initialize_by|exists\?)$
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?!params\b|cookies\b|request\b)
+          - patterns:
+              - pattern-either:
+                  - pattern: $HELPER(...)
+                  - pattern: $RECV.$HELPER(...)
+              - metavariable-regex:
+                  metavariable: $HELPER
+                  regex: ^[a-z]\w*_(path|url)$
+              - metavariable-regex:
+                  metavariable: $HELPER
+                  regex: ^(?!(original|request|base|full|redirect|return|callback|referr?er|back|next|target|destination|image|avatar|source|remote|external|cdn)_)
+          - pattern: I18n.t(...)
+          - pattern: I18n.translate(...)
+          - pattern: t(...)
+          - patterns:
+              - pattern: $X.$PRED
+              - metavariable-regex:
+                  metavariable: $PRED
+                  regex: ^(to_i|to_f|count|size|length|present\?|blank\?|nil\?|empty\?|any\?|none\?|include\?|exists\?)$
+          - pattern: Digest::$H.hexdigest(...)
+          - pattern: SecureRandom.$R(...)
+      - pattern-either:
+          - pattern: Shellwords.escape(...)
+          - pattern: Shellwords.shellescape(...)
+          - pattern: $X.shellescape
+          - pattern: $X.to_i
+          - pattern: Integer(...)
+    pattern-sinks:
+      # Single-string forms go through /bin/sh
+      - patterns:
+          - pattern-either:
+              - pattern: system($C)
+              - pattern: exec($C)
+              - pattern: spawn($C)
+              - pattern: Kernel.system($C)
+              - pattern: Kernel.exec($C)
+              - pattern: Kernel.spawn($C)
+              - pattern: IO.popen($C, ...)
+              - pattern: Open3.capture2($C, ...)
+              - pattern: Open3.capture2e($C, ...)
+              - pattern: Open3.capture3($C, ...)
+              - pattern: Open3.popen2($C, ...)
+              - pattern: Open3.popen2e($C, ...)
+              - pattern: Open3.popen3($C, ...)
+              - pattern: PTY.spawn($C, ...)
+              # Kernel#open runs "|cmd" as a command
+              - pattern: open($C, ...)
+              - pattern: Kernel.open($C, ...)
+          - pattern-not: IO.popen([...], ...)
+          - pattern-not: Open3.$F($A, $B, ...)
+          - focus-metavariable: $C
+      - pattern: |
+          `...`
+      - pattern: |
+          %x(...)

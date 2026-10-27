@@ -257,7 +257,7 @@ export default function DashboardPage() {
                 {scoreSubtitle(score, criticalCount)}
               </p>
             </div>
-            <div className="grid w-full grid-cols-1 divide-y divide-border/50 overflow-hidden rounded-lg border border-border/40 bg-background/40 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <div className="grid w-full grid-cols-1 divide-y divide-border/50 overflow-hidden rounded-lg border border-border/40 bg-background/40 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
               <div className="px-3 py-3 sm:px-4">
                 <p className="text-xs font-medium text-muted-foreground">
                   Last scan
@@ -273,15 +273,6 @@ export default function DashboardPage() {
                 <p className="mt-1 text-sm font-semibold">
                   <span className="text-destructive">{criticalCount}</span>
                   <span className="ml-1 font-normal text-muted-foreground">found</span>
-                </p>
-              </div>
-              <div className="px-3 py-3 sm:px-4">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Monitored repositories
-                </p>
-                <p className="mt-1 text-sm font-semibold text-foreground">
-                  {overview?.projectCount ?? 0}{" "}
-                  <span className="font-normal text-muted-foreground">repositories</span>
                 </p>
               </div>
             </div>

@@ -61,6 +61,7 @@ import { decompiledOriginOf } from "@/lib/compiled-scan/finding-origin";
 import { uploadedArtifactName } from "@/lib/compiled-scan/upload";
 import { maxUploadBytes } from "@/lib/upload-limits";
 import { mobilePlatformOf } from "@/lib/mobile-platform";
+import { SCAN_STATS_KEY } from "@/lib/scan-progress";
 import { isAgentArtifact, agentOwnsUpload } from "@/scanners/mobile-agent/artifact";
 import { isAgentScanConfigured, agentScanUnavailableReason } from "@/scanners/mobile-agent/config";
 
@@ -1311,7 +1312,7 @@ Schema:
       await assertScanActive();
       completed = await markScanCompleted(scanId, {
         filesScanned: result.filesScanned,
-        depsScanned: result.depsScanned,
+          depsScanned: result.depsScanned,
         gateResult,
       });
       if (completed.count === 0) {
@@ -1321,6 +1322,14 @@ Schema:
     }
 
     log.info({ gateResult }, "Scan completed successfully");
+
+    // Lines scanned is shown next to the file count; it lives in the
+    // reserved __stats__ entry of scannerProgress.
+    try {
+      await setScanStats(scanId, { linesScanned: result.linesScanned });
+    } catch (err) {
+      log.warn({ err }, "Failed to record lines scanned (non-blocking)");
+    }
 
     // 9b. Auto-resolve findings that were fixed (no longer appear in this scan)
     try {
@@ -1512,6 +1521,15 @@ async function setAgentScanProgress(scanId: string, entry: Record<string, unknow
   await prisma.$executeRaw`
     UPDATE "Scan"
     SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ AGENT_SCAN: entry })}::jsonb
+    WHERE id = ${scanId}
+  `;
+}
+
+/** The reserved __stats__ entry of Scan.scannerProgress (whole-scan statistics such as lines scanned). */
+async function setScanStats(scanId: string, stats: { linesScanned: number }): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE "Scan"
+    SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ [SCAN_STATS_KEY]: stats })}::jsonb
     WHERE id = ${scanId}
   `;
 }

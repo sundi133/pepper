@@ -1,0 +1,149 @@
+rules:
+  - id: pepper.rb.path-traversal
+    mode: taint
+    languages: [ruby]
+    severity: ERROR
+    message: >-
+      Request input is used as a file path. An attacker can use "../" or an
+      absolute path to read, overwrite or delete files outside the intended
+      directory.
+      Fix: take `File.basename()` of the input, join it with a fixed
+      directory, expand it and check the result still starts with that
+      directory.
+    metadata:
+      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+      owasp: "A01:2021 - Broken Access Control"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      references:
+        - https://owasp.org/www-community/attacks/Path_Traversal
+        - https://guides.rubyonrails.org/security.html#file-uploads
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      # Rails / Grape / Sinatra-class controllers
+      - patterns:
+          - pattern-inside: |
+              class $CTRL < $BASE
+                ...
+              end
+          # (metavariable-regex does not match Ruby class names here; a
+          # metavariable-pattern with pattern-regex does)
+          - metavariable-pattern:
+              metavariable: $CTRL
+              patterns:
+                - pattern-regex: (Controller|API|App|Application|Server|Routes|Endpoint)$
+          - pattern-either:
+              - pattern: params
+              - pattern: cookies
+              - pattern: request.params
+              - pattern: request.query_parameters
+              - pattern: request.request_parameters
+              - pattern: request.path_parameters
+              - pattern: request.headers
+              - pattern: request.body
+              - pattern: request.raw_post
+              - pattern: request.query_string
+              - pattern: request.referer
+              - pattern: request.referrer
+              - pattern: request.cookies
+      # Sinatra classic route blocks
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $VERB $ROUTE do
+                    ...
+                  end
+              - pattern-inside: |
+                  $VERB($ROUTE) do
+                    ...
+                  end
+          - metavariable-regex:
+              metavariable: $VERB
+              regex: ^(get|post|put|patch|delete|options)$
+          - pattern-either:
+              - pattern: params
+              - pattern: cookies
+              - pattern: request.params
+              - pattern: request.query_parameters
+              - pattern: request.request_parameters
+              - pattern: request.path_parameters
+              - pattern: request.headers
+              - pattern: request.body
+              - pattern: request.raw_post
+              - pattern: request.query_string
+              - pattern: request.referer
+              - pattern: request.referrer
+              - pattern: request.cookies
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: records loaded by id,
+      # route helpers (same-site URLs), translations, numbers and booleans.
+      - pattern-either:
+          - patterns:
+              - pattern: $M.$FIND(...)
+              - metavariable-regex:
+                  metavariable: $FIND
+                  regex: ^(find|find_by|find_by!|find_sole_by|find_or_create_by|find_or_create_by!|find_or_initialize_by|exists\?)$
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?!params\b|cookies\b|request\b)
+          - patterns:
+              - pattern-either:
+                  - pattern: $HELPER(...)
+                  - pattern: $RECV.$HELPER(...)
+              - metavariable-regex:
+                  metavariable: $HELPER
+                  regex: ^[a-z]\w*_(path|url)$
+              - metavariable-regex:
+                  metavariable: $HELPER
+                  regex: ^(?!(original|request|base|full|redirect|return|callback|referr?er|back|next|target|destination|image|avatar|source|remote|external|cdn)_)
+          - pattern: I18n.t(...)
+          - pattern: I18n.translate(...)
+          - pattern: t(...)
+          - patterns:
+              - pattern: $X.$PRED
+              - metavariable-regex:
+                  metavariable: $PRED
+                  regex: ^(to_i|to_f|count|size|length|present\?|blank\?|nil\?|empty\?|any\?|none\?|include\?|exists\?)$
+          - pattern: Digest::$H.hexdigest(...)
+          - pattern: SecureRandom.$R(...)
+      - pattern-either:
+          - pattern: File.basename(...)
+          - pattern: $X.to_i
+          - pattern: ActiveStorage::Filename.new(...).sanitized
+          - pattern: $X.sanitized
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern: $P.start_with?(...)
+              - pattern: $P.to_s.start_with?(...)
+          - focus-metavariable: $P
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: send_file($P, ...)
+              - pattern: File.read($P, ...)
+              - pattern: File.binread($P, ...)
+              - pattern: File.readlines($P, ...)
+              - pattern: File.open($P, ...)
+              - pattern: File.new($P, ...)
+              - pattern: File.write($P, ...)
+              - pattern: File.binwrite($P, ...)
+              - pattern: File.delete($P, ...)
+              - pattern: File.unlink($P, ...)
+              - pattern: File.foreach($P, ...)
+              - pattern: IO.read($P, ...)
+              - pattern: IO.readlines($P, ...)
+              - pattern: FileUtils.rm($P, ...)
+              - pattern: FileUtils.rm_rf($P, ...)
+              - pattern: FileUtils.rm_r($P, ...)
+              - pattern: FileUtils.mv($P, ...)
+              - pattern: FileUtils.mv($SRC, $P, ...)
+              - pattern: FileUtils.cp($P, ...)
+              - pattern: FileUtils.cp($SRC, $P, ...)
+              - pattern: Pathname.new($P).$M(...)
+              - pattern: Rails.root.join(..., $P, ...).$M(...)
+          - focus-metavariable: $P

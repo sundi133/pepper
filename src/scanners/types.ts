@@ -199,6 +199,8 @@ export interface ScanResult {
   findings: RawFinding[];
   dependencies: Dependency[];
   filesScanned: number;
+  /** Lines across every scanned file (blank lines included, binaries excluded). */
+  linesScanned: number;
   depsScanned: number;
   /** Vulnerabilities triage ruled out, for VEX. Never persisted as findings. */
   suppressed: SuppressedVulnerability[];

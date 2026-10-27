@@ -1,0 +1,49 @@
+rules:
+  - id: pepper.py.jwt-signature-not-verified
+    languages: [python]
+    severity: ERROR
+    message: >-
+      A JWT is decoded without verifying its signature (or the "none"
+      algorithm is accepted). Anyone can forge a token with any claims, e.g.
+      another user's id or an admin role.
+      Fix: decode with the signing key and an explicit algorithm list -
+      `jwt.decode(token, key, algorithms=["RS256"])` - and never trust claims
+      from an unverified decode.
+    metadata:
+      cwe: "CWE-347: Improper Verification of Cryptographic Signature"
+      owasp: "A02:2021 - Cryptographic Failures"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html
+        - https://pyjwt.readthedocs.io/en/stable/usage.html#reading-the-claimset-without-validation
+    pattern-either:
+      - pattern: jwt.decode(..., algorithms=[..., "none", ...], ...)
+      - pattern: jwt.decode(..., algorithms=[..., "None", ...], ...)
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  jwt.decode(..., options={..., "verify_signature": False, ...}, ...)
+              - pattern: jwt.decode(..., verify=False, ...)
+              - pattern: |
+                  jose.jwt.decode(..., options={..., "verify_signature": False, ...}, ...)
+              - pattern: jwt.JWT().decode(..., do_verify=False, ...)
+          # Reading the header/claims to pick a key, then verifying, is fine.
+          - pattern-not-inside: |
+              def $F(...):
+                ...
+                <... jwt.decode($TOK, $KEY, ..., algorithms=$ALGS, ...) ...>
+                ...
+          - pattern-not-inside: |
+              def $F(...):
+                ...
+                <... jwt.decode($TOK, key=$KEY, ..., algorithms=$ALGS, ...) ...>
+                ...
+    paths:
+      exclude:
+        - "test_*.py"
+        - "*_test.py"
+        - "tests/"

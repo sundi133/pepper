@@ -1,0 +1,168 @@
+rules:
+  - id: pepper.php.xss
+    mode: taint
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Request input is written to the HTML response without escaping. An
+      attacker can inject script that runs in other users' browsers (session
+      theft, actions as the victim).
+      Fix: escape on output with `htmlspecialchars($v, ENT_QUOTES, 'UTF-8')`
+      (or `esc_html()`/`e()` / Blade `{{ }}`), and never print raw request
+      values.
+    metadata:
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: MEDIUM
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $_FILES
+          - pattern: getallheaders()
+          - pattern: file_get_contents("php://input")
+          - pattern: file_get_contents('php://input')
+          - patterns:
+              - pattern: $_SERVER[$KEY]
+              - metavariable-regex:
+                  metavariable: $KEY
+                  regex: ^["'](QUERY_STRING|REQUEST_URI|PHP_SELF|PATH_INFO|ORIG_PATH_INFO|HTTP_[A-Z_]+)["']$
+          # Laravel / Symfony request objects
+          - patterns:
+              - pattern-either:
+                  - pattern: $REQ->$M(...)
+                  - pattern: request()->$M(...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(input|get|query|post|all|cookie|header|json|route|file|only|except|string|getContent|getQueryString|getRequestUri|getPathInfo)$
+              - metavariable-regex:
+                  metavariable: $REQ
+                  regex: ^\$(request|req|this->request)$
+          - patterns:
+              - pattern: $REQ->$BAG
+              - metavariable-regex:
+                  metavariable: $REQ
+                  regex: ^\$(request|req|this->request)$
+              - metavariable-regex:
+                  metavariable: $BAG
+                  regex: ^(query|request|cookies|headers|files|attributes)$
+          - pattern: request($KEY)
+          - pattern: Input::get(...)
+          - pattern: Request::input(...)
+          - pattern: Request::get(...)
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: numbers, booleans,
+      # digests, dates, translations, records loaded by id and same-site URL
+      # builders.
+      - pattern-either:
+          - pattern: count(...)
+          - pattern: sizeof(...)
+          - pattern: strlen(...)
+          - pattern: mb_strlen(...)
+          - pattern: isset(...)
+          - pattern: empty(...)
+          - pattern: in_array(...)
+          - pattern: array_key_exists(...)
+          - pattern: is_numeric(...)
+          - pattern: ctype_digit(...)
+          - pattern: ctype_alnum(...)
+          - pattern: preg_match(...)
+          - pattern: absint(...)
+          - pattern: md5(...)
+          - pattern: sha1(...)
+          - pattern: hash(...)
+          - pattern: hash_hmac(...)
+          - pattern: crc32(...)
+          - pattern: uniqid(...)
+          - pattern: password_hash(...)
+          - pattern: number_format(...)
+          - pattern: number_format_i18n(...)
+          - pattern: size_format(...)
+          - pattern: date(...)
+          - pattern: gmdate(...)
+          - pattern: date_i18n(...)
+          - pattern: mysql2date(...)
+          - pattern: __(...)
+          - pattern: _x(...)
+          - pattern: _n(...)
+          - pattern: esc_html__(...)
+          - pattern: esc_attr__(...)
+          - pattern: selected(...)
+          - pattern: checked(...)
+          - pattern: disabled(...)
+          - pattern: sanitize_key(...)
+          - pattern: sanitize_title(...)
+          - pattern: sanitize_file_name(...)
+          - pattern: sanitize_user(...)
+          - pattern: sanitize_email(...)
+          - pattern: wp_create_nonce(...)
+          - pattern: get_post(...)
+          - pattern: get_userdata(...)
+          - pattern: get_user_by(...)
+          - pattern: get_term(...)
+          - pattern: admin_url(...)
+          - pattern: self_admin_url(...)
+          - pattern: network_admin_url(...)
+          - pattern: user_admin_url(...)
+          - pattern: home_url(...)
+          - pattern: site_url(...)
+          - pattern: network_home_url(...)
+          - pattern: network_site_url(...)
+          - pattern: get_admin_url(...)
+          - pattern: get_permalink(...)
+          - pattern: wp_login_url(...)
+          - pattern: wp_logout_url(...)
+          - pattern: plugins_url(...)
+          - pattern: content_url(...)
+          - pattern: includes_url(...)
+          - pattern: route(...)
+          - pattern: action(...)
+          - pattern: $MODEL::find(...)
+          - pattern: $MODEL::findOrFail(...)
+          - pattern: $MODEL::firstOrFail(...)
+      - pattern-either:
+          - pattern: htmlspecialchars(...)
+          - pattern: htmlentities(...)
+          - pattern: strip_tags(...)
+          - pattern: esc_html(...)
+          - pattern: esc_attr(...)
+          - pattern: esc_url(...)
+          - pattern: esc_js(...)
+          - pattern: wp_kses(...)
+          - pattern: wp_kses_post(...)
+          - pattern: sanitize_text_field(...)
+          - pattern: e(...)
+          - pattern: urlencode(...)
+          - pattern: rawurlencode(...)
+          - pattern: json_encode(..., JSON_HEX_TAG, ...)
+          - pattern: (int) $X
+          - pattern: (float) $X
+          - pattern: intval(...)
+          - pattern: floatval(...)
+          - pattern: count(...)
+          - pattern: strlen(...)
+          - pattern: $PURIFIER->purify(...)
+          - pattern: Encode::forHtml(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: echo $X;
+              - pattern: echo ..., $X, ...;
+              - pattern: print $X
+              - pattern: print($X)
+              - pattern: printf($X, ...)
+              - pattern: printf($F, ..., $X, ...)
+              - pattern: vprintf($F, $X)
+              - pattern: die($X)
+              - pattern: exit($X)
+          - focus-metavariable: $X

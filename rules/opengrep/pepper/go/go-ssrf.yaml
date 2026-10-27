@@ -1,0 +1,124 @@
+rules:
+  - id: pepper.go.ssrf
+    mode: taint
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Request input controls the URL of a server-side HTTP request. An
+      attacker can make the server call internal services or cloud metadata
+      endpoints (e.g. http://169.254.169.254/) and read the response.
+      Fix: do not let the caller choose the host. Parse the URL, check scheme
+      and host against an allow-list, and use a dialer `Control` hook that
+      rejects private, loopback and link-local addresses.
+    metadata:
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+      owasp: "A10:2021 - Server-Side Request Forgery (SSRF)"
+      category: security
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
+    # Indexing a fixed table with request data is an allow-list, not a flow;
+    # numbers and booleans cannot carry an injection payload.
+    options:
+      taint_assume_safe_indexes: true
+      taint_assume_safe_numbers: true
+      taint_assume_safe_booleans: true
+    pattern-sources:
+      # net/http handlers
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  func $FN(..., $R *http.Request, ...) { ... }
+              - pattern-inside: |
+                  func ($RECV $RT) $FN(..., $R *http.Request, ...) { ... }
+              - pattern-inside: |
+                  func(..., $R *http.Request, ...) { ... }
+          - pattern-either:
+              - pattern: $R.URL.Query()
+              - pattern: $R.URL.RawQuery
+              - pattern: $R.Form
+              - pattern: $R.PostForm
+              - pattern: $R.Header
+              - pattern: $R.Body
+              - patterns:
+                  - pattern: $R.$M(...)
+                  - metavariable-regex:
+                      metavariable: $M
+                      regex: ^(FormValue|PostFormValue|Cookie|Cookies|Referer|PathValue|FormFile|MultipartReader)$
+      - pattern: mux.Vars(...)
+      - pattern: chi.URLParam(...)
+      # gin / fiber / echo handlers
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  func $FN(..., $C *gin.Context, ...) { ... }
+              - pattern-inside: |
+                  func ($RECV $RT) $FN(..., $C *gin.Context, ...) { ... }
+              - pattern-inside: |
+                  func(..., $C *gin.Context, ...) { ... }
+              - pattern-inside: |
+                  func $FN(..., $C *fiber.Ctx, ...) $RET { ... }
+              - pattern-inside: |
+                  func ($RECV $RT) $FN(..., $C *fiber.Ctx, ...) $RET { ... }
+              - pattern-inside: |
+                  func(..., $C *fiber.Ctx, ...) $RET { ... }
+              - pattern-inside: |
+                  func $FN(..., $C echo.Context, ...) $RET { ... }
+              - pattern-inside: |
+                  func ($RECV $RT) $FN(..., $C echo.Context, ...) $RET { ... }
+              - pattern-inside: |
+                  func(..., $C echo.Context, ...) $RET { ... }
+          - pattern: $C.$M(...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(Query|DefaultQuery|QueryArray|GetQuery|QueryMap|Param|Params|PostForm|DefaultPostForm|PostFormArray|GetPostForm|GetHeader|GetRawData|Cookie|Cookies|QueryParam|QueryParams|QueryString|FormValue|FormParams|Body|Get|FormFile)$
+      # Request bodies decoded into a struct
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - patterns:
+                  - pattern: $C.$BIND(&$X)
+                  - metavariable-regex:
+                      metavariable: $BIND
+                      regex: ^(Bind|BindJSON|BindQuery|BindUri|ShouldBind|ShouldBindJSON|ShouldBindQuery|ShouldBindUri|ShouldBindWith|BodyParser|QueryParser)$
+              - pattern: json.NewDecoder($R.Body).Decode(&$X)
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text.
+      - pattern-either:
+          - pattern: len(...)
+          - pattern: strconv.Itoa(...)
+          - pattern: strconv.FormatInt(...)
+          - pattern: uuid.New()
+          - pattern: uuid.NewString()
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: http.Get($URL)
+              - pattern: http.Head($URL)
+              - pattern: http.Post($URL, ...)
+              - pattern: http.PostForm($URL, ...)
+              - pattern: http.NewRequest($METHOD, $URL, ...)
+              - pattern: http.NewRequestWithContext($CTX, $METHOD, $URL, ...)
+              - pattern: net.Dial($NET, $URL)
+              - pattern: net.DialTimeout($NET, $URL, ...)
+          # A fixed scheme+host prefix only lets the caller pick a path.
+          - metavariable-regex:
+              metavariable: $URL
+              regex: ^(?!(fmt\.Sprintf\()?"(https?:)?//[^/"%]+/)
+          - focus-metavariable: $URL
+      - patterns:
+          - pattern-either:
+              - pattern: $CLIENT.Get($URL)
+              - pattern: $CLIENT.Head($URL)
+              - pattern: $CLIENT.Post($URL, ...)
+              - pattern: $CLIENT.PostForm($URL, ...)
+          - metavariable-regex:
+              metavariable: $CLIENT
+              regex: (?i)^(\w+\.)*\w*client$
+          - metavariable-regex:
+              metavariable: $URL
+              regex: ^(?!(fmt\.Sprintf\()?"(https?:)?//[^/"%]+/)
+          - focus-metavariable: $URL

@@ -26,6 +26,7 @@ import { fetchVersionInfoBatch } from "./sca/deps-dev-client";
 import { attachLicenses } from "./sca/license-findings";
 import { ENABLE_DEPS_DEV } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import { countLines } from "./shared/line-count";
 
 /** Scanners that also review source decompiled from compiled artifacts. */
 export const COMPILED_CODE_SCANNERS = new Set([
@@ -252,6 +253,7 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
       findings: deduplicator.allFindings(),
       dependencies: [],
       filesScanned: ctx.fileList.length,
+      linesScanned: 0,
       depsScanned: 0,
       suppressed,
     };
@@ -279,16 +281,19 @@ export async function runScanners(ctx: ScanContext): Promise<ScanResult> {
     }
   }
 
-  const filesScanned = new Set([
+  const scannedFiles = new Set([
     ...ctx.fileList,
     ...(ctx.scaFileList ?? []),
     ...decompiled,
-  ]).size;
+  ]);
+  const filesScanned = scannedFiles.size;
+  const linesScanned = await countLines(ctx.workDir, scannedFiles);
 
   return {
     findings: deduplicator.allFindings(),
     dependencies,
     filesScanned,
+    linesScanned,
     depsScanned: dependencies.length,
     suppressed,
   };

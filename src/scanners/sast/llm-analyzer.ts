@@ -6,7 +6,11 @@ import {
 } from "@/lib/llm-gateway";
 import { Chunk, RawFinding, ScanContext } from "../types";
 import { chunkFile, wholeFileChunk } from "./chunker";
-import { isAuthorizationOrLogicFinding, verifyFindingEvidence } from "./evidence-verify";
+import {
+  anchorFindingToEvidence,
+  isAuthorizationOrLogicFinding,
+  verifyFindingEvidence,
+} from "./evidence-verify";
 import {
   getOwasp2024Category,
   getOwaspApiCategory,
@@ -862,27 +866,53 @@ export async function validateCandidatesPass2(
         if (!src) continue; // orphan finding from LLM — skip
         confirmed.add(src);
 
+        // The validator may restate the location and sink. Hold that restated
+        // evidence to the same check as pass 1; if it does not hold up, keep
+        // the pass-1 location and evidence, which already did.
+        let startLine: number | undefined = f.startLine ?? src.startLine;
+        let endLine: number | undefined = f.endLine ?? src.endLine;
+        let metadata: Record<string, unknown> = { ...(src.metadata || {}), ...(f.metadata || {}) };
+        const srcContent = src.filePath ? fileContentMap.get(src.filePath) : undefined;
+        if (LLM_EVIDENCE_VERIFICATION && srcContent) {
+          const restated = { startLine, endLine, title: f.title, cweId: f.cweId || src.cweId, metadata };
+          const verdict = verifyFindingEvidence(restated, srcContent);
+          const anchored = verdict.ok
+            ? anchorFindingToEvidence(restated, srcContent)
+            : { ok: false, reason: verdict.reason };
+          if (anchored.ok) {
+            startLine = anchored.startLine ?? startLine;
+            endLine = anchored.endLine ?? endLine;
+          } else {
+            logger.warn(
+              { title: f.title, filePath: src.filePath, reason: anchored.reason },
+              "SAST pass-2 restated evidence not found; keeping the pass-1 location",
+            );
+            startLine = src.startLine;
+            endLine = src.endLine;
+            metadata = { ...(src.metadata || {}) };
+          }
+        }
+
         const base: RawFinding = applySeverityCalibration({
           scanner: "SAST_LLM",
           severity: parseSeverity(f.severity),
           title: f.title,
           description: f.description ?? src?.description ?? "",
           filePath: src?.filePath || f.filePath,
-          startLine: f.startLine ?? src?.startLine,
-          endLine: f.endLine ?? src?.endLine,
+          startLine,
+          endLine,
           cweId: f.cweId || src?.cweId,
           confidence: f.confidence,
           ruleId: f.cweId || src?.ruleId || "CWE-UNKNOWN",
           metadata: {
-            ...(src?.metadata || {}),
-            ...(f.metadata || {}),
+            ...metadata,
             passPhase: 2,
           },
         });
         validated.push(
           enrichFinding(base, base.metadata as Record<string, unknown>, {
             whatIsWrong: f.title,
-            where: `${src?.filePath || f.filePath}:${f.startLine ?? src?.startLine}`,
+            where: `${src?.filePath || f.filePath}:${startLine}`,
             whyExploitable:
               (f.metadata?.attackPath as string) || f.description,
             fix:
@@ -1189,6 +1219,27 @@ async function analyzeChunk(
             "Dropping SAST finding: cited evidence not found in file",
           );
           return false;
+        }
+        // The cited identifiers must also be in the lines the model was
+        // shown; a wrong line number is moved to where the sink really is.
+        const anchored = anchorFindingToEvidence(f, fileContent, {
+          startLine: chunk.startLine,
+          endLine: chunk.endLine,
+        });
+        if (!anchored.ok) {
+          logger.warn(
+            { filePath: chunk.filePath, title: f.title, reason: anchored.reason },
+            "Dropping SAST finding: cited evidence not in the reviewed lines",
+          );
+          return false;
+        }
+        if (anchored.relocated && anchored.startLine) {
+          logger.info(
+            { filePath: chunk.filePath, title: f.title, from: f.startLine, to: anchored.startLine },
+            "Moved SAST finding to the line holding its cited evidence",
+          );
+          f.startLine = anchored.startLine;
+          f.endLine = anchored.endLine ?? anchored.startLine;
         }
         return true;
       })

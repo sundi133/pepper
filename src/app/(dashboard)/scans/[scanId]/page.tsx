@@ -83,7 +83,8 @@ import { ScanTriageChat } from "@/components/scans/scan-triage-chat";
 import {
   computeScanProgress,
   reasoningTails,
-  REASONING_PROGRESS_KEY,
+  isScannerProgressKey,
+  scanLinesScanned,
 } from "@/lib/scan-progress";
 import { CustomReportDialog } from "@/components/scans/custom-report-dialog";
 import { CompiledCodeSummary } from "@/components/scans/compiled-code-summary";
@@ -711,8 +712,8 @@ export default function ScanDetailPage() {
                         }
                       >,
                     )
-                      // __reasoning__ is the live-reasoning store, not a scanner.
-                      .filter(([name]) => name !== REASONING_PROGRESS_KEY)
+                      // __reasoning__ and __stats__ are reserved stores, not scanners.
+                      .filter(([name]) => isScannerProgressKey(name))
                       .map(([name, info]) => (
                       <Badge
                         key={name}
@@ -1210,6 +1211,7 @@ function formatScanMetadataLine(scan: {
   createdAt: string;
   filesScanned?: number | null;
   depsScanned?: number | null;
+  scannerProgress?: unknown;
 }): string {
   const parts: string[] = [];
   if (scan.sourceType === "SVN_CHECKOUT") {
@@ -1225,6 +1227,13 @@ function formatScanMetadataLine(scan: {
   if (scan.filesScanned)
     parts.push(
       `${scan.filesScanned.toLocaleString()} file${scan.filesScanned === 1 ? "" : "s"} scanned`,
+    );
+  const linesScanned = scanLinesScanned(
+    scan.scannerProgress as Record<string, unknown> | null | undefined,
+  );
+  if (linesScanned)
+    parts.push(
+      `${linesScanned.toLocaleString()} line${linesScanned === 1 ? "" : "s"} scanned`,
     );
   if (scan.depsScanned)
     parts.push(`${scan.depsScanned.toLocaleString()} deps`);

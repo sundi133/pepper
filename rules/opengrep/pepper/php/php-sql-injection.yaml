@@ -1,0 +1,191 @@
+rules:
+  - id: pepper.php.sql-injection
+    mode: taint
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Request input reaches a SQL query string. An attacker can change the
+      query (read or modify any data, bypass authentication).
+      Fix: use prepared statements with bound parameters -
+      `$pdo->prepare("... WHERE id = ?")->execute([$id])`, `$wpdb->prepare()`,
+      or Laravel's `where('col', $value)` / `DB::select('... ?', [$v])`.
+    metadata:
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+        - https://www.php.net/manual/en/pdo.prepared-statements.php
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $_FILES
+          - pattern: getallheaders()
+          - pattern: file_get_contents("php://input")
+          - pattern: file_get_contents('php://input')
+          - patterns:
+              - pattern: $_SERVER[$KEY]
+              - metavariable-regex:
+                  metavariable: $KEY
+                  regex: ^["'](QUERY_STRING|REQUEST_URI|PHP_SELF|PATH_INFO|ORIG_PATH_INFO|HTTP_[A-Z_]+)["']$
+          # Laravel / Symfony request objects
+          - patterns:
+              - pattern-either:
+                  - pattern: $REQ->$M(...)
+                  - pattern: request()->$M(...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(input|get|query|post|all|cookie|header|json|route|file|only|except|string|getContent|getQueryString|getRequestUri|getPathInfo)$
+              - metavariable-regex:
+                  metavariable: $REQ
+                  regex: ^\$(request|req|this->request)$
+          - patterns:
+              - pattern: $REQ->$BAG
+              - metavariable-regex:
+                  metavariable: $REQ
+                  regex: ^\$(request|req|this->request)$
+              - metavariable-regex:
+                  metavariable: $BAG
+                  regex: ^(query|request|cookies|headers|files|attributes)$
+          - pattern: request($KEY)
+          - pattern: Input::get(...)
+          - pattern: Request::input(...)
+          - pattern: Request::get(...)
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: numbers, booleans,
+      # digests, dates, translations, records loaded by id and same-site URL
+      # builders.
+      - pattern-either:
+          - pattern: count(...)
+          - pattern: sizeof(...)
+          - pattern: strlen(...)
+          - pattern: mb_strlen(...)
+          - pattern: isset(...)
+          - pattern: empty(...)
+          - pattern: in_array(...)
+          - pattern: array_key_exists(...)
+          - pattern: is_numeric(...)
+          - pattern: ctype_digit(...)
+          - pattern: ctype_alnum(...)
+          - pattern: preg_match(...)
+          - pattern: absint(...)
+          - pattern: md5(...)
+          - pattern: sha1(...)
+          - pattern: hash(...)
+          - pattern: hash_hmac(...)
+          - pattern: crc32(...)
+          - pattern: uniqid(...)
+          - pattern: password_hash(...)
+          - pattern: number_format(...)
+          - pattern: number_format_i18n(...)
+          - pattern: size_format(...)
+          - pattern: date(...)
+          - pattern: gmdate(...)
+          - pattern: date_i18n(...)
+          - pattern: mysql2date(...)
+          - pattern: __(...)
+          - pattern: _x(...)
+          - pattern: _n(...)
+          - pattern: esc_html__(...)
+          - pattern: esc_attr__(...)
+          - pattern: selected(...)
+          - pattern: checked(...)
+          - pattern: disabled(...)
+          - pattern: sanitize_key(...)
+          - pattern: sanitize_title(...)
+          - pattern: sanitize_file_name(...)
+          - pattern: sanitize_user(...)
+          - pattern: sanitize_email(...)
+          - pattern: wp_create_nonce(...)
+          - pattern: get_post(...)
+          - pattern: get_userdata(...)
+          - pattern: get_user_by(...)
+          - pattern: get_term(...)
+          - pattern: admin_url(...)
+          - pattern: self_admin_url(...)
+          - pattern: network_admin_url(...)
+          - pattern: user_admin_url(...)
+          - pattern: home_url(...)
+          - pattern: site_url(...)
+          - pattern: network_home_url(...)
+          - pattern: network_site_url(...)
+          - pattern: get_admin_url(...)
+          - pattern: get_permalink(...)
+          - pattern: wp_login_url(...)
+          - pattern: wp_logout_url(...)
+          - pattern: plugins_url(...)
+          - pattern: content_url(...)
+          - pattern: includes_url(...)
+          - pattern: route(...)
+          - pattern: action(...)
+          - pattern: $MODEL::find(...)
+          - pattern: $MODEL::findOrFail(...)
+          - pattern: $MODEL::firstOrFail(...)
+      - pattern-either:
+          - pattern: (int) $X
+          - pattern: (float) $X
+          - pattern: (bool) $X
+          - pattern: intval(...)
+          - pattern: floatval(...)
+          - pattern: mysqli_real_escape_string(...)
+          - pattern: mysql_real_escape_string(...)
+          - pattern: pg_escape_string(...)
+          - pattern: pg_escape_literal(...)
+          - pattern: pg_escape_identifier(...)
+          - pattern: $DB->real_escape_string(...)
+          - pattern: $DB->quote(...)
+          - pattern: $DB->escape(...)
+          - pattern: esc_sql(...)
+          - pattern: $WPDB->prepare(...)
+          - pattern: $WPDB->esc_like(...)
+          - pattern: sqlite_escape_string(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: mysqli_query($C, $Q, ...)
+              - pattern: mysqli_multi_query($C, $Q)
+              - pattern: mysqli_real_query($C, $Q)
+              - pattern: mysqli_prepare($C, $Q)
+              - pattern: mysql_query($Q, ...)
+              - pattern: pg_query($C, $Q)
+              - pattern: pg_query($Q)
+              - pattern: pg_send_query($C, $Q)
+              - pattern: pg_prepare($C, $N, $Q)
+              - pattern: sqlite_query($C, $Q, ...)
+              - pattern: odbc_exec($C, $Q, ...)
+              - pattern: sqlsrv_query($C, $Q, ...)
+              - pattern: oci_parse($C, $Q)
+              - pattern: DB::raw($Q)
+              - pattern: DB::select($Q, ...)
+              - pattern: DB::statement($Q, ...)
+              - pattern: DB::unprepared($Q)
+              - pattern: DB::insert($Q, ...)
+              - pattern: DB::update($Q, ...)
+              - pattern: DB::delete($Q, ...)
+          - focus-metavariable: $Q
+      - patterns:
+          - pattern: $DB->$M($Q, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(query|exec|prepare|multi_query|real_query|get_results|get_row|get_var|get_col|statement|select|raw|executeQuery|executeStatement|createQuery|createNativeQuery|fetchAll|fetchAssociative|fetchOne)$
+          - metavariable-regex:
+              metavariable: $DB
+              regex: (?i)^\$(this->)?\w*(db|pdo|mysqli|conn|connection|link|wpdb|dbh|database|sql|em|entityManager|query|builder|qb)$|^DB::\w+\(.*\)$|::(table|query)\(.*\)$
+          - focus-metavariable: $Q
+      # Laravel raw-expression builders: the method name alone identifies the sink
+      - patterns:
+          - pattern: $B->$RAW($Q, ...)
+          - metavariable-regex:
+              metavariable: $RAW
+              regex: ^(whereRaw|orWhereRaw|havingRaw|orHavingRaw|orderByRaw|selectRaw|groupByRaw|fromRaw|joinRaw|unprepared)$
+          - focus-metavariable: $Q

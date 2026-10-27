@@ -1,0 +1,35 @@
+rules:
+  - id: pepper.php.xxe
+    languages: [php]
+    severity: ERROR
+    message: >-
+      XML is parsed with external entity substitution enabled (LIBXML_NOENT /
+      LIBXML_DTDLOAD or libxml_disable_entity_loader(false)). An XML document
+      from an attacker can read local files or reach internal URLs (XXE).
+      Fix: drop LIBXML_NOENT / LIBXML_DTDLOAD; libxml >= 2.9 does not load
+      external entities by default.
+    metadata:
+      cwe: "CWE-611: Improper Restriction of XML External Entity Reference"
+      owasp: "A05:2021 - Security Misconfiguration"
+      category: security
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html
+    patterns:
+      - pattern-either:
+          - pattern: libxml_disable_entity_loader(false)
+          - patterns:
+              - pattern-either:
+                  - pattern: simplexml_load_string($X, $C, $OPTS, ...)
+                  - pattern: simplexml_load_file($X, $C, $OPTS, ...)
+                  - pattern: $DOC->loadXML($X, $OPTS)
+                  - pattern: $DOC->load($X, $OPTS)
+                  - pattern: $DOC->loadHTML($X, $OPTS)
+                  - pattern: new SimpleXMLElement($X, $OPTS, ...)
+                  - pattern: $R->setParserProperty(XMLReader::SUBST_ENTITIES, true)
+              - metavariable-regex:
+                  metavariable: $OPTS
+                  regex: LIBXML_NOENT|LIBXML_DTDLOAD
+          - pattern: $R->setParserProperty(XMLReader::SUBST_ENTITIES, true)

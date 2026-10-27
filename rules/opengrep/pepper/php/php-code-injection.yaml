@@ -1,0 +1,163 @@
+rules:
+  - id: pepper.php.code-injection
+    mode: taint
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Request input is executed as PHP code or chooses which file/function is
+      run (eval, assert, include/require, call_user_func). An attacker can
+      execute arbitrary code or include local/remote files.
+      Fix: never evaluate request data; map the input to an allow-list of
+      known templates/handlers (e.g. a `match` on fixed names) instead of
+      including or calling it directly.
+    metadata:
+      cwe: "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+      references:
+        - https://owasp.org/www-community/attacks/Code_Injection
+        - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/11.1-Testing_for_Local_File_Inclusion
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $_FILES
+          - pattern: getallheaders()
+          - pattern: file_get_contents("php://input")
+          - pattern: file_get_contents('php://input')
+          - patterns:
+              - pattern: $_SERVER[$KEY]
+              - metavariable-regex:
+                  metavariable: $KEY
+                  regex: ^["'](QUERY_STRING|REQUEST_URI|PHP_SELF|PATH_INFO|ORIG_PATH_INFO|HTTP_[A-Z_]+)["']$
+          # Laravel / Symfony request objects
+          - patterns:
+              - pattern-either:
+                  - pattern: $REQ->$M(...)
+                  - pattern: request()->$M(...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(input|get|query|post|all|cookie|header|json|route|file|only|except|string|getContent|getQueryString|getRequestUri|getPathInfo)$
+              - metavariable-regex:
+                  metavariable: $REQ
+                  regex: ^\$(request|req|this->request)$
+          - patterns:
+              - pattern: $REQ->$BAG
+              - metavariable-regex:
+                  metavariable: $REQ
+                  regex: ^\$(request|req|this->request)$
+              - metavariable-regex:
+                  metavariable: $BAG
+                  regex: ^(query|request|cookies|headers|files|attributes)$
+          - pattern: request($KEY)
+          - pattern: Input::get(...)
+          - pattern: Request::input(...)
+          - pattern: Request::get(...)
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: numbers, booleans,
+      # digests, dates, translations, records loaded by id and same-site URL
+      # builders.
+      - pattern-either:
+          - pattern: count(...)
+          - pattern: sizeof(...)
+          - pattern: strlen(...)
+          - pattern: mb_strlen(...)
+          - pattern: isset(...)
+          - pattern: empty(...)
+          - pattern: in_array(...)
+          - pattern: array_key_exists(...)
+          - pattern: is_numeric(...)
+          - pattern: ctype_digit(...)
+          - pattern: ctype_alnum(...)
+          - pattern: preg_match(...)
+          - pattern: absint(...)
+          - pattern: md5(...)
+          - pattern: sha1(...)
+          - pattern: hash(...)
+          - pattern: hash_hmac(...)
+          - pattern: crc32(...)
+          - pattern: uniqid(...)
+          - pattern: password_hash(...)
+          - pattern: number_format(...)
+          - pattern: number_format_i18n(...)
+          - pattern: size_format(...)
+          - pattern: date(...)
+          - pattern: gmdate(...)
+          - pattern: date_i18n(...)
+          - pattern: mysql2date(...)
+          - pattern: __(...)
+          - pattern: _x(...)
+          - pattern: _n(...)
+          - pattern: esc_html__(...)
+          - pattern: esc_attr__(...)
+          - pattern: selected(...)
+          - pattern: checked(...)
+          - pattern: disabled(...)
+          - pattern: sanitize_key(...)
+          - pattern: sanitize_title(...)
+          - pattern: sanitize_file_name(...)
+          - pattern: sanitize_user(...)
+          - pattern: sanitize_email(...)
+          - pattern: wp_create_nonce(...)
+          - pattern: get_post(...)
+          - pattern: get_userdata(...)
+          - pattern: get_user_by(...)
+          - pattern: get_term(...)
+          - pattern: admin_url(...)
+          - pattern: self_admin_url(...)
+          - pattern: network_admin_url(...)
+          - pattern: user_admin_url(...)
+          - pattern: home_url(...)
+          - pattern: site_url(...)
+          - pattern: network_home_url(...)
+          - pattern: network_site_url(...)
+          - pattern: get_admin_url(...)
+          - pattern: get_permalink(...)
+          - pattern: wp_login_url(...)
+          - pattern: wp_logout_url(...)
+          - pattern: plugins_url(...)
+          - pattern: content_url(...)
+          - pattern: includes_url(...)
+          - pattern: route(...)
+          - pattern: action(...)
+          - pattern: $MODEL::find(...)
+          - pattern: $MODEL::findOrFail(...)
+          - pattern: $MODEL::firstOrFail(...)
+      - pattern-either:
+          - pattern: basename(...)
+          - pattern: (int) $X
+          - pattern: intval(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: eval($C)
+              - pattern: assert($C, ...)
+              - pattern: create_function($ARGS, $C)
+              - pattern: include $C
+              - pattern: include_once $C
+              - pattern: require $C
+              - pattern: require_once $C
+              - pattern: include($C)
+              - pattern: include_once($C)
+              - pattern: require($C)
+              - pattern: require_once($C)
+              - pattern: call_user_func($C, ...)
+              - pattern: call_user_func_array($C, ...)
+              - pattern: preg_replace_callback($P, $C, ...)
+          - focus-metavariable: $C
+      # Variable functions: $fn(...) where $fn holds request data
+      - patterns:
+          - pattern: $C(...)
+          - metavariable-regex:
+              metavariable: $C
+              regex: ^\$\w+$
+          - focus-metavariable: $C

@@ -1,0 +1,85 @@
+rules:
+  - id: pepper.py.sql-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Request input reaches a SQL query string. An attacker can change the
+      query (read or modify any data, bypass authentication).
+      Fix: pass values as bound parameters
+      (`cursor.execute("... WHERE id = %s", (id,))`, SQLAlchemy `text()` with
+      `:name` binds, or the ORM's filter methods) instead of formatting them
+      into the SQL string.
+    metadata:
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+        - https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html
+    pattern-sources:
+      # Flask / Django / Starlette request objects
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req|self\.request|flask\.request)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|files|cookies|headers|GET|POST|COOKIES|META|FILES|body|query_params|path_params|get_json|get_data)$
+      # Route-handler parameters (Flask view args, FastAPI path/query params)
+      - patterns:
+          - pattern-inside: |
+              @$APP.$VERB(...)
+              def $F(..., $P, ...):
+                ...
+          - metavariable-regex:
+              metavariable: $VERB
+              regex: ^(route|get|post|put|patch|delete|api_route)$
+          - pattern-not-inside: |
+              def $F(..., $P = Depends(...), ...):
+                ...
+          - pattern-not-inside: |
+              def $F(..., $P: $T = Depends(...), ...):
+                ...
+          - pattern: $P
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: int(...)
+          - pattern: float(...)
+          - pattern: uuid.UUID(...)
+          - pattern: $X.escape_string(...)
+          - pattern: $X.literal(...)
+          - pattern: psycopg2.sql.Identifier(...)
+          - pattern: sql.Identifier(...)
+          - pattern: sql.Literal(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $CUR.execute($Q, ...)
+              - pattern: $CUR.executemany($Q, ...)
+              - pattern: $CUR.executescript($Q, ...)
+              - pattern: $CUR.exec_driver_sql($Q, ...)
+              - pattern: $CUR.raw($Q, ...)
+              - pattern: $CUR.extra(..., where=$Q, ...)
+              - pattern: $CUR.extra(..., select=$Q, ...)
+              - pattern: $CUR.extra(..., tables=$Q, ...)
+              - pattern: $CUR.read_sql($Q, ...)
+              - pattern: pandas.read_sql($Q, ...)
+              - pattern: pd.read_sql($Q, ...)
+              - pattern: pd.read_sql_query($Q, ...)
+          - metavariable-regex:
+              metavariable: $CUR
+              regex: (?i)^(.*[._])?\w*(cur|cursor|conn|connection|con|db|database|session|engine|sess|objects|manager|c|pd|pandas)$
+          - focus-metavariable: $Q
+      - patterns:
+          - pattern-either:
+              - pattern: sqlalchemy.text($Q)
+              - pattern: text($Q)
+              - pattern: RawSQL($Q, ...)
+              - pattern: django.db.models.expressions.RawSQL($Q, ...)
+          - focus-metavariable: $Q

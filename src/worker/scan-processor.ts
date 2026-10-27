@@ -1249,6 +1249,14 @@ Schema:
                   signed: Object.keys(bundles),
                 },
               });
+              if (orgSettings.orgId) {
+                const { notifySigningFailed } = await import("@/lib/scan-notifications");
+                await notifySigningFailed({
+                  organizationId: orgSettings.orgId,
+                  scanId,
+                  reason: Object.values(failures)[0],
+                }).catch((e) => log.warn({ e }, "Signing-failure notification failed"));
+              }
             }
             if (Object.keys(bundles).length > 0) {
               const sigKey = `signatures/${scanId}/signatures.json`;

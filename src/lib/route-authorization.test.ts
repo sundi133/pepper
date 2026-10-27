@@ -27,6 +27,8 @@ const MEMBER_WRITES: Record<string, string> = {
   "notifications/[id] PATCH": "the caller's own notification",
   "notifications/[id] DELETE": "the caller's own notification",
   "notifications/mark-all-read POST": "the caller's own notifications",
+  "notifications DELETE": "the caller's own read notifications",
+  "notifications/preferences PUT": "the caller's own email preferences",
   "scans/[scanId]/chat POST": "read-only Q&A about a scan",
 };
 

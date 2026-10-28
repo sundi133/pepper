@@ -1,5 +1,6 @@
 "use client";
 
+import { scanModeLabel } from "@/lib/scan-types";
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ type RepositoryInventoryProps = {
   repos: UnifiedConnectedRepo[];
   projects: ScanProject[];
   scanType: ScanJobData["scanType"];
+  scanModules?: string[];
   loading: boolean;
   providerFilter: "all" | RepoProvider;
   onProviderFilterChange: (f: "all" | RepoProvider) => void;
@@ -60,6 +62,7 @@ export function RepositoryInventory({
   repos,
   projects,
   scanType,
+  scanModules = [],
   loading,
   providerFilter,
   onProviderFilterChange,
@@ -84,6 +87,7 @@ export function RepositoryInventory({
           body: JSON.stringify({
             projectId: repo.projectId,
             scanType,
+            ...(scanModules.length > 0 && { scanModules }),
             repoUrl,
             branch: repo.branch || project?.defaultBranch || undefined,
           }),
@@ -107,15 +111,14 @@ export function RepositoryInventory({
       const res = await fetch(`/api/scans/${repo.scanId}/rescan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scanType }),
+        body: JSON.stringify({
+          scanType,
+          ...(scanModules.length > 0 && { scanModules }),
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(data.error || "Failed to start rescan");
-      toast.success(
-        scanType === "FULL"
-          ? "Rescan queued (all scanners)"
-          : `Rescan queued (${scanType.replace(/_ONLY$/, "").toLowerCase()})`,
-      );
+      toast.success(`Rescan queued (${scanModeLabel(scanType, scanModules)})`);
       onRefresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to start rescan");

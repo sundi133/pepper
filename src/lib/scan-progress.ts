@@ -12,6 +12,51 @@ export type ScannerProgressMap = Record<
 export const REASONING_PROGRESS_KEY = "__reasoning__";
 
 /**
+ * Reserved key under `Scan.scannerProgress` holding whole-scan statistics
+ * written when the scan completes ({ linesScanned }), not a scanner status.
+ */
+export const SCAN_STATS_KEY = "__stats__";
+
+/**
+ * Reserved key under `Scan.scannerProgress` holding the scanner groups the user
+ * combined on the scan (e.g. ["SAST", "SECRETS"]), not a scanner status. Set
+ * when the scan is created and carried over whenever the map is reset, so a
+ * combination needs no column of its own. Absent = what scanType implies.
+ */
+export const SCAN_MODULES_KEY = "__modules__";
+
+/** True for per-scanner entries of `Scan.scannerProgress` (not the reserved stores). */
+export function isScannerProgressKey(name: string): boolean {
+  return (
+    name !== REASONING_PROGRESS_KEY && name !== SCAN_STATS_KEY && name !== SCAN_MODULES_KEY
+  );
+}
+
+/** The scanner groups stored on a scan's progress map; [] when none. */
+export function scanModulesFromProgress(scannerProgress: unknown): string[] {
+  if (!scannerProgress || typeof scannerProgress !== "object") return [];
+  const value = (scannerProgress as Record<string, unknown>)[SCAN_MODULES_KEY];
+  return Array.isArray(value) ? value.filter((m): m is string => typeof m === "string") : [];
+}
+
+/** A fresh progress map that keeps the scan's scanner groups (or `{}`). */
+export function progressWithScanModules(modules: readonly string[]): Record<string, string[]> {
+  return modules.length > 0 ? { [SCAN_MODULES_KEY]: [...modules] } : {};
+}
+
+/** Lines across every scanned file, or null for scans recorded before this was tracked. */
+export function scanLinesScanned(
+  scannerProgress: Record<string, unknown> | null | undefined,
+): number | null {
+  const stats = scannerProgress?.[SCAN_STATS_KEY];
+  if (stats && typeof stats === "object") {
+    const n = (stats as { linesScanned?: unknown }).linesScanned;
+    if (typeof n === "number" && n > 0) return n;
+  }
+  return null;
+}
+
+/**
  * The agent deep scan's per-scanner progress key (scanners/mobile-agent's
  * ScannerPlugin.name). Kept as a literal here so this shared, client-safe module
  * does not import the server-only scanner (which pulls in the E2B SDK).
@@ -140,9 +185,9 @@ export function computeScanProgress(
   if (status === "QUEUED") return 5;
   if (!scannerProgress || Object.keys(scannerProgress).length === 0) return 10;
 
-  // The __reasoning__ entry is a live-reasoning store, not a scanner status.
+  // __reasoning__ and __stats__ are reserved stores, not scanner statuses.
   const entries = Object.entries(scannerProgress)
-    .filter(([name]) => name !== REASONING_PROGRESS_KEY)
+    .filter(([name]) => isScannerProgressKey(name))
     .map(([, info]) => info);
   if (entries.length === 0) return 10;
   const done = entries.filter((s) => s.status === "DONE").length;

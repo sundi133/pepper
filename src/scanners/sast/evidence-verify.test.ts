@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  anchorFindingToEvidence,
   extractEvidenceAnchors,
   isAuthorizationOrLogicFinding,
   verifyFindingEvidence,
@@ -147,5 +148,46 @@ describe("authorization and business-logic findings are never dropped for their 
     ]) {
       expect(isAuthorizationOrLogicFinding(f), f.title).toBe(false);
     }
+  });
+});
+
+describe("anchorFindingToEvidence", () => {
+  const sqli = { title: "SQL injection", cweId: "CWE-89", metadata: { sink: "db.query", parameter: "userId" } };
+
+  it("keeps a finding whose cited lines hold the evidence", () => {
+    const a = anchorFindingToEvidence({ ...sqli, startLine: 6, endLine: 6 }, FILE, { startLine: 1, endLine: 7 });
+    expect(a).toMatchObject({ ok: true, startLine: 6, endLine: 6 });
+    expect(a.relocated).toBeUndefined();
+  });
+
+  it("moves a wrong line number to the nearest line holding the cited sink", () => {
+    const long = [FILE, ...Array.from({ length: 20 }, (_, i) => `// filler ${i}`)].join("\n");
+    const a = anchorFindingToEvidence({ ...sqli, startLine: 20, endLine: 21 }, long, { startLine: 1, endLine: 27 });
+    expect(a.ok).toBe(true);
+    expect(a.relocated).toBe(true);
+    expect(a.startLine).toBe(6);
+    expect(a.endLine).toBe(7);
+  });
+
+  it("rejects a finding whose evidence is outside the lines the model was shown", () => {
+    const a = anchorFindingToEvidence({ ...sqli, startLine: 2 }, FILE, { startLine: 1, endLine: 3 });
+    expect(a.ok).toBe(false);
+    expect(a.reason).toMatch(/reviewed lines 1-3/);
+  });
+
+  it("matches whole identifiers, not substrings", () => {
+    const file = "const querySelectorAll = 1;\nconst x = 2;\nconst y = 3;\nconst z = 4;\nrun();";
+    const a = anchorFindingToEvidence({ title: "Injection", metadata: { sink: "query" }, startLine: 5 }, file);
+    expect(a.ok).toBe(false);
+  });
+
+  it("rejects a citation outside the reviewed lines when nothing can be checked", () => {
+    expect(anchorFindingToEvidence({ title: "Weak crypto", startLine: 90, metadata: {} }, FILE, { startLine: 1, endLine: 7 }).ok).toBe(false);
+    expect(anchorFindingToEvidence({ title: "Weak crypto", startLine: 9, metadata: {} }, FILE, { startLine: 1, endLine: 7 }).ok).toBe(true);
+  });
+
+  it("never moves or rejects authorization and business-logic findings", () => {
+    const idor = { title: "IDOR on order lookup", cweId: "CWE-639", startLine: 2, metadata: { sink: "findOrder" } };
+    expect(anchorFindingToEvidence(idor, FILE, { startLine: 1, endLine: 3 })).toMatchObject({ ok: true, startLine: 2 });
   });
 });

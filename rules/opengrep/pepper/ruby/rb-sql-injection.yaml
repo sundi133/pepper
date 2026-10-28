@@ -1,0 +1,168 @@
+rules:
+  - id: pepper.rb.sql-injection
+    mode: taint
+    languages: [ruby]
+    severity: ERROR
+    message: >-
+      Request input is interpolated into a SQL fragment. An attacker can
+      change the query (read or modify any data, bypass authentication).
+      Fix: use bound parameters - `where("name = ?", params[:name])`,
+      `where(name: params[:name])`, `find_by_sql(["... ?", v])` - and
+      allow-list column names for `order`/`group`.
+    metadata:
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+      references:
+        - https://guides.rubyonrails.org/security.html#sql-injection
+        - https://rails-sqli.org/
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      # Rails / Grape / Sinatra-class controllers
+      - patterns:
+          - pattern-inside: |
+              class $CTRL < $BASE
+                ...
+              end
+          # (metavariable-regex does not match Ruby class names here; a
+          # metavariable-pattern with pattern-regex does)
+          - metavariable-pattern:
+              metavariable: $CTRL
+              patterns:
+                - pattern-regex: (Controller|API|App|Application|Server|Routes|Endpoint)$
+          - pattern-either:
+              - pattern: params
+              - pattern: cookies
+              - pattern: request.params
+              - pattern: request.query_parameters
+              - pattern: request.request_parameters
+              - pattern: request.path_parameters
+              - pattern: request.headers
+              - pattern: request.body
+              - pattern: request.raw_post
+              - pattern: request.query_string
+              - pattern: request.referer
+              - pattern: request.referrer
+              - pattern: request.cookies
+      # Sinatra classic route blocks
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $VERB $ROUTE do
+                    ...
+                  end
+              - pattern-inside: |
+                  $VERB($ROUTE) do
+                    ...
+                  end
+          - metavariable-regex:
+              metavariable: $VERB
+              regex: ^(get|post|put|patch|delete|options)$
+          - pattern-either:
+              - pattern: params
+              - pattern: cookies
+              - pattern: request.params
+              - pattern: request.query_parameters
+              - pattern: request.request_parameters
+              - pattern: request.path_parameters
+              - pattern: request.headers
+              - pattern: request.body
+              - pattern: request.raw_post
+              - pattern: request.query_string
+              - pattern: request.referer
+              - pattern: request.referrer
+              - pattern: request.cookies
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: records loaded by id,
+      # route helpers (same-site URLs), translations, numbers and booleans.
+      - pattern-either:
+          - patterns:
+              - pattern: $M.$FIND(...)
+              - metavariable-regex:
+                  metavariable: $FIND
+                  regex: ^(find|find_by|find_by!|find_sole_by|find_or_create_by|find_or_create_by!|find_or_initialize_by|exists\?)$
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?!params\b|cookies\b|request\b)
+          - patterns:
+              - pattern-either:
+                  - pattern: $HELPER(...)
+                  - pattern: $RECV.$HELPER(...)
+              - metavariable-regex:
+                  metavariable: $HELPER
+                  regex: ^[a-z]\w*_(path|url)$
+              - metavariable-regex:
+                  metavariable: $HELPER
+                  regex: ^(?!(original|request|base|full|redirect|return|callback|referr?er|back|next|target|destination|image|avatar|source|remote|external|cdn)_)
+          - pattern: I18n.t(...)
+          - pattern: I18n.translate(...)
+          - pattern: t(...)
+          - patterns:
+              - pattern: $X.$PRED
+              - metavariable-regex:
+                  metavariable: $PRED
+                  regex: ^(to_i|to_f|count|size|length|present\?|blank\?|nil\?|empty\?|any\?|none\?|include\?|exists\?)$
+          - pattern: Digest::$H.hexdigest(...)
+          - pattern: SecureRandom.$R(...)
+      - pattern-either:
+          - pattern: $X.to_i
+          - pattern: $X.to_f
+          - pattern: Integer(...)
+          - pattern: Float(...)
+          - pattern: $CONN.quote(...)
+          - pattern: $M.sanitize_sql(...)
+          - pattern: $M.sanitize_sql_array(...)
+          - pattern: $M.sanitize_sql_like(...)
+          - pattern: $M.sanitize_sql_for_order(...)
+          - pattern: ActiveRecord::Base.sanitize_sql(...)
+    pattern-sinks:
+      # Raw SQL entry points: the whole string is SQL
+      - patterns:
+          - pattern-either:
+              - pattern: $M.find_by_sql($Q, ...)
+              - pattern: $M.count_by_sql($Q, ...)
+              - pattern: $C.execute($Q, ...)
+              - pattern: $C.exec_query($Q, ...)
+              - pattern: $C.exec_update($Q, ...)
+              - pattern: $C.exec_delete($Q, ...)
+              - pattern: $C.exec_insert($Q, ...)
+              - pattern: $C.select_all($Q, ...)
+              - pattern: $C.select_one($Q, ...)
+              - pattern: $C.select_value($Q, ...)
+              - pattern: $C.select_values($Q, ...)
+              - pattern: $C.select_rows($Q, ...)
+              - pattern: Arel.sql($Q)
+              - pattern: Sequel.lit($Q, ...)
+          # Array form ["... ?", value]: only the SQL template is checked (below)
+          - pattern-not: $M.$F([...], ...)
+          - focus-metavariable: $Q
+      - patterns:
+          - pattern-either:
+              - pattern: $M.find_by_sql([$Q, ...], ...)
+              - pattern: $M.count_by_sql([$Q, ...], ...)
+              - pattern: $M.where([$Q, ...], ...)
+          - focus-metavariable: $Q
+      # Query-builder methods: only a string built from input is a SQL
+      # fragment (a hash or an array with "?" placeholders is bound safely).
+      - patterns:
+          - pattern: $M.$METHOD($Q, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(where|rewhere|not|or|having|order|reorder|group|joins|from|select|pluck|lock|exists\?|calculate|delete_by|destroy_by|delete_all|destroy_all|update_all|find_by|find_or_create_by|find_or_initialize_by|order!|where!)$
+          - metavariable-pattern:
+              metavariable: $Q
+              patterns:
+                - pattern-either:
+                    - pattern: |
+                        "...#{...}..."
+                    - pattern: $A + $B
+                    - pattern: $A % $B
+                    - pattern: $A << $B
+                    - pattern: format(...)
+          - focus-metavariable: $Q

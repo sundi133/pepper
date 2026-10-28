@@ -1,5 +1,7 @@
 "use client";
 
+import { scanModulesFromProgress } from "@/lib/scan-progress";
+import { scanModeLabel } from "@/lib/scan-types";
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
@@ -388,7 +390,7 @@ export default function ComplianceReportPage() {
       : []),
     {
       label: scanMeta?.scanType
-        ? `${String(scanMeta.scanType)} scan`
+        ? scanModeLabel(String(scanMeta.scanType), scanModulesFromProgress(scanMeta.scannerProgress))
         : "Scan",
       href: `/scans/${scanId}`,
     },

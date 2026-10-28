@@ -1,0 +1,143 @@
+rules:
+  - id: pepper.py.path-traversal
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Request input is used as a file path. An attacker can use "../" or an
+      absolute path to read, overwrite or delete files outside the intended
+      directory.
+      Fix: use `send_from_directory()` / `werkzeug.utils.safe_join()`, or take
+      `os.path.basename()` / `secure_filename()` of the input, resolve it
+      against a fixed base directory and check the resolved path still starts
+      with that base.
+    metadata:
+      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+      owasp: "A01:2021 - Broken Access Control"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      references:
+        - https://owasp.org/www-community/attacks/Path_Traversal
+        - https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req|self\.request|flask\.request)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|files|cookies|headers|GET|POST|COOKIES|META|FILES|body|query_params|path_params|get_json|get_data)$
+      - patterns:
+          - pattern-inside: |
+              @$APP.$VERB(...)
+              def $F(..., $P, ...):
+                ...
+          - metavariable-regex:
+              metavariable: $VERB
+              regex: ^(route|get|post|put|patch|delete|api_route)$
+          - pattern-not-inside: |
+              def $F(..., $P = Depends(...), ...):
+                ...
+          - pattern-not-inside: |
+              def $F(..., $P: $T = Depends(...), ...):
+                ...
+          - pattern: $P
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: records loaded by id,
+      # framework URL builders, translations, lengths, booleans and digests.
+      - pattern-either:
+          - pattern: get_object_or_404(...)
+          - pattern: get_list_or_404(...)
+          - pattern: $M.objects.get(...)
+          - pattern: $M.objects.get_or_create(...)
+          - pattern: $M.objects.filter(...).first()
+          - pattern: $M.query.get(...)
+          - pattern: $M.query.get_or_404(...)
+          - pattern: $M.query.filter_by(...).first()
+          - pattern: $M.query.filter_by(...).first_or_404()
+          - pattern: $Q.one()
+          - pattern: $Q.one_or_none()
+          - pattern: $Q.scalar_one()
+          - pattern: $Q.scalar_one_or_none()
+          - patterns:
+              - pattern: $SESSION.get($MODEL, ...)
+              - metavariable-regex:
+                  metavariable: $MODEL
+                  regex: ^[A-Z]\w*$
+          - pattern: url_for(...)
+          - pattern: reverse(...)
+          - pattern: reverse_lazy(...)
+          - pattern: len(...)
+          - pattern: bool(...)
+          - pattern: isinstance(...)
+          - pattern: hashlib.$H(...).hexdigest()
+          - pattern: hmac.new(...).hexdigest()
+          - pattern: uuid.uuid4()
+          - pattern: gettext(...)
+          - pattern: _(...)
+      - pattern-either:
+          - pattern: os.path.basename(...)
+          - pattern: secure_filename(...)
+          - pattern: werkzeug.utils.secure_filename(...)
+          - pattern: safe_join(...)
+          - pattern: werkzeug.utils.safe_join(...)
+          - pattern: werkzeug.security.safe_join(...)
+          - pattern: get_valid_filename(...)
+          - pattern: int(...)
+          - pattern: uuid.UUID(...)
+      # An explicit containment check guards the value afterwards
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern: $P.startswith(...)
+              - pattern: $P.is_relative_to(...)
+              - pattern: $P.relative_to(...)
+              - pattern: os.path.commonpath([..., $P, ...])
+              - pattern: os.path.commonprefix([..., $P, ...])
+          - focus-metavariable: $P
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: open($P, ...)
+              - pattern: io.open($P, ...)
+              - pattern: codecs.open($P, ...)
+              - pattern: send_file($P, ...)
+              - pattern: flask.send_file($P, ...)
+              - pattern: FileResponse($P, ...)
+              - pattern: os.remove($P)
+              - pattern: os.unlink($P)
+              - pattern: os.rmdir($P)
+              - pattern: shutil.rmtree($P, ...)
+              - pattern: shutil.copy($P, ...)
+              - pattern: shutil.copy($SRC, $P, ...)
+              - pattern: shutil.copyfile($P, ...)
+              - pattern: shutil.copyfile($SRC, $P, ...)
+              - pattern: shutil.move($P, ...)
+              - pattern: shutil.move($SRC, $P, ...)
+              - pattern: os.rename($P, ...)
+              - pattern: os.rename($SRC, $P)
+              - pattern: tarfile.open($P, ...)
+              - pattern: zipfile.ZipFile($P, ...)
+          - focus-metavariable: $P
+      # pathlib: Path(base, name).read_text(), (Path(base) / name).open()
+      - patterns:
+          - pattern-either:
+              - pattern: pathlib.Path(..., $P, ...).$M(...)
+              - pattern: ($BASE / $P).$M(...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(open|read_text|read_bytes|write_text|write_bytes|unlink|rmdir|rename|replace|touch|mkdir|symlink_to|hardlink_to|iterdir|glob|rglob)$
+          - focus-metavariable: $P
+      # Werkzeug FileStorage.save(dst)
+      - patterns:
+          - pattern: $FILE.save($P, ...)
+          - metavariable-regex:
+              metavariable: $FILE
+              regex: (?i)^(\w+\.)*(f|fs|file|files|upload|uploaded|attachment|image|img|doc|document|avatar|photo)\w*$
+          - focus-metavariable: $P

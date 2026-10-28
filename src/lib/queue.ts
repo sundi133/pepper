@@ -104,6 +104,8 @@ export interface ScanJobData {
     | "ZERO_DAY_ONLY"
     | "CONTAINER_ONLY"
     | "K8S_ONLY";
+  /** Scanner groups combined by the user; empty/absent = what scanType implies. */
+  scanModules?: string[];
   baseSha?: string;
   commitSha?: string;
   prNumber?: number;

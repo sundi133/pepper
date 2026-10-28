@@ -1,0 +1,32 @@
+rules:
+  - id: pepper.go.tls-insecure-skip-verify
+    languages: [go]
+    severity: WARNING
+    message: >-
+      TLS certificate verification is disabled (InsecureSkipVerify), so
+      connections can be intercepted and modified (man-in-the-middle).
+      Fix: remove InsecureSkipVerify; for an internal CA load it into
+      `tls.Config{RootCAs: pool}`.
+    metadata:
+      cwe: "CWE-295: Improper Certificate Validation"
+      owasp: "A02:2021 - Cryptographic Failures"
+      category: security
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://pkg.go.dev/crypto/tls#Config
+    patterns:
+      - pattern-either:
+          - pattern: |
+              tls.Config{..., InsecureSkipVerify: true, ...}
+          - pattern: $CFG.InsecureSkipVerify = true
+      # A custom VerifyPeerCertificate / VerifyConnection still checks the chain.
+      - pattern-not: |
+          tls.Config{..., VerifyPeerCertificate: $V, ...}
+      - pattern-not: |
+          tls.Config{..., VerifyConnection: $V, ...}
+    paths:
+      exclude:
+        - "*_test.go"
+        - "testdata/"

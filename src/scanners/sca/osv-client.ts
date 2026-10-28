@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { findPackageUsageWithLines } from "./find-package-usage";
 import { osvFixVersion, osvSeverity, type OsvRecord } from "./osv-severity";
 import { enrichFinding } from "../shared/finding-normalize";
+import { impactForWeakness, upgradeRisk } from "@/lib/sca-insights";
 
 const DETAIL_CONCURRENCY = 8;
 const DETAIL_TIMEOUT_MS = 15_000;
@@ -178,7 +179,7 @@ export async function queryOsvBatch(
         const dep = batch[j];
 
         for (const vuln of mergeAliasedVulns(vulns.map((v) => details.get(v.id) ?? v))) {
-          const { severity, cvssScore } = osvSeverity(vuln);
+          const { severity, cvssScore, cvssVector } = osvSeverity(vuln);
           const cveId =
             vuln.aliases?.find((a) => a.startsWith("CVE-")) ??
             (vuln.id.startsWith("CVE-") ? vuln.id : undefined);
@@ -206,6 +207,8 @@ export async function queryOsvBatch(
             }
           }
 
+          const weakness = impactForWeakness(detectedCwe, `${vuln.summary ?? ""} ${vuln.details ?? ""}`);
+
           const rawFinding: RawFinding = {
             scanner: "SCA",
             severity,
@@ -223,6 +226,9 @@ export async function queryOsvBatch(
               osvId: vuln.id,
               fixVersion,
               cvssScore: cvssScore ?? undefined,
+              cvssVector,
+              upgradeRisk: upgradeRisk(dep.version, fixVersion),
+              impactConsequences: weakness?.consequences,
               aliases: vuln.aliases?.length ? vuln.aliases : undefined,
               references: vuln.references?.map((r) => r.url),
               usageLocations: usageLocations.length > 0 ? usageLocations : undefined,
@@ -240,8 +246,9 @@ export async function queryOsvBatch(
                 vuln.details ||
                 vuln.summary ||
                 `Published vulnerability ${vuln.id} affecting ${dep.name}@${dep.version}.`,
-              impact:
-                "Vulnerable third-party dependency may allow attackers to exploit known defects to impact application integrity or availability.",
+              impact: weakness
+                ? `${weakness.outcome} through ${dep.name}@${dep.version}: ${weakness.consequences.join("; ").toLowerCase()}.`
+                : "Vulnerable third-party dependency may allow attackers to exploit known defects to impact application integrity or availability.",
               fix: fixVersion
                 ? `Upgrade to version ${fixVersion} or later.`
                 : `Update dependency ${dep.name} to a secure version.`,

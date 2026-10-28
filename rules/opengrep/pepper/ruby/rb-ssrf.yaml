@@ -1,0 +1,141 @@
+rules:
+  - id: pepper.rb.ssrf
+    mode: taint
+    languages: [ruby]
+    severity: ERROR
+    message: >-
+      Request input controls the URL of a server-side HTTP request. An
+      attacker can make the server call internal services or cloud metadata
+      endpoints (e.g. http://169.254.169.254/) and read the response.
+      Fix: do not let the caller choose the host. Validate scheme and host
+      against an allow-list, resolve the host and reject private, loopback
+      and link-local addresses (e.g. the ssrf_filter gem).
+    metadata:
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+      owasp: "A10:2021 - Server-Side Request Forgery (SSRF)"
+      category: security
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      # Rails / Grape / Sinatra-class controllers
+      - patterns:
+          - pattern-inside: |
+              class $CTRL < $BASE
+                ...
+              end
+          # (metavariable-regex does not match Ruby class names here; a
+          # metavariable-pattern with pattern-regex does)
+          - metavariable-pattern:
+              metavariable: $CTRL
+              patterns:
+                - pattern-regex: (Controller|API|App|Application|Server|Routes|Endpoint)$
+          - pattern-either:
+              - pattern: params
+              - pattern: cookies
+              - pattern: request.params
+              - pattern: request.query_parameters
+              - pattern: request.request_parameters
+              - pattern: request.path_parameters
+              - pattern: request.headers
+              - pattern: request.body
+              - pattern: request.raw_post
+              - pattern: request.query_string
+              - pattern: request.referer
+              - pattern: request.referrer
+              - pattern: request.cookies
+      # Sinatra classic route blocks
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $VERB $ROUTE do
+                    ...
+                  end
+              - pattern-inside: |
+                  $VERB($ROUTE) do
+                    ...
+                  end
+          - metavariable-regex:
+              metavariable: $VERB
+              regex: ^(get|post|put|patch|delete|options)$
+          - pattern-either:
+              - pattern: params
+              - pattern: cookies
+              - pattern: request.params
+              - pattern: request.query_parameters
+              - pattern: request.request_parameters
+              - pattern: request.path_parameters
+              - pattern: request.headers
+              - pattern: request.body
+              - pattern: request.raw_post
+              - pattern: request.query_string
+              - pattern: request.referer
+              - pattern: request.referrer
+              - pattern: request.cookies
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: records loaded by id,
+      # route helpers (same-site URLs), translations, numbers and booleans.
+      - pattern-either:
+          - patterns:
+              - pattern: $M.$FIND(...)
+              - metavariable-regex:
+                  metavariable: $FIND
+                  regex: ^(find|find_by|find_by!|find_sole_by|find_or_create_by|find_or_create_by!|find_or_initialize_by|exists\?)$
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?!params\b|cookies\b|request\b)
+          - patterns:
+              - pattern-either:
+                  - pattern: $HELPER(...)
+                  - pattern: $RECV.$HELPER(...)
+              - metavariable-regex:
+                  metavariable: $HELPER
+                  regex: ^[a-z]\w*_(path|url)$
+              - metavariable-regex:
+                  metavariable: $HELPER
+                  regex: ^(?!(original|request|base|full|redirect|return|callback|referr?er|back|next|target|destination|image|avatar|source|remote|external|cdn)_)
+          - pattern: I18n.t(...)
+          - pattern: I18n.translate(...)
+          - pattern: t(...)
+          - patterns:
+              - pattern: $X.$PRED
+              - metavariable-regex:
+                  metavariable: $PRED
+                  regex: ^(to_i|to_f|count|size|length|present\?|blank\?|nil\?|empty\?|any\?|none\?|include\?|exists\?)$
+          - pattern: Digest::$H.hexdigest(...)
+          - pattern: SecureRandom.$R(...)
+      - pattern-either:
+          - pattern: CGI.escape(...)
+          - pattern: ERB::Util.url_encode(...)
+          - pattern: $X.to_i
+          - pattern: SsrfFilter.get(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Net::HTTP.get($URL, ...)
+              - pattern: Net::HTTP.get_response($URL, ...)
+              - pattern: Net::HTTP.post($URL, ...)
+              - pattern: Net::HTTP.post_form($URL, ...)
+              - pattern: Net::HTTP.start($URL, ...)
+              - pattern: URI.open($URL, ...)
+              - pattern: URI($URL).open(...)
+              - pattern: URI.parse($URL).open(...)
+              - pattern: HTTParty.$M($URL, ...)
+              - pattern: Faraday.$M($URL, ...)
+              - pattern: Faraday.new($URL, ...)
+              - pattern: |
+                  Faraday.new(url: $URL, ...)
+              - pattern: RestClient.$M($URL, ...)
+              - pattern: Excon.$M($URL, ...)
+              - pattern: HTTP.$M($URL, ...)
+              - pattern: Typhoeus.$M($URL, ...)
+          # A fixed scheme+host prefix only lets the caller pick a path.
+          - metavariable-regex:
+              metavariable: $URL
+              regex: ^(?!(URI\()?["'](https?:)?//[^/"'#]+/)
+          - focus-metavariable: $URL

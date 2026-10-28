@@ -1,5 +1,6 @@
 "use client";
 
+import { scanModeLabel } from "@/lib/scan-types";
 import { Suspense, useMemo, useState } from "react";
 import useSWR from "swr";
 import { jsonFetcher } from "@/lib/fetcher";
@@ -586,7 +587,7 @@ function TrendsView() {
                   <tr key={s.scanId} className="border-b border-border/40 last:border-b-0">
                     <td className="px-4 py-2.5 text-muted-foreground">{fmtDate(s.completedAt)}</td>
                     <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                      {s.scanType.replace("_ONLY", "").replace("_", " ").toLowerCase()}
+                      {scanModeLabel(s.scanType)}
                     </td>
                     <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
                       {s.commitSha ? s.commitSha.slice(0, 8) : "—"}

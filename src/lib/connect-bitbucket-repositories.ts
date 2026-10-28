@@ -19,6 +19,7 @@ export async function connectBitbucketRepositories(params: {
   repoUuids: string[];
   workspace: string;
   scanType?: ScanJobData["scanType"];
+  scanModules?: string[];
 }): Promise<ConnectBitbucketRepoResult> {
   const auth = await getOrgBitbucketAuthOrThrow(params.organizationId);
   const workspace = params.workspace.trim();
@@ -87,6 +88,7 @@ export async function connectBitbucketRepositories(params: {
       connectedViaBitbucket: true,
       queueInitialScan: true,
       scanType: params.scanType,
+      scanModules: params.scanModules,
     });
 
     connected.push({

@@ -17,6 +17,7 @@ export async function connectAzureDevOpsRepositories(params: {
   userId: string;
   repoIds: string[];
   scanType?: ScanJobData["scanType"];
+  scanModules?: string[];
 }): Promise<ConnectAzureDevOpsRepoResult> {
   const auth = await getOrgAzureDevOpsAuthOrThrow(params.organizationId);
 
@@ -77,6 +78,7 @@ export async function connectAzureDevOpsRepositories(params: {
       connectedViaAzure: true,
       queueInitialScan: true,
       scanType: params.scanType,
+      scanModules: params.scanModules,
     });
 
     connected.push({

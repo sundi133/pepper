@@ -1,3 +1,5 @@
+import { normalizeScanSelection } from "@/lib/scan-types";
+import { progressWithScanModules, scanModulesFromProgress } from "@/lib/scan-progress";
 import { execFileSync } from "child_process";
 import { prisma } from "@/lib/prisma";
 import { scanQueue, ScanJobData } from "@/lib/queue";
@@ -37,6 +39,8 @@ export async function rescanScan(params: {
   scanId: string;
   /** Overrides the original scan's type; omitted reuses it. */
   scanType?: ScanJobData["scanType"];
+  /** With scanType, the scanner groups to combine; omitted reuses the original's. */
+  scanModules?: string[];
   ipAddress?: string | null;
   /** Extra audit detail naming the client that made the change (e.g. "mcp"). */
   via?: string;
@@ -78,7 +82,13 @@ export async function rescanScan(params: {
   });
   const sourceType =
     originalScan.sourceType === "WEBHOOK" ? "GIT_CLONE" : originalScan.sourceType;
-  const scanType = params.scanType ?? originalScan.scanType;
+  // A new type replaces the whole selection; otherwise keep the original's modules.
+  const { scanType, scanModules } = params.scanType
+    ? normalizeScanSelection(params.scanType, params.scanModules)
+    : {
+        scanType: originalScan.scanType,
+        scanModules: scanModulesFromProgress(originalScan.scannerProgress),
+      };
   const branch =
     sourceType === "GIT_CLONE"
       ? resolveGitDefaultBranch(originalScan.sourceRef) ||
@@ -103,6 +113,7 @@ export async function rescanScan(params: {
     data: {
       projectId: originalScan.projectId,
       scanType,
+      scannerProgress: progressWithScanModules(scanModules),
       branch,
       baseSha: originalScan.baseSha,
       sourceType,
@@ -126,6 +137,7 @@ export async function rescanScan(params: {
     sourceType: sourceType as ScanJobData["sourceType"],
     sourceRef: originalScan.sourceRef,
     scanType: scanType as ScanJobData["scanType"],
+    scanModules,
     baseSha: originalScan.baseSha || undefined,
     commitSha: originalScan.commitSha || undefined,
     prNumber: originalScan.prNumber ?? undefined,

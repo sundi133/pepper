@@ -1,0 +1,133 @@
+rules:
+  - id: pepper.py.ssrf
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Request input controls the URL of a server-side HTTP request. An
+      attacker can make the server call internal services or cloud metadata
+      endpoints (e.g. http://169.254.169.254/) and read the response.
+      Fix: do not let the caller choose the host. Validate the URL against an
+      allow-list of hosts/schemes, resolve the hostname and reject private,
+      loopback and link-local addresses before connecting.
+    metadata:
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+      owasp: "A10:2021 - Server-Side Request Forgery (SSRF)"
+      category: security
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req|self\.request|flask\.request)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|files|cookies|headers|GET|POST|COOKIES|META|FILES|body|query_params|path_params|get_json|get_data)$
+      - patterns:
+          - pattern-inside: |
+              @$APP.$VERB(...)
+              def $F(..., $P, ...):
+                ...
+          - metavariable-regex:
+              metavariable: $VERB
+              regex: ^(route|get|post|put|patch|delete|api_route)$
+          - pattern-not-inside: |
+              def $F(..., $P = Depends(...), ...):
+                ...
+          - pattern-not-inside: |
+              def $F(..., $P: $T = Depends(...), ...):
+                ...
+          - pattern: $P
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: records loaded by id,
+      # framework URL builders, translations, lengths, booleans and digests.
+      - pattern-either:
+          - pattern: get_object_or_404(...)
+          - pattern: get_list_or_404(...)
+          - pattern: $M.objects.get(...)
+          - pattern: $M.objects.get_or_create(...)
+          - pattern: $M.objects.filter(...).first()
+          - pattern: $M.query.get(...)
+          - pattern: $M.query.get_or_404(...)
+          - pattern: $M.query.filter_by(...).first()
+          - pattern: $M.query.filter_by(...).first_or_404()
+          - pattern: $Q.one()
+          - pattern: $Q.one_or_none()
+          - pattern: $Q.scalar_one()
+          - pattern: $Q.scalar_one_or_none()
+          - patterns:
+              - pattern: $SESSION.get($MODEL, ...)
+              - metavariable-regex:
+                  metavariable: $MODEL
+                  regex: ^[A-Z]\w*$
+          - pattern: url_for(...)
+          - pattern: reverse(...)
+          - pattern: reverse_lazy(...)
+          - pattern: len(...)
+          - pattern: bool(...)
+          - pattern: isinstance(...)
+          - pattern: hashlib.$H(...).hexdigest()
+          - pattern: hmac.new(...).hexdigest()
+          - pattern: uuid.uuid4()
+          - pattern: gettext(...)
+          - pattern: _(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: requests.$M($URL, ...)
+              - pattern: httpx.$M($URL, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(get|post|put|patch|delete|head|options|stream)$
+          # A fixed scheme+host prefix only lets the caller pick a path.
+          - metavariable-regex:
+              metavariable: $URL
+              regex: ^(?!f?["'](https?:)?//[^/{"']+/)
+          - focus-metavariable: $URL
+      - patterns:
+          - pattern: $SESSION.$M($URL, ...)
+          - pattern-either:
+              - pattern-inside: |
+                  $SESSION = $HTTP.$CLS(...)
+                  ...
+              - pattern-inside: |
+                  with $HTTP.$CLS(...) as $SESSION:
+                    ...
+              - pattern-inside: |
+                  async with $HTTP.$CLS(...) as $SESSION:
+                    ...
+          - metavariable-regex:
+              metavariable: $HTTP
+              regex: ^(requests|httpx|aiohttp)$
+          - metavariable-regex:
+              metavariable: $CLS
+              regex: ^(Session|Client|AsyncClient|ClientSession)$
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(get|post|put|patch|delete|head|options|stream|request)$
+          # A fixed scheme+host prefix only lets the caller pick a path.
+          - metavariable-regex:
+              metavariable: $URL
+              regex: ^(?!f?["'](https?:)?//[^/{"']+/)
+          - focus-metavariable: $URL
+      - patterns:
+          - pattern-either:
+              - pattern: requests.request($METHOD, $URL, ...)
+              - pattern: httpx.request($METHOD, $URL, ...)
+              - pattern: urllib.request.urlopen($URL, ...)
+              - pattern: urllib.request.Request($URL, ...)
+              - pattern: urllib2.urlopen($URL, ...)
+              - pattern: aiohttp.ClientSession(...).$M($URL, ...)
+          # A fixed scheme+host prefix only lets the caller pick a path.
+          - metavariable-regex:
+              metavariable: $URL
+              regex: ^(?!f?["'](https?:)?//[^/{"']+/)
+          - focus-metavariable: $URL

@@ -157,3 +157,88 @@ export function verifyFindingEvidence(
 
   return { ok: true, anchors, matched };
 }
+
+/** Lines of slack around the cited range and the reviewed range (chunk overlap, off-by-one). */
+const ANCHOR_WINDOW = 3;
+
+export interface EvidenceAnchoring {
+  /** False when the finding cites code the model was not shown. */
+  ok: boolean;
+  startLine?: number;
+  endLine?: number;
+  /** True when the cited lines were moved to where the evidence actually is. */
+  relocated?: boolean;
+  reason?: string;
+}
+
+function lineHasIdentifier(line: string, ident: string): boolean {
+  let from = 0;
+  for (;;) {
+    const i = line.indexOf(ident, from);
+    if (i === -1) return false;
+    const before = line[i - 1];
+    const after = line[i + ident.length];
+    if (!(before && /[A-Za-z0-9_$]/.test(before)) && !(after && /[A-Za-z0-9_$]/.test(after))) {
+      return true;
+    }
+    from = i + 1;
+  }
+}
+
+/**
+ * Tie a finding's line numbers to the code that backs it.
+ *
+ * `reviewed` is the line range the model was shown (its chunk). A finding
+ * whose cited sink/parameter identifiers appear on or next to its cited lines
+ * is left alone. If they appear elsewhere in the reviewed range, the finding
+ * is moved to the nearest such line, so the report points at the real sink. If
+ * none of them appear anywhere in the reviewed range, the model described code
+ * it never saw, and the finding is rejected.
+ *
+ * Authorization and business-logic findings describe a missing control and
+ * are never moved or rejected here (see ABSENCE_CWES).
+ */
+export function anchorFindingToEvidence(
+  finding: EvidenceCandidate & { endLine?: number },
+  fileContent: string | undefined,
+  reviewed?: { startLine: number; endLine: number },
+): EvidenceAnchoring {
+  const start = finding.startLine;
+  const end = finding.endLine && finding.endLine >= (start ?? 0) ? finding.endLine : start;
+  if (!fileContent || !start || isAuthorizationOrLogicFinding(finding)) {
+    return { ok: true, startLine: start, endLine: end };
+  }
+
+  const lines = fileContent.split("\n");
+  const from = Math.max(1, reviewed?.startLine ?? 1);
+  const to = Math.min(lines.length, reviewed?.endLine ?? lines.length);
+  const anchors = extractEvidenceAnchors(finding);
+
+  if (anchors.length === 0) {
+    if (start < from - ANCHOR_WINDOW || start > to + ANCHOR_WINDOW) {
+      return { ok: false, reason: `cited line ${start} is outside the reviewed lines ${from}-${to}` };
+    }
+    return { ok: true, startLine: start, endLine: end };
+  }
+
+  const hasAnchor = (n: number) => anchors.some((a) => lineHasIdentifier(lines[n - 1] ?? "", a));
+
+  const winFrom = Math.max(from, start - ANCHOR_WINDOW);
+  const winTo = Math.min(to, (end ?? start) + ANCHOR_WINDOW);
+  for (let n = winFrom; n <= winTo; n++) {
+    if (hasAnchor(n)) return { ok: true, startLine: start, endLine: end };
+  }
+
+  let best: number | undefined;
+  for (let n = from; n <= to; n++) {
+    if (hasAnchor(n) && (best === undefined || Math.abs(n - start) < Math.abs(best - start))) best = n;
+  }
+  if (best === undefined) {
+    return {
+      ok: false,
+      reason: `none of the cited identifiers (${anchors.join(", ")}) appear in the reviewed lines ${from}-${to}`,
+    };
+  }
+  const span = Math.max(0, (end ?? start) - start);
+  return { ok: true, startLine: best, endLine: Math.min(to, best + span), relocated: true };
+}

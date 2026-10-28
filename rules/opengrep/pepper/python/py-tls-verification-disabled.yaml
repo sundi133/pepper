@@ -1,0 +1,35 @@
+rules:
+  - id: pepper.py.tls-verification-disabled
+    languages: [python]
+    severity: WARNING
+    message: >-
+      TLS certificate verification is disabled, so connections can be
+      intercepted and modified (man-in-the-middle).
+      Fix: remove `verify=False` / CERT_NONE; for an internal CA pass its
+      bundle with `verify="/path/to/ca.pem"` or `ssl.create_default_context(cafile=...)`.
+    metadata:
+      cwe: "CWE-295: Improper Certificate Validation"
+      owasp: "A02:2021 - Cryptographic Failures"
+      category: security
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://requests.readthedocs.io/en/latest/user/advanced/#ssl-cert-verification
+        - https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Security_Cheat_Sheet.html
+    pattern-either:
+      - pattern: requests.$M(..., verify=False, ...)
+      - pattern: httpx.$M(..., verify=False, ...)
+      - pattern: $SESSION.verify = False
+      - pattern: ssl._create_unverified_context(...)
+      - pattern: ssl._https_verify_certificates(False)
+      - pattern: $CTX.verify_mode = ssl.CERT_NONE
+      - pattern: ssl.wrap_socket(..., cert_reqs=ssl.CERT_NONE, ...)
+      - pattern: aiohttp.TCPConnector(..., ssl=False, ...)
+      - pattern: aiohttp.TCPConnector(..., verify_ssl=False, ...)
+      - pattern: urllib3.PoolManager(..., cert_reqs="CERT_NONE", ...)
+    paths:
+      exclude:
+        - "test_*.py"
+        - "*_test.py"
+        - "tests/"

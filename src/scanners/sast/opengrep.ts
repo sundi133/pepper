@@ -294,6 +294,9 @@ export function buildOpengrepArgs(opts: {
     "--quiet",
     "--disable-version-check",
     "--no-rewrite-rule-ids",
+    // Follow taint through functions defined in the same file, so a helper
+    // that builds a query is caught and one that sanitises is respected.
+    "--taint-intrafile",
     "--timeout",
     process.env.OPENGREP_RULE_TIMEOUT_SECONDS?.trim() || "10",
     "--timeout-threshold",

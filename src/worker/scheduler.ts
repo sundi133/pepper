@@ -26,8 +26,24 @@ export function startScheduler() {
     logger.error({ err }, "Initial scheduler check failed");
   });
 
+  // Notifications past retention are removed hourly so the table and the
+  // page don't grow without bound.
+  const purgeNotifications = async () => {
+    try {
+      const { purgeOldNotifications } = await import("@/lib/scan-notifications");
+      const removed = await purgeOldNotifications();
+      if (removed > 0) logger.info({ removed }, "Purged old notifications");
+    } catch (err) {
+      logger.warn({ err }, "Notification purge failed");
+    }
+  };
+  void purgeNotifications();
+  setInterval(() => void purgeNotifications(), NOTIFICATION_PURGE_INTERVAL_MS).unref?.();
+
   return interval;
 }
+
+const NOTIFICATION_PURGE_INTERVAL_MS = 60 * 60_000;
 
 async function checkDueSchedules() {
   const now = new Date();

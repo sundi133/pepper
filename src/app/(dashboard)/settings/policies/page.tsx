@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import {
   Card,
   CardContent,
@@ -52,6 +53,28 @@ const SEVERITY_COLORS: Record<string, string> = {
   LOW: "bg-blue-100 text-blue-800",
 };
 
+const RULE_MIN = 10;
+const RULE_MAX = 2000;
+
+/** The API's error message, including which field failed validation. */
+async function apiError(res: Response, fallback: string): Promise<string> {
+  if (res.status === 403) return "You need the Security or Admin role to change policies";
+  try {
+    const body = (await res.json()) as {
+      error?: string;
+      details?: Array<{ path?: (string | number)[]; message?: string }>;
+    };
+    const issue = body.details?.[0];
+    if (issue?.message) {
+      const field = issue.path?.join(".");
+      return field ? `${field}: ${issue.message}` : issue.message;
+    }
+    return body.error || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 const EXAMPLE_POLICIES = [
   {
     name: "No hardcoded API URLs",
@@ -86,8 +109,13 @@ const EXAMPLE_POLICIES = [
 ];
 
 export default function PoliciesPage() {
+  const { data: session } = useSession();
+  const orgRole = session?.user?.memberships?.[0]?.role;
+  // The API requires SECURITY or above; don't offer controls that will 403.
+  const canEdit = orgRole === "ADMIN" || orgRole === "SECURITY";
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<Policy | null>(null);
   const [form, setForm] = useState({
@@ -106,10 +134,11 @@ export default function PoliciesPage() {
   async function fetchPolicies() {
     try {
       const res = await fetch("/api/settings/policies");
+      if (!res.ok) throw new Error(await apiError(res, "Failed to load policies"));
       const data = await res.json();
       setPolicies(data.policies || []);
-    } catch {
-      toast.error("Failed to load policies");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load policies");
     } finally {
       setLoading(false);
     }
@@ -152,34 +181,44 @@ export default function PoliciesPage() {
   }
 
   async function handleSave() {
-    if (!form.name || !form.rule) {
+    const name = form.name.trim();
+    const rule = form.rule.trim();
+    if (!name || !rule) {
       toast.error("Name and rule are required");
       return;
     }
+    if (rule.length < RULE_MIN) {
+      toast.error(`Rule must be at least ${RULE_MIN} characters`);
+      return;
+    }
+    const payload = { ...form, name, rule };
 
+    setSaving(true);
     try {
       if (editingPolicy) {
         const res = await fetch(`/api/settings/policies/${editingPolicy.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
+          body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error("Failed to update");
+        if (!res.ok) throw new Error(await apiError(res, "Failed to update policy"));
         toast.success("Policy updated");
       } else {
         const res = await fetch("/api/settings/policies", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
+          body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error("Failed to create");
+        if (!res.ok) throw new Error(await apiError(res, "Failed to create policy"));
         toast.success("Policy created");
       }
 
       setDialogOpen(false);
       fetchPolicies();
-    } catch {
-      toast.error("Failed to save policy");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save policy");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -187,24 +226,29 @@ export default function PoliciesPage() {
     if (!confirm("Delete this policy?")) return;
 
     try {
-      await fetch(`/api/settings/policies/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/settings/policies/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await apiError(res, "Failed to delete policy"));
       toast.success("Policy deleted");
       fetchPolicies();
-    } catch {
-      toast.error("Failed to delete policy");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete policy");
     }
   }
 
   async function handleToggle(id: string, enabled: boolean) {
+    // Flip immediately; roll back if the server refuses.
+    setPolicies((ps) => ps.map((p) => (p.id === id ? { ...p, enabled } : p)));
     try {
-      await fetch(`/api/settings/policies/${id}`, {
+      const res = await fetch(`/api/settings/policies/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled }),
       });
-      fetchPolicies();
-    } catch {
-      toast.error("Failed to update policy");
+      if (!res.ok) throw new Error(await apiError(res, "Failed to update policy"));
+      toast.success(enabled ? "Policy enabled" : "Policy disabled");
+    } catch (err) {
+      setPolicies((ps) => ps.map((p) => (p.id === id ? { ...p, enabled: !enabled } : p)));
+      toast.error(err instanceof Error ? err.message : "Failed to update policy");
     }
   }
 
@@ -226,7 +270,7 @@ export default function PoliciesPage() {
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={openCreate}>
+            <Button onClick={openCreate} disabled={!canEdit}>
               <Plus className="mr-2 h-4 w-4" />
               New Policy
             </Button>
@@ -264,11 +308,17 @@ export default function PoliciesPage() {
                   }
                   placeholder="e.g., Flag any hardcoded API endpoint URLs in source code. All API URLs should come from environment variables."
                   rows={4}
+                  maxLength={RULE_MAX}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Be specific: describe what pattern is bad, what is acceptable,
-                  and any exceptions.
-                </p>
+                <div className="flex justify-between gap-2 text-xs text-muted-foreground">
+                  <p>
+                    Be specific: describe what pattern is bad, what is acceptable,
+                    and any exceptions.
+                  </p>
+                  <span className="shrink-0 tabular-nums">
+                    {form.rule.length}/{RULE_MAX}
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -340,8 +390,8 @@ export default function PoliciesPage() {
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSave}>
-                {editingPolicy ? "Update" : "Create"} Policy
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? "Saving…" : `${editingPolicy ? "Update" : "Create"} Policy`}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -362,12 +412,15 @@ export default function PoliciesPage() {
             <strong>injected into the AI scanner prompt</strong> during every
             scan. The LLM checks each code chunk against your policies alongside
             standard vulnerability detection —{" "}
-            <strong>no extra LLM calls</strong> for the first 10 policies.
+            <strong>no extra LLM calls</strong> for the first 14 enabled policies.
           </p>
           <p>
-            If you have more than 10 policies, additional ones are checked in a
-            separate lightweight pass (batches of 10, ~1 extra LLM call per
-            batch per file).
+            Additional policies are checked in separate policy-only passes
+            (batches of 8, about one extra LLM call per batch per file). Up to
+            54 enabled policies are checked per scan.
+          </p>
+          <p>
+            Violations are reported with the severity you set on the policy.
           </p>
           <p>
             Write rules in plain English. Be specific about what is bad, what is
@@ -383,6 +436,7 @@ export default function PoliciesPage() {
           <CardTitle>Policies ({policies.length})</CardTitle>
           <CardDescription>
             Enabled policies are enforced during every scan
+            {!canEdit && session ? " · Only Security and Admin roles can change policies" : ""}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -421,6 +475,8 @@ export default function PoliciesPage() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <Switch
+                        disabled={!canEdit}
+                        aria-label={`${policy.enabled ? "Disable" : "Enable"} ${policy.name}`}
                         checked={policy.enabled}
                         onCheckedChange={(v) => handleToggle(policy.id, v)}
                       />
@@ -428,6 +484,8 @@ export default function PoliciesPage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
+                        disabled={!canEdit}
+                        aria-label={`Edit ${policy.name}`}
                         onClick={() => openEdit(policy)}
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -436,6 +494,8 @@ export default function PoliciesPage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-destructive"
+                        disabled={!canEdit}
+                        aria-label={`Delete ${policy.name}`}
                         onClick={() => handleDelete(policy.id)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />

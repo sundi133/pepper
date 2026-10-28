@@ -1,0 +1,105 @@
+rules:
+  - id: pepper.py.xss-escaping-disabled
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Request input is marked as safe HTML (or returned as an HTML response)
+      without escaping. An attacker can inject script that runs in other
+      users' browsers (session theft, actions as the victim).
+      Fix: let the template engine escape the value - do not wrap request
+      data in Markup()/mark_safe()/SafeString, and use `html.escape()` or
+      `format_html()` when building HTML in Python.
+    metadata:
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: MEDIUM
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req|self\.request|flask\.request)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|files|cookies|headers|GET|POST|COOKIES|META|FILES|body|query_params|path_params|get_json|get_data)$
+      - patterns:
+          - pattern-inside: |
+              @$APP.$VERB(...)
+              def $F(..., $P, ...):
+                ...
+          - metavariable-regex:
+              metavariable: $VERB
+              regex: ^(route|get|post|put|patch|delete|api_route)$
+          - pattern-not-inside: |
+              def $F(..., $P = Depends(...), ...):
+                ...
+          - pattern-not-inside: |
+              def $F(..., $P: $T = Depends(...), ...):
+                ...
+          - pattern: $P
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: records loaded by id,
+      # framework URL builders, translations, lengths, booleans and digests.
+      - pattern-either:
+          - pattern: get_object_or_404(...)
+          - pattern: get_list_or_404(...)
+          - pattern: $M.objects.get(...)
+          - pattern: $M.objects.get_or_create(...)
+          - pattern: $M.objects.filter(...).first()
+          - pattern: $M.query.get(...)
+          - pattern: $M.query.get_or_404(...)
+          - pattern: $M.query.filter_by(...).first()
+          - pattern: $M.query.filter_by(...).first_or_404()
+          - pattern: $Q.one()
+          - pattern: $Q.one_or_none()
+          - pattern: $Q.scalar_one()
+          - pattern: $Q.scalar_one_or_none()
+          - patterns:
+              - pattern: $SESSION.get($MODEL, ...)
+              - metavariable-regex:
+                  metavariable: $MODEL
+                  regex: ^[A-Z]\w*$
+          - pattern: url_for(...)
+          - pattern: reverse(...)
+          - pattern: reverse_lazy(...)
+          - pattern: len(...)
+          - pattern: bool(...)
+          - pattern: isinstance(...)
+          - pattern: hashlib.$H(...).hexdigest()
+          - pattern: hmac.new(...).hexdigest()
+          - pattern: uuid.uuid4()
+          - pattern: gettext(...)
+          - pattern: _(...)
+      - pattern-either:
+          - pattern: escape(...)
+          - pattern: html.escape(...)
+          - pattern: markupsafe.escape(...)
+          - pattern: Markup.escape(...)
+          - pattern: bleach.clean(...)
+          - pattern: nh3.clean(...)
+          - pattern: format_html(...)
+          - pattern: conditional_escape(...)
+          - pattern: json.dumps(...)
+          - pattern: int(...)
+          - pattern: float(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Markup($X)
+              - pattern: markupsafe.Markup($X)
+              - pattern: mark_safe($X)
+              - pattern: django.utils.safestring.mark_safe($X)
+              - pattern: SafeString($X)
+              - pattern: HTMLResponse($X, ...)
+              - pattern: HTMLResponse(content=$X, ...)
+              - pattern: HttpResponse($X)
+          - focus-metavariable: $X

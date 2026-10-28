@@ -38,10 +38,10 @@ import {
 } from "@/lib/vex-generator";
 import {
   signWithCosignKeyless,
-  signWithRsaKey,
-  digestOf,
+  signWithKey,
   type SignatureBundle,
 } from "@/lib/code-signing";
+import { writeAuditLog } from "@/lib/audit-log";
 import { decryptSecret } from "@/lib/token-encryption";
 import { computeRiskScore } from "@/lib/risk-score";
 import { validateExploitability } from "@/scanners/shared/exploit-validation";
@@ -61,7 +61,10 @@ import { decompiledOriginOf } from "@/lib/compiled-scan/finding-origin";
 import { uploadedArtifactName } from "@/lib/compiled-scan/upload";
 import { maxUploadBytes } from "@/lib/upload-limits";
 import { mobilePlatformOf } from "@/lib/mobile-platform";
+import { generateFindingDetails } from "@/lib/generate-finding-details";
+import { SCAN_STATS_KEY, progressWithScanModules } from "@/lib/scan-progress";
 import { isAgentArtifact, agentOwnsUpload } from "@/scanners/mobile-agent/artifact";
+import { scanIncludesModule } from "@/lib/scan-types";
 import { isAgentScanConfigured, agentScanUnavailableReason } from "@/scanners/mobile-agent/config";
 
 // prisma is imported from @/lib/prisma
@@ -90,10 +93,11 @@ export async function processScanJob(job: Job<ScanJobData>) {
     orgSettings,
     buildGate,
   } = job.data;
+  const scanModules = job.data.scanModules ?? [];
   const log = createScanLogger(scanId);
   const abortController = new AbortController();
 
-  log.info({ scanId, scanType, sourceType }, "Starting scan");
+  log.info({ scanId, scanType, scanModules, sourceType }, "Starting scan");
 
   const markRunning = await prisma.scan.updateMany({
     where: { id: scanId, status: { notIn: ["CANCELLED", "STOPPED"] } },
@@ -101,7 +105,8 @@ export async function processScanJob(job: Job<ScanJobData>) {
       status: "RUNNING",
       startedAt: new Date(),
       jobId: job.id,
-      scannerProgress: {},
+      // Fresh progress, keeping the scanner combination the scan was created with.
+      scannerProgress: progressWithScanModules(scanModules),
     },
   });
   if (markRunning.count === 0) {
@@ -758,11 +763,12 @@ Schema:
     const agentScanBinary =
       !!uploadedArtifact && isAgentArtifact(uploadedArtifact);
     const agentSastScan =
-      ["FULL", "SAST_ONLY", "INCREMENTAL"].includes(scanType) &&
+      scanIncludesModule(scanType, scanModules, "SAST") &&
       orgSettings.enableLlmSast === true;
     const agentScanOnly = agentOwnsUpload({
       uploadedArtifact,
       scanType,
+      scanModules,
       enableLlmSast: orgSettings.enableLlmSast,
       // Org LLM Config OpenRouter key wins; env is the fallback.
       configured: isAgentScanConfigured(orgSettings),
@@ -786,7 +792,13 @@ Schema:
         status: "RUNNING",
         note: "starting the E2B sandbox",
       });
-    } else if (compiledConfig.enabled && COMPILED_SCAN_TYPES.has(scanType)) {
+    } else if (
+      compiledConfig.enabled &&
+      COMPILED_SCAN_TYPES.has(scanType) &&
+      // Decompiled source only feeds SAST and secrets.
+      (scanIncludesModule(scanType, scanModules, "SAST") ||
+        scanIncludesModule(scanType, scanModules, "SECRETS"))
+    ) {
       let decompileStarted = false;
       try {
         const outcome = await runCompiledScan({
@@ -863,6 +875,7 @@ Schema:
       scaFileList,
       decompiledFileList: decompiledFiles,
       scanType,
+      scanModules,
       scanId,
       uploadedArtifact: uploadedArtifact ?? undefined,
       orgSettings,
@@ -1200,31 +1213,50 @@ Schema:
                 ? ([["cyclonedx-vex", cycloneVex]] as Array<[string, string]>)
                 : []),
             ];
+            // The configured mode is the only one used: falling back from
+            // keyless to the stored key (or the reverse) would sign with an
+            // identity verifiers weren't told to trust.
+            const identity = signingSettings.codeSigningIdentity || undefined;
+            const failures: Record<string, string> = {};
             for (const [label, body] of signable) {
-              let bundle: SignatureBundle | null = null;
-              if (
-                signingSettings.codeSigningMode === "keyless" ||
-                !signingSettings.codeSigningKeyEnc
-              ) {
-                bundle = await signWithCosignKeyless(
-                  digestOf(body),
-                  signingSettings.codeSigningIdentity || undefined,
-                );
-              }
-              if (!bundle && signingSettings.codeSigningKeyEnc) {
-                try {
+              try {
+                if (signingSettings.codeSigningMode === "key") {
+                  if (!signingSettings.codeSigningKeyEnc) {
+                    throw new Error("Key mode is enabled but no signing key is stored");
+                  }
                   const pem = decryptSecret(signingSettings.codeSigningKeyEnc);
-                  bundle = signWithRsaKey(
-                    body,
-                    pem,
-                    undefined,
-                    signingSettings.codeSigningIdentity || undefined,
-                  );
-                } catch {
-                  /* fall through */
+                  bundles[label] = signWithKey(body, pem, identity);
+                } else {
+                  bundles[label] = await signWithCosignKeyless(body, identity);
                 }
+              } catch (e) {
+                failures[label] = e instanceof Error ? e.message : String(e);
               }
-              if (bundle) bundles[label] = bundle;
+            }
+            if (Object.keys(failures).length > 0) {
+              log.warn({ failures }, "Code signing failed for some artifacts");
+              // Signing is opt-in evidence; a missing signature has to be
+              // visible (audit log + the Code signing page), not just a log line.
+              await writeAuditLog({
+                organizationId: orgSettings.orgId || null,
+                userId: null,
+                action: "scan.signing_failed",
+                resource: "scan",
+                resourceId: scanId,
+                details: {
+                  mode: signingSettings.codeSigningMode,
+                  failures,
+                  signed: Object.keys(bundles),
+                },
+              });
+              if (orgSettings.orgId) {
+                const { notifySigningFailed } = await import("@/lib/scan-notifications");
+                await notifySigningFailed({
+                  organizationId: orgSettings.orgId,
+                  scanId,
+                  reason: Object.values(failures)[0],
+                }).catch((e) => log.warn({ e }, "Signing-failure notification failed"));
+              }
             }
             if (Object.keys(bundles).length > 0) {
               const sigKey = `signatures/${scanId}/signatures.json`;
@@ -1311,7 +1343,7 @@ Schema:
       await assertScanActive();
       completed = await markScanCompleted(scanId, {
         filesScanned: result.filesScanned,
-        depsScanned: result.depsScanned,
+          depsScanned: result.depsScanned,
         gateResult,
       });
       if (completed.count === 0) {
@@ -1321,6 +1353,20 @@ Schema:
     }
 
     log.info({ gateResult }, "Scan completed successfully");
+
+    // 9d. Generate AI finding details for all findings so the UI shows full
+    // content immediately when a finding is opened, instead of generating on
+    // demand. Fire-and-forget with a concurrency cap so the scan is marked
+    // COMPLETED right away while details populate in the background.
+    void generateFindingDetailsForScan(scanId, orgSettings, log);
+
+    // Lines scanned is shown next to the file count; it lives in the
+    // reserved __stats__ entry of scannerProgress.
+    try {
+      await setScanStats(scanId, { linesScanned: result.linesScanned });
+    } catch (err) {
+      log.warn({ err }, "Failed to record lines scanned (non-blocking)");
+    }
 
     // 9b. Auto-resolve findings that were fixed (no longer appear in this scan)
     try {
@@ -1512,6 +1558,15 @@ async function setAgentScanProgress(scanId: string, entry: Record<string, unknow
   await prisma.$executeRaw`
     UPDATE "Scan"
     SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ AGENT_SCAN: entry })}::jsonb
+    WHERE id = ${scanId}
+  `;
+}
+
+/** The reserved __stats__ entry of Scan.scannerProgress (whole-scan statistics such as lines scanned). */
+async function setScanStats(scanId: string, stats: { linesScanned: number }): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE "Scan"
+    SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ [SCAN_STATS_KEY]: stats })}::jsonb
     WHERE id = ${scanId}
   `;
 }
@@ -1757,6 +1812,118 @@ async function runExploitValidation(
   } catch (err) {
     log.warn({ err }, "Exploit validation failed — findings left untouched");
   }
+}
+
+/**
+ * Generate AI details (`metadata.generatedDetails`) for every OPEN finding in
+ * the scan that lacks them, so the UI renders complete content immediately
+ * when a finding is opened instead of calling the LLM on demand.
+ *
+ * Runs fire-and-forget from the scan-completion path with a concurrency cap to
+ * avoid overwhelming the LLM provider. A finding that fails here is simply left
+ * without generated details; the frontend falls back to on-demand generation.
+ */
+async function generateFindingDetailsForScan(
+  scanId: string,
+  orgSettings: ScanJobData["orgSettings"],
+  log: ReturnType<typeof createScanLogger>,
+): Promise<void> {
+  const llmApiKey = orgSettings.llmApiKey?.trim();
+  if (!llmApiKey && orgSettings.llmProvider !== "ollama") return;
+
+  const config = {
+    provider: orgSettings.llmProvider ?? "openai",
+    baseUrl: orgSettings.llmBaseUrl ?? "",
+    apiKey: llmApiKey ?? "",
+    model: orgSettings.llmModel ?? "gpt-4o-mini",
+  };
+
+  const findings = await prisma.finding.findMany({
+    where: { scanId, status: "OPEN" },
+    select: {
+      id: true,
+      title: true,
+      cweId: true,
+      severity: true,
+      filePath: true,
+      startLine: true,
+      endLine: true,
+      description: true,
+      metadata: true,
+    },
+    take: 2000,
+  });
+
+  const pending = findings.filter((f) => {
+    const meta =
+      f.metadata && typeof f.metadata === "object" && !Array.isArray(f.metadata)
+        ? (f.metadata as Record<string, unknown>)
+        : {};
+    return !meta?.generatedDetails;
+  });
+
+  if (pending.length === 0) return;
+
+  log.info(
+    { pending: pending.length, total: findings.length },
+    "Generating AI details for findings at scan completion",
+  );
+
+  const CONCURRENCY = 5;
+  const queue = [...pending];
+  let completed = 0;
+
+  async function worker(): Promise<void> {
+    while (queue.length > 0) {
+      const f = queue.shift();
+      if (!f) return;
+      try {
+        const details = await generateFindingDetails(
+          {
+            id: f.id,
+            title: f.title,
+            cweId: f.cweId,
+            severity: f.severity,
+            filePath: f.filePath,
+            startLine: f.startLine,
+            endLine: f.endLine,
+            description: f.description,
+          },
+          config,
+        );
+        if (details) {
+          const meta =
+            f.metadata && typeof f.metadata === "object" && !Array.isArray(f.metadata)
+              ? (f.metadata as Record<string, unknown>)
+              : {};
+          await prisma.finding.update({
+            where: { id: f.id },
+            data: {
+              metadata: {
+                ...meta,
+                generatedDetails: details,
+              } as object,
+            },
+          });
+        }
+      } catch (err) {
+        log.warn({ err, findingId: f.id }, "Failed to generate finding details");
+      } finally {
+        completed += 1;
+        if (completed % 25 === 0) {
+          log.info({ completed, total: pending.length }, "Finding details generation progress");
+        }
+      }
+    }
+  }
+
+  const workers: Promise<void>[] = [];
+  for (let i = 0; i < Math.min(CONCURRENCY, pending.length); i++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+
+  log.info({ generated: completed, total: pending.length }, "Finding details generation complete");
 }
 
 /**

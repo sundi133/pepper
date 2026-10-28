@@ -32,7 +32,11 @@ describe("osvSeverity", () => {
         severity: [{ type: "CVSS_V3", score: "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H" }],
         database_specific: { severity: "CRITICAL" },
       }),
-    ).toEqual({ severity: "HIGH", cvssScore: 7.2 });
+    ).toEqual({
+      severity: "HIGH",
+      cvssScore: 7.2,
+      cvssVector: "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H",
+    });
   });
 
   it("falls back to the advisory label (MODERATE → MEDIUM), then MEDIUM", () => {

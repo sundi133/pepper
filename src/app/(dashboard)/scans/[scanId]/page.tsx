@@ -1,5 +1,7 @@
 "use client";
 
+import { scanModulesFromProgress } from "@/lib/scan-progress";
+import { scanModeLabel } from "@/lib/scan-types";
 import { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
@@ -72,6 +74,9 @@ import {
   FileSpreadsheet,
   ArrowUpRight,
   Sparkles,
+  Info,
+  FileSignature,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -83,11 +88,70 @@ import { ScanTriageChat } from "@/components/scans/scan-triage-chat";
 import {
   computeScanProgress,
   reasoningTails,
-  REASONING_PROGRESS_KEY,
+  isScannerProgressKey,
+  scanLinesScanned,
 } from "@/lib/scan-progress";
 import { CustomReportDialog } from "@/components/scans/custom-report-dialog";
 import { CompiledCodeSummary } from "@/components/scans/compiled-code-summary";
 import { AgentScanSummary } from "@/components/scans/agent-scan-summary";
+
+const SEVERITY_CARDS = [
+  {
+    key: "CRITICAL",
+    label: "Critical",
+    countKey: "criticalCount",
+    action: "Fix immediately",
+    icon: Siren,
+    tone: "border-red-200 from-red-50 dark:border-red-900/40 dark:from-red-950/20",
+    iconBg: "bg-red-100 dark:bg-red-900/40",
+    text: "text-red-700 dark:text-red-400",
+    ring: "ring-red-400",
+  },
+  {
+    key: "HIGH",
+    label: "High",
+    countKey: "highCount",
+    action: "Fix this sprint",
+    icon: AlertTriangle,
+    tone: "border-orange-200 from-orange-50 dark:border-orange-900/40 dark:from-orange-950/20",
+    iconBg: "bg-orange-100 dark:bg-orange-900/40",
+    text: "text-orange-700 dark:text-orange-400",
+    ring: "ring-orange-400",
+  },
+  {
+    key: "MEDIUM",
+    label: "Medium",
+    countKey: "mediumCount",
+    action: "Plan a fix",
+    icon: Shield,
+    tone: "border-yellow-200 from-yellow-50 dark:border-yellow-900/40 dark:from-yellow-950/20",
+    iconBg: "bg-yellow-100 dark:bg-yellow-900/40",
+    text: "text-yellow-700 dark:text-yellow-400",
+    ring: "ring-yellow-400",
+  },
+  {
+    key: "LOW",
+    label: "Low",
+    countKey: "lowCount",
+    action: "Fix when convenient",
+    icon: CheckCircle2,
+    tone: "border-blue-200 from-blue-50 dark:border-blue-900/40 dark:from-blue-950/20",
+    iconBg: "bg-blue-100 dark:bg-blue-900/40",
+    text: "text-blue-700 dark:text-blue-400",
+    ring: "ring-blue-400",
+  },
+  {
+    key: "INFO",
+    label: "Info",
+    countKey: "infoCount",
+    action: "For awareness",
+    icon: Info,
+    tone: "border-teal-200 from-teal-50 dark:border-teal-900/40 dark:from-teal-950/20",
+    iconBg: "bg-teal-100 dark:bg-teal-900/40",
+    text: "text-teal-700 dark:text-teal-400",
+    ring: "ring-teal-400",
+  },
+] as const;
 
 type Finding = {
   id: string;
@@ -117,7 +181,6 @@ export default function ScanDetailPage() {
   const router = useRouter();
   const { scan, isLoading } = useScanPolling(scanId);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
-  const [scannerFilter, setScannerFilter] = useState<string>("all");
   const [newOnlyFilter, setNewOnlyFilter] = useState(false);
   const [sortBy, setSortBy] = useState<string>("severity");
   const [rescanning, setRescanning] = useState(false);
@@ -147,6 +210,63 @@ export default function ScanDetailPage() {
       setReasoningLoading(false);
     }
   };
+  // Stored artifact types (SBOMs, VEX, SIGNATURE), so the Export menu only
+  // offers files this scan actually has.
+  const [artifactTypes, setArtifactTypes] = useState<string[]>([]);
+  const [verifying, setVerifying] = useState(false);
+  const scanCompleted = scan?.status === "COMPLETED";
+  useEffect(() => {
+    if (!scanCompleted) return;
+    let cancelled = false;
+    fetch(`/api/scans/${scanId}/artifacts`)
+      .then((res) => (res.ok ? res.json() : { artifacts: [] }))
+      .then((j: { artifacts?: Array<{ type: string }> }) => {
+        if (!cancelled) setArtifactTypes((j.artifacts ?? []).map((a) => a.type));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [scanId, scanCompleted]);
+
+  const verifySignatures = async () => {
+    setVerifying(true);
+    try {
+      const res = await fetch(`/api/scans/${scanId}/signature/verify`);
+      const j = (await res.json().catch(() => null)) as {
+        verified?: boolean;
+        error?: string;
+        results?: Array<{
+          label: string;
+          algorithm: string;
+          digestMatches: boolean;
+          signatureValid: boolean | null;
+          signedByCurrentKey: boolean | null;
+        }>;
+      } | null;
+      if (!res.ok || !j?.results) {
+        toast.error(j?.error || "Couldn't verify signatures");
+        return;
+      }
+      const bad = j.results.filter((r) => !r.digestMatches || r.signatureValid === false);
+      if (bad.length > 0) {
+        toast.error(`Verification failed for ${bad.map((r) => r.label).join(", ")}`, {
+          description: "The file was changed after signing, or wasn't signed by your current key.",
+        });
+      } else if (j.results.some((r) => r.algorithm === "cosign")) {
+        toast.success(`${j.results.length} files unchanged since signing`, {
+          description: "Keyless signatures: confirm the certificate with cosign verify-blob.",
+        });
+      } else {
+        toast.success(`All ${j.results.length} signatures valid`, {
+          description: "Signed by your organization's current key; files unchanged.",
+        });
+      }
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const [activeSection, setActiveSection] = useState<string>("");
   // Section ids (SAST, SECRETS, …) the user wants in the PDF export. An empty
   // array means "all sections" (the existing behavior).
@@ -160,7 +280,6 @@ export default function ScanDetailPage() {
 
   const filters: Record<string, string> = {};
   if (severityFilter !== "all") filters.severity = severityFilter;
-  if (scannerFilter !== "all") filters.scanner = scannerFilter;
   if (newOnlyFilter) filters.isNew = "true";
   if (sortBy !== "severity") filters.sort = sortBy;
 
@@ -174,10 +293,7 @@ export default function ScanDetailPage() {
 
   const findingFilters = useMemo(
     () =>
-      // The "All Scanners" dropdown still wins when the user picks a specific
-      // scanner (filters.scanner is set); only fall back to the active tab's
-      // scanners when the dropdown is on "All", so neither control is broken.
-      !filters.scanner && sectionScanners?.length
+      sectionScanners?.length
         ? { ...filters, scanner: sectionScanners.join(",") }
         : filters,
     [filters, sectionScanners],
@@ -366,7 +482,7 @@ export default function ScanDetailPage() {
       ? [{ label: project.name, href: `/projects/${projectIdForCrumb}` }]
       : []),
     {
-      label: `${scan.scanType} scan`,
+      label: scanModeLabel(scan.scanType, scanModulesFromProgress(scan.scannerProgress)),
     },
   ];
 
@@ -471,7 +587,7 @@ export default function ScanDetailPage() {
                 {scan.project?.name || "Scan"}
               </h1>
               <Badge variant="secondary" className="rounded-md border-slate-200 bg-slate-100 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                {scan.scanType}
+                {scanModeLabel(scan.scanType, scanModulesFromProgress(scan.scannerProgress))}
               </Badge>
               <ScanStatusBadge status={scan.status} />
               {scan.status === "COMPLETED" && (
@@ -483,18 +599,6 @@ export default function ScanDetailPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-1.5 shrink-0">
-            {canDelete && (
-              <Button
-                variant="outline"
-                className="h-8 gap-1 border-slate-300 px-2.5 text-xs text-slate-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700 dark:border-slate-700 dark:text-slate-400"
-                disabled={deleting || isRunning || isPaused}
-                onClick={handleDelete}
-                title="Delete this scan and all findings"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </Button>
-            )}
             {canRescan && (
               <Button
                 variant="outline"
@@ -557,30 +661,22 @@ export default function ScanDetailPage() {
                   canOpenCustom={scan.status === "COMPLETED" || scan.status === "STOPPED"}
                   onOpenCustom={() => setCustomReportOpen(true)}
                 />
-                <Button
-                  variant="ghost"
-                  className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
-                  onClick={() =>
-                    window.open(`/api/scans/${scanId}/findings/export?format=csv`, "_blank")
-                  }
-                >CSV</Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
                       className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
-                      aria-label="Export PDF — choose section types"
                     >
                       <FileDown className="h-3.5 w-3.5" />
-                      PDF
+                      Export
                       <ChevronDown className="h-3 w-3" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     align="end"
-                    className="min-w-[16rem] max-h-[22rem] overflow-y-auto"
+                    className="min-w-[16rem] max-h-[26rem] overflow-y-auto"
                   >
-                    <DropdownMenuLabel>PDF Section Types</DropdownMenuLabel>
+                    <DropdownMenuLabel>PDF by section</DropdownMenuLabel>
                     <DropdownMenuItem
                       className="cursor-pointer"
                       onClick={() => openPdfExport([])}
@@ -591,8 +687,6 @@ export default function ScanDetailPage() {
                         <Check className="ml-auto h-4 w-4" aria-hidden />
                       ) : null}
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel>Include specific sections</DropdownMenuLabel>
                     {exportableSections.map((section) => (
                       <DropdownMenuCheckboxItem
                         key={section.id}
@@ -609,52 +703,115 @@ export default function ScanDetailPage() {
                         </span>
                       </DropdownMenuCheckboxItem>
                     ))}
-                    <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="cursor-pointer text-indigo-600"
+                      disabled={exportSections.length === 0}
                       onClick={() => openPdfExport(exportSections)}
                     >
                       <Download className="mr-2 h-4 w-4" aria-hidden />
-                      Export PDF
+                      Export selected sections
                     </DropdownMenuItem>
+                    {scan.status === "COMPLETED" && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel>Software bill of materials</DropdownMenuLabel>
+                        <DropdownMenuItem
+                          className="cursor-pointer"
+                          onClick={() =>
+                            window.open(`/api/scans/${scanId}/artifacts/cyclonedx`, "_blank")
+                          }
+                        >
+                          <FileText className="mr-2 h-4 w-4" aria-hidden />
+                          SBOM (CycloneDX)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="cursor-pointer"
+                          onClick={() =>
+                            window.open(`/api/scans/${scanId}/artifacts/spdx`, "_blank")
+                          }
+                        >
+                          <FileText className="mr-2 h-4 w-4" aria-hidden />
+                          SBOM (SPDX)
+                        </DropdownMenuItem>
+                        {artifactTypes.includes("VEX_OPENVEX") && (
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onClick={() =>
+                              window.open(`/api/scans/${scanId}/artifacts/openvex`, "_blank")
+                            }
+                          >
+                            <FileText className="mr-2 h-4 w-4" aria-hidden />
+                            VEX (OpenVEX)
+                          </DropdownMenuItem>
+                        )}
+                        {artifactTypes.includes("VEX_CYCLONEDX") && (
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onClick={() =>
+                              window.open(`/api/scans/${scanId}/artifacts/cyclonedx-vex`, "_blank")
+                            }
+                          >
+                            <FileText className="mr-2 h-4 w-4" aria-hidden />
+                            VEX (CycloneDX)
+                          </DropdownMenuItem>
+                        )}
+                        {artifactTypes.includes("SIGNATURE") && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel>Signatures</DropdownMenuLabel>
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onClick={() =>
+                                window.open(`/api/scans/${scanId}/artifacts/signature`, "_blank")
+                              }
+                            >
+                              <FileSignature className="mr-2 h-4 w-4" aria-hidden />
+                              Signature file
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              disabled={verifying}
+                              onClick={() => void verifySignatures()}
+                            >
+                              <ShieldCheck className="mr-2 h-4 w-4" aria-hidden />
+                              {verifying ? "Verifying…" : "Verify signatures"}
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                        {/* The full AI reasoning trace, when an AI scanner produced
+                            one (the live tails persist under __reasoning__). */}
+                        {reasoningTails(
+                          scan.scannerProgress as Record<string, unknown> | null,
+                        ) && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onClick={openReasoning}
+                            >
+                              <Sparkles className="mr-2 h-4 w-4" aria-hidden />
+                              View AI reasoning
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                {scan.status === "COMPLETED" && (
-                  <Button
-                    variant="ghost"
-                    className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
-                    onClick={() => router.push(`/scans/${scanId}/compliance`)}
-                  >Compliance</Button>
-                )}
-                {scan.status === "COMPLETED" && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
-                      onClick={() =>
-                        window.open(`/api/scans/${scanId}/artifacts/cyclonedx`, "_blank")
-                      }
-                    >SBOM (CDX)</Button>
-                    <Button
-                      variant="ghost"
-                      className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
-                      onClick={() =>
-                        window.open(`/api/scans/${scanId}/artifacts/spdx`, "_blank")
-                      }
-                    >SBOM (SPDX)</Button>
-                    {/* The full AI reasoning trace, when an AI scanner produced
-                        one (the live tails persist under __reasoning__). */}
-                    {reasoningTails(
-                      scan.scannerProgress as Record<string, unknown> | null,
-                    ) && (
-                      <Button
-                        variant="ghost"
-                        className="h-8 gap-1 px-2 text-xs text-slate-500 hover:text-indigo-600"
-                        onClick={openReasoning}
-                      >AI reasoning</Button>
-                    )}
-                  </>
-                )}
+              </div>
+            )}
+            {canDelete && (
+              <div className="ml-1 border-l border-slate-200 pl-2 dark:border-slate-700">
+                <Button
+                  variant="outline"
+                  className="h-8 gap-1 border-slate-300 px-2.5 text-xs text-slate-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700 dark:border-slate-700 dark:text-slate-400"
+                  disabled={deleting || isRunning || isPaused}
+                  onClick={handleDelete}
+                  title="Delete this scan and all findings"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </Button>
               </div>
             )}
           </div>
@@ -711,8 +868,8 @@ export default function ScanDetailPage() {
                         }
                       >,
                     )
-                      // __reasoning__ is the live-reasoning store, not a scanner.
-                      .filter(([name]) => name !== REASONING_PROGRESS_KEY)
+                      // __reasoning__ and __stats__ are reserved stores, not scanners.
+                      .filter(([name]) => isScannerProgressKey(name))
                       .map(([name, info]) => (
                       <Badge
                         key={name}
@@ -783,45 +940,49 @@ export default function ScanDetailPage() {
         </div>
       )}
 
-      {/* Summary Cards */}
+      {/* Summary Cards: each one filters the findings below */}
       {(hasReportableFindings || isActive) && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
-          <div className="rounded-xl border border-red-200 bg-gradient-to-br from-red-50 to-white p-4 shadow-sm transition-all hover:shadow-md dark:border-red-900/40 dark:from-red-950/20 dark:to-slate-950">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900/40">
-                <Siren className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
-              </div>
-              <span className="text-xs font-semibold text-red-700 dark:text-red-400">Critical</span>
-            </div>
-            <p className="mt-2 text-2xl font-bold text-red-700 dark:text-red-400 tabular-nums">{scan.criticalCount}</p>
-          </div>
-          <div className="rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 to-white p-4 shadow-sm transition-all hover:shadow-md dark:border-orange-900/40 dark:from-orange-950/20 dark:to-slate-950">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/40">
-                <AlertTriangle className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
-              </div>
-              <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">High</span>
-            </div>
-            <p className="mt-2 text-2xl font-bold text-orange-700 dark:text-orange-400 tabular-nums">{scan.highCount}</p>
-          </div>
-          <div className="rounded-xl border border-yellow-200 bg-gradient-to-br from-yellow-50 to-white p-4 shadow-sm transition-all hover:shadow-md dark:border-yellow-900/40 dark:from-yellow-950/20 dark:to-slate-950">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-yellow-100 dark:bg-yellow-900/40">
-                <Shield className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
-              </div>
-              <span className="text-xs font-semibold text-yellow-700 dark:text-yellow-400">Medium</span>
-            </div>
-            <p className="mt-2 text-2xl font-bold text-yellow-700 dark:text-yellow-400 tabular-nums">{scan.mediumCount}</p>
-          </div>
-          <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-4 shadow-sm transition-all hover:shadow-md dark:border-blue-900/40 dark:from-blue-950/20 dark:to-slate-950">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/40">
-                <CheckCircle2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">Low</span>
-            </div>
-            <p className="mt-2 text-2xl font-bold text-blue-700 dark:text-blue-400 tabular-nums">{scan.lowCount}</p>
-          </div>
+        <div
+          className={cn(
+            "grid grid-cols-2 gap-3 lg:gap-4",
+            scan.infoCount > 0 ? "sm:grid-cols-3 lg:grid-cols-5" : "sm:grid-cols-4",
+          )}
+        >
+          {SEVERITY_CARDS.filter((c) => c.key !== "INFO" || scan.infoCount > 0).map((c) => {
+            const count = scan[c.countKey];
+            const active = severityFilter === c.key;
+            const Icon = c.icon;
+            return (
+              <button
+                key={c.key}
+                type="button"
+                aria-pressed={active}
+                title={active ? "Show all severities" : `Show only ${c.label.toLowerCase()} findings`}
+                onClick={() => {
+                  setSeverityFilter(active ? "all" : c.key);
+                  document.getElementById("scan-findings")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className={cn(
+                  "rounded-xl border bg-gradient-to-br to-white p-4 text-left shadow-sm transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:to-slate-950",
+                  c.tone,
+                  active && "ring-2 ring-offset-1 ring-offset-background",
+                  active && c.ring,
+                  severityFilter !== "all" && !active && "opacity-60 hover:opacity-100",
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <div className={cn("flex h-7 w-7 items-center justify-center rounded-lg", c.iconBg)}>
+                    <Icon className={cn("h-3.5 w-3.5", c.text)} />
+                  </div>
+                  <span className={cn("text-xs font-semibold", c.text)}>{c.label}</span>
+                </div>
+                <p className={cn("mt-2 text-2xl font-bold tabular-nums", c.text)}>{count}</p>
+                <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                  {count > 0 ? c.action : "None found"}
+                </p>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -876,6 +1037,18 @@ export default function ScanDetailPage() {
                       reports for audit. */}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {(severityFilter !== "all" || newOnlyFilter) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSeverityFilter("all");
+                        setNewOnlyFilter(false);
+                      }}
+                      className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                    >
+                      Clear filters
+                    </button>
+                  )}
                   <Select value={severityFilter} onValueChange={setSeverityFilter}>
                     <SelectTrigger className="h-8 w-full border-slate-300 bg-white text-xs sm:w-[130px] dark:border-slate-600 dark:bg-slate-900">
                       <SelectValue placeholder="Severity" />
@@ -887,21 +1060,6 @@ export default function ScanDetailPage() {
                       <SelectItem value="MEDIUM">Medium</SelectItem>
                       <SelectItem value="LOW">Low</SelectItem>
                       <SelectItem value="INFO">Info</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={scannerFilter} onValueChange={setScannerFilter}>
-                    <SelectTrigger className="h-8 w-full border-slate-300 bg-white text-xs sm:w-[140px] dark:border-slate-600 dark:bg-slate-900">
-                      <SelectValue placeholder="Scanner" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Scanners</SelectItem>
-                      <SelectItem value="SAST_LLM">SAST (AI)</SelectItem>
-                      <SelectItem value="SCA">SCA</SelectItem>
-                      <SelectItem value="SECRETS_LLM">Secrets (AI)</SelectItem>
-                      <SelectItem value="IAC">IaC Security</SelectItem>
-                      <SelectItem value="MALICIOUS_PKG">Supply Chain</SelectItem>
-                      <SelectItem value="CONTAINER">Container</SelectItem>
-                      <SelectItem value="ZERO_DAY">Zero-Day (AI)</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={sortBy} onValueChange={setSortBy}>
@@ -1210,6 +1368,7 @@ function formatScanMetadataLine(scan: {
   createdAt: string;
   filesScanned?: number | null;
   depsScanned?: number | null;
+  scannerProgress?: unknown;
 }): string {
   const parts: string[] = [];
   if (scan.sourceType === "SVN_CHECKOUT") {
@@ -1225,6 +1384,13 @@ function formatScanMetadataLine(scan: {
   if (scan.filesScanned)
     parts.push(
       `${scan.filesScanned.toLocaleString()} file${scan.filesScanned === 1 ? "" : "s"} scanned`,
+    );
+  const linesScanned = scanLinesScanned(
+    scan.scannerProgress as Record<string, unknown> | null | undefined,
+  );
+  if (linesScanned)
+    parts.push(
+      `${linesScanned.toLocaleString()} line${linesScanned === 1 ? "" : "s"} scanned`,
     );
   if (scan.depsScanned)
     parts.push(`${scan.depsScanned.toLocaleString()} deps`);

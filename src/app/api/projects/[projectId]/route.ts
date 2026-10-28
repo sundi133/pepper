@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { scanModulesFromProgress } from "@/lib/scan-progress";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, getActiveOrgId, requireRole } from "@/lib/auth-guard";
 import { scanQueue } from "@/lib/queue";
@@ -32,6 +33,7 @@ export async function GET(
           id: true,
           status: true,
           scanType: true,
+          scannerProgress: true,
           branch: true,
           gateResult: true,
           createdAt: true,
@@ -51,7 +53,16 @@ export async function GET(
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  return NextResponse.json(project);
+  // Send only the scanner combination, not the whole progress map (which can
+  // hold large AI reasoning text).
+  const { scans, ...rest } = project;
+  return NextResponse.json({
+    ...rest,
+    scans: scans.map(({ scannerProgress, ...scan }) => ({
+      ...scan,
+      scanModules: scanModulesFromProgress(scannerProgress),
+    })),
+  });
 }
 
 /** Strip HTML tags and trim whitespace to prevent stored XSS. */

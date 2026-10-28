@@ -41,12 +41,15 @@ const AGENT_SCAN_TYPES = new Set(["FULL", "SAST_ONLY", "INCREMENTAL"]);
 export function agentOwnsUpload(opts: {
   uploadedArtifact?: string | null;
   scanType: string;
+  /** Scanner groups combined on the scan; the agent runs only with SAST. */
+  scanModules?: readonly string[];
   enableLlmSast: boolean;
   configured: boolean;
 }): boolean {
   return (
     isAgentArtifact(opts.uploadedArtifact) &&
     AGENT_SCAN_TYPES.has(opts.scanType) &&
+    (!opts.scanModules?.length || opts.scanModules.includes("SAST")) &&
     opts.enableLlmSast === true &&
     opts.configured
   );

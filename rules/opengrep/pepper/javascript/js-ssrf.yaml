@@ -1,0 +1,62 @@
+rules:
+  - id: pepper.js.ssrf
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request input controls the URL of a server-side HTTP request. An
+      attacker can make the server call internal services or cloud metadata
+      endpoints (e.g. http://169.254.169.254/) and read the response.
+      Fix: do not let the caller choose the host. Parse the URL, check
+      protocol and hostname against an allow-list, and reject private,
+      loopback and link-local addresses after DNS resolution.
+    metadata:
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+      owasp: "A10:2021 - Server-Side Request Forgery (SSRF)"
+      category: security
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+              - pattern: $REQ.headers
+              - pattern: $REQ.cookies
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request|ctx|ctx\.request)$
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: encodeURIComponent(...)
+          - pattern: parseInt(...)
+          - pattern: Number(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fetch($URL, ...)
+              - pattern: axios($URL, ...)
+              - pattern: axios.$M($URL, ...)
+              - pattern: got($URL, ...)
+              - pattern: got.$M($URL, ...)
+              - pattern: needle($METHOD, $URL, ...)
+              - pattern: needle.$M($URL, ...)
+              - pattern: superagent.$M($URL, ...)
+              - pattern: request($URL, ...)
+              - pattern: request.$M($URL, ...)
+              - pattern: http.get($URL, ...)
+              - pattern: https.get($URL, ...)
+              - pattern: http.request($URL, ...)
+              - pattern: https.request($URL, ...)
+              - pattern: undici.request($URL, ...)
+              - pattern: |
+                  axios({..., url: $URL, ...})
+          # A fixed scheme+host prefix only lets the caller pick a path.
+          - metavariable-regex:
+              metavariable: $URL
+              regex: ^(?!["'`](https?:)?//[^/"'`$]+/)
+          - focus-metavariable: $URL

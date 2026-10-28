@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { progressWithScanModules } from "@/lib/scan-progress";
 import { prisma } from "@/lib/prisma";
 import { scanQueue, ScanJobData } from "@/lib/queue";
 import { uploadObject, ensureBucket } from "@/lib/minio";
@@ -14,7 +15,12 @@ import {
   projectNameFromSvnUrl,
   projectNameFromUploadFilename,
 } from "@/lib/project-name-from-source";
-import { API_CREATE_SCAN_TYPES } from "@/lib/scan-types";
+import {
+  API_CREATE_SCAN_TYPES,
+  SCAN_MODULE_IDS,
+  normalizeScanSelection,
+  type ScanModuleId,
+} from "@/lib/scan-types";
 import type { ScanActionResult } from "@/lib/scan-rescan";
 
 /** Strip HTML tags and trim whitespace to prevent stored XSS. */
@@ -34,6 +40,8 @@ export const createScanSchema = z
      */
     projectName: z.string().max(100).transform(sanitizeText).optional(),
     scanType: z.enum(API_CREATE_SCAN_TYPES).default("FULL"),
+    /** Combine scanner groups on one scan (e.g. ["SAST","SECRETS"]). */
+    scanModules: z.array(z.enum(SCAN_MODULE_IDS as [ScanModuleId, ...ScanModuleId[]])).max(7).optional(),
     branch: z.string().optional(),
     commitSha: z.string().optional(),
     baseSha: z.string().optional(),
@@ -157,11 +165,14 @@ export async function queueNewScan(params: {
     where: { organizationId: project.organizationId },
   });
 
+  const selection = normalizeScanSelection(scanParams.scanType, scanParams.scanModules);
+
   // Create scan record
   const scan = await prisma.scan.create({
     data: {
       projectId: effectiveProjectId,
-      scanType: scanParams.scanType,
+      scanType: selection.scanType,
+      scannerProgress: progressWithScanModules(selection.scanModules),
       branch: scanParams.branch,
       commitSha: scanParams.commitSha,
       baseSha: scanParams.baseSha,
@@ -229,7 +240,8 @@ export async function queueNewScan(params: {
           ? "SVN_CHECKOUT"
           : "UPLOAD",
     sourceRef,
-    scanType: scanParams.scanType,
+    scanType: selection.scanType,
+    scanModules: selection.scanModules,
     baseSha: scanParams.baseSha,
     commitSha: scanParams.commitSha,
     prNumber: scanParams.prNumber,
@@ -297,7 +309,8 @@ export async function queueNewScan(params: {
     resource: "scan",
     resourceId: scan.id,
     details: {
-      scanType: scanParams.scanType,
+      scanType: selection.scanType,
+      ...(selection.scanModules.length > 0 && { scanModules: selection.scanModules }),
       sourceType: jobData.sourceType,
       ...(params.via ? { via: params.via } : {}),
     },

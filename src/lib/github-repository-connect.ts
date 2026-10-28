@@ -24,6 +24,7 @@ export async function connectGithubRepositoryRecord(params: {
   connectedViaGithub: boolean;
   branch?: string;
   scanType?: ScanJobData["scanType"];
+  scanModules?: string[];
 }): Promise<ConnectGithubRepoRecord> {
   const fullName = `${params.owner}/${params.repo}`;
   const cloneUrl = params.cloneUrl.trim() || githubHttpsCloneUrl(params.owner, params.repo);
@@ -55,6 +56,7 @@ export async function connectGithubRepositoryRecord(params: {
       branch: params.branch?.trim() || params.defaultBranch,
       useOrgGithubToken: true,
       scanType: params.scanType,
+      scanModules: params.scanModules,
     });
     return {
       projectId: existing.id,
@@ -89,6 +91,7 @@ export async function connectGithubRepositoryRecord(params: {
     branch: params.branch?.trim() || params.defaultBranch,
     useOrgGithubToken: true,
     scanType: params.scanType,
+    scanModules: params.scanModules,
   });
 
   return {

@@ -21,7 +21,13 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { OrgSwitcher } from "@/components/layout/org-switcher";
 
-const unreadFetcher = (url: string) => fetch(url).then((r) => r.json());
+// Throw on errors so SWR keeps the last good count instead of reading an
+// error body as `unreadCount: undefined` (which rendered as 0).
+const unreadFetcher = (url: string) =>
+  fetch(url).then((r) => {
+    if (!r.ok) throw new Error("Failed to load unread count");
+    return r.json();
+  });
 
 export function Topbar({ activeOrgId }: { activeOrgId?: string | null }) {
   const pathname = usePathname();

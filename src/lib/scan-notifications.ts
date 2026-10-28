@@ -7,7 +7,61 @@ export type ScanNotificationType =
   | "SCAN_CANCELLED"
   | "SCAN_STOPPED"
   | "SCAN_PAUSED"
-  | "SCAN_RESUMED";
+  | "SCAN_RESUMED"
+  | "SCAN_GATE_FAILED";
+
+/** Notification types the page knows how to show (stored as a plain string). */
+export type NotificationType = ScanNotificationType | "SIGNING_FAILED";
+
+export interface ScanSeverityCounts {
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  newFindingCount: number;
+}
+
+/**
+ * Title and summary for a finished scan, leading with what needs attention:
+ * "Scan completed: 2 critical issues" / "…: 2 critical, 5 high, 1 low (3 new)".
+ */
+export function completionCopy(
+  projectName: string,
+  counts: ScanSeverityCounts,
+  gateFailed: boolean,
+): { title: string; body: string } {
+  const parts = (
+    [
+      [counts.criticalCount, "critical"],
+      [counts.highCount, "high"],
+      [counts.mediumCount, "medium"],
+      [counts.lowCount, "low"],
+    ] as const
+  )
+    .filter(([n]) => n > 0)
+    .map(([n, label]) => `${n} ${label}`);
+  const summary =
+    parts.length === 0
+      ? "no open issues found"
+      : `${parts.join(", ")}${counts.newFindingCount > 0 ? ` (${counts.newFindingCount} new)` : ""}`;
+
+  if (gateFailed) {
+    return {
+      title: `Build gate failed: ${projectName}`,
+      body: `Scan of ${projectName} finished with ${summary}. The build gate did not pass.`,
+    };
+  }
+  const urgent =
+    counts.criticalCount > 0
+      ? `${counts.criticalCount} critical issue${counts.criticalCount === 1 ? "" : "s"}`
+      : counts.highCount > 0
+        ? `${counts.highCount} high issue${counts.highCount === 1 ? "" : "s"}`
+        : null;
+  return {
+    title: urgent ? `Scan completed: ${urgent}` : "Scan completed",
+    body: `Security scan finished for ${projectName}: ${summary}.`,
+  };
+}
 
 const COPY: Record<
   ScanNotificationType,
@@ -41,6 +95,10 @@ const COPY: Record<
     title: "Scan resumed",
     body: `Security scan resumed for ${p}.`,
   }),
+  SCAN_GATE_FAILED: (p) => ({
+    title: `Build gate failed: ${p}`,
+    body: `The build gate did not pass for ${p}.`,
+  }),
 };
 
 async function recipientUserIds(
@@ -71,8 +129,10 @@ export async function createScanNotification(params: {
   triggeredBy?: string | null;
   actorUserId?: string;
   bodySuffix?: string;
+  /** Replaces the default copy for this type. */
+  copy?: { title: string; body: string };
 }): Promise<void> {
-  const { title, body } = COPY[params.type](params.projectName);
+  const { title, body } = params.copy ?? COPY[params.type](params.projectName);
   const fullBody = params.bodySuffix ? `${body} ${params.bodySuffix}` : body;
   const users = await recipientUserIds(
     params.organizationId,
@@ -123,17 +183,33 @@ export async function notifyScanLifecycleFromWorker(
       triggeredBy: true,
       gateResult: true,
       errorMessage: true,
+      criticalCount: true,
+      highCount: true,
+      mediumCount: true,
+      lowCount: true,
+      newFindingCount: true,
       project: { select: { name: true, organizationId: true } },
     },
   });
   if (!scan?.project) return;
 
   let bodySuffix = extra?.bodySuffix;
-  if (type === "SCAN_COMPLETED" && scan.gateResult === "FAILED") {
-    bodySuffix = "Build gate did not pass.";
-  }
   if (type === "SCAN_FAILED" && scan.errorMessage) {
     bodySuffix = scan.errorMessage.slice(0, 200);
+  }
+
+  if (type === "SCAN_COMPLETED") {
+    const gateFailed = scan.gateResult === "FAILED";
+    await createScanNotification({
+      type: gateFailed ? "SCAN_GATE_FAILED" : "SCAN_COMPLETED",
+      organizationId: scan.project.organizationId,
+      scanId,
+      projectName: scan.project.name,
+      triggeredBy: scan.triggeredBy,
+      bodySuffix,
+      copy: completionCopy(scan.project.name, scan, gateFailed),
+    });
+    return;
   }
 
   await createScanNotification({
@@ -144,6 +220,58 @@ export async function notifyScanLifecycleFromWorker(
     triggeredBy: scan.triggeredBy,
     bodySuffix,
   });
+}
+
+/**
+ * Tell the org's Security and Admin members that a scan's artifacts weren't
+ * signed: an unsigned SBOM handed to a customer is a silent compliance gap.
+ */
+export async function notifySigningFailed(params: {
+  organizationId: string;
+  scanId: string;
+  reason: string;
+}): Promise<void> {
+  const [members, scan] = await Promise.all([
+    prisma.orgMember.findMany({
+      where: { organizationId: params.organizationId, role: { in: ["ADMIN", "SECURITY"] } },
+      select: { userId: true },
+    }),
+    prisma.scan.findUnique({
+      where: { id: params.scanId },
+      select: { project: { select: { name: true } } },
+    }),
+  ]);
+  if (members.length === 0) return;
+  const projectName = scan?.project?.name ?? "a repository";
+  await prisma.notification.createMany({
+    data: members.map((m) => ({
+      userId: m.userId,
+      organizationId: params.organizationId,
+      type: "SIGNING_FAILED",
+      title: "Artifact signing failed",
+      body: `SBOMs for ${projectName} were not signed: ${params.reason.slice(0, 200)}`,
+      scanId: params.scanId,
+    })),
+  });
+}
+
+/** Read notifications are kept this long; unread ones a bit longer. */
+export const NOTIFICATION_RETENTION_DAYS = { read: 30, unread: 90 } as const;
+
+/** Delete notifications past retention. Returns the number removed. */
+export async function purgeOldNotifications(now = new Date()): Promise<number> {
+  const day = 24 * 60 * 60 * 1000;
+  const readCutoff = new Date(now.getTime() - NOTIFICATION_RETENTION_DAYS.read * day);
+  const unreadCutoff = new Date(now.getTime() - NOTIFICATION_RETENTION_DAYS.unread * day);
+  const result = await prisma.notification.deleteMany({
+    where: {
+      OR: [
+        { read: true, createdAt: { lt: readCutoff } },
+        { createdAt: { lt: unreadCutoff } },
+      ],
+    },
+  });
+  return result.count;
 }
 
 export async function notifyScanLifecycleFromApi(params: {

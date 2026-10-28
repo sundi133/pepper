@@ -1,0 +1,168 @@
+rules:
+  - id: pepper.php.open-redirect
+    mode: taint
+    languages: [php]
+    severity: WARNING
+    message: >-
+      Request input is used as a redirect target. An attacker can craft a
+      link on your domain that sends users to a phishing site, or leak
+      OAuth codes/tokens to an attacker-controlled host.
+      Fix: redirect only to relative paths or allow-listed hosts (parse with
+      parse_url and compare the host), falling back to a fixed page.
+    metadata:
+      cwe: "CWE-601: URL Redirection to Untrusted Site ('Open Redirect')"
+      owasp: "A01:2021 - Broken Access Control"
+      category: security
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: MEDIUM
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $_FILES
+          - pattern: getallheaders()
+          - pattern: file_get_contents("php://input")
+          - pattern: file_get_contents('php://input')
+          - patterns:
+              - pattern: $_SERVER[$KEY]
+              - metavariable-regex:
+                  metavariable: $KEY
+                  regex: ^["'](QUERY_STRING|REQUEST_URI|PHP_SELF|PATH_INFO|ORIG_PATH_INFO|HTTP_[A-Z_]+)["']$
+          # Laravel / Symfony request objects
+          - patterns:
+              - pattern-either:
+                  - pattern: $REQ->$M(...)
+                  - pattern: request()->$M(...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(input|get|query|post|all|cookie|header|json|route|file|only|except|string|getContent|getQueryString|getRequestUri|getPathInfo)$
+              - metavariable-regex:
+                  metavariable: $REQ
+                  regex: ^\$(request|req|this->request)$
+          - patterns:
+              - pattern: $REQ->$BAG
+              - metavariable-regex:
+                  metavariable: $REQ
+                  regex: ^\$(request|req|this->request)$
+              - metavariable-regex:
+                  metavariable: $BAG
+                  regex: ^(query|request|cookies|headers|files|attributes)$
+          - pattern: request($KEY)
+          - pattern: Input::get(...)
+          - pattern: Request::input(...)
+          - pattern: Request::get(...)
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: numbers, booleans,
+      # digests, dates, translations, records loaded by id and same-site URL
+      # builders.
+      - pattern-either:
+          - pattern: count(...)
+          - pattern: sizeof(...)
+          - pattern: strlen(...)
+          - pattern: mb_strlen(...)
+          - pattern: isset(...)
+          - pattern: empty(...)
+          - pattern: in_array(...)
+          - pattern: array_key_exists(...)
+          - pattern: is_numeric(...)
+          - pattern: ctype_digit(...)
+          - pattern: ctype_alnum(...)
+          - pattern: preg_match(...)
+          - pattern: absint(...)
+          - pattern: md5(...)
+          - pattern: sha1(...)
+          - pattern: hash(...)
+          - pattern: hash_hmac(...)
+          - pattern: crc32(...)
+          - pattern: uniqid(...)
+          - pattern: password_hash(...)
+          - pattern: number_format(...)
+          - pattern: number_format_i18n(...)
+          - pattern: size_format(...)
+          - pattern: date(...)
+          - pattern: gmdate(...)
+          - pattern: date_i18n(...)
+          - pattern: mysql2date(...)
+          - pattern: __(...)
+          - pattern: _x(...)
+          - pattern: _n(...)
+          - pattern: esc_html__(...)
+          - pattern: esc_attr__(...)
+          - pattern: selected(...)
+          - pattern: checked(...)
+          - pattern: disabled(...)
+          - pattern: sanitize_key(...)
+          - pattern: sanitize_title(...)
+          - pattern: sanitize_file_name(...)
+          - pattern: sanitize_user(...)
+          - pattern: sanitize_email(...)
+          - pattern: wp_create_nonce(...)
+          - pattern: get_post(...)
+          - pattern: get_userdata(...)
+          - pattern: get_user_by(...)
+          - pattern: get_term(...)
+          - pattern: admin_url(...)
+          - pattern: self_admin_url(...)
+          - pattern: network_admin_url(...)
+          - pattern: user_admin_url(...)
+          - pattern: home_url(...)
+          - pattern: site_url(...)
+          - pattern: network_home_url(...)
+          - pattern: network_site_url(...)
+          - pattern: get_admin_url(...)
+          - pattern: get_permalink(...)
+          - pattern: wp_login_url(...)
+          - pattern: wp_logout_url(...)
+          - pattern: plugins_url(...)
+          - pattern: content_url(...)
+          - pattern: includes_url(...)
+          - pattern: route(...)
+          - pattern: action(...)
+          - pattern: $MODEL::find(...)
+          - pattern: $MODEL::findOrFail(...)
+          - pattern: $MODEL::firstOrFail(...)
+      - pattern-either:
+          - pattern: urlencode(...)
+          - pattern: rawurlencode(...)
+          - pattern: wp_validate_redirect(...)
+          - pattern: (int) $X
+          - pattern: intval(...)
+      - by-side-effect: true
+        patterns:
+          - pattern: $F($P, ...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i)^(is_?)?(safe|allowed|valid|trusted)_?(url|redirect|next|target|host)\w*$
+          - focus-metavariable: $P
+    pattern-sinks:
+      - patterns:
+          - pattern: header($H, ...)
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^["']\s*location\s*:\s*["']?\s*\.
+          - focus-metavariable: $H
+      - patterns:
+          - pattern: |
+              header("Location: $U", ...)
+          - focus-metavariable: $U
+      - patterns:
+          - pattern-either:
+              - pattern: redirect($U, ...)
+              - pattern: redirect()->to($U, ...)
+              - pattern: redirect()->away($U, ...)
+              - pattern: Redirect::to($U, ...)
+              - pattern: Redirect::away($U, ...)
+              - pattern: new RedirectResponse($U, ...)
+              - pattern: wp_redirect($U, ...)
+          - metavariable-regex:
+              metavariable: $U
+              regex: ^(?!["']/[^/\\"'])
+          - focus-metavariable: $U

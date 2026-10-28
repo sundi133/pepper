@@ -25,6 +25,7 @@ export async function connectManualGithubRepository(params: {
   repoInput: string;
   branch?: string;
   scanType?: ScanJobData["scanType"];
+  scanModules?: string[];
 }) {
   const parsed = parseGithubRepoInput(params.repoInput);
   if (!parsed) {
@@ -73,6 +74,7 @@ export async function connectManualGithubRepository(params: {
     connectedViaGithub: true,
     branch: params.branch,
     scanType: params.scanType,
+    scanModules: params.scanModules,
   });
 
   return record;

@@ -1,0 +1,99 @@
+rules:
+  - id: pepper.py.server-side-template-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Request input is compiled as a template. Template expressions such as
+      {{ ... }} let an attacker read server secrets and usually execute code
+      on the server.
+      Fix: keep templates fixed (render_template with a file name) and pass
+      user data only as template variables:
+      `render_template_string(TEMPLATE, name=value)`.
+    metadata:
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+      owasp: "A03:2021 - Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pepper_severity: CRITICAL
+      references:
+        - https://portswigger.net/web-security/server-side-template-injection
+    # Indexing a fixed table with request data is an allow-list, not a flow.
+    options:
+      taint_assume_safe_indexes: true
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req|self\.request|flask\.request)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|files|cookies|headers|GET|POST|COOKIES|META|FILES|body|query_params|path_params|get_json|get_data)$
+      - patterns:
+          - pattern-inside: |
+              @$APP.$VERB(...)
+              def $F(..., $P, ...):
+                ...
+          - metavariable-regex:
+              metavariable: $VERB
+              regex: ^(route|get|post|put|patch|delete|api_route)$
+          - pattern-not-inside: |
+              def $F(..., $P = Depends(...), ...):
+                ...
+          - pattern-not-inside: |
+              def $F(..., $P: $T = Depends(...), ...):
+                ...
+          - pattern: $P
+    pattern-sanitizers:
+      # Values that cannot carry attacker-shaped text: records loaded by id,
+      # framework URL builders, translations, lengths, booleans and digests.
+      - pattern-either:
+          - pattern: get_object_or_404(...)
+          - pattern: get_list_or_404(...)
+          - pattern: $M.objects.get(...)
+          - pattern: $M.objects.get_or_create(...)
+          - pattern: $M.objects.filter(...).first()
+          - pattern: $M.query.get(...)
+          - pattern: $M.query.get_or_404(...)
+          - pattern: $M.query.filter_by(...).first()
+          - pattern: $M.query.filter_by(...).first_or_404()
+          - pattern: $Q.one()
+          - pattern: $Q.one_or_none()
+          - pattern: $Q.scalar_one()
+          - pattern: $Q.scalar_one_or_none()
+          - patterns:
+              - pattern: $SESSION.get($MODEL, ...)
+              - metavariable-regex:
+                  metavariable: $MODEL
+                  regex: ^[A-Z]\w*$
+          - pattern: url_for(...)
+          - pattern: reverse(...)
+          - pattern: reverse_lazy(...)
+          - pattern: len(...)
+          - pattern: bool(...)
+          - pattern: isinstance(...)
+          - pattern: hashlib.$H(...).hexdigest()
+          - pattern: hmac.new(...).hexdigest()
+          - pattern: uuid.uuid4()
+          - pattern: gettext(...)
+          - pattern: _(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: render_template_string($T, ...)
+              - pattern: flask.render_template_string($T, ...)
+              - pattern: jinja2.Template($T, ...)
+              - pattern: jinja2.Environment(...).from_string($T, ...)
+              - pattern: jinja2.sandbox.SandboxedEnvironment(...).from_string($T, ...)
+              - pattern: mako.template.Template($T, ...)
+              - pattern: django.template.Template($T, ...)
+          - focus-metavariable: $T
+      - patterns:
+          - pattern: $ENV.from_string($T, ...)
+          - metavariable-regex:
+              metavariable: $ENV
+              regex: (?i)^(\w+\.)*(jinja\w*|env|environment|template_env|templates?|engine)$
+          - focus-metavariable: $T

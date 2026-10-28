@@ -130,7 +130,12 @@ export async function requireAuth(): Promise<AuthResult> {
   return { session };
 }
 
-export async function requireRole(orgId: string, minRole: Role) {
+type Membership = NonNullable<Session["user"]["memberships"]>[number];
+
+/** Explicit for the same reason as AuthResult. */
+export type RoleResult = { error: NextResponse } | { session: Session; membership: Membership };
+
+export async function requireRole(orgId: string, minRole: Role): Promise<RoleResult> {
   const session = await resolvePrincipal();
   if (!session?.user?.id) {
     return {

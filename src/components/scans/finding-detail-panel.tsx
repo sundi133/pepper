@@ -53,6 +53,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { requestGeneratedDetails } from "@/lib/finding-details-client";
 import {
   advisoryUrl,
   cweUrl,
@@ -288,14 +289,8 @@ function SecretFindingReport({ finding, sourceContext }: { finding: Finding; sou
   const loadGeneratedDetailsForSecret = async () => {
     setLoadingDetails(true);
     try {
-      const response = await fetch(
-        `/api/findings/${finding.id}/generate-details`,
-        { method: "POST" }
-      );
-      if (response.ok) {
-        const details = await response.json();
-        setGeneratedDetails(details);
-      }
+      const result = await requestGeneratedDetails<NonNullable<typeof generatedDetails>>(finding.id);
+      if (result.ok) setGeneratedDetails(result.details);
     } catch (error) {
       console.error("Failed to load generated details:", error);
     } finally {
@@ -392,13 +387,9 @@ function SecretFindingReport({ finding, sourceContext }: { finding: Finding; sou
 
       {/* Recommendations Section */}
       <ReportBlock title="Recommendations" icon={<span className="text-lg">✅</span>}>
-        {loadingDetails ? (
-          <span className="text-muted-foreground italic text-sm">Generating recommendations...</span>
-        ) : (
-          <ReportPlainList
-            items={generatedRemediation.length > 0 ? generatedRemediation : report.remediation}
-          />
-        )}
+        <ReportPlainList
+          items={generatedRemediation.length > 0 ? generatedRemediation : report.remediation}
+        />
       </ReportBlock>
     </section>
   );
@@ -407,6 +398,7 @@ function SecretFindingReport({ finding, sourceContext }: { finding: Finding; sou
 function SastFindingReport({ finding, sourceContext }: { finding: Finding; sourceContext?: FindingScanSourceContext }) {
   const [generatedDetails, setGeneratedDetails] = useState<Record<string, unknown> | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
 
   const report = buildStoredFindingReport(finding);
   const metadata = finding.metadata as Record<string, unknown> | undefined;
@@ -422,9 +414,11 @@ function SastFindingReport({ finding, sourceContext }: { finding: Finding; sourc
 
   const loadGeneratedDetails = async () => {
     setLoadingDetails(true);
+    setDetailsError(null);
     try {
-      const res = await fetch(`/api/findings/${finding.id}/generate-details`, { method: "POST" });
-      if (res.ok) setGeneratedDetails(await res.json());
+      const result = await requestGeneratedDetails(finding.id);
+      if (result.ok) setGeneratedDetails(result.details);
+      else setDetailsError(result.error);
     } catch { /* silent */ } finally {
       setLoadingDetails(false);
     }
@@ -489,23 +483,40 @@ function SastFindingReport({ finding, sourceContext }: { finding: Finding; sourc
           </div>
         </div>
 
+        {(loadingDetails || detailsError) && (
+          <p
+            className={cn(
+              "flex items-center gap-1.5 text-xs",
+              detailsError ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
+            )}
+          >
+            {loadingDetails ? (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin" /> Writing a detailed AI report; showing the scan&apos;s
+                report until it&apos;s ready…
+              </>
+            ) : (
+              <>
+                {detailsError}
+                <button type="button" className="underline" onClick={() => void loadGeneratedDetails()}>
+                  Retry
+                </button>
+              </>
+            )}
+          </p>
+        )}
+
         {(gStr("summary") || report.summary) && (
           <div>
             <h3 className="text-base font-bold mb-1.5">Summary</h3>
-            {loadingDetails ? (
-              <p className="text-sm text-muted-foreground italic">Generating summary...</p>
-            ) : (
-              <ReportSummaryText text={gStr("summary") || report.summary} />
-            )}
+            <ReportSummaryText text={gStr("summary") || report.summary} />
           </div>
         )}
 
         {hasSteps && (
           <div>
             <h3 className="text-base font-bold mb-1.5">Steps to Reproduce</h3>
-            {loadingDetails ? (
-              <p className="text-sm text-muted-foreground italic">Generating steps...</p>
-            ) : stepsAsStr ? (
+            {stepsAsStr ? (
               <ReportRichText text={stepsAsStr} />
             ) : (
               <ReportPlainList items={stepsAsArr} />
@@ -516,20 +527,14 @@ function SastFindingReport({ finding, sourceContext }: { finding: Finding; sourc
         {(gStr("impact") || report.impact) && (
           <div>
             <h3 className="text-base font-bold mb-1.5">Impact</h3>
-            {loadingDetails ? (
-              <p className="text-sm text-muted-foreground italic">Generating impact...</p>
-            ) : (
-              <ReportRichText text={gStr("impact") || report.impact} />
-            )}
+            <ReportRichText text={gStr("impact") || report.impact} />
           </div>
         )}
 
         {hasRem && (
           <div>
             <h3 className="text-base font-bold mb-1.5">Remediation</h3>
-            {loadingDetails ? (
-              <p className="text-sm text-muted-foreground italic">Generating recommendations...</p>
-            ) : remAsStr ? (
+            {remAsStr ? (
               <ReportRichText text={remAsStr} />
             ) : (
               <ReportPlainList items={remAsArr} />
@@ -591,14 +596,8 @@ function MaliciousPkgFindingReport({ finding, sourceContext }: { finding: Findin
   const loadGeneratedDetailsForMalicious = async () => {
     setLoadingDetails(true);
     try {
-      const response = await fetch(
-        `/api/findings/${finding.id}/generate-details`,
-        { method: "POST" }
-      );
-      if (response.ok) {
-        const details = await response.json();
-        setGeneratedDetails(details);
-      }
+      const result = await requestGeneratedDetails<NonNullable<typeof generatedDetails>>(finding.id);
+      if (result.ok) setGeneratedDetails(result.details);
     } catch (error) {
       console.error("Failed to load generated details:", error);
     } finally {
@@ -858,17 +857,19 @@ function ScaFindingReport({ finding, sourceContext }: { finding: Finding; source
   useEffect(() => {
     if (hasCached) return;
     let cancelled = false;
-    fetch(`/api/findings/${finding.id}/generate-details`, { method: "POST" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((details: ScaGeneratedDetails | null) => {
-        if (!cancelled) setFetched({ id: finding.id, details });
+    const controller = new AbortController();
+    requestGeneratedDetails<ScaGeneratedDetails>(finding.id, { signal: controller.signal })
+      .then((result) => {
+        if (!cancelled) setFetched({ id: finding.id, details: result.ok ? result.details : null });
       })
       .catch((error) => {
+        if ((error as Error).name === "AbortError") return;
         console.error("Failed to load generated details:", error);
         if (!cancelled) setFetched({ id: finding.id, details: null });
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [finding.id, hasCached]);
 
@@ -1250,14 +1251,8 @@ function IacFindingReport({
   const loadGeneratedDetailsForIac = async () => {
     setLoadingDetails(true);
     try {
-      const response = await fetch(
-        `/api/findings/${finding.id}/generate-details`,
-        { method: "POST" }
-      );
-      if (response.ok) {
-        const details = await response.json();
-        setGeneratedDetails(details);
-      }
+      const result = await requestGeneratedDetails<NonNullable<typeof generatedDetails>>(finding.id);
+      if (result.ok) setGeneratedDetails(result.details);
     } catch (error) {
       console.error("Failed to load generated details:", error);
     } finally {

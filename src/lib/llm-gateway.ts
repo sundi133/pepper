@@ -898,6 +898,109 @@ export function parseLlmJsonResponseDetailed<T>(raw: string, fallback: T): LlmJs
   }
 }
 
+/**
+ * Make a model's almost-JSON object parseable: escape raw control characters
+ * inside strings (models often emit literal newlines in Markdown values) and,
+ * when the answer was cut off, drop the unfinished tail and close every open
+ * string, array and object.
+ */
+export function repairJsonObject(text: string): string {
+  let out = "";
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  // Last non-whitespace character outside strings, to tell a value string
+  // (after ":" or inside an array) from a key.
+  let lastSignificant = "";
+  let stringIsValue = false;
+  // Output length at the last point where everything before it is complete
+  // values, so the tail can be dropped and the containers closed.
+  let safeLength = -1;
+  let safeStack: string[] = [];
+  const markSafe = () => {
+    safeLength = out.length;
+    safeStack = [...stack];
+  };
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        out += ch;
+      } else if (ch === "\\") {
+        escaped = true;
+        out += ch;
+      } else if (ch === '"') {
+        inString = false;
+        out += ch;
+        lastSignificant = '"';
+        if (stringIsValue) markSafe();
+      } else if (ch === "\n") out += "\\n";
+      else if (ch === "\r") out += "\\r";
+      else if (ch === "\t") out += "\\t";
+      else if (ch < " ") out += `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`;
+      else out += ch;
+      continue;
+    }
+    out += ch;
+    if (ch === '"') {
+      inString = true;
+      stringIsValue = lastSignificant === ":" || stack[stack.length - 1] === "[";
+    } else if (ch === "{" || ch === "[") {
+      stack.push(ch);
+    } else if (ch === "}" || ch === "]") {
+      stack.pop();
+      markSafe();
+      if (stack.length === 0) return out;
+    } else if (/[0-9a-z.]/i.test(ch) && /^[,}\]\s]$/.test(text[i + 1] ?? "")) {
+      // Last character of a complete number / true / false / null.
+      markSafe();
+    }
+    if (!/\s/.test(ch)) lastSignificant = ch;
+  }
+
+  if (stack.length === 0 && !inString) return out;
+  // Cut off: keep everything up to the last complete value, then close.
+  if (safeLength < 0) return out;
+  let repaired = out.slice(0, safeLength).replace(/,\s*$/, "");
+  for (let i = safeStack.length - 1; i >= 0; i--) {
+    repaired += safeStack[i] === "{" ? "}" : "]";
+  }
+  return repaired;
+}
+
+/**
+ * Parse a model's answer that must be ONE JSON object (not a findings list).
+ * Strips code fences and prose around it, then repairs raw newlines and a
+ * cut-off ending. Null when no object can be recovered.
+ */
+export function parseLlmJsonObject<T extends object>(
+  raw: string,
+): { value: T; status: "ok" | "recovered" } | null {
+  const text = (raw || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+  const body = text.slice(start);
+  try {
+    const parsed = JSON.parse(body.slice(0, body.lastIndexOf("}") + 1));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return { value: parsed as T, status: "ok" };
+    }
+  } catch {
+    /* fall through to repair */
+  }
+  try {
+    const parsed = JSON.parse(repairJsonObject(body));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return { value: parsed as T, status: "recovered" };
+    }
+  } catch {
+    /* unrecoverable */
+  }
+  return null;
+}
+
 export function parseLlmJsonResponse<T>(raw: string, fallback: T): T {
   let cleaned = (raw || "").trim();
   try {

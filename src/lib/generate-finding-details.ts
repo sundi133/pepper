@@ -1,8 +1,14 @@
 import {
   createLlmClient,
   analyzeWithLlm,
-  parseLlmJsonResponse,
+  parseLlmJsonObject,
 } from "@/lib/llm-gateway";
+
+/**
+ * Output budget. Six Markdown fields with code examples overflowed 4096 and
+ * cut the JSON off mid-string (issue #213).
+ */
+export const FINDING_DETAILS_MAX_TOKENS = 6144;
 
 export interface FindingDetailsInput {
   id: string;
@@ -59,7 +65,9 @@ RULES:
 - references: ALWAYS include at least the CWE reference
 - Each bullet in impact and remediation is a complete sentence
 - stepsToReproduce: each numbered step is a SINGLE list item with its code block indented directly under it (no blank line between the step text and its code block)
-- DO NOT put code blocks as separate paragraphs between numbered items — they must be part of the step`;
+- DO NOT put code blocks as separate paragraphs between numbered items — they must be part of the step
+- JSON strings: write every line break as \\n and escape double quotes as \\". Never put a raw line break inside a string value
+- Keep each field concise (at most ~200 words) so the whole object fits in the answer`;
 
 export async function generateFindingDetails(
   input: FindingDetailsInput,
@@ -96,26 +104,22 @@ export async function generateFindingDetails(
     config.model,
     "You are a security engineer writing a vulnerability report. Output ONLY valid JSON. No markdown, no code fences.",
     prompt,
-    { maxTokens: 4096 },
+    { maxTokens: FINDING_DETAILS_MAX_TOKENS },
   );
 
-  let details: LlmDetailsOutput = {};
-  try {
-    details = parseLlmJsonResponse<LlmDetailsOutput>(responseText, {});
-    if (!details || Object.keys(details).length === 0) {
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        details = JSON.parse(jsonMatch[0]) as LlmDetailsOutput;
-      }
-    }
-  } catch {
-    console.error(`[generate-finding-details] Failed to parse AI response for finding ${id}:`, responseText);
+  // Repairs raw newlines in string values and a cut-off ending, which were
+  // the "Failed to parse vulnerability details" cases in issue #213.
+  const parsed = parseLlmJsonObject<LlmDetailsOutput>(responseText);
+  const details = parsed?.value;
+  if (!details || !(details.summary || details.vulnerabilityDetails || details.impact)) {
+    console.error(
+      `[generate-finding-details] AI returned an unparseable response for finding ${id} (${responseText.length} chars):`,
+      responseText.slice(0, 500),
+    );
     return null;
   }
-
-  if (!details || Object.keys(details).length === 0) {
-    console.error(`[generate-finding-details] AI returned empty/unparseable response for finding ${id}:`, responseText);
-    return null;
+  if (parsed.status === "recovered") {
+    console.warn(`[generate-finding-details] Recovered a malformed or cut-off AI response for finding ${id}`);
   }
 
   return {

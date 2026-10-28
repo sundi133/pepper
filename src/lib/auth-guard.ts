@@ -113,7 +113,14 @@ export const resolvePrincipal = cache(async (): Promise<Session | null> => {
   return sessionFromApiKey();
 });
 
-export async function requireAuth() {
+/**
+ * Declared explicitly: the inferred type would add `error?: undefined` to the
+ * success case, so `"error" in auth` could never narrow and every route's
+ * return type picked up `| undefined`.
+ */
+export type AuthResult = { error: NextResponse } | { session: Session };
+
+export async function requireAuth(): Promise<AuthResult> {
   const session = await resolvePrincipal();
   if (!session?.user?.id) {
     return {

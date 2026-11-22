@@ -25,11 +25,54 @@ export const SCAN_STATS_KEY = "__stats__";
  */
 export const SCAN_MODULES_KEY = "__modules__";
 
+/**
+ * Reserved key under `Scan.scannerProgress` holding the AI model each scanner
+ * used: { scannerName: { model, provider? } }. Not a scanner status. Written per
+ * scan at scan time so the model shown is the one that ran, not whatever the org
+ * settings say now (they may have changed since).
+ */
+export const MODELS_PROGRESS_KEY = "__models__";
+
 /** True for per-scanner entries of `Scan.scannerProgress` (not the reserved stores). */
 export function isScannerProgressKey(name: string): boolean {
   return (
-    name !== REASONING_PROGRESS_KEY && name !== SCAN_STATS_KEY && name !== SCAN_MODULES_KEY
+    name !== REASONING_PROGRESS_KEY &&
+    name !== SCAN_STATS_KEY &&
+    name !== SCAN_MODULES_KEY &&
+    name !== MODELS_PROGRESS_KEY
   );
+}
+
+/** A single scanner's recorded AI model, as read back from scannerProgress. */
+export interface ScanModelUsed {
+  model: string;
+  provider?: string;
+}
+
+/**
+ * The per-scanner AI models recorded on a scan (scannerProgress.__models__), or
+ * null when none were recorded — e.g. a non-AI scan, or a scan from before this
+ * was tracked. Pure and client-safe; tolerates malformed stored shapes.
+ */
+export function scanModelsUsed(
+  scannerProgress: Record<string, unknown> | null | undefined,
+): Record<string, ScanModelUsed> | null {
+  const entry = scannerProgress?.[MODELS_PROGRESS_KEY];
+  if (!entry || typeof entry !== "object") return null;
+  const out: Record<string, ScanModelUsed> = {};
+  for (const [name, v] of Object.entries(entry as Record<string, unknown>)) {
+    if (v && typeof v === "object") {
+      const model = (v as { model?: unknown }).model;
+      const provider = (v as { provider?: unknown }).provider;
+      if (typeof model === "string" && model.trim()) {
+        out[name] = {
+          model,
+          provider: typeof provider === "string" && provider.trim() ? provider : undefined,
+        };
+      }
+    }
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /** The scanner groups stored on a scan's progress map; [] when none. */

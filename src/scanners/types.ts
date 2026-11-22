@@ -79,6 +79,17 @@ export interface ScanContext {
    */
   onReasoning?: (scannerName: string, reasoning: string) => Promise<void>;
   /**
+   * The model an AI scanner actually used, reported once when the scanner
+   * confirms it will run (not before — a skipped scanner records nothing). The
+   * processor persists it under scannerProgress.__models__ so the scan page can
+   * show which model produced the AI findings, instead of reading today's org
+   * setting (which may have changed since the scan). Best-effort, like reasoning.
+   */
+  onModelUsed?: (
+    scannerName: string,
+    info: { provider?: string; model: string },
+  ) => Promise<void>;
+  /**
    * Visible status for the agent deep scan (scanners/mobile-agent): running (+
    * sandbox id), completed, incomplete or failed. Persisted by the processor to
    * scannerProgress.AGENT_SCAN so it survives the ephemeral sandbox and shows on

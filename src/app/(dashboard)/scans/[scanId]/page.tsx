@@ -90,6 +90,7 @@ import {
   reasoningTails,
   isScannerProgressKey,
   scanLinesScanned,
+  scanModelsUsed,
 } from "@/lib/scan-progress";
 import { CustomReportDialog } from "@/components/scans/custom-report-dialog";
 import { CompiledCodeSummary } from "@/components/scans/compiled-code-summary";
@@ -597,6 +598,44 @@ export default function ScanDetailPage() {
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {formatScanMetadataLine(scan)}
             </p>
+            {/* AI models used for this scan, recorded per scanner at scan time.
+                Persists after completion and reflects the model that actually
+                ran — not the org's current LLM setting. Hidden for non-AI
+                scans (nothing recorded). */}
+            {(() => {
+              const models = scanModelsUsed(
+                scan.scannerProgress as Record<string, unknown> | null,
+              );
+              if (!models) return null;
+              return (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    <Sparkles className="h-3 w-3" aria-hidden />
+                    AI models
+                  </span>
+                  {Object.entries(models).map(([scanner, m]) => (
+                    <Badge
+                      key={scanner}
+                      variant="outline"
+                      className="gap-1.5 text-xs font-normal"
+                      title={m.provider ? `${scanner} · ${m.provider}` : scanner}
+                    >
+                      <span className="font-medium text-slate-500 dark:text-slate-400">
+                        {scanner}
+                      </span>
+                      <span className="text-slate-700 dark:text-slate-200">
+                        {m.model}
+                      </span>
+                      {m.provider && (
+                        <span className="text-slate-400 dark:text-slate-500">
+                          ({m.provider})
+                        </span>
+                      )}
+                    </Badge>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
           <div className="flex flex-wrap gap-1.5 shrink-0">
             {canRescan && (

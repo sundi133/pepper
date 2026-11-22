@@ -4,10 +4,62 @@ import {
   reasoningTails,
   REASONING_PROGRESS_KEY,
   SCAN_STATS_KEY,
+  MODELS_PROGRESS_KEY,
   scanLinesScanned,
+  scanModelsUsed,
   agentScanKeptCount,
   agentScanSummaryView,
 } from "./scan-progress";
+
+describe("scanModelsUsed", () => {
+  it("returns null when no models were recorded", () => {
+    expect(scanModelsUsed(null)).toBeNull();
+    expect(scanModelsUsed(undefined)).toBeNull();
+    expect(scanModelsUsed({})).toBeNull();
+    expect(scanModelsUsed({ SAST_LLM: { status: "DONE" } })).toBeNull();
+    expect(scanModelsUsed({ [MODELS_PROGRESS_KEY]: {} })).toBeNull();
+  });
+
+  it("reads the per-scanner models the worker recorded", () => {
+    const scannerProgress = {
+      SAST_LLM: { status: "DONE", findingsCount: 3 },
+      [MODELS_PROGRESS_KEY]: {
+        SAST_LLM: { provider: "anthropic", model: "claude-sonnet-4-6" },
+        "mobile-llm": { provider: "openrouter", model: "z-ai/glm-5.3" },
+      },
+    };
+    expect(scanModelsUsed(scannerProgress)).toEqual({
+      SAST_LLM: { provider: "anthropic", model: "claude-sonnet-4-6" },
+      "mobile-llm": { provider: "openrouter", model: "z-ai/glm-5.3" },
+    });
+  });
+
+  it("keeps a model with no provider and drops malformed entries", () => {
+    const scannerProgress = {
+      [MODELS_PROGRESS_KEY]: {
+        SAST_LLM: { model: "gpt-4o-mini" },
+        bad1: { model: "" },
+        bad2: { provider: "x" },
+        bad3: "not-an-object",
+      },
+    };
+    expect(scanModelsUsed(scannerProgress)).toEqual({
+      SAST_LLM: { model: "gpt-4o-mini", provider: undefined },
+    });
+  });
+
+  it("is ignored by computeScanProgress (not treated as a scanner)", () => {
+    // A models-only map must not count as an unfinished scanner.
+    const withModels = {
+      SAST_LLM: { status: "DONE" },
+      [MODELS_PROGRESS_KEY]: { SAST_LLM: { model: "claude-sonnet-4-6" } } as never,
+    };
+    const withoutModels = { SAST_LLM: { status: "DONE" } };
+    expect(computeScanProgress(withModels, "RUNNING")).toBe(
+      computeScanProgress(withoutModels, "RUNNING"),
+    );
+  });
+});
 
 describe("agentScanKeptCount", () => {
   it("returns null when there is no agent-scan progress entry", () => {

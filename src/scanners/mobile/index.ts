@@ -127,6 +127,12 @@ export const mobileLlmScanner: ScannerPlugin = {
     const { text, included } = buildBundle(ctx);
     if (!text) return [];
     ctx.onProgress?.(`Mobile review: ${included} files -> ${cfg.model}`);
+    // Record the model for the scan page (best-effort; never fail the scan).
+    try {
+      await ctx.onModelUsed?.("mobile-llm", { provider: "openrouter", model: cfg.model });
+    } catch {
+      /* model recording is best-effort */
+    }
 
     // Stream reasoning to the developer progress feed, buffered so we don't
     // write per token; the full trace is persisted below via ctx.onReasoning.

@@ -172,6 +172,12 @@ export const mobileAgentScanner: ScannerPlugin = {
       `Agent deep scan: ${name} -> ${cfg.model} (E2B sandbox, ${cfg.keySource} OpenRouter key)`,
     );
     await ctx.onAgentStatus?.({ status: "RUNNING", note: "starting the E2B sandbox" });
+    // Record the model for the scan page (best-effort; never fail the scan).
+    try {
+      await ctx.onModelUsed?.(AGENT_SCANNER_KEY, { provider: "openrouter", model: cfg.model });
+    } catch {
+      /* model recording is best-effort */
+    }
 
     const sink = makeReasoningSink(ctx, AGENT_SCANNER_KEY);
 

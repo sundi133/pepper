@@ -941,6 +941,15 @@ Schema:
           log.warn({ err }, "Could not store AI reasoning trace");
         }
       },
+      onModelUsed: async (scannerName, info) => {
+        // Persist which model an AI scanner used, for the scan page. Best-effort:
+        // a storage failure must never fail the scan.
+        try {
+          await setScanModel(scanId, scannerName, info);
+        } catch (err) {
+          log.warn({ err, scanner: scannerName }, "Could not record scan model");
+        }
+      },
       onAgentStatus: async (entry) => {
         // Persist the agent deep scan's visible status (running + sandbox id,
         // completed/incomplete/failed) so it survives the ephemeral sandbox and
@@ -1038,6 +1047,26 @@ Schema:
         const note = aiUnavailableNote(orgSettings.llmProvider, orgSettings.llmModel, preflight.reason);
         log.error({ status: preflight.status, reason: preflight.reason }, "AI provider refused requests; AI analysis will not run");
         await prisma.scan.update({ where: { id: scanId }, data: { errorMessage: note } });
+      } else {
+        // Record the org-configured model for the AI scanners that will use it,
+        // so the scan page shows the model that actually ran (not today's org
+        // setting). The mobile/agent scanners record their own models when they
+        // run. Gating mirrors getScanners(): the LLM SAST/secrets scanners only
+        // run for their scan types, so we don't claim a model for a scanner that
+        // never runs. Best-effort — never fail the scan over it.
+        const info = { provider: orgSettings.llmProvider, model: orgSettings.llmModel };
+        const sastLlmRuns =
+          scanIncludesModule(scanType, scanModules, "SAST") &&
+          orgSettings.enableLlmSast;
+        const secretsLlmRuns =
+          scanIncludesModule(scanType, scanModules, "SECRETS") &&
+          orgSettings.enableLlmSecrets;
+        try {
+          if (sastLlmRuns) await setScanModel(scanId, "SAST_LLM", info);
+          if (secretsLlmRuns) await setScanModel(scanId, "SECRETS_LLM", info);
+        } catch (err) {
+          log.warn({ err }, "Could not record scan model");
+        }
       }
     }
 
@@ -1567,6 +1596,28 @@ async function setScanStats(scanId: string, stats: { linesScanned: number }): Pr
   await prisma.$executeRaw`
     UPDATE "Scan"
     SET "scannerProgress" = COALESCE("scannerProgress", '{}'::jsonb) || ${JSON.stringify({ [SCAN_STATS_KEY]: stats })}::jsonb
+    WHERE id = ${scanId}
+  `;
+}
+
+/**
+ * Record the AI model one scanner used under scannerProgress.__models__
+ * (MODELS_PROGRESS_KEY). Merges INTO the nested map (jsonb_set, not a top-level
+ * `||`) so each AI scanner's entry is kept as others are added. Best-effort —
+ * callers never let it fail the scan.
+ */
+async function setScanModel(
+  scanId: string,
+  scanner: string,
+  info: { provider?: string; model: string },
+): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE "Scan"
+    SET "scannerProgress" = jsonb_set(
+      COALESCE("scannerProgress", '{}'::jsonb),
+      '{__models__}',
+      COALESCE("scannerProgress"->'__models__', '{}'::jsonb) || ${JSON.stringify({ [scanner]: info })}::jsonb
+    )
     WHERE id = ${scanId}
   `;
 }
